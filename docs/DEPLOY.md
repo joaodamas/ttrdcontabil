@@ -1,112 +1,101 @@
 # Deploy — TTRD Contábil | Gestão
 ## gestao.ttrdcontabil.com.br
 
+**Stack:** Next.js 16 → Firebase App Hosting → Cloudflare DNS
+
 ---
 
 ## 1. Pré-requisitos
 
-- Conta no [Vercel](https://vercel.com)
-- Firebase CLI: `npm install -g firebase-tools`
-- Projeto Firebase: `ttrdcontabil-jpproject`
+```bash
+npm install -g firebase-tools
+firebase login
+firebase use ttrdcontabil-jpproject
+```
 
 ---
 
-## 2. Configurar Firebase Auth — Session Cookies
+## 2. Habilitar Firebase Auth
 
-No Console Firebase:
+No [Console Firebase](https://console.firebase.google.com/project/ttrdcontabil-jpproject):
+
 1. **Authentication > Sign-in method** → Habilitar **E-mail/senha**
 2. **Authentication > Settings > Authorized domains** → Adicionar:
    - `gestao.ttrdcontabil.com.br`
-   - `ttrdcontabil-jpproject.vercel.app` (temporário)
+   - `ttrdcontabil-jpproject.web.app` (domínio padrão do App Hosting)
 
 ---
 
-## 3. Gerar Service Account (Firebase Admin SDK)
-
-1. Console Firebase → **Configurações do projeto** (⚙️) → **Contas de serviço**
-2. Clique em **Gerar nova chave privada**
-3. Faça download do arquivo JSON
-4. Minifique o conteúdo (sem quebras de linha):
-   ```bash
-   cat service-account.json | tr -d '\n'
-   ```
-5. Esse valor vai em `FIREBASE_SERVICE_ACCOUNT_KEY` nas variáveis de ambiente
-
----
-
-## 4. Deploy no Vercel
-
-### Via CLI:
-```bash
-cd app-temp
-npm install -g vercel
-vercel login
-vercel --prod
-```
-
-### Via GitHub (recomendado):
-1. Push para GitHub
-2. Conectar repo no Vercel
-3. Framework: **Next.js** (auto-detectado)
-
-### Variáveis de ambiente no Vercel:
-Configure em **Settings > Environment Variables**:
-
-| Variável | Valor |
-|----------|-------|
-| `NEXT_PUBLIC_FIREBASE_API_KEY` | `AIzaSyDzFv78FFgoYY2wXaO43par3Dy4N69o1S8` |
-| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | `ttrdcontabil-jpproject.firebaseapp.com` |
-| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | `ttrdcontabil-jpproject` |
-| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | `ttrdcontabil-jpproject.firebasestorage.app` |
-| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | `1077611965156` |
-| `NEXT_PUBLIC_FIREBASE_APP_ID` | `1:1077611965156:web:adf49df9b1e34982df1af1` |
-| `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | `G-TCQG0TXZZE` |
-| `NEXT_PUBLIC_APP_URL` | `https://gestao.ttrdcontabil.com.br` |
-| `FIREBASE_SERVICE_ACCOUNT_KEY` | *(conteúdo do JSON minificado)* |
-
----
-
-## 5. Domínio no Vercel
-
-1. Vercel → **Settings > Domains**
-2. Adicionar: `gestao.ttrdcontabil.com.br`
-3. O Vercel vai te dar um valor CNAME, ex: `cname.vercel-dns.com`
-
----
-
-## 6. Configurar DNS no Cloudflare
-
-1. Acesse o Cloudflare do domínio `ttrdcontabil.com.br`
-2. **DNS > Add record**:
-
-| Tipo | Nome | Valor | Proxy |
-|------|------|-------|-------|
-| CNAME | `gestao` | `cname.vercel-dns.com` | ☁️ Proxied (ligado) |
-
-3. Com o proxy do Cloudflare ativo você ganha:
-   - SSL automático
-   - Proteção DDoS
-   - Cache de borda
-   - Headers de segurança (configurar em Rules > Transform Rules)
-
----
-
-## 7. Regras de Segurança do Firestore e Storage
+## 3. Deploy das Regras Firestore + Storage
 
 ```bash
-firebase login
-firebase use ttrdcontabil-jpproject
 firebase deploy --only firestore:rules,firestore:indexes,storage
 ```
 
 ---
 
-## 8. Seed inicial (apenas uma vez)
+## 4. Firebase App Hosting
 
-Depois do deploy, rode o seed para popular conectores e criar o admin:
+### 4.1 Criar o backend no Console Firebase
+
+1. Acesse: **Hosting > App Hosting** no Console Firebase
+2. Clique em **Get started** (ou **Add backend**)
+3. Conecte ao repositório GitHub: `joaodamas/ttrdcontabil`
+4. Branch de deploy: `master`
+5. Root directory: `app-temp` *(se o Next.js estiver em subpasta)*
+6. Confirme o nome do backend: `ttrdcontabil-gestao` (ou qualquer nome)
+
+> O Firebase App Hosting usa `apphosting.yaml` na raiz do projeto para configurações.  
+> As variáveis de ambiente públicas já estão definidas no `apphosting.yaml`.  
+> O SDK Admin usa **Application Default Credentials** automaticamente — sem necessidade de `FIREBASE_SERVICE_ACCOUNT_KEY` em produção.
+
+### 4.2 Permissões do Service Account (App Hosting)
+
+O App Hosting usa a conta `firebase-app-hosting-compute@ttrdcontabil-jpproject.iam.gserviceaccount.com`.
+
+No [IAM do Google Cloud](https://console.cloud.google.com/iam-admin/iam?project=ttrdcontabil-jpproject), confirme que ela tem os roles:
+- `Firebase Admin SDK Administrator Service Agent`
+- `Cloud Datastore User` (Firestore)
+- `Storage Admin`
+
+### 4.3 Deploy via GitHub Actions (automático)
+
+Após conectar o repo, cada `git push origin master` aciona um deploy automático.
+
+**Deploy manual forçado:**
+```bash
+firebase apphosting:backends:create   # apenas na primeira vez
+# ou via Console > App Hosting > Rollouts > Deploy manually
+```
+
+---
+
+## 5. Domínio customizado
+
+### 5.1 Adicionar no App Hosting
+
+1. Console Firebase > **App Hosting > seu backend > Custom domains**
+2. Adicionar: `gestao.ttrdcontabil.com.br`
+3. O Firebase vai fornecer um valor de DNS para verificação
+
+### 5.2 Configurar DNS no Cloudflare
+
+| Tipo | Nome | Valor | Proxy |
+|------|------|-------|-------|
+| CNAME | `gestao` | `ttrdcontabil-gestao.web.app` | ☁️ Proxied |
+
+*(Substitua pelo valor exato que o Firebase App Hosting fornecer)*
+
+> Com Cloudflare Proxied ativo: SSL automático, proteção DDoS, cache de borda.
+
+---
+
+## 6. Seed inicial (apenas uma vez)
+
+Execute localmente com o `.env.local` configurado:
 
 ```bash
-# Configure o .env.local com FIREBASE_SERVICE_ACCOUNT_KEY
+# Certifique-se que FIREBASE_SERVICE_ACCOUNT_KEY está em .env.local
 npx tsx src/scripts/seed.ts
 ```
 
@@ -117,34 +106,23 @@ npx tsx src/scripts/seed.ts
 
 ---
 
-## 9. Criar usuários adicionais
+## 7. Desenvolvimento local
 
-Após o deploy, acesse:
-`https://gestao.ttrdcontabil.com.br/admin/usuarios`
+```bash
+cp .env.local.example .env.local   # ou edite manualmente
+# Configure FIREBASE_SERVICE_ACCOUNT_KEY com o JSON da conta de serviço
+npm run dev
+```
 
-Crie os usuários da equipe com os perfis corretos:
-- `admin` — Acesso total
-- `operacional` — Clientes, competências, tarefas, IR
-- `fiscal` — NFS-e, configurações fiscais
-- `financeiro` — Lançamentos, cobrança
-- `leitura` — Apenas visualização
+Para gerar a chave de serviço local:
+1. Console Firebase → ⚙️ → **Contas de serviço**
+2. **Gerar nova chave privada** → baixar JSON
+3. Minificar: `node -e "console.log(JSON.stringify(require('./service-account.json')))" > key.txt`
+4. Colar o conteúdo em `FIREBASE_SERVICE_ACCOUNT_KEY=...` no `.env.local`
 
 ---
 
-## 10. Headers de Segurança (Cloudflare)
-
-Configure em **Cloudflare > Rules > Transform Rules > Modify Response Header**:
-
-```
-X-Frame-Options: DENY
-X-Content-Type-Options: nosniff
-Referrer-Policy: strict-origin-when-cross-origin
-Permissions-Policy: camera=(), microphone=(), geolocation=()
-```
-
----
-
-## Arquitetura de infraestrutura
+## 8. Arquitetura
 
 ```
 gestao.ttrdcontabil.com.br
@@ -152,9 +130,23 @@ gestao.ttrdcontabil.com.br
     [Cloudflare]
     (proxy, DDoS, SSL, cache)
          │
-      [Vercel]
-    (Next.js 16, SSR)
+ [Firebase App Hosting]
+   (Next.js 16 SSR + API)
+   Cloud Run gerenciado
          │
     [Firebase]
-    Auth │ Firestore │ Storage
+ Auth │ Firestore │ Storage
+```
+
+---
+
+## 9. Headers de Segurança (Cloudflare)
+
+Configure em **Rules > Transform Rules > Modify Response Header**:
+
+```
+X-Frame-Options: DENY
+X-Content-Type-Options: nosniff
+Referrer-Policy: strict-origin-when-cross-origin
+Permissions-Policy: camera=(), microphone=(), geolocation=()
 ```

@@ -1,4 +1,4 @@
-import { initializeApp, getApps, cert, App } from 'firebase-admin/app'
+import { initializeApp, getApps, cert, applicationDefault, App } from 'firebase-admin/app'
 import { getAuth, Auth } from 'firebase-admin/auth'
 import { getFirestore, Firestore } from 'firebase-admin/firestore'
 import { getStorage, Storage } from 'firebase-admin/storage'
@@ -12,16 +12,18 @@ function getAdminApp(): App {
     return _app
   }
 
+  const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
   const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
-  if (!serviceAccountKey) {
-    throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY não configurada')
+
+  if (serviceAccountKey) {
+    // Local dev: use explicit service account key
+    const serviceAccount = JSON.parse(serviceAccountKey)
+    _app = initializeApp({ credential: cert(serviceAccount), storageBucket })
+  } else {
+    // Firebase App Hosting / Cloud Run: use Application Default Credentials
+    _app = initializeApp({ credential: applicationDefault(), storageBucket })
   }
 
-  const serviceAccount = JSON.parse(serviceAccountKey)
-  _app = initializeApp({
-    credential: cert(serviceAccount),
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  })
   return _app
 }
 

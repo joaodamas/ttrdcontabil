@@ -1,0 +1,58 @@
+runConfig:
+  minInstances: 0
+  maxInstances: 2
+  cpu: 1
+  memoryMiB: 512
+  concurrency: 80
+
+env:
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: AIzaSyDzFv78FFgoYY2wXaO43par3Dy4N69o1S8
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: ttrdcontabil-jpproject.firebaseapp.com
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: ttrdcontabil-jpproject
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: ttrdcontabil-jpproject.firebasestorage.app
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "1077611965156"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: 1:1077611965156:web:adf49df9b1e34982df1af1
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_APP_URL
+    value: https://gestao.ttrdcontabil.com.br
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # FIREBASE_SERVICE_ACCOUNT_KEY não é necessária no App Hosting —
+  # o SDK usa Application Default Credentials (ADC) automaticamente.
+  # Se precisar forçar uma conta específica, adicione como secret:
+  #
+  # - variable: FIREBASE_SERVICE_ACCOUNT_KEY
+  #   secret: firebase-service-account-key
+  #   availability:
+  #     - RUNTIME
