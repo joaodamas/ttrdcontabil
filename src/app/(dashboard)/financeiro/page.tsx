@@ -1,15 +1,17 @@
-export const dynamic = 'force-dynamic'
+'use client'
 
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { requireAuth } from '@/lib/auth'
-import { adminDb } from '@/lib/firebase-admin'
-import { Timestamp } from 'firebase-admin/firestore'
+import { where, orderBy, Timestamp } from 'firebase/firestore'
+
+import { listDocuments } from '@/lib/firestore-client'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LancamentoBaixar } from '@/components/financeiro/lancamento-baixar'
-import { Plus, TrendingUp, CheckCircle, AlertTriangle } from 'lucide-react'
+import { Plus, TrendingUp, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   pendente: { label: 'Pendente', variant: 'outline' },
@@ -24,82 +26,60 @@ const TIPO_MAP: Record<string, { label: string; variant: 'default' | 'secondary'
   despesa: { label: 'Despesa', variant: 'secondary' },
 }
 
-interface SearchParams {
-  tipo?: string
-  status?: string
-  clienteId?: string
-  competenciaId?: string
-  page?: string
-}
+const PAGE_SIZE = 20
 
-export default async function FinanceiroPage({
-  searchParams,
-}: {
-  searchParams: Promise<SearchParams>
-}) {
-  await requireAuth()
-  const sp = await searchParams
+function FinanceiroContent() {
+  const searchParams = useSearchParams()
+  const tipo = searchParams.get('tipo') ?? ''
+  const status = searchParams.get('status') ?? ''
+  const clienteId = searchParams.get('clienteId') ?? ''
+  const competenciaId = searchParams.get('competenciaId') ?? ''
+  const page = parseInt(searchParams.get('page') ?? '1')
 
-  const tipo = sp.tipo ?? ''
-  const status = sp.status ?? ''
-  const clienteId = sp.clienteId ?? ''
-  const competenciaId = sp.competenciaId ?? ''
-  const page = parseInt(sp.page ?? '1')
-  const limit = 20
+  const [allLancamentos, setAllLancamentos] = useState<Array<Record<string, unknown>>>([])
+  const [somaAReceber, setSomaAReceber] = useState(0)
+  const [somaRecebidoMes, setSomaRecebidoMes] = useState(0)
+  const [somaEmAtraso, setSomaEmAtraso] = useState(0)
+  const [loading, setLoading] = useState(true)
 
   const hoje = new Date()
-  const hojeTs = Timestamp.fromDate(hoje)
-  const inicioMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
-  const fimMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0, 23, 59, 59))
 
-  let query = adminDb.collection('lancamentos') as FirebaseFirestore.Query
+  useEffect(() => {
+    setLoading(true)
+    const hojeTs = Timestamp.fromDate(hoje)
+    const inicioMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
+    const fimMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0, 23, 59, 59))
 
-  if (tipo) query = query.where('tipo', '==', tipo)
-  if (status) query = query.where('status', '==', status)
-  if (clienteId) query = query.where('clienteId', '==', clienteId)
-  if (competenciaId) query = query.where('competenciaId', '==', competenciaId)
+    const constraints = [
+      ...(tipo ? [where('tipo', '==', tipo)] : []),
+      ...(status ? [where('status', '==', status)] : []),
+      ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
+      ...(competenciaId ? [where('competenciaId', '==', competenciaId)] : []),
+      orderBy('dataVencimento', 'asc'),
+    ]
 
-  query = query.orderBy('dataVencimento', 'asc')
-
-  const [snap, aReceberSnap, recebidoMesSnap, emAtrasoSnap] = await Promise.all([
-    query.get(),
-    adminDb
-      .collection('lancamentos')
-      .where('tipo', '==', 'receita')
-      .where('status', '==', 'pendente')
-      .get(),
-    adminDb
-      .collection('lancamentos')
-      .where('tipo', '==', 'receita')
-      .where('status', '==', 'pago')
-      .where('dataPagamento', '>=', inicioMes)
-      .where('dataPagamento', '<=', fimMes)
-      .get(),
-    adminDb
-      .collection('lancamentos')
-      .where('tipo', '==', 'receita')
-      .where('status', '==', 'pendente')
-      .where('dataVencimento', '<', hojeTs)
-      .get(),
-  ])
-
-  const all = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Array<Record<string, unknown>>
-  const total = all.length
-  const totalPages = Math.ceil(total / limit)
-  const lancamentos = all.slice((page - 1) * limit, page * limit)
-
-  const somaAReceber = aReceberSnap.docs.reduce(
-    (acc, d) => acc + ((d.data().valor as number) ?? 0),
-    0
-  )
-  const somaRecebidoMes = recebidoMesSnap.docs.reduce(
-    (acc, d) => acc + ((d.data().valor as number) ?? 0),
-    0
-  )
-  const somaEmAtraso = emAtrasoSnap.docs.reduce(
-    (acc, d) => acc + ((d.data().valor as number) ?? 0),
-    0
-  )
+    Promise.all([
+      listDocuments('lancamentos', constraints),
+      listDocuments('lancamentos', [where('tipo', '==', 'receita'), where('status', '==', 'pendente')]),
+      listDocuments('lancamentos', [
+        where('tipo', '==', 'receita'),
+        where('status', '==', 'pago'),
+        where('dataPagamento', '>=', inicioMes),
+        where('dataPagamento', '<=', fimMes),
+      ]),
+      listDocuments('lancamentos', [
+        where('tipo', '==', 'receita'),
+        where('status', '==', 'pendente'),
+        where('dataVencimento', '<', hojeTs),
+      ]),
+    ]).then(([mainData, aReceberData, recebidoMesData, emAtrasoData]) => {
+      setAllLancamentos(mainData as Array<Record<string, unknown>>)
+      setSomaAReceber(aReceberData.reduce((acc, d) => acc + (((d as Record<string, unknown>).valor as number) ?? 0), 0))
+      setSomaRecebidoMes(recebidoMesData.reduce((acc, d) => acc + (((d as Record<string, unknown>).valor as number) ?? 0), 0))
+      setSomaEmAtraso(emAtrasoData.reduce((acc, d) => acc + (((d as Record<string, unknown>).valor as number) ?? 0), 0))
+    }).finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipo, status, clienteId, competenciaId])
 
   function buildUrl(overrides: Record<string, string | number>) {
     const params = new URLSearchParams({
@@ -108,10 +88,22 @@ export default async function FinanceiroPage({
       ...(clienteId && { clienteId }),
       ...(competenciaId && { competenciaId }),
       page: String(page),
-      ...overrides,
+      ...Object.fromEntries(Object.entries(overrides).map(([k, v]) => [k, String(v)])),
     })
     return `/financeiro?${params.toString()}`
   }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-5 h-5 animate-spin" />
+      </div>
+    )
+  }
+
+  const total = allLancamentos.length
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const lancamentos = allLancamentos.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
     <div className="space-y-5">
@@ -290,5 +282,13 @@ export default async function FinanceiroPage({
         </div>
       ) : null}
     </div>
+  )
+}
+
+export default function FinanceiroPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
+      <FinanceiroContent />
+    </Suspense>
   )
 }

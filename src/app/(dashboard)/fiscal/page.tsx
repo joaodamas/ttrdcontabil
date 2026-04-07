@@ -1,14 +1,15 @@
-export const dynamic = 'force-dynamic'
+'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { requireAuth } from '@/lib/auth'
-import { adminDb } from '@/lib/firebase-admin'
+import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
+
+import { listDocuments } from '@/lib/firestore-client'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { FileText, CheckCircle, XCircle, AlertTriangle, Plus } from 'lucide-react'
-import type { Timestamp } from 'firebase-admin/firestore'
+import { FileText, CheckCircle, XCircle, AlertTriangle, Plus, Loader2 } from 'lucide-react'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   emitida: { label: 'Emitida', variant: 'default' },
@@ -18,56 +19,51 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
   erro_integracao: { label: 'Erro', variant: 'destructive' },
 }
 
-export default async function FiscalPage() {
-  await requireAuth()
+export default function FiscalPage() {
+  const [loading, setLoading] = useState(true)
+  const [emitidaMesCount, setEmitidaMesCount] = useState(0)
+  const [somaEmitidaMes, setSomaEmitidaMes] = useState(0)
+  const [pendenteCount, setPendenteCount] = useState(0)
+  const [erroCount, setErroCount] = useState(0)
+  const [canceladaCount, setCanceladaCount] = useState(0)
+  const [notas, setNotas] = useState<Array<Record<string, unknown>>>([])
 
-  const hoje = new Date()
-  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
-  const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0, 23, 59, 59)
-  const inicioMesTs = (await import('firebase-admin/firestore')).Timestamp.fromDate(inicioMes)
-  const fimMesTs = (await import('firebase-admin/firestore')).Timestamp.fromDate(fimMes)
+  useEffect(() => {
+    const hoje = new Date()
+    const inicioMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
+    const fimMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0, 23, 59, 59))
 
-  const [emitidaMesSnap, pendenteSnap, erroSnap, canceladaSnap, recentesSnap] = await Promise.all([
-    adminDb
-      .collection('nfse_emitidas')
-      .where('status', '==', 'emitida')
-      .where('dataEmissao', '>=', inicioMesTs)
-      .where('dataEmissao', '<=', fimMesTs)
-      .get(),
-    adminDb
-      .collection('nfse_emitidas')
-      .where('status', '==', 'pendente_processamento')
-      .count()
-      .get(),
-    adminDb
-      .collection('nfse_emitidas')
-      .where('status', 'in', ['erro_integracao', 'rejeitada'])
-      .count()
-      .get(),
-    adminDb
-      .collection('nfse_emitidas')
-      .where('status', '==', 'cancelada')
-      .where('dataEmissao', '>=', inicioMesTs)
-      .where('dataEmissao', '<=', fimMesTs)
-      .count()
-      .get(),
-    adminDb
-      .collection('nfse_emitidas')
-      .orderBy('criadoEm', 'desc')
-      .limit(10)
-      .get(),
-  ])
+    Promise.all([
+      listDocuments('nfse_emitidas', [
+        where('status', '==', 'emitida'),
+        where('dataEmissao', '>=', inicioMes),
+        where('dataEmissao', '<=', fimMes),
+      ]),
+      listDocuments('nfse_emitidas', [where('status', '==', 'pendente_processamento')]),
+      listDocuments('nfse_emitidas', [where('status', 'in', ['erro_integracao', 'rejeitada'])]),
+      listDocuments('nfse_emitidas', [
+        where('status', '==', 'cancelada'),
+        where('dataEmissao', '>=', inicioMes),
+        where('dataEmissao', '<=', fimMes),
+      ]),
+      listDocuments('nfse_emitidas', [orderBy('criadoEm', 'desc'), limit(10)]),
+    ]).then(([emitidaMesData, pendenteData, erroData, canceladaData, recentesData]) => {
+      setEmitidaMesCount(emitidaMesData.length)
+      setSomaEmitidaMes(emitidaMesData.reduce((acc, d) => acc + (((d as Record<string, unknown>).valorServico as number) ?? 0), 0))
+      setPendenteCount(pendenteData.length)
+      setErroCount(erroData.length)
+      setCanceladaCount(canceladaData.length)
+      setNotas(recentesData as Array<Record<string, unknown>>)
+    }).finally(() => setLoading(false))
+  }, [])
 
-  const emitidaMesCount = emitidaMesSnap.size
-  const somaEmitidaMes = emitidaMesSnap.docs.reduce(
-    (acc, d) => acc + ((d.data().valorServico as number) ?? 0),
-    0
-  )
-
-  const notas = recentesSnap.docs.map((d) => ({
-    id: d.id,
-    ...d.data(),
-  })) as Array<Record<string, unknown>>
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-5 h-5 animate-spin" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -116,7 +112,7 @@ export default async function FiscalPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{pendenteSnap.data().count}</p>
+            <p className="text-2xl font-bold">{pendenteCount}</p>
           </CardContent>
         </Card>
 
@@ -128,7 +124,7 @@ export default async function FiscalPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-destructive">{erroSnap.data().count}</p>
+            <p className="text-2xl font-bold text-destructive">{erroCount}</p>
           </CardContent>
         </Card>
 
@@ -142,7 +138,7 @@ export default async function FiscalPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{canceladaSnap.data().count}</p>
+            <p className="text-2xl font-bold">{canceladaCount}</p>
           </CardContent>
         </Card>
       </div>

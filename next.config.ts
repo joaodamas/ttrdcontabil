@@ -1,16 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: 'export',        // gera pasta out/ para Firebase Hosting
   reactCompiler: true,
-  // Firebase Admin SDK usa módulos Node.js — precisa rodar no servidor
-  serverExternalPackages: ['firebase-admin'],
   images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'firebasestorage.googleapis.com',
-      },
-    ],
+    unoptimized: true,     // obrigatório em static export
   },
 };
 

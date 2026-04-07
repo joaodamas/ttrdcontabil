@@ -1,14 +1,15 @@
-export const dynamic = 'force-dynamic'
+'use client'
 
-import { Suspense } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
-import { requireAuth } from '@/lib/auth'
-import { adminDb } from '@/lib/firebase-admin'
+import { useSearchParams } from 'next/navigation'
+
+import { getClientes } from '@/lib/firestore-client'
 import { formatCpfCnpj } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ClientesFiltros } from '@/components/clientes/clientes-filtros'
-import { Plus } from 'lucide-react'
+import { Plus, Loader2 } from 'lucide-react'
 
 const STATUS_LABELS: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   ativo: { label: 'Ativo', variant: 'default' },
@@ -24,33 +25,33 @@ const REGIME_LABELS: Record<string, string> = {
   isento: 'Isento',
 }
 
-interface SearchParams {
-  busca?: string
-  status?: string
-  page?: string
-}
+const PAGE_SIZE = 20
 
-export default async function ClientesPage({
-  searchParams,
-}: {
-  searchParams: Promise<SearchParams>
-}) {
-  await requireAuth()
-  const sp = await searchParams
-  const busca = sp.busca ?? ''
-  const status = sp.status ?? ''
-  const page = parseInt(sp.page ?? '1')
-  const limit = 20
+function ClientesContent() {
+  const searchParams = useSearchParams()
+  const busca = searchParams.get('busca') ?? ''
+  const status = searchParams.get('status') ?? ''
+  const page = parseInt(searchParams.get('page') ?? '1')
 
-  let query = adminDb.collection('clientes').orderBy('razaoSocial') as FirebaseFirestore.Query
+  const [allClientes, setAllClientes] = useState<Array<Record<string, string>>>([])
+  const [loading, setLoading] = useState(true)
 
-  if (status) {
-    query = query.where('status', '==', status)
+  useEffect(() => {
+    setLoading(true)
+    getClientes(status ? { status } : {})
+      .then((data) => setAllClientes(data as Array<Record<string, string>>))
+      .finally(() => setLoading(false))
+  }, [status])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-5 h-5 animate-spin" />
+      </div>
+    )
   }
 
-  const snap = await query.get()
-  let clientes = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Array<Record<string, string>>
-
+  let clientes = allClientes
   if (busca) {
     const buscaLower = busca.toLowerCase()
     clientes = clientes.filter(
@@ -62,8 +63,8 @@ export default async function ClientesPage({
   }
 
   const total = clientes.length
-  const totalPages = Math.ceil(total / limit)
-  const paginados = clientes.slice((page - 1) * limit, page * limit)
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const paginados = clientes.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
     <div className="space-y-5">
@@ -179,5 +180,13 @@ export default async function ClientesPage({
         </div>
       )}
     </div>
+  )
+}
+
+export default function ClientesPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
+      <ClientesContent />
+    </Suspense>
   )
 }

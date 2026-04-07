@@ -1,13 +1,14 @@
-export const dynamic = 'force-dynamic'
+'use client'
 
-import { requireAdmin } from '@/lib/auth'
-import { adminDb } from '@/lib/firebase-admin'
+import { useState, useEffect } from 'react'
+import { Timestamp } from 'firebase/firestore'
+
+import { getUsuarios } from '@/lib/firestore-client'
 import { formatDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { UsuarioForm } from '@/components/admin/usuario-form'
-import type { Timestamp } from 'firebase-admin/firestore'
+import { Loader2 } from 'lucide-react'
 
 const PERFIL_LABELS: Record<string, string> = {
   admin: 'Admin',
@@ -17,18 +18,23 @@ const PERFIL_LABELS: Record<string, string> = {
   leitura: 'Leitura',
 }
 
-export default async function AdminUsuariosPage() {
-  await requireAdmin()
+export default function AdminUsuariosPage() {
+  const [usuarios, setUsuarios] = useState<Array<Record<string, unknown>>>([])
+  const [loading, setLoading] = useState(true)
 
-  const snap = await adminDb
-    .collection('usuarios')
-    .orderBy('nome')
-    .get()
+  useEffect(() => {
+    getUsuarios()
+      .then((data) => setUsuarios(data as Array<Record<string, unknown>>))
+      .finally(() => setLoading(false))
+  }, [])
 
-  const usuarios = snap.docs.map((d) => ({
-    id: d.id,
-    ...d.data(),
-  })) as Array<Record<string, unknown>>
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-5 h-5 animate-spin" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-5">

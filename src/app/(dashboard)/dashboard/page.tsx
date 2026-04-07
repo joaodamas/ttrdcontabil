@@ -1,9 +1,10 @@
-export const dynamic = 'force-dynamic'
+'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { requireAuth } from '@/lib/auth'
-import { adminDb } from '@/lib/firebase-admin'
-import { Timestamp } from 'firebase-admin/firestore'
+import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
+
+import { listDocuments } from '@/lib/firestore-client'
 import { formatCurrency, formatDate, formatMesAno } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -13,138 +14,120 @@ import {
   CheckSquare,
   TrendingUp,
   AlertTriangle,
+  Loader2,
 } from 'lucide-react'
 
-export default async function DashboardPage() {
-  await requireAuth()
-
+export default function DashboardPage() {
   const hoje = new Date()
   const mesAtual = hoje.getMonth() + 1
   const anoAtual = hoje.getFullYear()
-  const em7Dias = new Date(hoje)
-  em7Dias.setDate(hoje.getDate() + 7)
-
   const mesAnterior = mesAtual === 1 ? 12 : mesAtual - 1
   const anoAnterior = mesAtual === 1 ? anoAtual - 1 : anoAtual
 
-  const hojeTs = Timestamp.fromDate(hoje)
-  const em7DiasTs = Timestamp.fromDate(em7Dias)
+  const [loading, setLoading] = useState(true)
+  const [totalClientesAtivos, setTotalClientesAtivos] = useState(0)
+  const [compCounts, setCompCounts] = useState<Record<string, number>>({})
+  const [tarefasPendentes, setTarefasPendentes] = useState(0)
+  const [somaVencendo, setSomaVencendo] = useState(0)
+  const [vencendoCount, setVencendoCount] = useState(0)
+  const [somaAtrasados, setSomaAtrasados] = useState(0)
+  const [atrasadosCount, setAtrasadosCount] = useState(0)
+  const [tarefasVencidas, setTarefasVencidas] = useState<Array<{ id: string; titulo: string; clienteNome?: string; dataPrazo?: Timestamp }>>([])
+  const [competenciasAbertasAnteriores, setCompetenciasAbertasAnteriores] = useState<Array<{ id: string; clienteNome?: string; mes: number; ano: number }>>([])
+  const [lancamentosVencidos, setLancamentosVencidos] = useState<Array<{ id: string; descricao: string; clienteNome?: string; valor: number; dataVencimento: Timestamp }>>([])
 
-  const [
-    clientesSnap,
-    competenciasMesSnap,
-    tarefasAbertasSnap,
-    lancamentosVencendoSnap,
-    lancamentosAtrasadosSnap,
-    tarefasVencidasSnap,
-    competenciasAbertasAnterioresSnap,
-    lancamentosVencidosSnap,
-  ] = await Promise.all([
-    // Clientes ativos
-    adminDb.collection('clientes').where('status', '==', 'ativo').count().get(),
+  useEffect(() => {
+    const em7Dias = new Date(hoje)
+    em7Dias.setDate(hoje.getDate() + 7)
 
-    // Competências do mês atual
-    adminDb
-      .collection('competencias')
-      .where('mes', '==', mesAtual)
-      .where('ano', '==', anoAtual)
-      .get(),
+    const hojeTs = Timestamp.fromDate(hoje)
+    const em7DiasTs = Timestamp.fromDate(em7Dias)
 
-    // Tarefas pendentes + em_andamento (usamos contagem separada)
-    adminDb
-      .collection('tarefas')
-      .where('status', 'in', ['pendente', 'em_andamento'])
-      .count()
-      .get(),
+    Promise.all([
+      // Clientes ativos
+      listDocuments('clientes', [where('status', '==', 'ativo')]),
+      // Competências do mês atual
+      listDocuments('competencias', [where('mes', '==', mesAtual), where('ano', '==', anoAtual)]),
+      // Tarefas pendentes
+      listDocuments('tarefas', [where('status', 'in', ['pendente', 'em_andamento'])]),
+      // Lançamentos vencendo em 7 dias
+      listDocuments('lancamentos', [
+        where('tipo', '==', 'receita'),
+        where('status', '==', 'pendente'),
+        where('dataVencimento', '>=', hojeTs),
+        where('dataVencimento', '<=', em7DiasTs),
+      ]),
+      // Lançamentos em atraso
+      listDocuments('lancamentos', [
+        where('tipo', '==', 'receita'),
+        where('status', '==', 'pendente'),
+        where('dataVencimento', '<', hojeTs),
+      ]),
+      // Tarefas vencidas (top 5)
+      listDocuments('tarefas', [
+        where('dataPrazo', '<', hojeTs),
+        where('status', 'in', ['pendente', 'em_andamento']),
+        orderBy('dataPrazo', 'asc'),
+        limit(5),
+      ]),
+      // Competências abertas mês anterior (top 5)
+      listDocuments('competencias', [
+        where('mes', '==', mesAnterior),
+        where('ano', '==', anoAnterior),
+        where('status', '==', 'aberta'),
+        limit(5),
+      ]),
+      // Lançamentos vencidos (top 5)
+      listDocuments('lancamentos', [
+        where('tipo', '==', 'receita'),
+        where('status', '==', 'pendente'),
+        where('dataVencimento', '<', hojeTs),
+        orderBy('dataVencimento', 'asc'),
+        limit(5),
+      ]),
+    ]).then(([
+      clientesData,
+      compMesData,
+      tarefasData,
+      vencendoData,
+      atrasadosData,
+      tarefasVencidasData,
+      compAbertasData,
+      lancVencidosData,
+    ]) => {
+      setTotalClientesAtivos(clientesData.length)
 
-    // Lançamentos receitas vencendo em 7 dias
-    adminDb
-      .collection('lancamentos')
-      .where('tipo', '==', 'receita')
-      .where('status', '==', 'pendente')
-      .where('dataVencimento', '>=', hojeTs)
-      .where('dataVencimento', '<=', em7DiasTs)
-      .get(),
+      const counts: Record<string, number> = {}
+      compMesData.forEach((d) => {
+        const s = (d as Record<string, unknown>).status as string
+        counts[s] = (counts[s] ?? 0) + 1
+      })
+      setCompCounts(counts)
 
-    // Lançamentos em atraso
-    adminDb
-      .collection('lancamentos')
-      .where('tipo', '==', 'receita')
-      .where('status', '==', 'pendente')
-      .where('dataVencimento', '<', hojeTs)
-      .get(),
+      setTarefasPendentes(tarefasData.length)
 
-    // Tarefas vencidas (top 5)
-    adminDb
-      .collection('tarefas')
-      .where('dataPrazo', '<', hojeTs)
-      .where('status', 'in', ['pendente', 'em_andamento'])
-      .orderBy('dataPrazo', 'asc')
-      .limit(5)
-      .get(),
+      const sumVencendo = vencendoData.reduce((acc, d) => acc + (((d as Record<string, unknown>).valor as number) ?? 0), 0)
+      setSomaVencendo(sumVencendo)
+      setVencendoCount(vencendoData.length)
 
-    // Competências abertas do mês anterior (top 5)
-    adminDb
-      .collection('competencias')
-      .where('mes', '==', mesAnterior)
-      .where('ano', '==', anoAnterior)
-      .where('status', '==', 'aberta')
-      .limit(5)
-      .get(),
+      const sumAtrasados = atrasadosData.reduce((acc, d) => acc + (((d as Record<string, unknown>).valor as number) ?? 0), 0)
+      setSomaAtrasados(sumAtrasados)
+      setAtrasadosCount(atrasadosData.length)
 
-    // Lançamentos vencidos (top 5, mais antigos)
-    adminDb
-      .collection('lancamentos')
-      .where('tipo', '==', 'receita')
-      .where('status', '==', 'pendente')
-      .where('dataVencimento', '<', hojeTs)
-      .orderBy('dataVencimento', 'asc')
-      .limit(5)
-      .get(),
-  ])
+      setTarefasVencidas(tarefasVencidasData as Array<{ id: string; titulo: string; clienteNome?: string; dataPrazo?: Timestamp }>)
+      setCompetenciasAbertasAnteriores(compAbertasData as Array<{ id: string; clienteNome?: string; mes: number; ano: number }>)
+      setLancamentosVencidos(lancVencidosData as Array<{ id: string; descricao: string; clienteNome?: string; valor: number; dataVencimento: Timestamp }>)
+    }).finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const totalClientesAtivos = clientesSnap.data().count
-  const tarefasPendentes = tarefasAbertasSnap.data().count
-
-  // Agrupa competências por status
-  const compCounts: Record<string, number> = {}
-  competenciasMesSnap.docs.forEach((d) => {
-    const s = d.data().status as string
-    compCounts[s] = (compCounts[s] ?? 0) + 1
-  })
-
-  // Soma lançamentos vencendo
-  const somaVencendo = lancamentosVencendoSnap.docs.reduce(
-    (acc, d) => acc + ((d.data().valor as number) ?? 0),
-    0
-  )
-  const somaAtrasados = lancamentosAtrasadosSnap.docs.reduce(
-    (acc, d) => acc + ((d.data().valor as number) ?? 0),
-    0
-  )
-
-  const tarefasVencidas = tarefasVencidasSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Array<{
-    id: string
-    titulo: string
-    clienteNome?: string
-    dataPrazo?: Timestamp
-  }>
-
-  const competenciasAbertasAnteriores = competenciasAbertasAnterioresSnap.docs.map((d) => ({
-    id: d.id,
-    ...d.data(),
-  })) as Array<{ id: string; clienteNome?: string; mes: number; ano: number }>
-
-  const lancamentosVencidos = lancamentosVencidosSnap.docs.map((d) => ({
-    id: d.id,
-    ...d.data(),
-  })) as Array<{
-    id: string
-    descricao: string
-    clienteNome?: string
-    valor: number
-    dataVencimento: Timestamp
-  }>
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-5 h-5 animate-spin" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -228,7 +211,7 @@ export default async function DashboardPage() {
           <CardContent>
             <p className="text-2xl font-bold">{formatCurrency(somaVencendo)}</p>
             <p className="text-xs text-muted-foreground">
-              {lancamentosVencendoSnap.size} lançamento{lancamentosVencendoSnap.size !== 1 ? 's' : ''}
+              {vencendoCount} lançamento{vencendoCount !== 1 ? 's' : ''}
             </p>
           </CardContent>
         </Card>
@@ -245,7 +228,7 @@ export default async function DashboardPage() {
           <CardContent>
             <p className="text-2xl font-bold text-destructive">{formatCurrency(somaAtrasados)}</p>
             <p className="text-xs text-muted-foreground">
-              {lancamentosAtrasadosSnap.size} lançamento{lancamentosAtrasadosSnap.size !== 1 ? 's' : ''}
+              {atrasadosCount} lançamento{atrasadosCount !== 1 ? 's' : ''}
             </p>
           </CardContent>
         </Card>

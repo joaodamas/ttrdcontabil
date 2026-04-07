@@ -1,13 +1,15 @@
-export const dynamic = 'force-dynamic'
+'use client'
 
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { requireAuth } from '@/lib/auth'
-import { adminDb } from '@/lib/firebase-admin'
-import { formatDate, formatCurrency, formatMesAno } from '@/lib/utils'
+import { where, orderBy, Timestamp } from 'firebase/firestore'
+
+import { listDocuments } from '@/lib/firestore-client'
+import { formatDate, formatCurrency } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft } from 'lucide-react'
-import type { Timestamp } from 'firebase-admin/firestore'
+import { ArrowLeft, Loader2 } from 'lucide-react'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   emitida: { label: 'Emitida', variant: 'default' },
@@ -17,57 +19,41 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
   erro_integracao: { label: 'Erro', variant: 'destructive' },
 }
 
-interface SearchParams {
-  clienteId?: string
-  status?: string
-  mes?: string
-  ano?: string
-  page?: string
-}
+const PAGE_SIZE = 20
 
-export default async function FiscalHistoricoPage({
-  searchParams,
-}: {
-  searchParams: Promise<SearchParams>
-}) {
-  await requireAuth()
-  const sp = await searchParams
+function FiscalHistoricoContent() {
+  const searchParams = useSearchParams()
+  const clienteId = searchParams.get('clienteId') ?? ''
+  const status = searchParams.get('status') ?? ''
+  const mes = searchParams.get('mes') ? parseInt(searchParams.get('mes')!) : undefined
+  const ano = searchParams.get('ano') ? parseInt(searchParams.get('ano')!) : undefined
+  const page = parseInt(searchParams.get('page') ?? '1')
 
-  const clienteId = sp.clienteId ?? ''
-  const status = sp.status ?? ''
-  const mes = sp.mes ? parseInt(sp.mes) : undefined
-  const ano = sp.ano ? parseInt(sp.ano) : undefined
-  const page = parseInt(sp.page ?? '1')
-  const limit = 20
+  const [allNotas, setAllNotas] = useState<Array<Record<string, unknown>>>([])
+  const [loading, setLoading] = useState(true)
 
-  let query = adminDb.collection('nfse_emitidas') as FirebaseFirestore.Query
-
-  if (clienteId) query = query.where('clienteId', '==', clienteId)
-  if (status) query = query.where('status', '==', status)
-
-  query = query.orderBy('criadoEm', 'desc')
-
-  const snap = await query.get()
-  let all = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Array<Record<string, unknown>>
-
-  if (mes || ano) {
-    all = all.filter((n) => {
-      const dataEmissao = n.dataEmissao as Timestamp | undefined
-      if (!dataEmissao) return false
-      const dt = dataEmissao.toDate()
-      if (mes && dt.getMonth() + 1 !== mes) return false
-      if (ano && dt.getFullYear() !== ano) return false
-      return true
-    })
-  }
-
-  const total = all.length
-  const totalPages = Math.ceil(total / limit)
-  const notas = all.slice((page - 1) * limit, page * limit)
-
-  const hoje = new Date()
-  const mesAtual = hoje.getMonth() + 1
-  const anoAtual = hoje.getFullYear()
+  useEffect(() => {
+    setLoading(true)
+    const constraints = [
+      ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
+      ...(status ? [where('status', '==', status)] : []),
+      orderBy('criadoEm', 'desc'),
+    ]
+    listDocuments('nfse_emitidas', constraints).then((data) => {
+      let filtered = data as Array<Record<string, unknown>>
+      if (mes || ano) {
+        filtered = filtered.filter((n) => {
+          const dataEmissao = n.dataEmissao as Timestamp | undefined
+          if (!dataEmissao) return false
+          const dt = dataEmissao.toDate()
+          if (mes && dt.getMonth() + 1 !== mes) return false
+          if (ano && dt.getFullYear() !== ano) return false
+          return true
+        })
+      }
+      setAllNotas(filtered)
+    }).finally(() => setLoading(false))
+  }, [clienteId, status, mes, ano])
 
   function buildUrl(overrides: Record<string, string | number>) {
     const params = new URLSearchParams({
@@ -76,10 +62,22 @@ export default async function FiscalHistoricoPage({
       ...(mes && { mes: String(mes) }),
       ...(ano && { ano: String(ano) }),
       page: String(page),
-      ...overrides,
+      ...Object.fromEntries(Object.entries(overrides).map(([k, v]) => [k, String(v)])),
     })
     return `/fiscal/historico?${params.toString()}`
   }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-5 h-5 animate-spin" />
+      </div>
+    )
+  }
+
+  const total = allNotas.length
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const notas = allNotas.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
     <div className="space-y-5">
@@ -189,5 +187,13 @@ export default async function FiscalHistoricoPage({
         </div>
       ) : null}
     </div>
+  )
+}
+
+export default function FiscalHistoricoPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
+      <FiscalHistoricoContent />
+    </Suspense>
   )
 }

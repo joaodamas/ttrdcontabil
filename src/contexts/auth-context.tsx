@@ -1,57 +1,44 @@
 'use client'
 
-import { createContext, useContext, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { createContext, useContext, useEffect, useState } from 'react'
+import { onSession, signOut, type UserSession } from '@/lib/auth-client'
 
-interface UsuarioSession {
-  id: string
-  nome: string
-  email: string
-  perfil: string
-}
-
-interface AuthContextType {
-  usuario: UsuarioSession
+interface AuthContextValue {
+  usuario: UserSession | null
+  loading: boolean
   logout: () => Promise<void>
-  isAdmin: boolean
-  isFiscal: boolean
-  isFinanceiro: boolean
 }
 
-const AuthContext = createContext<AuthContextType | null>(null)
+const AuthContext = createContext<AuthContextValue>({
+  usuario: null,
+  loading: true,
+  logout:  async () => {},
+})
 
-export function AuthProvider({
-  children,
-  usuario,
-}: {
-  children: React.ReactNode
-  usuario: UsuarioSession
-}) {
-  const router = useRouter()
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [usuario, setUsuario] = useState<UserSession | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  const logout = useCallback(async () => {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    router.push('/login')
-    router.refresh()
-  }, [router])
+  useEffect(() => {
+    const unsub = onSession((session) => {
+      setUsuario(session)
+      setLoading(false)
+    })
+    return unsub
+  }, [])
+
+  async function logout() {
+    await signOut()
+    setUsuario(null)
+  }
 
   return (
-    <AuthContext.Provider
-      value={{
-        usuario,
-        logout,
-        isAdmin: usuario.perfil === 'admin',
-        isFiscal: ['admin', 'fiscal'].includes(usuario.perfil),
-        isFinanceiro: ['admin', 'financeiro'].includes(usuario.perfil),
-      }}
-    >
+    <AuthContext.Provider value={{ usuario, loading, logout }}>
       {children}
     </AuthContext.Provider>
   )
 }
 
-export function useAuth(): AuthContextType {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth deve ser usado dentro de AuthProvider')
-  return ctx
+export function useAuth() {
+  return useContext(AuthContext)
 }

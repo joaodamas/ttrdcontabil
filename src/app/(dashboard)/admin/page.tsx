@@ -1,13 +1,10 @@
-export const dynamic = 'force-dynamic'
+'use client'
 
 import Link from 'next/link'
-import { requireAdmin } from '@/lib/auth'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Users, Briefcase, Plug } from 'lucide-react'
 
-export default async function AdminPage() {
-  await requireAdmin()
-
+export default function AdminPage() {
   const links = [
     {
       href: '/admin/usuarios',

@@ -1,11 +1,13 @@
-export const dynamic = 'force-dynamic'
+'use client'
 
-import { requireAdmin } from '@/lib/auth'
-import { adminDb } from '@/lib/firebase-admin'
+import { useState, useEffect } from 'react'
+
+import { getServicos } from '@/lib/firestore-client'
 import { formatCurrency } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { ServicoForm } from '@/components/admin/servico-form'
+import { Loader2 } from 'lucide-react'
 
 const FREQUENCIA_LABELS: Record<string, string> = {
   mensal: 'Mensal',
@@ -14,18 +16,23 @@ const FREQUENCIA_LABELS: Record<string, string> = {
   trimestral: 'Trimestral',
 }
 
-export default async function AdminServicosPage() {
-  await requireAdmin()
+export default function AdminServicosPage() {
+  const [servicos, setServicos] = useState<Array<Record<string, unknown>>>([])
+  const [loading, setLoading] = useState(true)
 
-  const snap = await adminDb
-    .collection('servicos')
-    .orderBy('nome')
-    .get()
+  useEffect(() => {
+    getServicos()
+      .then((data) => setServicos(data as Array<Record<string, unknown>>))
+      .finally(() => setLoading(false))
+  }, [])
 
-  const servicos = snap.docs.map((d) => ({
-    id: d.id,
-    ...d.data(),
-  })) as Array<Record<string, unknown>>
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-5 h-5 animate-spin" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-5">

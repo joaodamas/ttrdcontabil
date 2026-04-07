@@ -1,0 +1,91 @@
+export const dynamic = 'force-static'
+export function generateStaticParams() { return [] }
+import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/auth'
+import { adminDb } from '@/lib/firebase-admin'
+import { Timestamp } from 'firebase-admin/firestore'
+import { z } from 'zod'
+
+const updateSchema = z.object({
+  status: z
+    .enum(['pendente', 'em_andamento', 'entregue', 'retificado', 'cancelado'])
+    .optional(),
+  responsavelId: z.string().optional().nullable(),
+  dataEntrega: z.string().optional().nullable(),
+  numeroRecibo: z.string().max(50).optional().nullable(),
+  observacoes: z.string().optional().nullable(),
+})
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireAuth()
+    const { id } = await params
+
+    const doc = await adminDb.collection('ir_declaracoes').doc(id).get()
+    if (!doc.exists) {
+      return NextResponse.json({ error: 'Declaração IR não encontrada' }, { status: 404 })
+    }
+
+    const declaracao = { id: doc.id, ...doc.data() }
+
+    // Checklist
+    const checklistSnap = await adminDb
+      .collection('ir_checklist')
+      .where('declaracaoId', '==', id)
+      .orderBy('criadoEm', 'asc')
+      .get()
+    const checklist = checklistSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
+
+    return NextResponse.json({ declaracao, checklist })
+  } catch (error) {
+    if (error instanceof z.ZodError) return NextResponse.json({ error: error.issues[0].message }, { status: 400 })
+    if (error instanceof Error && error.message === 'UNAUTHORIZED') return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+    if (error instanceof Error && error.message === 'FORBIDDEN') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
+    console.error(error)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+  }
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireAuth()
+    const { id } = await params
+
+    const body = await req.json()
+    const data = updateSchema.parse(body)
+
+    const doc = await adminDb.collection('ir_declaracoes').doc(id).get()
+    if (!doc.exists) {
+      return NextResponse.json({ error: 'Declaração IR não encontrada' }, { status: 404 })
+    }
+
+    const updateData: Record<string, unknown> = { atualizadoEm: Timestamp.now() }
+
+    if (data.status !== undefined) updateData.status = data.status
+    if (data.responsavelId !== undefined) updateData.responsavelId = data.responsavelId
+    if (data.numeroRecibo !== undefined) updateData.numeroRecibo = data.numeroRecibo
+    if (data.observacoes !== undefined) updateData.observacoes = data.observacoes
+    if (data.dataEntrega !== undefined) {
+      updateData.dataEntrega = data.dataEntrega
+        ? Timestamp.fromDate(new Date(data.dataEntrega))
+        : null
+    }
+
+    await adminDb.collection('ir_declaracoes').doc(id).update(updateData)
+
+    const updated = await adminDb.collection('ir_declaracoes').doc(id).get()
+    return NextResponse.json({ id: updated.id, ...updated.data() })
+  } catch (error) {
+    if (error instanceof z.ZodError) return NextResponse.json({ error: error.issues[0].message }, { status: 400 })
+    if (error instanceof Error && error.message === 'UNAUTHORIZED') return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+    if (error instanceof Error && error.message === 'FORBIDDEN') return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
+    console.error(error)
+    return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
+  }
+}

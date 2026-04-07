@@ -1,13 +1,15 @@
-export const dynamic = 'force-dynamic'
+'use client'
 
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { requireAuth } from '@/lib/auth'
-import { adminDb } from '@/lib/firebase-admin'
+import { where, orderBy, Timestamp } from 'firebase/firestore'
+
+import { listDocuments } from '@/lib/firestore-client'
 import { formatDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Plus } from 'lucide-react'
-import type { Timestamp } from 'firebase-admin/firestore'
+import { Plus, Loader2 } from 'lucide-react'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   pendente: { label: 'Pendente', variant: 'outline' },
@@ -23,48 +25,36 @@ const PRIORIDADE_MAP: Record<string, { label: string; variant: 'default' | 'seco
   urgente: { label: 'Urgente', variant: 'destructive' },
 }
 
-interface SearchParams {
-  status?: string
-  prioridade?: string
-  responsavelId?: string
-  clienteId?: string
-  competenciaId?: string
-  page?: string
-}
+const PAGE_SIZE = 20
 
-export default async function TarefasPage({
-  searchParams,
-}: {
-  searchParams: Promise<SearchParams>
-}) {
-  await requireAuth()
-  const sp = await searchParams
+function TarefasContent() {
+  const searchParams = useSearchParams()
+  const status = searchParams.get('status') ?? ''
+  const prioridade = searchParams.get('prioridade') ?? ''
+  const responsavelId = searchParams.get('responsavelId') ?? ''
+  const clienteId = searchParams.get('clienteId') ?? ''
+  const competenciaId = searchParams.get('competenciaId') ?? ''
+  const page = parseInt(searchParams.get('page') ?? '1')
 
-  const status = sp.status ?? ''
-  const prioridade = sp.prioridade ?? ''
-  const responsavelId = sp.responsavelId ?? ''
-  const clienteId = sp.clienteId ?? ''
-  const competenciaId = sp.competenciaId ?? ''
-  const page = parseInt(sp.page ?? '1')
-  const limit = 20
+  const [allTarefas, setAllTarefas] = useState<Array<Record<string, unknown>>>([])
+  const [loading, setLoading] = useState(true)
 
   const hoje = new Date()
 
-  let query = adminDb.collection('tarefas') as FirebaseFirestore.Query
-
-  if (status) query = query.where('status', '==', status)
-  if (prioridade) query = query.where('prioridade', '==', prioridade)
-  if (responsavelId) query = query.where('responsavelId', '==', responsavelId)
-  if (clienteId) query = query.where('clienteId', '==', clienteId)
-  if (competenciaId) query = query.where('competenciaId', '==', competenciaId)
-
-  query = query.orderBy('dataPrazo', 'asc')
-
-  const snap = await query.get()
-  const all = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Array<Record<string, unknown>>
-  const total = all.length
-  const totalPages = Math.ceil(total / limit)
-  const tarefas = all.slice((page - 1) * limit, page * limit)
+  useEffect(() => {
+    setLoading(true)
+    const constraints = [
+      ...(status ? [where('status', '==', status)] : []),
+      ...(prioridade ? [where('prioridade', '==', prioridade)] : []),
+      ...(responsavelId ? [where('responsavelId', '==', responsavelId)] : []),
+      ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
+      ...(competenciaId ? [where('competenciaId', '==', competenciaId)] : []),
+      orderBy('dataVencimento', 'asc'),
+    ]
+    listDocuments('tarefas', constraints)
+      .then((data) => setAllTarefas(data as Array<Record<string, unknown>>))
+      .finally(() => setLoading(false))
+  }, [status, prioridade, responsavelId, clienteId, competenciaId])
 
   function buildUrl(overrides: Record<string, string | number>) {
     const params = new URLSearchParams({
@@ -74,10 +64,22 @@ export default async function TarefasPage({
       ...(clienteId && { clienteId }),
       ...(competenciaId && { competenciaId }),
       page: String(page),
-      ...overrides,
+      ...Object.fromEntries(Object.entries(overrides).map(([k, v]) => [k, String(v)])),
     })
     return `/tarefas?${params.toString()}`
   }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-5 h-5 animate-spin" />
+      </div>
+    )
+  }
+
+  const total = allTarefas.length
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const tarefas = allTarefas.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
     <div className="space-y-5">
@@ -226,5 +228,13 @@ export default async function TarefasPage({
         </div>
       ) : null}
     </div>
+  )
+}
+
+export default function TarefasPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
+      <TarefasContent />
+    </Suspense>
   )
 }

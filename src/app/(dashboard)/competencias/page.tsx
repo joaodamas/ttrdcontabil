@@ -1,12 +1,15 @@
-export const dynamic = 'force-dynamic'
+'use client'
 
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { requireAuth } from '@/lib/auth'
-import { adminDb } from '@/lib/firebase-admin'
+import { where, orderBy } from 'firebase/firestore'
+
+import { listDocuments } from '@/lib/firestore-client'
 import { formatMesAno } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Plus, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   aberta: { label: 'Aberta', variant: 'outline' },
@@ -15,46 +18,37 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
   cancelada: { label: 'Cancelada', variant: 'destructive' },
 }
 
-interface SearchParams {
-  mes?: string
-  ano?: string
-  status?: string
-  clienteId?: string
-  page?: string
-}
+const PAGE_SIZE = 20
 
-export default async function CompetenciasPage({
-  searchParams,
-}: {
-  searchParams: Promise<SearchParams>
-}) {
-  await requireAuth()
-  const sp = await searchParams
+function CompetenciasContent() {
+  const searchParams = useSearchParams()
 
   const hoje = new Date()
   const mesAtual = hoje.getMonth() + 1
   const anoAtual = hoje.getFullYear()
 
-  const mes = sp.mes ? parseInt(sp.mes) : mesAtual
-  const ano = sp.ano ? parseInt(sp.ano) : anoAtual
-  const status = sp.status ?? ''
-  const clienteId = sp.clienteId ?? ''
-  const page = parseInt(sp.page ?? '1')
-  const limit = 20
+  const mes = searchParams.get('mes') ? parseInt(searchParams.get('mes')!) : mesAtual
+  const ano = searchParams.get('ano') ? parseInt(searchParams.get('ano')!) : anoAtual
+  const status = searchParams.get('status') ?? ''
+  const clienteId = searchParams.get('clienteId') ?? ''
+  const page = parseInt(searchParams.get('page') ?? '1')
 
-  let query = adminDb.collection('competencias') as FirebaseFirestore.Query
-  query = query.where('mes', '==', mes).where('ano', '==', ano)
+  const [allCompetencias, setAllCompetencias] = useState<Array<Record<string, unknown>>>([])
+  const [loading, setLoading] = useState(true)
 
-  if (status) query = query.where('status', '==', status)
-  if (clienteId) query = query.where('clienteId', '==', clienteId)
-
-  query = query.orderBy('clienteNome', 'asc')
-
-  const snap = await query.get()
-  const all = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Array<Record<string, unknown>>
-  const total = all.length
-  const totalPages = Math.ceil(total / limit)
-  const competencias = all.slice((page - 1) * limit, page * limit)
+  useEffect(() => {
+    setLoading(true)
+    const constraints = [
+      where('mes', '==', mes),
+      where('ano', '==', ano),
+      ...(status ? [where('status', '==', status)] : []),
+      ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
+      orderBy('clienteNome', 'asc'),
+    ]
+    listDocuments('competencias', constraints)
+      .then((data) => setAllCompetencias(data as Array<Record<string, unknown>>))
+      .finally(() => setLoading(false))
+  }, [mes, ano, status, clienteId])
 
   function buildUrl(overrides: Record<string, string | number>) {
     const params = new URLSearchParams({
@@ -63,10 +57,22 @@ export default async function CompetenciasPage({
       ...(status && { status }),
       ...(clienteId && { clienteId }),
       page: String(page),
-      ...overrides,
+      ...Object.fromEntries(Object.entries(overrides).map(([k, v]) => [k, String(v)])),
     })
     return `/competencias?${params.toString()}`
   }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-5 h-5 animate-spin" />
+      </div>
+    )
+  }
+
+  const total = allCompetencias.length
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const competencias = allCompetencias.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
     <div className="space-y-5">
@@ -201,5 +207,13 @@ export default async function CompetenciasPage({
         </div>
       ) : null}
     </div>
+  )
+}
+
+export default function CompetenciasPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
+      <CompetenciasContent />
+    </Suspense>
   )
 }

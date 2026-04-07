@@ -159,33 +159,21 @@ const SERVICOS_PADRAO = [
 
 // ── Usuário admin ─────────────────────────────────────────────────────────────
 
-async function criarAdmin() {
-  const email = 'admin@ttrdcontabil.com.br'
+async function criarUsuario(email: string, senha: string, nome: string, perfil: string) {
   try {
     const existing = await auth.getUserByEmail(email)
-    console.log(`  skip  auth/${existing.uid} (admin já existe)`)
-    // Garante doc no Firestore
-    await upsert('usuarios', existing.uid, {
-      nome:   'Administrador',
-      email,
-      perfil: 'admin',
-      ativo:  true,
-    })
+    console.log(`  skip  auth/${existing.uid} (${email} já existe)`)
+    await upsert('usuarios', existing.uid, { nome, email, perfil, ativo: true })
   } catch {
-    // Usuário não existe — cria
-    const user = await auth.createUser({
-      email,
-      password: 'Admin@123456',
-      displayName: 'Administrador',
-    })
-    await upsert('usuarios', user.uid, {
-      nome:   'Administrador',
-      email,
-      perfil: 'admin',
-      ativo:  true,
-    })
-    console.log(`  added auth/${user.uid} (admin)`)
+    const user = await auth.createUser({ email, password: senha, displayName: nome })
+    await upsert('usuarios', user.uid, { nome, email, perfil, ativo: true })
+    console.log(`  added auth/${user.uid} (${email})`)
   }
+}
+
+async function criarAdmin() {
+  await criarUsuario('admin@ttrdcontabil.com.br', 'Admin@123456', 'Administrador', 'admin')
+  await criarUsuario('joaodamasit@gmail.com', 'Jopa@0206', 'João Damas', 'admin')
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────

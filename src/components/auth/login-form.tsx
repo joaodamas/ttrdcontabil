@@ -5,8 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { signInWithEmailAndPassword } from 'firebase/auth'
-import { auth } from '@/lib/firebase'
+import { signIn } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -36,38 +35,19 @@ export function LoginForm() {
   async function onSubmit(data: LoginFormValues) {
     setError(null)
     try {
-      // 1. Firebase Client SDK — autentica e obtém idToken
-      const userCredential = await signInWithEmailAndPassword(auth, data.email, data.senha)
-      const idToken = await userCredential.user.getIdToken()
-
-      // 2. Envia idToken para o servidor criar o session cookie
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken }),
-      })
-
-      if (!res.ok) {
-        const json = await res.json()
-        setError(json.error ?? 'Erro ao fazer login')
-        return
-      }
-
-      // 3. Redireciona
+      await signIn(data.email, data.senha)
       router.push(from)
-      router.refresh()
     } catch (err) {
       const code = (err as { code?: string }).code
-      if (
-        code === 'auth/user-not-found' ||
-        code === 'auth/wrong-password' ||
-        code === 'auth/invalid-credential'
-      ) {
+      const msg  = (err as { message?: string }).message ?? ''
+      if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
         setError('E-mail ou senha inválidos')
       } else if (code === 'auth/too-many-requests') {
-        setError('Muitas tentativas. Aguarde um momento e tente novamente.')
+        setError('Muitas tentativas. Aguarde um momento.')
       } else if (code === 'auth/user-disabled') {
         setError('Usuário inativo. Contate o administrador.')
+      } else if (msg) {
+        setError(msg)
       } else {
         setError('Erro de conexão. Tente novamente.')
       }

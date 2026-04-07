@@ -50,7 +50,7 @@ export function Sidebar() {
   const { usuario, logout } = useAuth()
 
   const itemsVisiveis = NAV_ITEMS.filter(
-    (item) => !item.perfis || item.perfis.includes(usuario.perfil)
+    (item) => !item.perfis || (usuario && item.perfis.includes(usuario.perfil))
   )
 
   return (
@@ -102,11 +102,11 @@ export function Sidebar() {
       <div className="px-3 py-4 border-t border-sidebar-border">
         <div className="flex items-center gap-3 px-3 py-2 rounded-md">
           <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary text-xs font-semibold shrink-0">
-            {getInitials(usuario.nome)}
+            {usuario ? getInitials(usuario.nome) : '—'}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-sidebar-foreground truncate">{usuario.nome}</p>
-            <p className="text-xs text-sidebar-foreground/50 capitalize truncate">{usuario.perfil}</p>
+            <p className="text-xs font-medium text-sidebar-foreground truncate">{usuario?.nome ?? '—'}</p>
+            <p className="text-xs text-sidebar-foreground/50 capitalize truncate">{usuario?.perfil ?? ''}</p>
           </div>
           <Tooltip>
             <TooltipTrigger>

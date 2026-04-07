@@ -1,13 +1,15 @@
-export const dynamic = 'force-dynamic'
+'use client'
 
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { requireAuth } from '@/lib/auth'
-import { adminDb } from '@/lib/firebase-admin'
+import { where, orderBy, Timestamp } from 'firebase/firestore'
+
+import { listDocuments } from '@/lib/firestore-client'
 import { formatDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Plus } from 'lucide-react'
-import type { Timestamp } from 'firebase-admin/firestore'
+import { Plus, Loader2 } from 'lucide-react'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   pendente: { label: 'Pendente', variant: 'outline' },
@@ -17,50 +19,53 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
   cancelado: { label: 'Cancelado', variant: 'destructive' },
 }
 
-interface SearchParams {
-  anoBase?: string
-  status?: string
-  page?: string
-}
+const PAGE_SIZE = 20
 
-export default async function IrPage({
-  searchParams,
-}: {
-  searchParams: Promise<SearchParams>
-}) {
-  await requireAuth()
-  const sp = await searchParams
-
+function IrContent() {
+  const searchParams = useSearchParams()
   const anoBaseAtual = new Date().getFullYear() - 1
-  const anoBase = sp.anoBase ? parseInt(sp.anoBase) : anoBaseAtual
-  const status = sp.status ?? ''
-  const page = parseInt(sp.page ?? '1')
-  const limit = 20
+  const anoBase = searchParams.get('anoBase') ? parseInt(searchParams.get('anoBase')!) : anoBaseAtual
+  const status = searchParams.get('status') ?? ''
+  const page = parseInt(searchParams.get('page') ?? '1')
 
-  let query = adminDb.collection('ir_declaracoes') as FirebaseFirestore.Query
-  query = query.where('anoBase', '==', anoBase)
-
-  if (status) query = query.where('status', '==', status)
-
-  query = query.orderBy('clienteNome', 'asc')
-
-  const snap = await query.get()
-  const all = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Array<Record<string, unknown>>
-  const total = all.length
-  const totalPages = Math.ceil(total / limit)
-  const declaracoes = all.slice((page - 1) * limit, page * limit)
+  const [allDeclaracoes, setAllDeclaracoes] = useState<Array<Record<string, unknown>>>([])
+  const [loading, setLoading] = useState(true)
 
   const anosDisponiveis = [anoBaseAtual, anoBaseAtual - 1, anoBaseAtual - 2, anoBaseAtual - 3]
+
+  useEffect(() => {
+    setLoading(true)
+    const constraints = [
+      where('anoBase', '==', anoBase),
+      ...(status ? [where('status', '==', status)] : []),
+      orderBy('clienteNome', 'asc'),
+    ]
+    listDocuments('ir_declaracoes', constraints)
+      .then((data) => setAllDeclaracoes(data as Array<Record<string, unknown>>))
+      .finally(() => setLoading(false))
+  }, [anoBase, status])
 
   function buildUrl(overrides: Record<string, string | number>) {
     const params = new URLSearchParams({
       anoBase: String(anoBase),
       ...(status && { status }),
       page: String(page),
-      ...overrides,
+      ...Object.fromEntries(Object.entries(overrides).map(([k, v]) => [k, String(v)])),
     })
     return `/ir?${params.toString()}`
   }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-5 h-5 animate-spin" />
+      </div>
+    )
+  }
+
+  const total = allDeclaracoes.length
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const declaracoes = allDeclaracoes.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
     <div className="space-y-5">
@@ -186,5 +191,13 @@ export default async function IrPage({
         </div>
       ) : null}
     </div>
+  )
+}
+
+export default function IrPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
+      <IrContent />
+    </Suspense>
   )
 }
