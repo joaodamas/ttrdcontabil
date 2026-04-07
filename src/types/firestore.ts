@@ -387,6 +387,36 @@ export interface NfseFilaDoc {
 }
 
 // ============================================================
+// MÓDULO FECHAMENTO MENSAL
+// ============================================================
+
+export type StatusObrigacao = 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
+export type FormaEntrega = 'guia' | 'sm' | 'programa' | 'email' | 'manual'
+
+// Coleção: fechamentos (uma entrada por cliente/mês/ano)
+export interface FechamentoDoc {
+  clienteId: string
+  clienteNome: string
+  clienteCodigo: number
+  mes: number
+  ano: number
+  regime: RegimeTributario
+  responsavel: string
+  portalUrl?: string
+  formaEntrega?: FormaEntrega | null
+
+  // Obrigações
+  dasStatus: StatusObrigacao          // DAS / Simples Nacional
+  esocialStatus: StatusObrigacao      // eSocial
+  reinfStatus: StatusObrigacao        // REINF
+  fgtsStatus: StatusObrigacao         // FGTS
+
+  observacoes?: string
+  criadoEm: Timestamp
+  atualizadoEm: Timestamp
+}
+
+// ============================================================
 // TIPO HELPER — Documento com ID
 // ============================================================
 export type WithId<T> = T & { id: string }

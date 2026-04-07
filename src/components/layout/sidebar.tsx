@@ -18,6 +18,7 @@ import {
   Building2,
   LogOut,
   ChevronRight,
+  ClipboardCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -35,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/servicos', label: 'Serviços', icon: Briefcase },
   { href: '/competencias', label: 'Competências', icon: CalendarDays },
+  { href: '/fechamento', label: 'Fechamento Mensal', icon: ClipboardCheck },
   { href: '/tarefas', label: 'Tarefas', icon: CheckSquare },
   { href: '/ir', label: 'Imp. de Renda', icon: FileText },
   { href: '/financeiro', label: 'Financeiro', icon: DollarSign },
