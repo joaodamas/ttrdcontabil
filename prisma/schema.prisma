@@ -1,0 +1,745 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// DOMÍNIO 1 — AUTENTICAÇÃO E USUÁRIOS
+// ============================================================
+
+enum PerfilUsuario {
+  admin
+  operacional
+  fiscal
+  financeiro
+  leitura
+}
+
+model Usuario {
+  id            String        @id @default(uuid())
+  nome          String        @db.VarChar(150)
+  email         String        @unique @db.VarChar(150)
+  senhaHash     String        @map("senha_hash")
+  perfil        PerfilUsuario @default(operacional)
+  ativo         Boolean       @default(true)
+  ultimoAcesso  DateTime?     @map("ultimo_acesso")
+  criadoEm      DateTime      @default(now()) @map("criado_em")
+  atualizadoEm  DateTime      @updatedAt @map("atualizado_em")
+
+  sessoes              Sessao[]
+  clientesCriados      Cliente[]              @relation("ClienteCriadoPor")
+  competenciasResp     Competencia[]          @relation("CompetenciaResponsavel")
+  competenciasCriadas  Competencia[]          @relation("CompetenciaCriadaPor")
+  tarefasResp          Tarefa[]               @relation("TarefaResponsavel")
+  tarefasCriadas       Tarefa[]               @relation("TarefaCriadaPor")
+  comentarios          TarefaComentario[]
+  irDeclaracoes        IrDeclaracao[]         @relation("IrResponsavel")
+  irCriadas            IrDeclaracao[]         @relation("IrCriadoPor")
+  lancamentosCriados   Lancamento[]
+  documentosCriados    Documento[]
+  certificadosCriados  CertificadoDigital[]
+  rascunhosCriados     NfseRascunho[]
+  nfseEmitidas         NfseEmitida[]
+  logsAuditoria        LogAuditoria[]
+  nfseEventos          NfseEvento[]
+  configAtualizadas    Configuracao[]
+  clientesServCriados  ClienteServico[]
+
+  @@map("usuarios")
+}
+
+model Sessao {
+  id        String   @id @default(uuid())
+  usuarioId String   @map("usuario_id")
+  tokenHash String   @unique @map("token_hash")
+  ip        String?  @db.VarChar(45)
+  userAgent String?  @map("user_agent")
+  expiraEm  DateTime @map("expira_em")
+  criadoEm  DateTime @default(now()) @map("criado_em")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@map("sessoes")
+}
+
+// ============================================================
+// DOMÍNIO 2 — CLIENTES
+// ============================================================
+
+enum TipoPessoa {
+  pf
+  pj
+}
+
+enum StatusCliente {
+  ativo
+  inativo
+  suspenso
+}
+
+enum RegimeTributario {
+  simples_nacional
+  lucro_presumido
+  lucro_real
+  mei
+  isento
+}
+
+model Cliente {
+  id                   String            @id @default(uuid())
+  tipoPessoa           TipoPessoa        @default(pj) @map("tipo_pessoa")
+  razaoSocial          String            @map("razao_social") @db.VarChar(200)
+  nomeFantasia         String?           @map("nome_fantasia") @db.VarChar(200)
+  cpfCnpj              String            @unique @map("cpf_cnpj") @db.VarChar(18)
+  email                String?           @db.VarChar(150)
+  telefone             String?           @db.VarChar(20)
+  celular              String?           @db.VarChar(20)
+  cep                  String?           @db.VarChar(9)
+  logradouro           String?           @db.VarChar(200)
+  numero               String?           @db.VarChar(20)
+  complemento          String?           @db.VarChar(100)
+  bairro               String?           @db.VarChar(100)
+  cidade               String?           @db.VarChar(100)
+  uf                   String?           @db.Char(2)
+  regimeTributario     RegimeTributario? @map("regime_tributario")
+  responsavelNome      String?           @map("responsavel_nome") @db.VarChar(150)
+  responsavelEmail     String?           @map("responsavel_email") @db.VarChar(150)
+  responsavelTelefone  String?           @map("responsavel_telefone") @db.VarChar(20)
+  observacoes          String?
+  status               StatusCliente     @default(ativo)
+  criadoPorId          String?           @map("criado_por")
+  criadoEm             DateTime          @default(now()) @map("criado_em")
+  atualizadoEm         DateTime          @updatedAt @map("atualizado_em")
+
+  criadoPor          Usuario?                 @relation("ClienteCriadoPor", fields: [criadoPorId], references: [id])
+  servicos           ClienteServico[]
+  competencias       Competencia[]
+  tarefas            Tarefa[]
+  irDeclaracoes      IrDeclaracao[]
+  lancamentos        Lancamento[]
+  documentos         Documento[]
+  fiscal             ClienteFiscal?
+  integracoesFiscais ClienteFiscalIntegracao[]
+  certificados       CertificadoDigital[]
+  nfseTemplates      NfseTemplate[]
+  nfseRascunhos      NfseRascunho[]
+  nfseEmitidas       NfseEmitida[]
+
+  @@index([cpfCnpj])
+  @@index([status])
+  @@index([razaoSocial])
+  @@map("clientes")
+}
+
+// ============================================================
+// DOMÍNIO 3 — SERVIÇOS CONTRATADOS
+// ============================================================
+
+enum FrequenciaServico {
+  mensal
+  avulso
+  anual
+  trimestral
+}
+
+enum StatusServicoCliente {
+  ativo
+  inativo
+  suspenso
+}
+
+model Servico {
+  id           String            @id @default(uuid())
+  nome         String            @db.VarChar(150)
+  descricao    String?
+  frequencia   FrequenciaServico @default(mensal)
+  valorPadrao  Decimal?          @map("valor_padrao") @db.Decimal(12, 2)
+  ativo        Boolean           @default(true)
+  criadoEm     DateTime          @default(now()) @map("criado_em")
+  atualizadoEm DateTime          @updatedAt @map("atualizado_em")
+
+  clientesServicos ClienteServico[]
+  nfseTemplates    NfseTemplate[]
+
+  @@map("servicos")
+}
+
+model ClienteServico {
+  id             String               @id @default(uuid())
+  clienteId      String               @map("cliente_id")
+  servicoId      String               @map("servico_id")
+  valor          Decimal              @db.Decimal(12, 2)
+  diaVencimento  Int?                 @map("dia_vencimento")
+  dataInicio     DateTime             @map("data_inicio") @db.Date
+  dataFim        DateTime?            @map("data_fim") @db.Date
+  observacoes    String?
+  status         StatusServicoCliente @default(ativo)
+  criadoPorId    String?              @map("criado_por")
+  criadoEm       DateTime             @default(now()) @map("criado_em")
+  atualizadoEm   DateTime             @updatedAt @map("atualizado_em")
+
+  cliente       Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  servico       Servico      @relation(fields: [servicoId], references: [id])
+  criadoPor     Usuario?     @relation(fields: [criadoPorId], references: [id])
+  competencias  Competencia[]
+  lancamentos   Lancamento[]
+  nfseRascunhos NfseRascunho[]
+  nfseEmitidas  NfseEmitida[]
+
+  @@index([clienteId])
+  @@index([servicoId])
+  @@index([status])
+  @@map("clientes_servicos")
+}
+
+// ============================================================
+// DOMÍNIO 4 — COMPETÊNCIAS MENSAIS
+// ============================================================
+
+enum StatusCompetencia {
+  aberta
+  em_andamento
+  concluida
+  cancelada
+}
+
+model Competencia {
+  id               String            @id @default(uuid())
+  clienteId        String            @map("cliente_id")
+  clienteServicoId String?           @map("cliente_servico_id")
+  mes              Int
+  ano              Int
+  status           StatusCompetencia @default(aberta)
+  observacoes      String?
+  responsavelId    String?           @map("responsavel_id")
+  dataConclusao    DateTime?         @map("data_conclusao") @db.Date
+  criadoPorId      String?           @map("criado_por")
+  criadoEm         DateTime          @default(now()) @map("criado_em")
+  atualizadoEm     DateTime          @updatedAt @map("atualizado_em")
+
+  cliente        Cliente         @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  clienteServico ClienteServico? @relation(fields: [clienteServicoId], references: [id])
+  responsavel    Usuario?        @relation("CompetenciaResponsavel", fields: [responsavelId], references: [id])
+  criadoPor      Usuario?        @relation("CompetenciaCriadaPor", fields: [criadoPorId], references: [id])
+  tarefas        Tarefa[]
+  lancamentos    Lancamento[]
+  documentos     Documento[]
+  nfseRascunhos  NfseRascunho[]
+  nfseEmitidas   NfseEmitida[]
+
+  @@unique([clienteId, clienteServicoId, mes, ano])
+  @@index([clienteId])
+  @@index([ano, mes])
+  @@index([status])
+  @@map("competencias")
+}
+
+// ============================================================
+// DOMÍNIO 5 — TAREFAS OPERACIONAIS
+// ============================================================
+
+enum StatusTarefa {
+  pendente
+  em_andamento
+  concluida
+  cancelada
+}
+
+enum PrioridadeTarefa {
+  baixa
+  normal
+  alta
+  urgente
+}
+
+model Tarefa {
+  id            String           @id @default(uuid())
+  clienteId     String?          @map("cliente_id")
+  competenciaId String?          @map("competencia_id")
+  titulo        String           @db.VarChar(200)
+  descricao     String?
+  prioridade    PrioridadeTarefa @default(normal)
+  status        StatusTarefa     @default(pendente)
+  responsavelId String?          @map("responsavel_id")
+  dataPrazo     DateTime?        @map("data_prazo") @db.Date
+  dataConclusao DateTime?        @map("data_conclusao") @db.Date
+  criadoPorId   String?          @map("criado_por")
+  criadoEm      DateTime         @default(now()) @map("criado_em")
+  atualizadoEm  DateTime         @updatedAt @map("atualizado_em")
+
+  cliente     Cliente?     @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  competencia Competencia? @relation(fields: [competenciaId], references: [id], onDelete: SetNull)
+  responsavel Usuario?     @relation("TarefaResponsavel", fields: [responsavelId], references: [id])
+  criadoPor   Usuario?     @relation("TarefaCriadaPor", fields: [criadoPorId], references: [id])
+  comentarios TarefaComentario[]
+  documentos  Documento[]
+
+  @@index([clienteId])
+  @@index([responsavelId])
+  @@index([status])
+  @@index([dataPrazo])
+  @@map("tarefas")
+}
+
+model TarefaComentario {
+  id        String   @id @default(uuid())
+  tarefaId  String   @map("tarefa_id")
+  usuarioId String   @map("usuario_id")
+  texto     String
+  criadoEm  DateTime @default(now()) @map("criado_em")
+
+  tarefa  Tarefa  @relation(fields: [tarefaId], references: [id], onDelete: Cascade)
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@index([tarefaId])
+  @@map("tarefas_comentarios")
+}
+
+// ============================================================
+// DOMÍNIO 6 — IMPOSTO DE RENDA
+// ============================================================
+
+enum StatusIr {
+  pendente
+  em_andamento
+  entregue
+  retificado
+  cancelado
+}
+
+model IrDeclaracao {
+  id            String    @id @default(uuid())
+  clienteId     String    @map("cliente_id")
+  anoBase       Int       @map("ano_base")
+  status        StatusIr  @default(pendente)
+  responsavelId String?   @map("responsavel_id")
+  dataEntrega   DateTime? @map("data_entrega") @db.Date
+  numeroRecibo  String?   @map("numero_recibo") @db.VarChar(50)
+  observacoes   String?
+  criadoPorId   String?   @map("criado_por")
+  criadoEm      DateTime  @default(now()) @map("criado_em")
+  atualizadoEm  DateTime  @updatedAt @map("atualizado_em")
+
+  cliente     Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  responsavel Usuario?  @relation("IrResponsavel", fields: [responsavelId], references: [id])
+  criadoPor   Usuario?  @relation("IrCriadoPor", fields: [criadoPorId], references: [id])
+  checklist   IrDocumentoChecklist[]
+  documentos  Documento[]
+
+  @@unique([clienteId, anoBase])
+  @@index([clienteId])
+  @@index([anoBase])
+  @@index([status])
+  @@map("ir_declaracoes")
+}
+
+model IrDocumentoChecklist {
+  id              String    @id @default(uuid())
+  declaracaoId    String    @map("declaracao_id")
+  descricao       String    @db.VarChar(200)
+  recebido        Boolean   @default(false)
+  dataRecebimento DateTime? @map("data_recebimento") @db.Date
+  observacao      String?
+  criadoEm        DateTime  @default(now()) @map("criado_em")
+
+  declaracao IrDeclaracao @relation(fields: [declaracaoId], references: [id], onDelete: Cascade)
+
+  @@index([declaracaoId])
+  @@map("ir_documentos_checklist")
+}
+
+// ============================================================
+// DOMÍNIO 7 — FINANCEIRO
+// ============================================================
+
+enum TipoLancamento {
+  receita
+  despesa
+}
+
+enum StatusPagamento {
+  pendente
+  pago
+  atrasado
+  cancelado
+  estornado
+}
+
+model Lancamento {
+  id               String          @id @default(uuid())
+  clienteId        String?         @map("cliente_id")
+  competenciaId    String?         @map("competencia_id")
+  clienteServicoId String?         @map("cliente_servico_id")
+  tipo             TipoLancamento
+  descricao        String          @db.VarChar(200)
+  valor            Decimal         @db.Decimal(12, 2)
+  dataVencimento   DateTime        @map("data_vencimento") @db.Date
+  dataPagamento    DateTime?       @map("data_pagamento") @db.Date
+  status           StatusPagamento @default(pendente)
+  formaPagamento   String?         @map("forma_pagamento") @db.VarChar(50)
+  observacoes      String?
+  criadoPorId      String?         @map("criado_por")
+  criadoEm         DateTime        @default(now()) @map("criado_em")
+  atualizadoEm     DateTime        @updatedAt @map("atualizado_em")
+
+  cliente        Cliente?        @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  competencia    Competencia?    @relation(fields: [competenciaId], references: [id], onDelete: SetNull)
+  clienteServico ClienteServico? @relation(fields: [clienteServicoId], references: [id], onDelete: SetNull)
+  criadoPor      Usuario?        @relation(fields: [criadoPorId], references: [id])
+  nfseEmitidas   NfseEmitida[]
+
+  @@index([clienteId])
+  @@index([status])
+  @@index([dataVencimento])
+  @@index([tipo])
+  @@map("lancamentos")
+}
+
+// ============================================================
+// DOMÍNIO 8 — DOCUMENTOS E ANEXOS
+// ============================================================
+
+model Documento {
+  id            String   @id @default(uuid())
+  clienteId     String?  @map("cliente_id")
+  competenciaId String?  @map("competencia_id")
+  irId          String?  @map("ir_id")
+  tarefaId      String?  @map("tarefa_id")
+  nome          String   @db.VarChar(200)
+  descricao     String?
+  tipoMime      String?  @map("tipo_mime") @db.VarChar(100)
+  tamanhoBytes  BigInt?  @map("tamanho_bytes")
+  storageUrl    String   @map("storage_url")
+  criadoPorId   String?  @map("criado_por")
+  criadoEm      DateTime @default(now()) @map("criado_em")
+
+  cliente     Cliente?      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  competencia Competencia?  @relation(fields: [competenciaId], references: [id], onDelete: SetNull)
+  ir          IrDeclaracao? @relation(fields: [irId], references: [id], onDelete: SetNull)
+  tarefa      Tarefa?       @relation(fields: [tarefaId], references: [id], onDelete: SetNull)
+  criadoPor   Usuario?      @relation(fields: [criadoPorId], references: [id])
+
+  @@index([clienteId])
+  @@index([competenciaId])
+  @@map("documentos")
+}
+
+// ============================================================
+// DOMÍNIO 9 — ADMINISTRAÇÃO / CONFIGURAÇÕES
+// ============================================================
+
+model Configuracao {
+  id              String   @id @default(uuid())
+  chave           String   @unique @db.VarChar(100)
+  valor           String?
+  descricao       String?
+  atualizadoPorId String?  @map("atualizado_por")
+  atualizadoEm    DateTime @updatedAt @map("atualizado_em")
+
+  atualizadoPor Usuario? @relation(fields: [atualizadoPorId], references: [id])
+
+  @@map("configuracoes")
+}
+
+model LogAuditoria {
+  id         String   @id @default(uuid())
+  usuarioId  String?  @map("usuario_id")
+  entidade   String   @db.VarChar(100)
+  entidadeId String?  @map("entidade_id")
+  acao       String   @db.VarChar(50)
+  dadosAntes Json?    @map("dados_antes")
+  dadosDepois Json?   @map("dados_depois")
+  ip         String?  @db.VarChar(45)
+  criadoEm   DateTime @default(now()) @map("criado_em")
+
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@index([usuarioId])
+  @@index([entidade, entidadeId])
+  @@index([criadoEm])
+  @@map("logs_auditoria")
+}
+
+// ============================================================
+// DOMÍNIO 10 — FISCAL / NFS-e
+// ============================================================
+
+enum TipoIntegracaoNfse {
+  nacional
+  prefeitura
+  provedor
+  manual_assistido
+}
+
+enum TipoConector {
+  nacional
+  prefeitura
+  provedor
+  manual
+}
+
+enum StatusRascunhoNfse {
+  rascunho
+  validando
+  pronto_para_emitir
+  erro_validacao
+}
+
+enum StatusNfse {
+  emitida
+  pendente_processamento
+  rejeitada
+  cancelada
+  erro_integracao
+}
+
+enum TipoEventoNfse {
+  emissao
+  consulta
+  cancelamento
+  download_xml
+  download_pdf
+  erro
+  reenvio
+}
+
+enum StatusFila {
+  aguardando
+  processando
+  processado
+  erro
+  cancelado
+}
+
+model ClienteFiscal {
+  id                     String              @id @default(uuid())
+  clienteId              String              @unique @map("cliente_id")
+  municipioEmissor       String              @map("municipio_emissor") @db.VarChar(100)
+  uf                     String              @db.Char(2)
+  codigoMunicipioIbge    String?             @map("codigo_municipio_ibge") @db.VarChar(7)
+  inscricaoMunicipal     String?             @map("inscricao_municipal") @db.VarChar(30)
+  regimeTributario       RegimeTributario?   @map("regime_tributario")
+  optanteSimples         Boolean             @default(false) @map("optante_simples")
+  incentivadorCultural   Boolean             @default(false) @map("incentivador_cultural")
+  naturezaOperacaoPadrao String?             @map("natureza_operacao_padrao") @db.VarChar(100)
+  codigoServicoPadrao    String?             @map("codigo_servico_padrao") @db.VarChar(20)
+  descricaoServicoPadrao String?             @map("descricao_servico_padrao")
+  aliquotaPadrao         Decimal?            @map("aliquota_padrao") @db.Decimal(5, 4)
+  itemListaServico       String?             @map("item_lista_servico") @db.VarChar(10)
+  cnae                   String?             @db.VarChar(10)
+  ambienteEmissao        String              @default("producao") @map("ambiente_emissao") @db.VarChar(20)
+  tipoIntegracaoNfse     TipoIntegracaoNfse  @default(manual_assistido) @map("tipo_integracao_nfse")
+  ativo                  Boolean             @default(true)
+  criadoEm               DateTime            @default(now()) @map("criado_em")
+  atualizadoEm           DateTime            @updatedAt @map("atualizado_em")
+
+  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@map("clientes_fiscal")
+}
+
+model FiscalConector {
+  id           String       @id @default(uuid())
+  nome         String       @db.VarChar(100)
+  slug         String       @unique @db.VarChar(50)
+  tipo         TipoConector
+  ativo        Boolean      @default(true)
+  observacao   String?
+  criadoEm     DateTime     @default(now()) @map("criado_em")
+  atualizadoEm DateTime     @updatedAt @map("atualizado_em")
+
+  integracoes  ClienteFiscalIntegracao[]
+  nfseEmitidas NfseEmitida[]
+  fila         NfseFilaProcessamento[]
+
+  @@map("fiscal_conectores")
+}
+
+model ClienteFiscalIntegracao {
+  id                   String  @id @default(uuid())
+  clienteId            String  @map("cliente_id")
+  conectorId           String  @map("conector_id")
+  identificadorExterno String? @map("identificador_externo") @db.VarChar(100)
+  usaCertificado       Boolean @default(false) @map("usa_certificado")
+  usaLoginSenha        Boolean @default(false) @map("usa_login_senha")
+  usaToken             Boolean @default(false) @map("usa_token")
+  usaGov               Boolean @default(false) @map("usa_gov")
+  configJson           Json?   @map("config_json")
+  ativo                Boolean @default(true)
+  criadoEm             DateTime @default(now()) @map("criado_em")
+  atualizadoEm         DateTime @updatedAt @map("atualizado_em")
+
+  cliente  Cliente        @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  conector FiscalConector @relation(fields: [conectorId], references: [id])
+
+  @@unique([clienteId, conectorId])
+  @@index([clienteId])
+  @@map("clientes_fiscal_integracao")
+}
+
+model CertificadoDigital {
+  id                String    @id @default(uuid())
+  clienteId         String    @map("cliente_id")
+  nomeCertificado   String    @map("nome_certificado") @db.VarChar(150)
+  arquivoStorageUrl String    @map("arquivo_storage_url")
+  senhaReferencia   String?   @map("senha_referencia")
+  validadeInicio    DateTime? @map("validade_inicio") @db.Date
+  validadeFim       DateTime  @map("validade_fim") @db.Date
+  ativo             Boolean   @default(true)
+  criadoPorId       String?   @map("criado_por")
+  criadoEm          DateTime  @default(now()) @map("criado_em")
+  atualizadoEm      DateTime  @updatedAt @map("atualizado_em")
+
+  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  criadoPor Usuario? @relation(fields: [criadoPorId], references: [id])
+
+  @@index([clienteId])
+  @@index([validadeFim])
+  @@map("certificados_digitais")
+}
+
+model NfseTemplate {
+  id                     String   @id @default(uuid())
+  clienteId              String?  @map("cliente_id")
+  servicoId              String?  @map("servico_id")
+  titulo                 String   @db.VarChar(150)
+  descricaoServicoPadrao String?  @map("descricao_servico_padrao")
+  codigoServico          String?  @map("codigo_servico") @db.VarChar(20)
+  aliquota               Decimal? @db.Decimal(5, 4)
+  ativo                  Boolean  @default(true)
+  criadoEm               DateTime @default(now()) @map("criado_em")
+  atualizadoEm           DateTime @updatedAt @map("atualizado_em")
+
+  cliente       Cliente?       @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  servico       Servico?       @relation(fields: [servicoId], references: [id], onDelete: SetNull)
+  nfseRascunhos NfseRascunho[]
+
+  @@index([clienteId])
+  @@map("nfse_templates")
+}
+
+model NfseRascunho {
+  id               String             @id @default(uuid())
+  clienteId        String             @map("cliente_id")
+  competenciaId    String?            @map("competencia_id")
+  clienteServicoId String?            @map("cliente_servico_id")
+  templateId       String?            @map("template_id")
+  titulo           String?            @db.VarChar(200)
+  dadosJson        Json               @default("{}") @map("dados_json")
+  status           StatusRascunhoNfse @default(rascunho)
+  criadoPorId      String?            @map("criado_por")
+  criadoEm         DateTime           @default(now()) @map("criado_em")
+  atualizadoEm     DateTime           @updatedAt @map("atualizado_em")
+
+  cliente        Cliente?        @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  competencia    Competencia?    @relation(fields: [competenciaId], references: [id], onDelete: SetNull)
+  clienteServico ClienteServico? @relation(fields: [clienteServicoId], references: [id], onDelete: SetNull)
+  template       NfseTemplate?   @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  criadoPor      Usuario?        @relation(fields: [criadoPorId], references: [id])
+  fila           NfseFilaProcessamento[]
+
+  @@index([clienteId])
+  @@index([competenciaId])
+  @@index([status])
+  @@map("nfse_rascunhos")
+}
+
+model NfseEmitida {
+  id                 String     @id @default(uuid())
+  clienteId          String     @map("cliente_id")
+  competenciaId      String?    @map("competencia_id")
+  clienteServicoId   String?    @map("cliente_servico_id")
+  conectorId         String?    @map("conector_id")
+  rascunhoId         String?    @map("rascunho_id")
+  lancamentoId       String?    @map("lancamento_id")
+  numeroRps          String?    @map("numero_rps") @db.VarChar(20)
+  numeroNfse         String?    @map("numero_nfse") @db.VarChar(30)
+  serie              String?    @db.VarChar(5)
+  codigoVerificacao  String?    @map("codigo_verificacao") @db.VarChar(100)
+  status             StatusNfse @default(pendente_processamento)
+  dataEmissao        DateTime?  @map("data_emissao")
+  tomadorNome        String?    @map("tomador_nome") @db.VarChar(200)
+  tomadorCpfCnpj     String?    @map("tomador_cpf_cnpj") @db.VarChar(18)
+  tomadorEmail       String?    @map("tomador_email") @db.VarChar(150)
+  tomadorMunicipio   String?    @map("tomador_municipio") @db.VarChar(100)
+  tomadorUf          String?    @map("tomador_uf") @db.Char(2)
+  descricaoServico   String     @map("descricao_servico")
+  codigoServico      String?    @map("codigo_servico") @db.VarChar(20)
+  valorServico       Decimal    @map("valor_servico") @db.Decimal(12, 2)
+  valorDeducoes      Decimal    @default(0) @map("valor_deducoes") @db.Decimal(12, 2)
+  valorLiquido       Decimal?   @map("valor_liquido") @db.Decimal(12, 2)
+  aliquota           Decimal?   @db.Decimal(5, 4)
+  issRetido          Boolean    @default(false) @map("iss_retido")
+  valorIss           Decimal?   @map("valor_iss") @db.Decimal(12, 2)
+  xmlUrl             String?    @map("xml_url")
+  pdfUrl             String?    @map("pdf_url")
+  linkConsulta       String?    @map("link_consulta")
+  chaveExterna       String?    @map("chave_externa") @db.VarChar(100)
+  protocolo          String?    @db.VarChar(100)
+  respostaIntegracao Json?      @map("resposta_integracao")
+  emitidoPorId       String?    @map("emitido_por")
+  criadoEm           DateTime   @default(now()) @map("criado_em")
+  atualizadoEm       DateTime   @updatedAt @map("atualizado_em")
+
+  cliente        Cliente?        @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  competencia    Competencia?    @relation(fields: [competenciaId], references: [id], onDelete: SetNull)
+  clienteServico ClienteServico? @relation(fields: [clienteServicoId], references: [id], onDelete: SetNull)
+  conector       FiscalConector? @relation(fields: [conectorId], references: [id])
+  lancamento     Lancamento?     @relation(fields: [lancamentoId], references: [id], onDelete: SetNull)
+  emitidoPor     Usuario?        @relation(fields: [emitidoPorId], references: [id])
+  eventos        NfseEvento[]
+
+  @@index([clienteId])
+  @@index([competenciaId])
+  @@index([status])
+  @@index([dataEmissao])
+  @@index([numeroNfse])
+  @@map("nfse_emitidas")
+}
+
+model NfseEvento {
+  id             String         @id @default(uuid())
+  nfseId         String         @map("nfse_id")
+  tipoEvento     TipoEventoNfse @map("tipo_evento")
+  status         String?        @db.VarChar(50)
+  mensagem       String?
+  payloadEnvio   Json?          @map("payload_envio")
+  payloadRetorno Json?          @map("payload_retorno")
+  usuarioId      String?        @map("usuario_id")
+  criadoEm       DateTime       @default(now()) @map("criado_em")
+
+  nfse    NfseEmitida @relation(fields: [nfseId], references: [id], onDelete: Cascade)
+  usuario Usuario?    @relation(fields: [usuarioId], references: [id])
+
+  @@index([nfseId])
+  @@index([tipoEvento])
+  @@map("nfse_eventos")
+}
+
+model NfseFilaProcessamento {
+  id             String     @id @default(uuid())
+  nfseRascunhoId String     @map("nfse_rascunho_id")
+  clienteId      String     @map("cliente_id")
+  conectorId     String     @map("conector_id")
+  status         StatusFila @default(aguardando)
+  tentativas     Int        @default(0)
+  maxTentativas  Int        @default(3) @map("max_tentativas")
+  ultimoErro     String?    @map("ultimo_erro")
+  agendadoPara   DateTime   @default(now()) @map("agendado_para")
+  processadoEm   DateTime?  @map("processado_em")
+  criadoEm       DateTime   @default(now()) @map("criado_em")
+  atualizadoEm   DateTime   @updatedAt @map("atualizado_em")
+
+  nfseRascunho NfseRascunho   @relation(fields: [nfseRascunhoId], references: [id], onDelete: Cascade)
+  conector     FiscalConector @relation(fields: [conectorId], references: [id])
+
+  @@index([status])
+  @@index([agendadoPara])
+  @@index([clienteId])
+  @@map("nfse_fila_processamento")
+}
