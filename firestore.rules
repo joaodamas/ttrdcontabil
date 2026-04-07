@@ -1,0 +1,164 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Helper functions
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // All writes to Firestore happen exclusively through Firebase Admin SDK
+    // (server-side API routes). Direct client writes are prohibited except
+    // for collections explicitly opened below.
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.perfil == 'admin';
+    }
+
+    function isContadorOrAdmin() {
+      let perfil = get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.perfil;
+      return isSignedIn() && (perfil == 'admin' || perfil == 'contador');
+    }
+
+    function isActiveUser() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.ativo == true;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Default: deny all direct client access
+    // All data access is mediated by the Next.js API routes (Admin SDK).
+    // ─────────────────────────────────────────────────────────────────────────
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // usuarios
+    // ─────────────────────────────────────────────────────────────────────────
+    match /usuarios/{uid} {
+      // A user can read their own profile; admins can read all.
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      // Only server (Admin SDK) writes. Direct writes blocked.
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // clientes
+    // ─────────────────────────────────────────────────────────────────────────
+    match /clientes/{clienteId} {
+      allow read: if isActiveUser();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // clientes_servicos
+    // ─────────────────────────────────────────────────────────────────────────
+    match /clientes_servicos/{docId} {
+      allow read: if isActiveUser();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // clientes_fiscal
+    // ─────────────────────────────────────────────────────────────────────────
+    match /clientes_fiscal/{docId} {
+      allow read: if isActiveUser();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // servicos
+    // ─────────────────────────────────────────────────────────────────────────
+    match /servicos/{servicoId} {
+      allow read: if isActiveUser();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // competencias
+    // ─────────────────────────────────────────────────────────────────────────
+    match /competencias/{competenciaId} {
+      allow read: if isActiveUser();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // tarefas
+    // ─────────────────────────────────────────────────────────────────────────
+    match /tarefas/{tarefaId} {
+      allow read: if isActiveUser();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // tarefas_comentarios
+    // ─────────────────────────────────────────────────────────────────────────
+    match /tarefas_comentarios/{comentarioId} {
+      allow read: if isActiveUser();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // lancamentos
+    // ─────────────────────────────────────────────────────────────────────────
+    match /lancamentos/{lancamentoId} {
+      allow read: if isActiveUser();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // ir_declaracoes
+    // ─────────────────────────────────────────────────────────────────────────
+    match /ir_declaracoes/{declaracaoId} {
+      allow read: if isActiveUser();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // ir_checklist
+    // ─────────────────────────────────────────────────────────────────────────
+    match /ir_checklist/{itemId} {
+      allow read: if isActiveUser();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // fiscal_conectores
+    // ─────────────────────────────────────────────────────────────────────────
+    match /fiscal_conectores/{id} {
+      allow read: if isActiveUser();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // nfse_rascunhos
+    // ─────────────────────────────────────────────────────────────────────────
+    match /nfse_rascunhos/{id} {
+      allow read: if isActiveUser();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // nfse_emitidas
+    // ─────────────────────────────────────────────────────────────────────────
+    match /nfse_emitidas/{id} {
+      allow read: if isActiveUser();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // nfse_eventos
+    // ─────────────────────────────────────────────────────────────────────────
+    match /nfse_eventos/{id} {
+      allow read: if isActiveUser();
+      allow write: if false;
+    }
+  }
+}

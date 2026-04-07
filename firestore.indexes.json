@@ -1,0 +1,48 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "competencias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "mes", "order": "ASCENDING" },
+        { "fieldPath": "ano", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "competencias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clienteId", "order": "ASCENDING" },
+        { "fieldPath": "ano", "order": "DESCENDING" },
+        { "fieldPath": "mes", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tipo", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "dataVencimento", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "tarefas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "dataPrazo", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "nfse_emitidas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clienteId", "order": "ASCENDING" },
+        { "fieldPath": "dataEmissao", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

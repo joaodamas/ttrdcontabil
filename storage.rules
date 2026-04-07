@@ -1,0 +1,27 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Documentos de clientes — só leitura autenticada, escrita via Admin SDK
+    match /documentos/{clienteId}/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Certificados digitais — acesso restrito (Admin SDK only)
+    match /certificados/{clienteId}/{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // NFS-e (XML/PDF) — leitura autenticada
+    match /nfse/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Bloqueia tudo mais
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
