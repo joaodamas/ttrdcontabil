@@ -10,25 +10,28 @@ service cloud.firestore {
     }
 
     function isAtivo() {
-      return isAuth() &&
-        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.ativo == true;
+      // Active if: authenticated AND (document doesn't exist yet OR ativo is not explicitly false)
+      // This avoids blocking users whose document was created without setting ativo:true
+      return isAuth() && (
+        !exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) ||
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.ativo != false
+      );
     }
 
     match /usuarios/{uid} {
-      // Own document: read always allowed (needed at login before isAtivo() is evaluated)
-      allow read: if isAuth() && request.auth.uid == uid;
+      // Any active user can read the usuarios list (needed for responsável selects in forms)
+      allow read: if isAtivo();
       // Own document: only allow updating safe fields — never perfil/ativo (prevents self-promotion)
       allow update: if isAuth() && request.auth.uid == uid
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['perfil', 'ativo']);
-      // Admin can read all users and write any field
-      allow read: if isAdmin();
+      // Admin can write any field
       allow write: if isAdmin();
     }
 
     match /clientes/{id}         { allow read, write: if isAtivo(); }
     match /clientes_servicos/{id}{ allow read, write: if isAtivo(); }
     match /clientes_fiscal/{id}  { allow read, write: if isAtivo(); }
-    match /servicos/{id}         { allow read: if isAtivo(); allow write: if isAdmin(); }
+    match /servicos/{id}         { allow read, write: if isAtivo(); }
     match /competencias/{id}     { allow read, write: if isAtivo(); }
     match /fechamentos/{id}      { allow read, write: if isAtivo(); }
     match /lancamentos/{id}      { allow read, write: if isAtivo(); }

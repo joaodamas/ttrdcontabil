@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useState, useEffect } from 'react'
+import { memo, useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -31,7 +31,7 @@ import {
 import { getInitials } from '@/lib/utils'
 
 /* ─── Nav data ────────────────────────────────────────────── */
-type NavItem   = { href: string; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }
+type NavItem   = { href: string; label: string; icon: React.ComponentType<{ size?: number; className?: string }>; telaKey?: string }
 type NavGroup  = { label: string; icon: React.ComponentType<{ size?: number; className?: string }>; items: NavItem[]; perfis?: string[] }
 type NavDirect = NavItem & { perfis?: string[] }
 
@@ -40,17 +40,17 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Carteira',
     icon: Users,
     items: [
-      { href: '/clientes',       label: 'Clientes',         icon: Users },
-      { href: '/admin/servicos', label: 'Tipos de Serviço', icon: Briefcase },
+      { href: '/clientes',       label: 'Clientes',         icon: Users,     telaKey: 'clientes' },
+      { href: '/admin/servicos', label: 'Tipos de Serviço', icon: Briefcase, telaKey: 'servicos' },
     ],
   },
   {
     label: 'Operação',
     icon: ClipboardCheck,
     items: [
-      { href: '/competencias', label: 'Competências',      icon: CalendarDays },
-      { href: '/tarefas',      label: 'Tarefas',           icon: CheckSquare },
-      { href: '/fechamento',   label: 'Fechamento Mensal', icon: ClipboardCheck },
+      { href: '/competencias', label: 'Competências',      icon: CalendarDays,  telaKey: 'competencias' },
+      { href: '/tarefas',      label: 'Tarefas',           icon: CheckSquare,   telaKey: 'tarefas' },
+      { href: '/fechamento',   label: 'Fechamento Mensal', icon: ClipboardCheck, telaKey: 'fechamento' },
     ],
   },
   {
@@ -58,15 +58,15 @@ const NAV_GROUPS: NavGroup[] = [
     icon: Receipt,
     perfis: ['admin', 'fiscal', 'financeiro'],
     items: [
-      { href: '/fiscal', label: 'Painel NFS-e',       icon: Receipt },
-      { href: '/ir',     label: 'Imposto de Renda',   icon: FileText },
+      { href: '/fiscal', label: 'Painel NFS-e',     icon: Receipt,  telaKey: 'fiscal' },
+      { href: '/ir',     label: 'Imposto de Renda', icon: FileText, telaKey: 'ir' },
     ],
   },
 ]
 
 const NAV_DIRECT: NavDirect[] = [
-  { href: '/financeiro', label: 'Financeiro', icon: Wallet },
-  { href: '/admin',      label: 'Administração', icon: Settings, perfis: ['admin'] },
+  { href: '/financeiro', label: 'Financeiro',    icon: Wallet,   telaKey: 'financeiro' },
+  { href: '/admin',      label: 'Administração', icon: Settings, telaKey: 'admin', perfis: ['admin'] },
 ]
 
 /* ─── CTA per section ─────────────────────────────────────── */
@@ -90,6 +90,7 @@ export const Navbar = memo(function Navbar() {
   const { usuario, logout } = useAuth()
   const [openDropdown, setOpenDropdown]  = useState<string | null>(null)
   const [mobileOpen, setMobileOpen]      = useState(false)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const cta = useCTA(pathname)
 
   useEffect(() => {
@@ -97,9 +98,33 @@ export const Navbar = memo(function Navbar() {
     setMobileOpen(false)
   }, [pathname])
 
-  function canSee(perfis?: string[]) {
+  // Cleanup timer on unmount
+  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current) }, [])
+
+  function openMenu(key: string) {
+    if (closeTimer.current) clearTimeout(closeTimer.current)
+    setOpenDropdown(key)
+  }
+
+  function scheduleClose() {
+    closeTimer.current = setTimeout(() => setOpenDropdown(null), 120)
+  }
+
+  function canSee(perfis?: string[], telaKey?: string) {
+    // If user has granular telas defined, use those
+    if (telaKey && usuario?.telas) {
+      return usuario.telas.includes(telaKey)
+    }
+    // Fall back to profile-level access
     if (!perfis) return true
     return !!usuario && perfis.includes(usuario.perfil)
+  }
+
+  function canSeeGroup(group: NavGroup) {
+    // Group is visible if at least one item is accessible
+    if (group.items.some((item) => canSee(undefined, item.telaKey))) return true
+    // Also check group-level perfis as fallback
+    return canSee(group.perfis)
   }
 
   function isGroupActive(items: NavItem[]) {
@@ -148,7 +173,7 @@ export const Navbar = memo(function Navbar() {
               </Link>
 
               {/* Dropdown groups */}
-              {NAV_GROUPS.filter(g => canSee(g.perfis)).map((group) => {
+              {NAV_GROUPS.filter(g => canSeeGroup(g)).map((group) => {
                 const active = isGroupActive(group.items)
                 const isOpen = openDropdown === group.label
                 const GroupIcon = group.icon
@@ -156,8 +181,8 @@ export const Navbar = memo(function Navbar() {
                   <div
                     key={group.label}
                     className="relative"
-                    onMouseEnter={() => setOpenDropdown(group.label)}
-                    onMouseLeave={() => setOpenDropdown(null)}
+                    onMouseEnter={() => openMenu(group.label)}
+                    onMouseLeave={scheduleClose}
                   >
                     <button
                       className={cn(
@@ -179,8 +204,7 @@ export const Navbar = memo(function Navbar() {
                     </button>
 
                     {isOpen && (
-                      /* pt-1.5: transparent bridge — no gap so mouse stays inside parent */
-                      <div className="absolute top-full left-0 w-56 pt-1.5 z-50">
+                      <div className="absolute top-full left-0 w-56 pt-2 z-50">
                         <div
                           className="rounded-xl py-1.5 overflow-hidden"
                           style={{
@@ -189,7 +213,7 @@ export const Navbar = memo(function Navbar() {
                             boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
                           }}
                         >
-                          {group.items.map((item) => {
+                          {group.items.filter(item => canSee(undefined, item.telaKey)).map((item) => {
                             const isItemActive = isActive(item.href)
                             const Icon = item.icon
                             return (
@@ -224,7 +248,7 @@ export const Navbar = memo(function Navbar() {
               })}
 
               {/* Direct links */}
-              {NAV_DIRECT.filter(item => canSee(item.perfis)).map((item) => {
+              {NAV_DIRECT.filter(item => canSee(item.perfis, item.telaKey)).map((item) => {
                 const active = isActive(item.href)
                 const Icon = item.icon
                 return (
@@ -273,8 +297,8 @@ export const Navbar = memo(function Navbar() {
               {/* User */}
               <div
                 className="relative"
-                onMouseEnter={() => setOpenDropdown('user')}
-                onMouseLeave={() => setOpenDropdown(null)}
+                onMouseEnter={() => openMenu('user')}
+                onMouseLeave={scheduleClose}
               >
                 <button className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-white/8 transition-colors cursor-pointer">
                   <div
@@ -291,7 +315,7 @@ export const Navbar = memo(function Navbar() {
                 </button>
 
                 {openDropdown === 'user' && (
-                  <div className="absolute top-full right-0 w-56 pt-1.5 z-50">
+                  <div className="absolute top-full right-0 w-56 pt-2 z-50">
                   <div
                     className="rounded-xl py-1.5 overflow-hidden"
                     style={{
@@ -336,8 +360,8 @@ export const Navbar = memo(function Navbar() {
             <Link href="/dashboard" className={cn('flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium', isActive('/dashboard') ? 'text-white bg-white/8' : 'text-white/55')}>
               <LayoutDashboard size={15} /> Início
             </Link>
-            {NAV_GROUPS.filter(g => canSee(g.perfis)).flatMap(group =>
-              group.items.map(item => {
+            {NAV_GROUPS.filter(g => canSeeGroup(g)).flatMap(group =>
+              group.items.filter(item => canSee(undefined, item.telaKey)).map(item => {
                 const Icon = item.icon
                 const active = isActive(item.href)
                 return (
@@ -347,7 +371,7 @@ export const Navbar = memo(function Navbar() {
                 )
               })
             )}
-            {NAV_DIRECT.filter(i => canSee(i.perfis)).map(item => {
+            {NAV_DIRECT.filter(i => canSee(i.perfis, i.telaKey)).map(item => {
               const Icon = item.icon
               const active = isActive(item.href)
               return (

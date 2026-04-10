@@ -4,16 +4,18 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
 
-import { listDocuments } from '@/lib/firestore-client'
+import { listDocuments, deleteDocument } from '@/lib/firestore-client'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { FileText, CheckCircle, XCircle, AlertTriangle, Plus, Loader2 } from 'lucide-react'
+import { FileText, CheckCircle, XCircle, AlertTriangle, Plus, Loader2, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   emitida: { label: 'Emitida', variant: 'default' },
   pendente_processamento: { label: 'Pendente', variant: 'outline' },
+  aguardando_emissao: { label: 'Aguardando', variant: 'secondary' },
   rejeitada: { label: 'Rejeitada', variant: 'destructive' },
   cancelada: { label: 'Cancelada', variant: 'secondary' },
   erro_integracao: { label: 'Erro', variant: 'destructive' },
@@ -28,12 +30,23 @@ export default function FiscalPage() {
   const [canceladaCount, setCanceladaCount] = useState(0)
   const [notas, setNotas] = useState<Array<Record<string, unknown>>>([])
 
+  async function deleteRascunho(id: string) {
+    try {
+      await deleteDocument('nfse_rascunhos', id)
+      setNotas(prev => prev.filter(n => n.id !== id))
+      setPendenteCount(prev => Math.max(0, prev - 1))
+      toast.success('Rascunho removido.')
+    } catch {
+      toast.error('Erro ao remover rascunho.')
+    }
+  }
+
   useEffect(() => {
     const hoje = new Date()
     const inicioMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
     const fimMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0, 23, 59, 59))
 
-    Promise.all([
+    Promise.allSettled([
       listDocuments('nfse_emitidas', [
         where('status', '==', 'emitida'),
         where('dataEmissao', '>=', inicioMes),
@@ -46,14 +59,36 @@ export default function FiscalPage() {
         where('dataEmissao', '>=', inicioMes),
         where('dataEmissao', '<=', fimMes),
       ]),
-      listDocuments('nfse_emitidas', [orderBy('criadoEm', 'desc'), limit(10)]),
-    ]).then(([emitidaMesData, pendenteData, erroData, canceladaData, recentesData]) => {
+      listDocuments('nfse_emitidas', [orderBy('criadoEm', 'desc'), limit(5)]),
+      // rascunhos aguardando emissão manual (no orderBy to avoid composite index)
+      listDocuments('nfse_rascunhos', [where('status', '==', 'aguardando_emissao'), limit(10)]),
+    ]).then(([emitidaMesR, pendenteR, erroR, canceladaR, recentesR, rascunhosR]) => {
+      const emitidaMesData  = emitidaMesR.status  === 'fulfilled' ? emitidaMesR.value  : []
+      const pendenteData    = pendenteR.status    === 'fulfilled' ? pendenteR.value    : []
+      const erroData        = erroR.status        === 'fulfilled' ? erroR.value        : []
+      const canceladaData   = canceladaR.status   === 'fulfilled' ? canceladaR.value   : []
+      const recentesData    = recentesR.status    === 'fulfilled' ? recentesR.value    : []
+      const rascunhosData   = rascunhosR.status   === 'fulfilled' ? rascunhosR.value   : []
+
       setEmitidaMesCount(emitidaMesData.length)
       setSomaEmitidaMes(emitidaMesData.reduce((acc, d) => acc + (((d as Record<string, unknown>).valorServico as number) ?? 0), 0))
-      setPendenteCount(pendenteData.length)
+      // pendentes = nfse_emitidas pendentes + rascunhos aguardando emissão
+      setPendenteCount(pendenteData.length + rascunhosData.length)
       setErroCount(erroData.length)
       setCanceladaCount(canceladaData.length)
-      setNotas(recentesData as Array<Record<string, unknown>>)
+      // merge: rascunhos appear first, then emitidas
+      const rascunhosNormalizados = rascunhosData.map((r) => {
+        const rr = r as Record<string, unknown>
+        const dados = (rr.dados ?? {}) as Record<string, unknown>
+        return {
+          ...rr,
+          clienteNome:   rr.clienteNome ?? rr.titulo,
+          valorServico:  dados.valorServico ?? rr.valorServico ?? 0,
+          status:        'aguardando_emissao',
+          _origem:       'rascunho',
+        }
+      })
+      setNotas([...rascunhosNormalizados, ...(recentesData as Array<Record<string, unknown>>)].slice(0, 10))
     }).finally(() => setLoading(false))
   }, [])
 
@@ -162,6 +197,7 @@ export default function FiscalPage() {
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Emissão</th>
                 <th className="px-4 py-3 text-right font-medium text-muted-foreground">Valor</th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
+                <th className="px-4 py-3 w-10" />
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -188,10 +224,21 @@ export default function FiscalPage() {
                         {dataEmissao ? formatDate(dataEmissao.toDate()) : '—'}
                       </td>
                       <td className="px-4 py-3 text-right font-medium">
-                        {formatCurrency(n.valorServico as number)}
+                        {formatCurrency((n.valorServico as number) ?? 0)}
                       </td>
                       <td className="px-4 py-3">
                         <Badge variant={st.variant}>{st.label}</Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        {n._origem === 'rascunho' && (
+                          <button
+                            onClick={() => deleteRascunho(n.id as string)}
+                            className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
+                            title="Remover rascunho"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   )

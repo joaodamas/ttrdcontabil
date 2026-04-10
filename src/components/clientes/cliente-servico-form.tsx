@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
+import { createDocument } from '@/lib/firestore-client'
 
 const schema = z.object({
   servicoId: z.string().min(1, 'Selecione um serviço'),
@@ -63,18 +64,18 @@ export function ClienteServicoForm({ clienteId, servicos }: ClienteServicoFormPr
 
   async function onSubmit(data: FormData) {
     try {
-      const res = await fetch(`/api/clientes/${clienteId}/servicos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+      const servico = servicos.find((s) => s.id === data.servicoId)
+      await createDocument('clientes_servicos', {
+        clienteId,
+        servicoId:    data.servicoId,
+        servicoNome:  servico?.nome ?? null,
+        valor:        data.valor,
+        diaVencimento: data.diaVencimento ?? null,
+        dataInicio:   data.dataInicio,
+        dataFim:      data.dataFim ?? null,
+        observacoes:  data.observacoes ?? null,
+        status:       'ativo',
       })
-
-      if (!res.ok) {
-        const json = await res.json()
-        toast.error(json.error ?? 'Erro ao adicionar serviço')
-        return
-      }
-
       toast.success('Serviço adicionado!')
       router.push(`/clientes/${clienteId}`)
       router.refresh()

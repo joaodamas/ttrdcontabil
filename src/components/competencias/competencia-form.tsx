@@ -19,6 +19,14 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MESES } from '@/lib/utils'
 import { Loader2 } from 'lucide-react'
+import {
+  getClientes,
+  getUsuarios,
+  getClienteServicos,
+  getServicos,
+  createDocument,
+  updateDocument,
+} from '@/lib/firestore-client'
 
 const competenciaSchema = z.object({
   clienteId:        z.string().min(1, 'Selecione o cliente'),
@@ -32,32 +40,23 @@ const competenciaSchema = z.object({
 
 type CompetenciaFormData = z.input<typeof competenciaSchema>
 
-interface Cliente {
-  id: string
-  razaoSocial: string
-}
-
-interface ClienteServico {
-  id: string
-  servico: { nome: string }
-}
-
-interface Usuario {
-  id: string
-  nome: string
-}
+interface ClienteItem { id: string; razaoSocial: string }
+interface ServicoItem { id: string; servico: { nome: string } }
+interface UsuarioItem { id: string; nome: string }
 
 interface CompetenciaFormProps {
   initialData?: Partial<CompetenciaFormData> & { id?: string }
+  onSuccess?: (id: string) => void
+  onClose?: () => void
 }
 
-export function CompetenciaForm({ initialData }: CompetenciaFormProps) {
+export function CompetenciaForm({ initialData, onSuccess, onClose }: CompetenciaFormProps) {
   const router = useRouter()
   const isEditing = !!initialData?.id
 
-  const [clientes, setClientes]       = useState<Cliente[]>([])
-  const [servicos, setServicos]       = useState<ClienteServico[]>([])
-  const [usuarios, setUsuarios]       = useState<Usuario[]>([])
+  const [clientes, setClientes]             = useState<ClienteItem[]>([])
+  const [servicos, setServicos]             = useState<ServicoItem[]>([])
+  const [usuarios, setUsuarios]             = useState<UsuarioItem[]>([])
   const [loadingClientes, setLoadingClientes] = useState(true)
   const [loadingServicos, setLoadingServicos] = useState(false)
 
@@ -82,28 +81,17 @@ export function CompetenciaForm({ initialData }: CompetenciaFormProps) {
 
   const clienteId = watch('clienteId')
 
-  // Carregar clientes e usuários na montagem
   useEffect(() => {
-    async function load() {
-      try {
-        const [resClientes, resUsuarios] = await Promise.all([
-          fetch('/api/clientes?limit=500&status=ativo'),
-          fetch('/api/usuarios?ativo=true'),
-        ])
-        const { clientes: c }  = await resClientes.json()
-        const { usuarios: u }  = await resUsuarios.json()
-        setClientes(c ?? [])
-        setUsuarios(u ?? [])
-      } catch {
-        toast.error('Erro ao carregar dados')
-      } finally {
-        setLoadingClientes(false)
-      }
-    }
-    load()
+    Promise.allSettled([
+      getClientes({ status: 'ativo' }),
+      getUsuarios(),
+    ]).then(([rc, ru]) => {
+      if (rc.status === 'fulfilled') setClientes(rc.value as unknown as ClienteItem[])
+      if (ru.status === 'fulfilled') setUsuarios(ru.value as unknown as UsuarioItem[])
+      setLoadingClientes(false)
+    })
   }, [])
 
-  // Carregar serviços do cliente ao selecionar cliente
   useEffect(() => {
     if (!clienteId) {
       setServicos([])
@@ -111,38 +99,40 @@ export function CompetenciaForm({ initialData }: CompetenciaFormProps) {
       return
     }
     setLoadingServicos(true)
-    fetch(`/api/clientes/${clienteId}/servicos`)
-      .then((r) => r.json())
-      .then((data) => {
-        setServicos(data.servicos ?? [])
-        setValue('clienteServicoId', '')
-      })
-      .catch(() => toast.error('Erro ao carregar serviços'))
-      .finally(() => setLoadingServicos(false))
+    Promise.allSettled([
+      getClienteServicos(clienteId),
+      getServicos(),
+    ]).then(([rcs, rs]) => {
+      if (rcs.status === 'fulfilled' && rs.status === 'fulfilled') {
+        const allServicos = rs.value as Array<{ id: string; nome: string }>
+        const joined: ServicoItem[] = (rcs.value as Array<Record<string, unknown>>).map((cs) => ({
+          id: cs.id as string,
+          servico: {
+            nome: allServicos.find((s) => s.id === (cs.servicoId as string))?.nome ?? 'Serviço',
+          },
+        }))
+        setServicos(joined)
+      }
+      setValue('clienteServicoId', '')
+      setLoadingServicos(false)
+    })
   }, [clienteId, setValue])
 
   async function onSubmit(data: CompetenciaFormData) {
     try {
-      const url    = isEditing ? `/api/competencias/${initialData?.id}` : '/api/competencias'
-      const method = isEditing ? 'PATCH' : 'POST'
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-
-      if (!res.ok) {
-        const json = await res.json()
-        toast.error(json.error ?? 'Erro ao salvar competência')
-        return
+      if (isEditing) {
+        await updateDocument('competencias', initialData!.id!, data)
+        toast.success('Competência atualizada!')
+        if (onSuccess) onSuccess(initialData!.id!)
+        else router.push(`/competencias/${initialData!.id}`)
+      } else {
+        const id = await createDocument('competencias', data)
+        toast.success('Competência criada!')
+        if (onSuccess) onSuccess(id)
+        else router.push(`/competencias/${id}`)
       }
-
-      const json = await res.json()
-      toast.success(isEditing ? 'Competência atualizada!' : 'Competência criada!')
-      router.push(`/competencias/${json.id ?? initialData?.id}`)
     } catch {
-      toast.error('Erro inesperado. Tente novamente.')
+      toast.error('Erro ao salvar. Tente novamente.')
     }
   }
 
@@ -153,43 +143,29 @@ export function CompetenciaForm({ initialData }: CompetenciaFormProps) {
           <CardTitle className="text-sm">Dados da Competência</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Cliente */}
           <div className="space-y-1.5">
-            <Label htmlFor="clienteId">
-              Cliente <span className="text-destructive">*</span>
-            </Label>
+            <Label>Cliente <span className="text-destructive">*</span></Label>
             <Controller
               name="clienteId"
               control={control}
               render={({ field }) => (
-                <Select
-                  value={field.value ?? ''}
-                  onValueChange={field.onChange}
-                  disabled={loadingClientes}
-                >
+                <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={loadingClientes}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder={loadingClientes ? 'Carregando...' : 'Selecione o cliente'} />
                   </SelectTrigger>
                   <SelectContent>
                     {clientes.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.razaoSocial}
-                      </SelectItem>
+                      <SelectItem key={c.id} value={c.id}>{c.razaoSocial}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               )}
             />
-            {errors.clienteId && (
-              <p className="text-xs text-destructive">{errors.clienteId.message}</p>
-            )}
+            {errors.clienteId && <p className="text-xs text-destructive">{errors.clienteId.message}</p>}
           </div>
 
-          {/* Serviço */}
           <div className="space-y-1.5">
-            <Label htmlFor="clienteServicoId">
-              Serviço <span className="text-destructive">*</span>
-            </Label>
+            <Label>Serviço <span className="text-destructive">*</span></Label>
             <Controller
               name="clienteServicoId"
               control={control}
@@ -202,93 +178,62 @@ export function CompetenciaForm({ initialData }: CompetenciaFormProps) {
                   <SelectTrigger className="w-full">
                     <SelectValue
                       placeholder={
-                        !clienteId
-                          ? 'Selecione um cliente primeiro'
-                          : loadingServicos
-                          ? 'Carregando...'
-                          : 'Selecione o serviço'
+                        !clienteId ? 'Selecione um cliente primeiro'
+                        : loadingServicos ? 'Carregando...'
+                        : servicos.length === 0 ? 'Nenhum serviço vinculado'
+                        : 'Selecione o serviço'
                       }
                     />
                   </SelectTrigger>
                   <SelectContent>
                     {servicos.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.servico.nome}
-                      </SelectItem>
+                      <SelectItem key={s.id} value={s.id}>{s.servico.nome}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               )}
             />
-            {errors.clienteServicoId && (
-              <p className="text-xs text-destructive">{errors.clienteServicoId.message}</p>
-            )}
+            {errors.clienteServicoId && <p className="text-xs text-destructive">{errors.clienteServicoId.message}</p>}
           </div>
 
-          {/* Mês e Ano */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>
-                Mês <span className="text-destructive">*</span>
-              </Label>
+              <Label>Mês <span className="text-destructive">*</span></Label>
               <Controller
                 name="mes"
                 control={control}
                 render={({ field }) => (
-                  <Select
-                    value={String(field.value)}
-                    onValueChange={(v) => field.onChange(parseInt(v ?? '0'))}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Mês" />
-                    </SelectTrigger>
+                  <Select value={String(field.value)} onValueChange={(v) => field.onChange(parseInt(v ?? '0'))}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Mês" /></SelectTrigger>
                     <SelectContent>
                       {MESES.map((m) => (
-                        <SelectItem key={m.value} value={String(m.value)}>
-                          {m.label}
-                        </SelectItem>
+                        <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 )}
               />
-              {errors.mes && (
-                <p className="text-xs text-destructive">{errors.mes.message}</p>
-              )}
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="ano">
-                Ano <span className="text-destructive">*</span>
-              </Label>
+              <Label>Ano <span className="text-destructive">*</span></Label>
               <Controller
                 name="ano"
                 control={control}
                 render={({ field }) => (
-                  <Select
-                    value={String(field.value)}
-                    onValueChange={(v) => field.onChange(parseInt(v ?? '0'))}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Ano" />
-                    </SelectTrigger>
+                  <Select value={String(field.value)} onValueChange={(v) => field.onChange(parseInt(v ?? '0'))}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="Ano" /></SelectTrigger>
                     <SelectContent>
                       {Array.from({ length: 5 }, (_, i) => hoje.getFullYear() - 2 + i).map((a) => (
-                        <SelectItem key={a} value={String(a)}>
-                          {a}
-                        </SelectItem>
+                        <SelectItem key={a} value={String(a)}>{a}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 )}
               />
-              {errors.ano && (
-                <p className="text-xs text-destructive">{errors.ano.message}</p>
-              )}
             </div>
           </div>
 
-          {/* Status */}
           <div className="space-y-1.5">
             <Label>Status</Label>
             <Controller
@@ -296,9 +241,7 @@ export function CompetenciaForm({ initialData }: CompetenciaFormProps) {
               control={control}
               render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="aberta">Aberta</SelectItem>
                     <SelectItem value="em_andamento">Em andamento</SelectItem>
@@ -310,26 +253,18 @@ export function CompetenciaForm({ initialData }: CompetenciaFormProps) {
             />
           </div>
 
-          {/* Responsável */}
           <div className="space-y-1.5">
             <Label>Responsável</Label>
             <Controller
               name="responsavelId"
               control={control}
               render={({ field }) => (
-                <Select
-                  value={field.value ?? ''}
-                  onValueChange={(v) => field.onChange(v || undefined)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Selecione o responsável" />
-                  </SelectTrigger>
+                <Select value={field.value ?? ''} onValueChange={(v) => field.onChange(v || undefined)}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Selecione o responsável" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">Nenhum</SelectItem>
                     {usuarios.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.nome}
-                      </SelectItem>
+                      <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -337,26 +272,15 @@ export function CompetenciaForm({ initialData }: CompetenciaFormProps) {
             />
           </div>
 
-          {/* Observações */}
           <div className="space-y-1.5">
             <Label htmlFor="observacoes">Observações</Label>
-            <Textarea
-              id="observacoes"
-              rows={3}
-              placeholder="Observações opcionais..."
-              {...register('observacoes')}
-            />
+            <Textarea id="observacoes" rows={3} placeholder="Observações opcionais..." {...register('observacoes')} />
           </div>
         </CardContent>
       </Card>
 
       <div className="flex items-center justify-end gap-3">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => router.back()}
-          disabled={isSubmitting}
-        >
+        <Button type="button" variant="outline" onClick={() => onClose ? onClose() : router.back()} disabled={isSubmitting}>
           Cancelar
         </Button>
         <Button type="submit" disabled={isSubmitting}>

@@ -97,6 +97,14 @@
       ]
     },
     {
+      "collectionGroup": "clientes_servicos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clienteId", "order": "ASCENDING" },
+        { "fieldPath": "dataInicio", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "nfse_rascunhos",
       "queryScope": "COLLECTION",
       "fields": [

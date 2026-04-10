@@ -26,13 +26,23 @@ export async function listDocuments<T>(
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as T) }))
 }
 
+function stripUndefined(data: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined))
+}
+
 export async function createDocument(col: string, data: Record<string, unknown>) {
-  const ref = await addDoc(collection(db, col), { ...data, criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp() })
+  const ref = await addDoc(
+    collection(db, col),
+    { ...stripUndefined(data), criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp() }
+  )
   return ref.id
 }
 
 export async function updateDocument(col: string, id: string, data: Record<string, unknown>) {
-  await updateDoc(doc(db, col, id), { ...data, atualizadoEm: serverTimestamp() })
+  await updateDoc(
+    doc(db, col, id),
+    { ...stripUndefined(data), atualizadoEm: serverTimestamp() }
+  )
 }
 
 export async function deleteDocument(col: string, id: string) {
@@ -42,18 +52,31 @@ export async function deleteDocument(col: string, id: string) {
 // ── Domain queries ────────────────────────────────────────────────────────────
 
 export async function getClientes(opts: { status?: string; limit?: number } = {}) {
-  const constraints: QueryConstraint[] = [orderBy('razaoSocial')]
-  if (opts.status) constraints.push(where('status', '==', opts.status))
-  constraints.push(limit(opts.limit ?? 500))
-  return listDocuments('clientes', constraints)
+  // Fetch all then filter client-side to avoid composite index requirement
+  // (orderBy + where on different fields requires a deployed composite index)
+  const all = await listDocuments<Record<string, unknown>>('clientes', [orderBy('razaoSocial'), limit(opts.limit ?? 500)])
+  if (!opts.status) return all
+  return all.filter((c) => c.status === opts.status)
 }
 
 export async function getCliente(id: string) {
   return getDocument('clientes', id)
 }
 
+export async function getNextClienteCodigo(): Promise<number> {
+  const rows = await listDocuments<{ codigo?: number }>('clientes', [orderBy('codigo', 'desc'), limit(1)])
+  if (rows.length === 0) return 1
+  return (rows[0].codigo ?? 0) + 1
+}
+
 export async function getServicos() {
   return listDocuments('servicos', [orderBy('nome'), limit(500)])
+}
+
+export async function getNextServicoCodigo(): Promise<string> {
+  const rows = await listDocuments<{ codigoNumero?: number }>('servicos', [orderBy('codigoNumero', 'desc'), limit(1)])
+  const next = rows.length === 0 ? 1 : (rows[0].codigoNumero ?? 0) + 1
+  return `COB${String(next).padStart(2, '0')}`
 }
 
 export async function getClienteServicos(clienteId: string) {
@@ -64,16 +87,20 @@ export async function getClienteServicos(clienteId: string) {
 }
 
 export async function getCompetencias(opts: { clienteId?: string; limit?: number } = {}) {
-  const c: QueryConstraint[] = [orderBy('ano', 'desc'), orderBy('mes', 'desc')]
+  // where() must come before orderBy() to match deployed composite index (clienteId, ano, mes)
+  const c: QueryConstraint[] = []
   if (opts.clienteId) c.push(where('clienteId', '==', opts.clienteId))
+  c.push(orderBy('ano', 'desc'), orderBy('mes', 'desc'))
   c.push(limit(opts.limit ?? 200))
   return listDocuments('competencias', c)
 }
 
 export async function getLancamentos(opts: { clienteId?: string; status?: string; limit?: number } = {}) {
-  const c: QueryConstraint[] = [orderBy('dataVencimento', 'desc')]
+  // where() must come before orderBy() to match deployed composite indexes
+  const c: QueryConstraint[] = []
   if (opts.clienteId) c.push(where('clienteId', '==', opts.clienteId))
   if (opts.status)    c.push(where('status', '==', opts.status))
+  c.push(orderBy('dataVencimento', 'desc'))
   c.push(limit(opts.limit ?? 200))
   return listDocuments('lancamentos', c)
 }
@@ -87,13 +114,15 @@ export async function getTarefas(opts: { responsavelId?: string; status?: string
 }
 
 export async function getFechamentos(mes: number, ano: number, regime?: string) {
+  // Use only equality filters (no orderBy) to avoid requiring composite indexes.
+  // Sort client-side after fetching.
   const c: QueryConstraint[] = [
     where('mes', '==', mes),
     where('ano', '==', ano),
-    orderBy('clienteCodigo', 'asc'),
   ]
   if (regime) c.push(where('regime', '==', regime))
-  return listDocuments('fechamentos', c)
+  const results = await listDocuments<{ clienteCodigo?: number }>('fechamentos', c)
+  return results.sort((a, b) => (a.clienteCodigo ?? 0) - (b.clienteCodigo ?? 0))
 }
 
 export async function getUsuarios() {

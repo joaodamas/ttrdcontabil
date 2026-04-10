@@ -1,7 +1,6 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -19,31 +18,38 @@ import {
 } from '@/components/ui/select'
 import {
   Dialog,
-  DialogTrigger,
-  DialogPortal,
-  DialogOverlay,
   DialogContent,
+  DialogHeader,
   DialogTitle,
   DialogClose,
-} from '@radix-ui/react-dialog'
-import { Loader2, Plus, Pencil, X } from 'lucide-react'
+} from '@/components/ui/dialog'
+import { Loader2, Plus, Pencil } from 'lucide-react'
+import { createDocument, updateDocument } from '@/lib/firestore-client'
+
+// COB pricing table: COB01 = R$50, COB02 = R$100, ..., COB20 = R$1000
+const COB_TABLE = Array.from({ length: 20 }, (_, i) => ({
+  codigo: `COB${String(i + 1).padStart(2, '0')}`,
+  valor:  (i + 1) * 50,
+  numero: i + 1,
+}))
 
 const servicoSchema = z.object({
-  nome: z.string().min(2, 'Nome é obrigatório').max(100),
-  descricao: z.string().optional().nullable(),
-  frequencia: z.enum(['mensal', 'avulso', 'anual', 'trimestral']).default('mensal'),
+  codigo:      z.string().min(1, 'Código é obrigatório').max(20),
+  nome:        z.string().min(2, 'Nome é obrigatório').max(100),
+  descricao:   z.string().optional().nullable(),
+  frequencia:  z.enum(['mensal', 'avulso', 'anual', 'trimestral']).default('mensal'),
   valorPadrao: z.number().min(0).optional().nullable(),
-  ativo: z.boolean().default(true),
+  ativo:       z.boolean().default(true),
 })
 
 type ServicoFormData = z.input<typeof servicoSchema>
 
 interface ServicoFormProps {
-  servico?: Record<string, unknown>
+  servico?:  Record<string, unknown>
+  onSaved?:  () => void
 }
 
-export function ServicoForm({ servico }: ServicoFormProps) {
-  const router = useRouter()
+export function ServicoForm({ servico, onSaved }: ServicoFormProps) {
   const isEditing = !!servico?.id
   const [open, setOpen] = useState(false)
 
@@ -52,93 +58,127 @@ export function ServicoForm({ servico }: ServicoFormProps) {
     handleSubmit,
     control,
     reset,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<ServicoFormData>({
     resolver: zodResolver(servicoSchema),
     defaultValues: isEditing
       ? {
-          nome: (servico.nome as string) ?? '',
-          descricao: (servico.descricao as string) ?? '',
-          frequencia: (servico.frequencia as ServicoFormData['frequencia']) ?? 'mensal',
+          codigo:      (servico.codigo as string) ?? '',
+          nome:        (servico.nome as string) ?? '',
+          descricao:   (servico.descricao as string) ?? '',
+          frequencia:  (servico.frequencia as ServicoFormData['frequencia']) ?? 'mensal',
           valorPadrao: servico.valorPadrao != null ? Number(servico.valorPadrao) : undefined,
-          ativo: servico.ativo !== false,
+          ativo:       servico.ativo !== false,
         }
       : {
+          codigo:     '',
           frequencia: 'mensal',
-          ativo: true,
+          ativo:      true,
         },
   })
 
+  function handleCodigoChange(codigo: string | null) {
+    if (!codigo) return
+    setValue('codigo', codigo)
+    const entry = COB_TABLE.find((c) => c.codigo === codigo)
+    if (entry) setValue('valorPadrao', entry.valor)
+  }
+
   async function onSubmit(data: ServicoFormData) {
     try {
-      const url = isEditing ? `/api/servicos/${servico!.id}` : '/api/servicos'
-      const method = isEditing ? 'PATCH' : 'POST'
+      // Extract numeric part for ordering
+      const codigoNumero = parseInt(data.codigo.replace(/\D/g, '') || '0', 10)
 
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-
-      if (!res.ok) {
-        const json = await res.json()
-        toast.error(json.error ?? 'Erro ao salvar serviço')
-        return
+      if (isEditing) {
+        await updateDocument('servicos', servico!.id as string, {
+          ...data,
+          codigoNumero,
+        })
+        toast.success('Serviço atualizado!')
+      } else {
+        await createDocument('servicos', {
+          ...data,
+          codigoNumero,
+        })
+        toast.success('Serviço criado!')
       }
-
-      toast.success(isEditing ? 'Serviço atualizado!' : 'Serviço criado!')
       setOpen(false)
       reset()
-      router.refresh()
+      onSaved?.()
     } catch {
-      toast.error('Erro inesperado. Tente novamente.')
+      toast.error('Erro ao salvar serviço. Tente novamente.')
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {isEditing ? (
-          <Button size="sm" variant="ghost">
-            <Pencil className="w-4 h-4 mr-1" />
-            Editar
-          </Button>
-        ) : (
-          <Button size="sm">
-            <Plus className="w-4 h-4 mr-1" />
-            Novo Serviço
-          </Button>
-        )}
-      </DialogTrigger>
+    <>
+      {isEditing ? (
+        <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
+          <Pencil className="w-4 h-4 mr-1" />
+          Editar
+        </Button>
+      ) : (
+        <Button size="sm" onClick={() => setOpen(true)}>
+          <Plus className="w-4 h-4 mr-1" />
+          Novo Serviço
+        </Button>
+      )}
 
-      <DialogPortal>
-        <DialogOverlay className="fixed inset-0 bg-black/50 z-40" />
-        <DialogContent className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-background rounded-lg shadow-lg p-6 space-y-5">
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-base font-semibold">
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
               {isEditing ? 'Editar Serviço' : 'Novo Tipo de Serviço'}
             </DialogTitle>
-            <DialogClose asChild>
-              <Button size="sm" variant="ghost" className="h-7 w-7 p-0">
-                <X className="w-4 h-4" />
-              </Button>
-            </DialogClose>
-          </div>
+          </DialogHeader>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            {/* Nome */}
-            <div className="space-y-1.5">
-              <Label htmlFor="nome">
-                Nome <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="nome"
-                {...register('nome')}
-                placeholder="Ex: Contabilidade Mensal, IRPJ, Folha de Pagamento..."
-              />
-              {errors.nome && (
-                <p className="text-xs text-destructive">{errors.nome.message}</p>
-              )}
+            {/* Código + Nome */}
+            <div className="grid grid-cols-[140px_1fr] gap-3">
+              <div className="space-y-1.5">
+                <Label>
+                  Código <span className="text-destructive">*</span>
+                </Label>
+                <Controller
+                  name="codigo"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ?? ''}
+                      onValueChange={handleCodigoChange}
+                      disabled={isEditing}
+                    >
+                      <SelectTrigger className="font-mono">
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COB_TABLE.map((c) => (
+                          <SelectItem key={c.codigo} value={c.codigo} className="font-mono">
+                            {c.codigo} — R${c.valor.toFixed(2).replace('.', ',')}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                {errors.codigo && (
+                  <p className="text-xs text-destructive">{errors.codigo.message}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="nome">
+                  Nome <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="nome"
+                  {...register('nome')}
+                  placeholder="Ex: Contabilidade Mensal, IRPJ..."
+                />
+                {errors.nome && (
+                  <p className="text-xs text-destructive">{errors.nome.message}</p>
+                )}
+              </div>
             </div>
 
             {/* Descrição */}
@@ -182,8 +222,11 @@ export function ServicoForm({ servico }: ServicoFormProps) {
                   type="number"
                   step="0.01"
                   min="0"
+                  max="1000"
                   placeholder="0,00"
-                  {...register('valorPadrao')}
+                  {...register('valorPadrao', {
+                    setValueAs: (v) => (v === '' || v === null ? null : Number(v)),
+                  })}
                 />
                 {errors.valorPadrao && (
                   <p className="text-xs text-destructive">{errors.valorPadrao.message}</p>
@@ -217,11 +260,7 @@ export function ServicoForm({ servico }: ServicoFormProps) {
             )}
 
             <div className="flex items-center justify-end gap-3 pt-2">
-              <DialogClose asChild>
-                <Button type="button" variant="outline" size="sm">
-                  Cancelar
-                </Button>
-              </DialogClose>
+              <DialogClose render={<Button type="button" variant="outline" size="sm">Cancelar</Button>} />
               <Button type="submit" size="sm" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 {isEditing ? 'Salvar Alterações' : 'Criar Serviço'}
@@ -229,7 +268,7 @@ export function ServicoForm({ servico }: ServicoFormProps) {
             </div>
           </form>
         </DialogContent>
-      </DialogPortal>
-    </Dialog>
+      </Dialog>
+    </>
   )
 }

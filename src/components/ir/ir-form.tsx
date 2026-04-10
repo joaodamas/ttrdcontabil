@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
+import { getClientes, getUsuarios, createDocument, updateDocument } from '@/lib/firestore-client'
 
 const irSchema = z.object({
   clienteId: z.string().min(1, 'Cliente é obrigatório'),
@@ -71,45 +72,26 @@ export function IrForm({ initialData }: IrFormProps) {
   })
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [rc, ru] = await Promise.all([
-          fetch('/api/clientes?status=ativo'),
-          fetch('/api/usuarios?ativo=true'),
-        ])
-        const { clientes: c } = await rc.json()
-        const { usuarios: u } = await ru.json()
-        setClientes(c ?? [])
-        setUsuarios(u ?? [])
-      } catch {
-        toast.error('Erro ao carregar dados')
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
+    Promise.allSettled([
+      getClientes({ status: 'ativo' }),
+      getUsuarios(),
+    ]).then(([rc, ru]) => {
+      if (rc.status === 'fulfilled') setClientes(rc.value as unknown as Cliente[])
+      if (ru.status === 'fulfilled') setUsuarios(ru.value as unknown as Usuario[])
+    }).finally(() => setLoading(false))
   }, [])
 
   async function onSubmit(data: IrFormData) {
     try {
-      const url = isEditing ? `/api/ir/${initialData?.id}` : '/api/ir'
-      const method = isEditing ? 'PATCH' : 'POST'
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-
-      if (!res.ok) {
-        const json = await res.json()
-        toast.error(json.error ?? 'Erro ao salvar declaração')
-        return
+      if (isEditing) {
+        await updateDocument('ir_declaracoes', initialData!.id!, data as Record<string, unknown>)
+        toast.success('Declaração atualizada!')
+        router.push(`/ir/${initialData!.id}`)
+      } else {
+        const id = await createDocument('ir_declaracoes', data as Record<string, unknown>)
+        toast.success('Declaração criada!')
+        router.push(`/ir/${id}`)
       }
-
-      const result = await res.json()
-      toast.success(isEditing ? 'Declaração atualizada!' : 'Declaração criada!')
-      router.push(`/ir/${result.id ?? initialData?.id}`)
       router.refresh()
     } catch {
       toast.error('Erro inesperado. Tente novamente.')

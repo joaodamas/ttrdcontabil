@@ -19,41 +19,37 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
+import { getClientes, getUsuarios, createDocument, updateDocument } from '@/lib/firestore-client'
 
 const tarefaSchema = z.object({
-  clienteId: z.string().optional().nullable(),
+  clienteId:     z.string().optional().nullable(),
   competenciaId: z.string().optional().nullable(),
-  titulo: z.string().min(1, 'Título é obrigatório').max(200),
-  descricao: z.string().optional().nullable(),
-  prioridade: z.enum(['baixa', 'normal', 'alta', 'urgente']).default('normal'),
-  status: z.enum(['pendente', 'em_andamento', 'concluida', 'cancelada']).default('pendente'),
+  titulo:        z.string().min(1, 'Título é obrigatório').max(200),
+  descricao:     z.string().optional().nullable(),
+  prioridade:    z.enum(['baixa', 'normal', 'alta', 'urgente']).default('normal'),
+  status:        z.enum(['pendente', 'em_andamento', 'concluida', 'cancelada']).default('pendente'),
   responsavelId: z.string().optional().nullable(),
-  dataPrazo: z.string().optional().nullable(),
+  dataPrazo:     z.string().optional().nullable(),
 })
 
 type TarefaFormData = z.input<typeof tarefaSchema>
 
-interface Cliente {
-  id: string
-  razaoSocial: string
-}
-
-interface Usuario {
-  id: string
-  nome: string
-}
+interface ClienteItem { id: string; razaoSocial: string }
+interface UsuarioItem { id: string; nome: string }
 
 interface TarefaFormProps {
   initialData?: Partial<TarefaFormData> & { id?: string }
+  onSuccess?: (id: string) => void
+  onClose?: () => void
 }
 
-export function TarefaForm({ initialData }: TarefaFormProps) {
+export function TarefaForm({ initialData, onSuccess, onClose }: TarefaFormProps) {
   const router = useRouter()
   const isEditing = !!initialData?.id
 
-  const [clientes, setClientes] = useState<Cliente[]>([])
-  const [usuarios, setUsuarios] = useState<Usuario[]>([])
-  const [loading, setLoading] = useState(true)
+  const [clientes, setClientes] = useState<ClienteItem[]>([])
+  const [usuarios, setUsuarios] = useState<UsuarioItem[]>([])
+  const [loading, setLoading]   = useState(true)
 
   const {
     register,
@@ -62,56 +58,35 @@ export function TarefaForm({ initialData }: TarefaFormProps) {
     formState: { errors, isSubmitting },
   } = useForm<TarefaFormData>({
     resolver: zodResolver(tarefaSchema),
-    defaultValues: {
-      prioridade: 'normal',
-      status: 'pendente',
-      ...initialData,
-    },
+    defaultValues: { prioridade: 'normal', status: 'pendente', ...initialData },
   })
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [rc, ru] = await Promise.all([
-          fetch('/api/clientes?status=ativo'),
-          fetch('/api/usuarios?ativo=true'),
-        ])
-        const { clientes: c } = await rc.json()
-        const { usuarios: u } = await ru.json()
-        setClientes(c ?? [])
-        setUsuarios(u ?? [])
-      } catch {
-        toast.error('Erro ao carregar dados')
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
+    Promise.allSettled([
+      getClientes({ status: 'ativo' }),
+      getUsuarios(),
+    ]).then(([rc, ru]) => {
+      if (rc.status === 'fulfilled') setClientes(rc.value as unknown as ClienteItem[])
+      if (ru.status === 'fulfilled') setUsuarios(ru.value as unknown as UsuarioItem[])
+      setLoading(false)
+    })
   }, [])
 
   async function onSubmit(data: TarefaFormData) {
     try {
-      const url = isEditing ? `/api/tarefas/${initialData?.id}` : '/api/tarefas'
-      const method = isEditing ? 'PATCH' : 'POST'
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-
-      if (!res.ok) {
-        const json = await res.json()
-        toast.error(json.error ?? 'Erro ao salvar tarefa')
-        return
+      if (isEditing) {
+        await updateDocument('tarefas', initialData!.id!, data)
+        toast.success('Tarefa atualizada!')
+        if (onSuccess) onSuccess(initialData!.id!)
+        else { router.push('/tarefas'); router.refresh() }
+      } else {
+        const id = await createDocument('tarefas', data)
+        toast.success('Tarefa criada!')
+        if (onSuccess) onSuccess(id)
+        else { router.push('/tarefas'); router.refresh() }
       }
-
-      const result = await res.json()
-      toast.success(isEditing ? 'Tarefa atualizada!' : 'Tarefa criada!')
-      router.push(`/tarefas/${result.id ?? initialData?.id}`)
-      router.refresh()
     } catch {
-      toast.error('Erro inesperado. Tente novamente.')
+      toast.error('Erro ao salvar. Tente novamente.')
     }
   }
 
@@ -123,23 +98,14 @@ export function TarefaForm({ initialData }: TarefaFormProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="titulo">
-              Título <span className="text-destructive">*</span>
-            </Label>
+            <Label htmlFor="titulo">Título <span className="text-destructive">*</span></Label>
             <Input id="titulo" {...register('titulo')} placeholder="Descreva brevemente a tarefa" />
-            {errors.titulo && (
-              <p className="text-xs text-destructive">{errors.titulo.message}</p>
-            )}
+            {errors.titulo && <p className="text-xs text-destructive">{errors.titulo.message}</p>}
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="descricao">Descrição</Label>
-            <Textarea
-              id="descricao"
-              rows={3}
-              placeholder="Detalhes adicionais..."
-              {...register('descricao')}
-            />
+            <Textarea id="descricao" rows={3} placeholder="Detalhes adicionais..." {...register('descricao')} />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -150,9 +116,7 @@ export function TarefaForm({ initialData }: TarefaFormProps) {
                 control={control}
                 render={({ field }) => (
                   <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="baixa">Baixa</SelectItem>
                       <SelectItem value="normal">Normal</SelectItem>
@@ -171,9 +135,7 @@ export function TarefaForm({ initialData }: TarefaFormProps) {
                 control={control}
                 render={({ field }) => (
                   <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="pendente">Pendente</SelectItem>
                       <SelectItem value="em_andamento">Em andamento</SelectItem>
@@ -192,20 +154,14 @@ export function TarefaForm({ initialData }: TarefaFormProps) {
               name="clienteId"
               control={control}
               render={({ field }) => (
-                <Select
-                  value={field.value ?? ''}
-                  onValueChange={(v) => field.onChange(v || null)}
-                  disabled={loading}
-                >
+                <Select value={field.value ?? ''} onValueChange={(v) => field.onChange(v || null)} disabled={loading}>
                   <SelectTrigger>
                     <SelectValue placeholder={loading ? 'Carregando...' : 'Selecione o cliente'} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">Nenhum</SelectItem>
                     {clientes.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.razaoSocial}
-                      </SelectItem>
+                      <SelectItem key={c.id} value={c.id}>{c.razaoSocial}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -219,20 +175,14 @@ export function TarefaForm({ initialData }: TarefaFormProps) {
               name="responsavelId"
               control={control}
               render={({ field }) => (
-                <Select
-                  value={field.value ?? ''}
-                  onValueChange={(v) => field.onChange(v || null)}
-                  disabled={loading}
-                >
+                <Select value={field.value ?? ''} onValueChange={(v) => field.onChange(v || null)} disabled={loading}>
                   <SelectTrigger>
                     <SelectValue placeholder={loading ? 'Carregando...' : 'Selecione o responsável'} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">Nenhum</SelectItem>
                     {usuarios.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.nome}
-                      </SelectItem>
+                      <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -252,7 +202,7 @@ export function TarefaForm({ initialData }: TarefaFormProps) {
           {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
           {isEditing ? 'Salvar Alterações' : 'Criar Tarefa'}
         </Button>
-        <Button type="button" variant="outline" onClick={() => router.back()}>
+        <Button type="button" variant="outline" onClick={() => onClose ? onClose() : router.back()}>
           Cancelar
         </Button>
       </div>

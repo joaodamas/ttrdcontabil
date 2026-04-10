@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, Send } from 'lucide-react'
+import { createDocument } from '@/lib/firestore-client'
+import { useAuth } from '@/contexts/auth-context'
 
 interface Comentario {
   id: string
@@ -22,6 +24,7 @@ interface TarefaComentariosProps {
 }
 
 export function TarefaComentarios({ tarefaId, comentariosIniciais }: TarefaComentariosProps) {
+  const { usuario } = useAuth()
   const [comentarios, setComentarios] = useState<Comentario[]>(comentariosIniciais)
   const [texto, setTexto]             = useState('')
   const [enviando, setEnviando]       = useState(false)
@@ -43,26 +46,21 @@ export function TarefaComentarios({ tarefaId, comentariosIniciais }: TarefaComen
 
     setEnviando(true)
     try {
-      const res = await fetch(`/api/tarefas/${tarefaId}/comentarios`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ texto: trimmed }),
+      const usuarioNome = usuario?.nome ?? 'Usuário'
+      const usuarioId   = usuario?.uid ?? null
+      const id = await createDocument('tarefa_comentarios', {
+        tarefaId,
+        texto:       trimmed,
+        usuarioNome,
+        usuarioId,
       })
-
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}))
-        toast.error(json.error ?? 'Erro ao enviar comentário')
-        return
-      }
-
-      const novo = await res.json()
       setComentarios((prev) => [
         ...prev,
         {
-          id:          novo.id,
-          texto:       novo.texto,
-          criadoEm:    novo.criadoEm,
-          usuarioNome: novo.usuarioNome ?? novo.usuario?.nome ?? 'Usuário',
+          id,
+          texto:       trimmed,
+          criadoEm:    new Date().toISOString(),
+          usuarioNome,
         },
       ])
       setTexto('')

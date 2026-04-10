@@ -12,9 +12,9 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
 import { formatCpfCnpj, formatPhone, formatCep, UFS } from '@/lib/utils'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Search, CheckCircle2 } from 'lucide-react'
+import { createDocument, updateDocument, getNextClienteCodigo } from '@/lib/firestore-client'
 
 const clienteSchema = z.object({
   tipoPessoa: z.enum(['pf', 'pj']).default('pj'),
@@ -43,12 +43,16 @@ type ClienteFormData = z.input<typeof clienteSchema>
 
 interface ClienteFormProps {
   initialData?: Partial<ClienteFormData> & { id?: string }
+  onSuccess?: (id: string) => void
+  onClose?: () => void
 }
 
-export function ClienteForm({ initialData }: ClienteFormProps) {
+export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProps) {
   const router = useRouter()
   const isEditing = !!initialData?.id
   const [buscandoCep, setBuscandoCep] = useState(false)
+  const [buscandoCnpj, setBuscandoCnpj] = useState(false)
+  const [cnpjOk, setCnpjOk] = useState(false)
 
   const {
     register,
@@ -67,46 +71,94 @@ export function ClienteForm({ initialData }: ClienteFormProps) {
 
   const tipoPessoa = watch('tipoPessoa')
 
-  async function buscarCep(cep: string) {
-    const digits = cep.replace(/\D/g, '')
+  async function buscarCep(cepRaw: string) {
+    const digits = cepRaw.replace(/\D/g, '')
     if (digits.length !== 8) return
     setBuscandoCep(true)
     try {
       const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
       const data = await res.json()
       if (!data.erro) {
-        setValue('logradouro', data.logradouro)
-        setValue('bairro', data.bairro)
-        setValue('cidade', data.localidade)
-        setValue('uf', data.uf)
+        if (data.logradouro) setValue('logradouro', data.logradouro)
+        if (data.bairro)     setValue('bairro', data.bairro)
+        if (data.localidade) setValue('cidade', data.localidade)
+        if (data.uf)         setValue('uf', data.uf)
       }
     } catch {}
     finally { setBuscandoCep(false) }
   }
 
-  async function onSubmit(data: ClienteFormData) {
+  async function buscarCnpj(cnpjRaw: string) {
+    const digits = cnpjRaw.replace(/\D/g, '')
+    if (digits.length !== 14) return
+    setBuscandoCnpj(true)
+    setCnpjOk(false)
     try {
-      const url = isEditing ? `/api/clientes/${initialData?.id}` : '/api/clientes'
-      const method = isEditing ? 'PATCH' : 'POST'
+      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${digits}`)
+      if (!res.ok) return
+      const data = await res.json()
 
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      })
-
-      if (!res.ok) {
-        const json = await res.json()
-        toast.error(json.error ?? 'Erro ao salvar cliente')
-        return
+      if (data.razao_social)  setValue('razaoSocial',  data.razao_social)
+      if (data.nome_fantasia) setValue('nomeFantasia', data.nome_fantasia)
+      if (data.email)         setValue('email',        data.email)
+      if (data.ddd_telefone_1) {
+        setValue('telefone', formatPhone(data.ddd_telefone_1.replace(/\D/g, '')))
       }
 
-      const cliente = await res.json()
-      toast.success(isEditing ? 'Cliente atualizado' : 'Cliente cadastrado')
-      router.push(`/clientes/${cliente.id}`)
-      router.refresh()
+      // Endereço
+      if (data.cep) {
+        const formatted = formatCep(data.cep)
+        setValue('cep', formatted)
+        await buscarCep(data.cep)
+      }
+      if (data.logradouro)  setValue('logradouro',  data.logradouro)
+      if (data.numero)      setValue('numero',      data.numero)
+      if (data.complemento) setValue('complemento', data.complemento)
+      if (data.bairro)      setValue('bairro',      data.bairro)
+      if (data.municipio)   setValue('cidade',      data.municipio)
+      if (data.uf)          setValue('uf',          data.uf)
+
+      setCnpjOk(true)
+      toast.success('Dados da empresa preenchidos automaticamente')
     } catch {
-      toast.error('Erro de conexão')
+      toast.error('Não foi possível buscar dados do CNPJ')
+    } finally {
+      setBuscandoCnpj(false)
+    }
+  }
+
+  async function onSubmit(data: ClienteFormData) {
+    try {
+      if (isEditing) {
+        await updateDocument('clientes', initialData!.id!, {
+          ...data,
+          regimeTributario: data.regimeTributario ?? null,
+        })
+        toast.success('Cliente atualizado')
+        if (onSuccess) {
+          onSuccess(initialData!.id!)
+        } else {
+          router.push(`/clientes/${initialData!.id}`)
+          router.refresh()
+        }
+      } else {
+        const codigo = await getNextClienteCodigo()
+        const id = await createDocument('clientes', {
+          ...data,
+          codigo,
+          regimeTributario: data.regimeTributario ?? null,
+        })
+        toast.success('Cliente cadastrado com sucesso!')
+        if (onSuccess) {
+          onSuccess(id)
+        } else {
+          router.push(`/clientes/${id}`)
+          router.refresh()
+        }
+      }
+    } catch (err) {
+      console.error(err)
+      toast.error('Erro ao salvar cliente. Tente novamente.')
     }
   }
 
@@ -153,34 +205,37 @@ export function ClienteForm({ initialData }: ClienteFormProps) {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="razaoSocial">
-              {tipoPessoa === 'pj' ? 'Razão Social' : 'Nome Completo'} *
-            </Label>
-            <Input id="razaoSocial" {...register('razaoSocial')} />
-            {errors.razaoSocial && <p className="text-xs text-destructive">{errors.razaoSocial.message}</p>}
-          </div>
-
-          {tipoPessoa === 'pj' && (
-            <div className="space-y-2">
-              <Label htmlFor="nomeFantasia">Nome Fantasia</Label>
-              <Input id="nomeFantasia" {...register('nomeFantasia')} />
-            </div>
-          )}
-
+          {/* CNPJ — with auto-fill */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="cpfCnpj">{tipoPessoa === 'pj' ? 'CNPJ' : 'CPF'} *</Label>
-              <Input
-                id="cpfCnpj"
-                {...register('cpfCnpj')}
-                onChange={(e) => {
-                  const formatted = formatCpfCnpj(e.target.value)
-                  e.target.value = formatted
-                  setValue('cpfCnpj', formatted)
-                }}
-                maxLength={tipoPessoa === 'pj' ? 18 : 14}
-              />
+              <Label htmlFor="cpfCnpj">
+                {tipoPessoa === 'pj' ? 'CNPJ' : 'CPF'} *
+                {tipoPessoa === 'pj' && (
+                  <span className="ml-2 text-xs text-muted-foreground font-normal">
+                    (preenche dados automaticamente)
+                  </span>
+                )}
+              </Label>
+              <div className="relative">
+                <Input
+                  id="cpfCnpj"
+                  {...register('cpfCnpj')}
+                  onChange={(e) => {
+                    const formatted = formatCpfCnpj(e.target.value)
+                    e.target.value = formatted
+                    setValue('cpfCnpj', formatted)
+                    if (tipoPessoa === 'pj' && formatted.replace(/\D/g, '').length === 14) {
+                      buscarCnpj(formatted)
+                    }
+                  }}
+                  maxLength={tipoPessoa === 'pj' ? 18 : 14}
+                  className="pr-8"
+                />
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+                  {buscandoCnpj && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+                  {cnpjOk && !buscandoCnpj && <CheckCircle2 className="w-4 h-4 text-green-600" />}
+                </div>
+              </div>
               {errors.cpfCnpj && <p className="text-xs text-destructive">{errors.cpfCnpj.message}</p>}
             </div>
 
@@ -188,7 +243,7 @@ export function ClienteForm({ initialData }: ClienteFormProps) {
               <Label htmlFor="regimeTributario">Regime Tributário</Label>
               <Select
                 defaultValue={initialData?.regimeTributario ?? ''}
-                onValueChange={(v) => setValue('regimeTributario', v as any || null)}
+                onValueChange={(v) => setValue('regimeTributario', (v as any) || null)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione..." />
@@ -204,6 +259,21 @@ export function ClienteForm({ initialData }: ClienteFormProps) {
               </Select>
             </div>
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="razaoSocial">
+              {tipoPessoa === 'pj' ? 'Razão Social' : 'Nome Completo'} *
+            </Label>
+            <Input id="razaoSocial" {...register('razaoSocial')} />
+            {errors.razaoSocial && <p className="text-xs text-destructive">{errors.razaoSocial.message}</p>}
+          </div>
+
+          {tipoPessoa === 'pj' && (
+            <div className="space-y-2">
+              <Label htmlFor="nomeFantasia">Nome Fantasia</Label>
+              <Input id="nomeFantasia" {...register('nomeFantasia')} />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -247,22 +317,30 @@ export function ClienteForm({ initialData }: ClienteFormProps) {
         <CardContent className="space-y-4">
           <div className="flex gap-4 items-end">
             <div className="space-y-2 w-40">
-              <Label htmlFor="cep">CEP</Label>
-              <Input
-                id="cep"
-                {...register('cep')}
-                maxLength={9}
-                onChange={(e) => {
-                  const formatted = formatCep(e.target.value)
-                  e.target.value = formatted
-                  setValue('cep', formatted)
-                  if (formatted.replace(/\D/g, '').length === 8) {
-                    buscarCep(formatted)
-                  }
-                }}
-              />
+              <Label htmlFor="cep">
+                CEP
+                <span className="ml-2 text-xs text-muted-foreground font-normal">(auto-preenche)</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  id="cep"
+                  {...register('cep')}
+                  maxLength={9}
+                  className="pr-8"
+                  onChange={(e) => {
+                    const formatted = formatCep(e.target.value)
+                    e.target.value = formatted
+                    setValue('cep', formatted)
+                    if (formatted.replace(/\D/g, '').length === 8) {
+                      buscarCep(formatted)
+                    }
+                  }}
+                />
+                {buscandoCep && (
+                  <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground pointer-events-none" />
+                )}
+              </div>
             </div>
-            {buscandoCep && <span className="text-xs text-muted-foreground pb-2">Buscando...</span>}
           </div>
 
           <div className="grid grid-cols-3 gap-4">
@@ -351,7 +429,11 @@ export function ClienteForm({ initialData }: ClienteFormProps) {
           {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
           {isEditing ? 'Salvar Alterações' : 'Cadastrar Cliente'}
         </Button>
-        <Button type="button" variant="outline" onClick={() => router.back()}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onClose ? onClose() : router.back()}
+        >
           Cancelar
         </Button>
       </div>

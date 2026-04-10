@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
@@ -9,33 +9,37 @@ import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft, Loader2, Pencil, Plus, ShieldCheck, ShieldAlert, ShieldOff } from 'lucide-react'
+import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
+import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 
 const REGIME_LABELS: Record<string, string> = {
   simples_nacional: 'Simples Nacional',
-  lucro_presumido: 'Lucro Presumido',
-  lucro_real: 'Lucro Real',
-  mei: 'MEI',
-  isento: 'Isento',
+  lucro_presumido:  'Lucro Presumido',
+  lucro_real:       'Lucro Real',
+  mei:              'MEI',
+  isento:           'Isento / Imune',
 }
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  emitida: { label: 'Emitida', variant: 'default' },
-  cancelada: { label: 'Cancelada', variant: 'destructive' },
-  pendente_processamento: { label: 'Pendente', variant: 'outline' },
-  erro: { label: 'Erro', variant: 'destructive' },
+  emitida:                 { label: 'Emitida',    variant: 'default' },
+  cancelada:               { label: 'Cancelada',  variant: 'destructive' },
+  pendente_processamento:  { label: 'Pendente',   variant: 'outline' },
+  erro_integracao:         { label: 'Erro',       variant: 'destructive' },
+  rejeitada:               { label: 'Rejeitada',  variant: 'destructive' },
 }
 
 export default function ClienteFiscalPage() {
   const { id } = useParams<{ id: string }>()
-  const router = useRouter()
+  const router  = useRouter()
 
-  const [cliente, setCliente] = useState<Record<string, unknown> | null>(null)
-  const [fiscal, setFiscal] = useState<Record<string, unknown> | null>(null)
-  const [notas, setNotas] = useState<Array<Record<string, unknown>>>([])
-  const [loading, setLoading] = useState(true)
+  const [cliente,   setCliente]   = useState<Record<string, unknown> | null>(null)
+  const [fiscal,    setFiscal]    = useState<Record<string, unknown> | null>(null)
+  const [notas,     setNotas]     = useState<Array<Record<string, unknown>>>([])
+  const [loading,   setLoading]   = useState(true)
+  const [configOpen, setConfigOpen] = useState(false)
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!id) return
     setLoading(true)
     Promise.all([
@@ -43,15 +47,14 @@ export default function ClienteFiscalPage() {
       listDocuments('clientes_fiscal', [where('clienteId', '==', id), limit(1)]),
       listDocuments('nfse_emitidas', [where('clienteId', '==', id), orderBy('dataEmissao', 'desc'), limit(10)]),
     ]).then(([clienteData, fiscalData, notasData]) => {
-      if (!clienteData) {
-        router.push('/clientes')
-        return
-      }
+      if (!clienteData) { router.push('/clientes'); return }
       setCliente(clienteData as Record<string, unknown>)
       setFiscal(fiscalData.length > 0 ? fiscalData[0] as Record<string, unknown> : null)
       setNotas(notasData as Array<Record<string, unknown>>)
     }).finally(() => setLoading(false))
   }, [id, router])
+
+  useEffect(() => { load() }, [load])
 
   if (loading) {
     return (
@@ -63,75 +66,159 @@ export default function ClienteFiscalPage() {
 
   if (!cliente) return null
 
+  const creds       = (fiscal?.credenciais ?? {}) as Record<string, unknown>
+  const ibge        = fiscal?.municipioIbge as string | undefined
+  const tipo        = ibge ? MUNICIPIO_TIPO[ibge] : undefined
+  const municipioNome = MUNICIPIOS.find(m => m.ibge === ibge)?.nome ?? (ibge ?? '—')
+
+  const certInfo: CertInfo | null = creds.certTitular
+    ? {
+        titular:     creds.certTitular as string,
+        vencimento:  creds.certVencimento as string,
+        valido:      creds.certValido as boolean,
+        storagePath: creds.certificadoStoragePath as string,
+      }
+    : null
+
+  const fiscalDefaults = fiscal
+    ? {
+        municipioIbge:       fiscal.municipioIbge       as string,
+        inscricaoMunicipal:  fiscal.inscricaoMunicipal  as string,
+        inscricaoEstadual:   fiscal.inscricaoEstadual   as string,
+        ambienteEmissao:     (fiscal.ambienteEmissao    as 'homologacao' | 'producao') ?? 'homologacao',
+        regimeTributario:    fiscal.regimeTributario    as string,
+        optanteSimples:      (fiscal.optanteSimples     as boolean) ?? true,
+        incentivadorCultural:(fiscal.incentivadorCultural as boolean) ?? false,
+        naturezaOperacao:    (fiscal.naturezaOperacao   as string) ?? '1',
+        itemListaServico:    fiscal.itemListaServico    as string,
+        cnae:                fiscal.cnae                as string,
+        aliquotaPadrao:      fiscal.aliquotaPadrao      as number,
+        credenciais:         creds,
+      }
+    : undefined
+
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Link href={`/clientes/${id}`}>
-          <Button variant="ghost" size="sm">
-            <ArrowLeft className="w-4 h-4 mr-1" />
-            Voltar
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Link href={`/clientes/${id}`}>
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              Voltar
+            </Button>
+          </Link>
+          <div>
+            <h2 className="text-lg font-semibold">Fiscal — {cliente.razaoSocial as string}</h2>
+            <p className="text-sm text-muted-foreground">Configurações fiscais e NFS-e emitidas</p>
+          </div>
+        </div>
+        <Link href={`/fiscal/emitir?clienteId=${id}`}>
+          <Button size="sm">
+            <Plus className="w-4 h-4 mr-1" />
+            Emitir NFS-e
           </Button>
         </Link>
-        <div>
-          <h2 className="text-lg font-semibold">Fiscal — {cliente.razaoSocial as string}</h2>
-          <p className="text-sm text-muted-foreground">Configurações fiscais e NFS-e emitidas</p>
-        </div>
       </div>
 
       {/* Dados Fiscais */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-sm">Dados Fiscais</CardTitle>
-          <Link href={`/fiscal/emitir?clienteId=${id}`}>
-            <Button size="sm">Emitir NFS-e</Button>
-          </Link>
+          <Button variant="outline" size="sm" onClick={() => setConfigOpen(true)}>
+            <Pencil className="w-3.5 h-3.5 mr-1.5" />
+            {fiscal ? 'Editar' : 'Configurar'}
+          </Button>
         </CardHeader>
         <CardContent>
           {!fiscal ? (
-            <p className="text-sm text-muted-foreground">
-              Nenhum dado fiscal cadastrado para este cliente.
-            </p>
+            <div className="text-center py-6 space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Nenhuma configuração fiscal cadastrada.
+              </p>
+              <Button size="sm" onClick={() => setConfigOpen(true)}>
+                Configurar agora
+              </Button>
+            </div>
           ) : (
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
               <div>
-                <dt className="text-muted-foreground">Regime Tributário</dt>
+                <dt className="text-muted-foreground text-xs">Município</dt>
+                <dd className="font-medium">{municipioNome}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground text-xs">Ambiente</dt>
                 <dd className="font-medium">
-                  {REGIME_LABELS[fiscal.regimeTributario as string] ??
-                    (fiscal.regimeTributario as string) ??
-                    '—'}
+                  {fiscal.ambienteEmissao === 'producao'
+                    ? <Badge variant="default" className="text-xs">Produção</Badge>
+                    : <Badge variant="secondary" className="text-xs">Homologação</Badge>
+                  }
                 </dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Inscrição Municipal</dt>
+                <dt className="text-muted-foreground text-xs">Inscrição Municipal</dt>
                 <dd className="font-medium">{(fiscal.inscricaoMunicipal as string) ?? '—'}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Inscrição Estadual</dt>
-                <dd className="font-medium">{(fiscal.inscricaoEstadual as string) ?? '—'}</dd>
+                <dt className="text-muted-foreground text-xs">Regime Tributário</dt>
+                <dd className="font-medium">
+                  {REGIME_LABELS[fiscal.regimeTributario as string] ?? (fiscal.regimeTributario as string) ?? '—'}
+                </dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">CNAE Principal</dt>
-                <dd className="font-medium">{(fiscal.cnaePrincipal as string) ?? '—'}</dd>
+                <dt className="text-muted-foreground text-xs">Optante Simples</dt>
+                <dd className="font-medium">{fiscal.optanteSimples ? 'Sim' : 'Não'}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Município NFS-e</dt>
-                <dd className="font-medium">{(fiscal.municipioNfse as string) ?? '—'}</dd>
+                <dt className="text-muted-foreground text-xs">Alíquota ISS</dt>
+                <dd className="font-medium">
+                  {fiscal.aliquotaPadrao != null ? `${fiscal.aliquotaPadrao}%` : '—'}
+                </dd>
               </div>
-              <div>
-                <dt className="text-muted-foreground">Código Serviço Padrão</dt>
-                <dd className="font-medium">{(fiscal.codigoServicoPadrao as string) ?? '—'}</dd>
-              </div>
-              {fiscal.aliquotaIss != null ? (
+              {fiscal.itemListaServico ? (
                 <div>
-                  <dt className="text-muted-foreground">Alíquota ISS</dt>
-                  <dd className="font-medium">{fiscal.aliquotaIss as number}%</dd>
+                  <dt className="text-muted-foreground text-xs">Item Lista Serviço</dt>
+                  <dd className="font-medium">{fiscal.itemListaServico as string}</dd>
+                </div>
+              ) : null}
+              {fiscal.cnae ? (
+                <div>
+                  <dt className="text-muted-foreground text-xs">CNAE</dt>
+                  <dd className="font-medium">{fiscal.cnae as string}</dd>
+                </div>
+              ) : null}
+              {fiscal.naturezaOperacao ? (
+                <div>
+                  <dt className="text-muted-foreground text-xs">Natureza Operação</dt>
+                  <dd className="font-medium">{fiscal.naturezaOperacao as string}</dd>
                 </div>
               ) : null}
             </dl>
           )}
         </CardContent>
       </Card>
+
+      {/* Certificado A1 — só para municípios ABRASF */}
+      {fiscal && tipo === 'abrasf_a1' && (
+        <Card>
+          <CardHeader className="flex flex-row items-center gap-2">
+            {certInfo
+              ? certInfo.valido
+                ? <ShieldCheck className="w-4 h-4 text-green-600" />
+                : <ShieldAlert className="w-4 h-4 text-destructive" />
+              : <ShieldOff className="w-4 h-4 text-muted-foreground" />
+            }
+            <CardTitle className="text-sm">Certificado Digital A1</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CertificadoUpload
+              clienteId={id}
+              certInfo={certInfo}
+              onUploaded={() => load()}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* NFS-e Emitidas */}
       <Card>
@@ -140,36 +227,35 @@ export default function ClienteFiscalPage() {
         </CardHeader>
         <CardContent className="p-0">
           {notas.length === 0 ? (
-            <p className="px-4 py-4 text-sm text-muted-foreground">
+            <p className="px-4 py-6 text-sm text-muted-foreground">
               Nenhuma NFS-e emitida para este cliente.
             </p>
           ) : (
             <table className="w-full text-sm">
               <thead className="bg-muted/50 border-b">
                 <tr>
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">
-                    Tomador
-                  </th>
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Valor</th>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Tomador</th>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Nº NFS-e</th>
+                  <th className="px-4 py-2 text-right font-medium text-muted-foreground">Valor</th>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Data</th>
                   <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {notas.map((n) => {
-                  const st = STATUS_MAP[n.status as string] ?? {
-                    label: n.status as string,
-                    variant: 'outline' as const,
-                  }
+                  const st = STATUS_MAP[n.status as string] ?? { label: n.status as string, variant: 'outline' as const }
+                  const dt = n.dataEmissao instanceof Timestamp ? n.dataEmissao.toDate() : null
                   return (
-                    <tr key={n.id as string}>
-                      <td className="px-4 py-2">{(n.tomadorNome as string) ?? '—'}</td>
-                      <td className="px-4 py-2">
+                    <tr key={n.id as string} className="hover:bg-muted/30">
+                      <td className="px-4 py-2 font-medium">{(n.tomadorNome as string) ?? '—'}</td>
+                      <td className="px-4 py-2 font-mono text-xs">{(n.numeroNfse as string) ?? '—'}</td>
+                      <td className="px-4 py-2 text-right">
                         {n.valorServico != null
-                          ? Number(n.valorServico).toLocaleString('pt-BR', {
-                              style: 'currency',
-                              currency: 'BRL',
-                            })
+                          ? Number(n.valorServico).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
                           : '—'}
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground text-xs">
+                        {dt ? dt.toLocaleDateString('pt-BR') : '—'}
                       </td>
                       <td className="px-4 py-2">
                         <Badge variant={st.variant}>{st.label}</Badge>
@@ -182,6 +268,16 @@ export default function ClienteFiscalPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Config Form Dialog */}
+      <ConfigFiscalForm
+        open={configOpen}
+        onOpenChange={setConfigOpen}
+        clienteId={id}
+        docId={fiscal?.id as string | undefined}
+        defaultValues={fiscalDefaults}
+        onSaved={load}
+      />
     </div>
   )
 }

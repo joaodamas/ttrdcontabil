@@ -9,6 +9,7 @@ import { formatCpfCnpj } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ClientesFiltros } from '@/components/clientes/clientes-filtros'
+import { ClienteModal } from '@/components/clientes/cliente-modal'
 import { Plus, Loader2 } from 'lucide-react'
 
 const STATUS_LABELS: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
@@ -35,6 +36,8 @@ function ClientesContent() {
 
   const [allClientes, setAllClientes] = useState<Array<Record<string, string>>>([])
   const [loading, setLoading] = useState(true)
+  const [modalClienteId, setModalClienteId] = useState<string | null>(null)
+  const [modalClienteNome, setModalClienteNome] = useState('')
 
   useEffect(() => {
     setLoading(true)
@@ -139,11 +142,16 @@ function ClientesContent() {
                     <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
                   </td>
                   <td className="px-4 py-3">
-                    <Link href={`/clientes/${c.id}`}>
-                      <Button variant="ghost" size="sm">
-                        Ver
-                      </Button>
-                    </Link>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setModalClienteId(c.id)
+                        setModalClienteNome(c.razaoSocial)
+                      }}
+                    >
+                      Ver
+                    </Button>
                   </td>
                 </tr>
               )
@@ -178,6 +186,15 @@ function ClientesContent() {
             )}
           </div>
         </div>
+      )}
+
+      {modalClienteId && (
+        <ClienteModal
+          clienteId={modalClienteId}
+          clienteNome={modalClienteNome}
+          open={!!modalClienteId}
+          onOpenChange={(v) => { if (!v) setModalClienteId(null) }}
+        />
       )}
     </div>
   )

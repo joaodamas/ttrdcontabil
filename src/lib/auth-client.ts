@@ -16,6 +16,7 @@ export interface UserSession {
   email: string
   nome: string
   perfil: string
+  telas?: string[]   // granular screen access; undefined = use perfil defaults
 }
 
 export async function signIn(email: string, password: string): Promise<UserSession> {
@@ -33,6 +34,9 @@ export async function signIn(email: string, password: string): Promise<UserSessi
       if (data.ativo === false) throw new Error('Usuário inativo. Contate o administrador.')
       nome   = data.nome   ?? email
       perfil = data.perfil ?? 'leitura'
+      if (Array.isArray(data.telas)) {
+        return { uid: cred.user.uid, email: cred.user.email ?? email, nome, perfil, telas: data.telas }
+      }
     }
     // If document doesn't exist, proceed with defaults — admin should run seed
   } catch (err) {
@@ -69,6 +73,10 @@ export function onSession(callback: (session: UserSession | null) => void) {
         if (data.ativo === false) { callback(null); return }
         nome   = data.nome   ?? nome
         perfil = data.perfil ?? perfil
+        if (Array.isArray(data.telas)) {
+          callback({ uid: user.uid, email: user.email ?? '', nome, perfil, telas: data.telas })
+          return
+        }
       }
     } catch {
       // Firestore unavailable — still allow access with defaults
