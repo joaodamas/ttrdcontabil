@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "ttrdcontabil-jpproject",
     "public": "out",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
@@ -9,6 +10,14 @@
       {
         "source": "**/*.@(js|css|woff2)",
         "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      },
+      {
+        "source": "**/*.html",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+      },
+      {
+        "source": "/",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
       }
     ]
   },

@@ -28,11 +28,80 @@
       ]
     },
     {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tipo", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "dataPagamento", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clienteId", "order": "ASCENDING" },
+        { "fieldPath": "dataVencimento", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "tarefas",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "dataPrazo", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "tarefas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "dataPrazo", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "competencias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "mes", "order": "ASCENDING" },
+        { "fieldPath": "ano", "order": "ASCENDING" },
+        { "fieldPath": "clienteId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "tarefas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "responsavelId", "order": "ASCENDING" },
+        { "fieldPath": "dataVencimento", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "fechamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "mes", "order": "ASCENDING" },
+        { "fieldPath": "ano", "order": "ASCENDING" },
+        { "fieldPath": "clienteCodigo", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "fechamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "mes", "order": "ASCENDING" },
+        { "fieldPath": "ano", "order": "ASCENDING" },
+        { "fieldPath": "regime", "order": "ASCENDING" },
+        { "fieldPath": "clienteCodigo", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "nfse_rascunhos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clienteId", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
       ]
     },
     {

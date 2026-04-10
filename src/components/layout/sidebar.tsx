@@ -1,5 +1,6 @@
 'use client'
 
+import { memo, useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -13,7 +14,6 @@ import {
   FileText,
   DollarSign,
   Receipt,
-  FolderOpen,
   Settings,
   Building2,
   LogOut,
@@ -41,16 +41,16 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/ir', label: 'Imp. de Renda', icon: FileText },
   { href: '/financeiro', label: 'Financeiro', icon: DollarSign },
   { href: '/fiscal', label: 'Fiscal / NFS-e', icon: Receipt, perfis: ['admin', 'fiscal', 'financeiro'] },
-  { href: '/documentos', label: 'Documentos', icon: FolderOpen },
   { href: '/admin', label: 'Administração', icon: Settings, perfis: ['admin'] },
 ]
 
-export function Sidebar() {
+export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname()
   const { usuario, logout } = useAuth()
 
-  const itemsVisiveis = NAV_ITEMS.filter(
-    (item) => !item.perfis || (usuario && item.perfis.includes(usuario.perfil))
+  const itemsVisiveis = useMemo(
+    () => NAV_ITEMS.filter((item) => !item.perfis || (usuario && item.perfis.includes(usuario.perfil))),
+    [usuario?.perfil] // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   return (
@@ -78,7 +78,7 @@ export function Sidebar() {
             <Link key={item.href} href={item.href}>
               <span
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors group',
+                  'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors cursor-pointer group',
                   isActive
                     ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
                     : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
@@ -125,4 +125,4 @@ export function Sidebar() {
       </div>
     </aside>
   )
-}
+})

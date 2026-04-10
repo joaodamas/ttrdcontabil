@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm, Controller } from 'react-hook-form'
+import { updateDocument } from '@/lib/firestore-client'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
@@ -28,18 +29,21 @@ import {
 import { Loader2, Plus, Pencil, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+const PERFIS = ['admin', 'operacional', 'fiscal', 'financeiro', 'leitura'] as const
+type Perfil = typeof PERFIS[number]
+
 const createSchema = z.object({
   nome: z.string().min(2, 'Nome é obrigatório').max(100),
   email: z.string().email('E-mail inválido'),
   senha: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres'),
-  perfil: z.enum(['admin', 'contador', 'assistente']).default('assistente'),
+  perfil: z.enum(PERFIS).default('leitura'),
 })
 
 const editSchema = z.object({
   nome: z.string().min(2, 'Nome é obrigatório').max(100),
   email: z.string().email('E-mail inválido'),
   senha: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres').optional().or(z.literal('')),
-  perfil: z.enum(['admin', 'contador', 'assistente']).default('assistente'),
+  perfil: z.enum(PERFIS).default('leitura'),
   ativo: z.boolean().default(true),
 })
 
@@ -56,10 +60,12 @@ interface UsuarioFormProps {
   }
 }
 
-const PERFIL_LABELS: Record<string, string> = {
-  admin: 'Administrador',
-  contador: 'Contador',
-  assistente: 'Assistente',
+const PERFIL_LABELS: Record<Perfil, string> = {
+  admin:        'Administrador',
+  operacional:  'Operacional',
+  fiscal:       'Fiscal',
+  financeiro:   'Financeiro',
+  leitura:      'Somente Leitura',
 }
 
 export function UsuarioForm({ usuario }: UsuarioFormProps) {
@@ -84,42 +90,38 @@ export function UsuarioForm({ usuario }: UsuarioFormProps) {
           nome: usuario.nome ?? '',
           email: usuario.email ?? '',
           senha: '',
-          perfil: (usuario.perfil as EditData['perfil']) ?? 'assistente',
+          perfil: (PERFIS.includes(usuario.perfil as Perfil) ? usuario.perfil : 'leitura') as Perfil,
           ativo: usuario.ativo ?? true,
         }
       : {
-          perfil: 'assistente',
+          perfil: 'leitura' as Perfil,
           ativo: true,
         },
   })
 
   async function onSubmit(data: EditData) {
+    if (!isEditing) {
+      // Criação de usuário requer Firebase Auth Admin — usar o Firebase Console
+      // ou implementar via Cloud Function futuramente
+      toast.error('Para criar usuários, acesse o Firebase Console e depois edite o perfil aqui.')
+      return
+    }
+
     try {
-      const url = isEditing ? `/api/usuarios/${usuario.id}` : '/api/usuarios'
-      const method = isEditing ? 'PATCH' : 'POST'
-
-      // Remove empty password on edit
-      const payload: Record<string, unknown> = { ...data }
-      if (isEditing && !payload.senha) delete payload.senha
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-
-      if (!res.ok) {
-        const json = await res.json()
-        toast.error(json.error ?? 'Erro ao salvar usuário')
-        return
+      const updates: Record<string, unknown> = {
+        nome: data.nome,
+        perfil: data.perfil,
+        ativo: data.ativo,
       }
 
-      toast.success(isEditing ? 'Usuário atualizado!' : 'Usuário criado!')
+      await updateDocument('usuarios', usuario!.id, updates)
+
+      toast.success('Usuário atualizado!')
       setOpen(false)
       reset()
       router.refresh()
     } catch {
-      toast.error('Erro inesperado. Tente novamente.')
+      toast.error('Erro ao salvar usuário. Tente novamente.')
     }
   }
 
@@ -219,9 +221,9 @@ export function UsuarioForm({ usuario }: UsuarioFormProps) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="admin">Administrador</SelectItem>
-                      <SelectItem value="contador">Contador</SelectItem>
-                      <SelectItem value="assistente">Assistente</SelectItem>
+                      {PERFIS.map((p) => (
+                        <SelectItem key={p} value={p}>{PERFIL_LABELS[p]}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 )}

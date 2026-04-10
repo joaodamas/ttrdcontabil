@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Timestamp } from 'firebase/firestore'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -22,32 +22,33 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Loader2, ArrowDownCircle } from 'lucide-react'
+import { updateDocument } from '@/lib/firestore-client'
 
 const FORMAS_PAGAMENTO = [
-  { value: 'pix',          label: 'PIX' },
-  { value: 'boleto',       label: 'Boleto' },
-  { value: 'transferencia',label: 'Transferência' },
-  { value: 'dinheiro',     label: 'Dinheiro' },
-  { value: 'cartao',       label: 'Cartão' },
-  { value: 'outro',        label: 'Outro' },
+  { value: 'pix',           label: 'PIX' },
+  { value: 'boleto',        label: 'Boleto' },
+  { value: 'transferencia', label: 'Transferência' },
+  { value: 'dinheiro',      label: 'Dinheiro' },
+  { value: 'cartao',        label: 'Cartão' },
+  { value: 'outro',         label: 'Outro' },
 ]
 
 function toDateInputValue(date: Date) {
-  const y  = date.getFullYear()
-  const m  = String(date.getMonth() + 1).padStart(2, '0')
-  const d  = String(date.getDate()).padStart(2, '0')
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
 }
 
 interface LancamentoBaixarProps {
   lancamentoId: string
+  onBaixado?: () => void
 }
 
-export function LancamentoBaixar({ lancamentoId }: LancamentoBaixarProps) {
-  const router = useRouter()
-  const [open, setOpen]               = useState(false)
-  const [salvando, setSalvando]       = useState(false)
-  const [dataPagamento, setDataPagamento] = useState(toDateInputValue(new Date()))
+export function LancamentoBaixar({ lancamentoId, onBaixado }: LancamentoBaixarProps) {
+  const [open, setOpen]                     = useState(false)
+  const [salvando, setSalvando]             = useState(false)
+  const [dataPagamento, setDataPagamento]   = useState(toDateInputValue(new Date()))
   const [formaPagamento, setFormaPagamento] = useState('pix')
 
   async function handleBaixar() {
@@ -58,28 +59,20 @@ export function LancamentoBaixar({ lancamentoId }: LancamentoBaixarProps) {
 
     setSalvando(true)
     try {
-      const res = await fetch(`/api/lancamentos/${lancamentoId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          baixar: {
-            dataPagamento,
-            formaPagamento,
-          },
-        }),
-      })
+      const [year, month, day] = dataPagamento.split('-').map(Number)
+      const dataTs = Timestamp.fromDate(new Date(year, month - 1, day))
 
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}))
-        toast.error(json.error ?? 'Erro ao baixar lançamento')
-        return
-      }
+      await updateDocument('lancamentos', lancamentoId, {
+        status: 'pago',
+        dataPagamento: dataTs,
+        formaPagamento,
+      })
 
       toast.success('Lançamento baixado com sucesso!')
       setOpen(false)
-      router.refresh()
+      onBaixado?.()
     } catch {
-      toast.error('Erro inesperado. Tente novamente.')
+      toast.error('Erro ao baixar lançamento. Tente novamente.')
     } finally {
       setSalvando(false)
     }
@@ -102,7 +95,6 @@ export function LancamentoBaixar({ lancamentoId }: LancamentoBaixarProps) {
         </DialogHeader>
 
         <div className="space-y-4 pt-2">
-          {/* Data de pagamento */}
           <div className="space-y-1.5">
             <Label htmlFor="dataPagamento">Data de Pagamento</Label>
             <Input
@@ -114,7 +106,6 @@ export function LancamentoBaixar({ lancamentoId }: LancamentoBaixarProps) {
             />
           </div>
 
-          {/* Forma de pagamento */}
           <div className="space-y-1.5">
             <Label>Forma de Pagamento</Label>
             <Select
@@ -135,7 +126,6 @@ export function LancamentoBaixar({ lancamentoId }: LancamentoBaixarProps) {
             </Select>
           </div>
 
-          {/* Botões */}
           <div className="flex justify-end gap-2 pt-2">
             <DialogClose render={<Button variant="outline" size="sm" disabled={salvando} />}>
               Cancelar

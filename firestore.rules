@@ -15,9 +15,14 @@ service cloud.firestore {
     }
 
     match /usuarios/{uid} {
-      allow read: if isAtivo();
+      // Own document: read always allowed (needed at login before isAtivo() is evaluated)
+      allow read: if isAuth() && request.auth.uid == uid;
+      // Own document: only allow updating safe fields — never perfil/ativo (prevents self-promotion)
+      allow update: if isAuth() && request.auth.uid == uid
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['perfil', 'ativo']);
+      // Admin can read all users and write any field
+      allow read: if isAdmin();
       allow write: if isAdmin();
-      allow read, update: if isAuth() && request.auth.uid == uid;
     }
 
     match /clientes/{id}         { allow read, write: if isAtivo(); }

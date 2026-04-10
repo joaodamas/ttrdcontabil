@@ -3,358 +3,420 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
-
 import { listDocuments } from '@/lib/firestore-client'
 import { formatCurrency, formatDate, formatMesAno } from '@/lib/utils'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import {
   Users,
   ClipboardList,
   CheckSquare,
   TrendingUp,
   AlertTriangle,
-  Loader2,
+  ArrowRight,
+  Clock,
+  CheckCircle2,
+  Circle,
+  Calendar,
 } from 'lucide-react'
 
+/* ─── Skeleton ─────────────────────────────────────────────── */
+function SkeletonKPI() {
+  return (
+    <div className="bg-card card-shadow rounded-2xl p-5 animate-pulse">
+      <div className="flex items-start justify-between mb-4">
+        <div className="h-3 w-28 bg-muted rounded-full" />
+        <div className="w-10 h-10 bg-muted rounded-xl shrink-0" />
+      </div>
+      <div className="h-9 w-24 bg-muted rounded-lg mb-2" />
+      <div className="h-3 w-20 bg-muted rounded-full" />
+    </div>
+  )
+}
+
+function SkeletonList() {
+  return (
+    <div className="bg-card card-shadow rounded-2xl overflow-hidden animate-pulse">
+      <div className="px-5 py-4 border-b border-border flex justify-between items-center">
+        <div className="h-4 w-36 bg-muted rounded-full" />
+        <div className="h-3 w-16 bg-muted rounded-full" />
+      </div>
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="px-5 py-3.5 border-b border-border/50 last:border-0 flex gap-3 items-start">
+          <div className="w-2 h-2 rounded-full bg-muted mt-1.5 shrink-0" />
+          <div className="flex-1 space-y-1.5">
+            <div className="h-3.5 w-40 bg-muted rounded-full" />
+            <div className="h-3 w-24 bg-muted rounded-full" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* ─── Status config ─────────────────────────────────────────── */
+const COMP_STATUS: Record<string, { label: string; icon: React.ElementType; color: string; dot: string }> = {
+  aberta:       { label: 'Abertas',      icon: Circle,       color: 'text-muted-foreground', dot: 'bg-muted-foreground/40' },
+  em_andamento: { label: 'Em andamento', icon: Clock,        color: 'text-amber-600',         dot: 'bg-amber-500' },
+  concluida:    { label: 'Concluídas',   icon: CheckCircle2, color: 'text-emerald-600',        dot: 'bg-emerald-500' },
+}
+
+/* ─── Page ──────────────────────────────────────────────────── */
 export default function DashboardPage() {
   const hoje = new Date()
-  const mesAtual = hoje.getMonth() + 1
-  const anoAtual = hoje.getFullYear()
+  const mesAtual  = hoje.getMonth() + 1
+  const anoAtual  = hoje.getFullYear()
   const mesAnterior = mesAtual === 1 ? 12 : mesAtual - 1
   const anoAnterior = mesAtual === 1 ? anoAtual - 1 : anoAtual
 
-  const [loading, setLoading] = useState(true)
-  const [totalClientesAtivos, setTotalClientesAtivos] = useState(0)
-  const [compCounts, setCompCounts] = useState<Record<string, number>>({})
-  const [tarefasPendentes, setTarefasPendentes] = useState(0)
-  const [somaVencendo, setSomaVencendo] = useState(0)
-  const [vencendoCount, setVencendoCount] = useState(0)
-  const [somaAtrasados, setSomaAtrasados] = useState(0)
-  const [atrasadosCount, setAtrasadosCount] = useState(0)
-  const [tarefasVencidas, setTarefasVencidas] = useState<Array<{ id: string; titulo: string; clienteNome?: string; dataPrazo?: Timestamp }>>([])
-  const [competenciasAbertasAnteriores, setCompetenciasAbertasAnteriores] = useState<Array<{ id: string; clienteNome?: string; mes: number; ano: number }>>([])
-  const [lancamentosVencidos, setLancamentosVencidos] = useState<Array<{ id: string; descricao: string; clienteNome?: string; valor: number; dataVencimento: Timestamp }>>([])
+  const [loading, setLoading]                               = useState(true)
+  const [totalClientesAtivos, setTotalClientesAtivos]       = useState(0)
+  const [compCounts, setCompCounts]                         = useState<Record<string, number>>({})
+  const [tarefasPendentes, setTarefasPendentes]             = useState(0)
+  const [somaVencendo, setSomaVencendo]                     = useState(0)
+  const [vencendoCount, setVencendoCount]                   = useState(0)
+  const [somaAtrasados, setSomaAtrasados]                   = useState(0)
+  const [atrasadosCount, setAtrasadosCount]                 = useState(0)
+  const [tarefasVencidas, setTarefasVencidas]               = useState<Array<{ id: string; titulo: string; clienteNome?: string; dataPrazo?: Timestamp }>>([])
+  const [competenciasAbertas, setCompetenciasAbertas]       = useState<Array<{ id: string; clienteNome?: string; mes: number; ano: number }>>([])
+  const [lancamentosVencidos, setLancamentosVencidos]       = useState<Array<{ id: string; descricao: string; clienteNome?: string; valor: number; dataVencimento: Timestamp }>>([])
 
   useEffect(() => {
-    const em7Dias = new Date(hoje)
-    em7Dias.setDate(hoje.getDate() + 7)
-
-    const hojeTs = Timestamp.fromDate(hoje)
+    const em7Dias  = new Date(hoje); em7Dias.setDate(hoje.getDate() + 7)
+    const hojeTs   = Timestamp.fromDate(hoje)
     const em7DiasTs = Timestamp.fromDate(em7Dias)
 
-    Promise.all([
-      // Clientes ativos
-      listDocuments('clientes', [where('status', '==', 'ativo')]),
-      // Competências do mês atual
+    // Use Promise.allSettled so one failing query doesn't break everything
+    Promise.allSettled([
+      listDocuments('clientes',     [where('status', '==', 'ativo')]),
       listDocuments('competencias', [where('mes', '==', mesAtual), where('ano', '==', anoAtual)]),
-      // Tarefas pendentes
-      listDocuments('tarefas', [where('status', 'in', ['pendente', 'em_andamento'])]),
-      // Lançamentos vencendo em 7 dias
-      listDocuments('lancamentos', [
-        where('tipo', '==', 'receita'),
-        where('status', '==', 'pendente'),
-        where('dataVencimento', '>=', hojeTs),
-        where('dataVencimento', '<=', em7DiasTs),
-      ]),
-      // Lançamentos em atraso
-      listDocuments('lancamentos', [
-        where('tipo', '==', 'receita'),
-        where('status', '==', 'pendente'),
-        where('dataVencimento', '<', hojeTs),
-      ]),
-      // Tarefas vencidas (top 5)
-      listDocuments('tarefas', [
-        where('dataPrazo', '<', hojeTs),
-        where('status', 'in', ['pendente', 'em_andamento']),
-        orderBy('dataPrazo', 'asc'),
-        limit(5),
-      ]),
-      // Competências abertas mês anterior (top 5)
-      listDocuments('competencias', [
-        where('mes', '==', mesAnterior),
-        where('ano', '==', anoAnterior),
-        where('status', '==', 'aberta'),
-        limit(5),
-      ]),
-      // Lançamentos vencidos (top 5)
-      listDocuments('lancamentos', [
-        where('tipo', '==', 'receita'),
-        where('status', '==', 'pendente'),
-        where('dataVencimento', '<', hojeTs),
-        orderBy('dataVencimento', 'asc'),
-        limit(5),
-      ]),
-    ]).then(([
-      clientesData,
-      compMesData,
-      tarefasData,
-      vencendoData,
-      atrasadosData,
-      tarefasVencidasData,
-      compAbertasData,
-      lancVencidosData,
-    ]) => {
+      listDocuments('tarefas',      [where('status', 'in', ['pendente', 'em_andamento'])]),
+      listDocuments('lancamentos',  [where('tipo', '==', 'receita'), where('status', '==', 'pendente'), where('dataVencimento', '>=', hojeTs), where('dataVencimento', '<=', em7DiasTs)]),
+      listDocuments('lancamentos',  [where('tipo', '==', 'receita'), where('status', '==', 'pendente'), where('dataVencimento', '<', hojeTs)]),
+      // Simplified: filter by status only, filter overdue client-side (avoids composite index requirement)
+      listDocuments('tarefas',      [where('status', 'in', ['pendente', 'em_andamento']), orderBy('dataPrazo', 'asc'), limit(20)]),
+      listDocuments('competencias', [where('mes', '==', mesAnterior), where('ano', '==', anoAnterior), where('status', '==', 'aberta'), limit(5)]),
+      listDocuments('lancamentos',  [where('tipo', '==', 'receita'), where('status', '==', 'pendente'), where('dataVencimento', '<', hojeTs), orderBy('dataVencimento', 'asc'), limit(5)]),
+    ]).then((results) => {
+      function get<T>(idx: number): T[] {
+        const r = results[idx]
+        return r.status === 'fulfilled' ? (r as PromiseFulfilledResult<unknown[]>).value as T[] : []
+      }
+
+      const clientesData       = get<Record<string, unknown>>(0)
+      const compMesData        = get<Record<string, unknown>>(1)
+      const tarefasData        = get<Record<string, unknown>>(2)
+      const vencendoData       = get<Record<string, unknown>>(3)
+      const atrasadosData      = get<Record<string, unknown>>(4)
+      const tarefasStatusData  = get<Record<string, unknown>>(5)
+      const compAbertasData    = get<Record<string, unknown>>(6)
+      const lancVencidosData   = get<Record<string, unknown>>(7)
+
       setTotalClientesAtivos(clientesData.length)
 
       const counts: Record<string, number> = {}
-      compMesData.forEach((d) => {
-        const s = (d as Record<string, unknown>).status as string
-        counts[s] = (counts[s] ?? 0) + 1
-      })
+      compMesData.forEach((d) => { const s = d.status as string; counts[s] = (counts[s] ?? 0) + 1 })
       setCompCounts(counts)
 
       setTarefasPendentes(tarefasData.length)
 
-      const sumVencendo = vencendoData.reduce((acc, d) => acc + (((d as Record<string, unknown>).valor as number) ?? 0), 0)
-      setSomaVencendo(sumVencendo)
+      setSomaVencendo(vencendoData.reduce((acc, d) => acc + ((d.valor as number) ?? 0), 0))
       setVencendoCount(vencendoData.length)
-
-      const sumAtrasados = atrasadosData.reduce((acc, d) => acc + (((d as Record<string, unknown>).valor as number) ?? 0), 0)
-      setSomaAtrasados(sumAtrasados)
+      setSomaAtrasados(atrasadosData.reduce((acc, d) => acc + ((d.valor as number) ?? 0), 0))
       setAtrasadosCount(atrasadosData.length)
 
-      setTarefasVencidas(tarefasVencidasData as Array<{ id: string; titulo: string; clienteNome?: string; dataPrazo?: Timestamp }>)
-      setCompetenciasAbertasAnteriores(compAbertasData as Array<{ id: string; clienteNome?: string; mes: number; ano: number }>)
+      // Filter overdue tasks client-side
+      const vencidas = tarefasStatusData.filter((t) => {
+        if (!t.dataPrazo) return false
+        const prazo = (t.dataPrazo as Timestamp).toDate()
+        return prazo < hoje
+      }).slice(0, 5)
+      setTarefasVencidas(vencidas as Array<{ id: string; titulo: string; clienteNome?: string; dataPrazo?: Timestamp }>)
+
+      setCompetenciasAbertas(compAbertasData as Array<{ id: string; clienteNome?: string; mes: number; ano: number }>)
       setLancamentosVencidos(lancVencidosData as Array<{ id: string; descricao: string; clienteNome?: string; valor: number; dataVencimento: Timestamp }>)
     }).finally(() => setLoading(false))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  /* ─── Loading ──────────────────────────────────────────── */
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="w-5 h-5 animate-spin" />
+      <div className="space-y-8">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-6 w-32 bg-muted rounded-lg animate-pulse" />
+            <div className="h-4 w-48 bg-muted rounded-full animate-pulse" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          {[1,2,3,4,5].map(i => <SkeletonKPI key={i} />)}
+        </div>
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          {[1,2,3].map(i => <SkeletonList key={i} />)}
+        </div>
       </div>
     )
   }
 
+  /* ─── Render ────────────────────────────────────────────── */
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold">Dashboard</h2>
-        <p className="text-sm text-muted-foreground">
-          Visão geral — {formatMesAno(mesAtual, anoAtual)}
-        </p>
+    <div className="space-y-8">
+
+      {/* ── Page header ──────────────────────────────────── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Visão geral — {formatMesAno(mesAtual, anoAtual)}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-card border border-border card-shadow rounded-xl px-3 py-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_6px_1px_rgb(16_185_129/0.5)]" />
+          Sistema online
+        </div>
       </div>
 
-      {/* Cards de resumo */}
+      {/* ── KPI cards ──────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Clientes Ativos
-              </CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{totalClientesAtivos}</p>
-            <Link href="/clientes?status=ativo" className="text-xs text-primary hover:underline">
-              Ver todos
-            </Link>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Competências {formatMesAno(mesAtual, anoAtual)}
-              </CardTitle>
-              <ClipboardList className="h-4 w-4 text-muted-foreground" />
+        {/* Clientes */}
+        <Link href="/clientes?status=ativo" className="group">
+          <div className="bg-card card-shadow hover:card-shadow-hover rounded-2xl p-5 border border-border/60 hover:border-primary/30 transition-all duration-200 h-full cursor-pointer">
+            <div className="flex items-start justify-between mb-4">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Clientes Ativos</span>
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <Users className="w-5 h-5 text-primary" />
+              </div>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-muted-foreground">Abertas:</span>
-              <Badge variant="outline">{compCounts['aberta'] ?? 0}</Badge>
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-muted-foreground">Em andamento:</span>
-              <Badge variant="secondary">{compCounts['em_andamento'] ?? 0}</Badge>
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-muted-foreground">Concluídas:</span>
-              <Badge>{compCounts['concluida'] ?? 0}</Badge>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Tarefas Abertas
-              </CardTitle>
-              <CheckSquare className="h-4 w-4 text-muted-foreground" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{tarefasPendentes}</p>
-            <Link href="/tarefas?status=pendente" className="text-xs text-primary hover:underline">
-              Ver tarefas
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                A Receber (7 dias)
-              </CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(somaVencendo)}</p>
-            <p className="text-xs text-muted-foreground">
-              {vencendoCount} lançamento{vencendoCount !== 1 ? 's' : ''}
+            <p className="text-4xl font-bold tracking-tight">{totalClientesAtivos}</p>
+            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1 group-hover:text-primary transition-colors">
+              Ver todos <ArrowRight className="w-3 h-3" />
             </p>
-          </CardContent>
-        </Card>
+          </div>
+        </Link>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Em Atraso
-              </CardTitle>
-              <AlertTriangle className="h-4 w-4 text-destructive" />
+        {/* Competências */}
+        <Link href={`/competencias?mes=${mesAtual}&ano=${anoAtual}`} className="group">
+          <div className="bg-card card-shadow hover:card-shadow-hover rounded-2xl p-5 border border-border/60 hover:border-primary/30 transition-all duration-200 h-full cursor-pointer">
+            <div className="flex items-start justify-between mb-4">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Competências</span>
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <ClipboardList className="w-5 h-5 text-primary" />
+              </div>
             </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-destructive">{formatCurrency(somaAtrasados)}</p>
-            <p className="text-xs text-muted-foreground">
-              {atrasadosCount} lançamento{atrasadosCount !== 1 ? 's' : ''}
+            <div className="space-y-2">
+              {Object.entries(COMP_STATUS).map(([key, { label, icon: Icon, color, dot }]) => (
+                <div key={key} className="flex items-center justify-between text-xs">
+                  <span className={cn('flex items-center gap-1.5 font-medium', color)}>
+                    <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', dot)} />
+                    {label}
+                  </span>
+                  <span className="font-bold tabular-nums">{compCounts[key] ?? 0}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Link>
+
+        {/* Tarefas */}
+        <Link href="/tarefas?status=pendente" className="group">
+          <div className="bg-card card-shadow hover:card-shadow-hover rounded-2xl p-5 border border-border/60 hover:border-primary/30 transition-all duration-200 h-full cursor-pointer">
+            <div className="flex items-start justify-between mb-4">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tarefas Abertas</span>
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <CheckSquare className="w-5 h-5 text-primary" />
+              </div>
+            </div>
+            <p className="text-4xl font-bold tracking-tight">{tarefasPendentes}</p>
+            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1 group-hover:text-primary transition-colors">
+              Ver tarefas <ArrowRight className="w-3 h-3" />
             </p>
-          </CardContent>
-        </Card>
+          </div>
+        </Link>
+
+        {/* A receber */}
+        <Link href="/financeiro?status=pendente" className="group">
+          <div className="bg-card card-shadow hover:card-shadow-hover rounded-2xl p-5 border border-border/60 hover:border-emerald-300/40 transition-all duration-200 h-full cursor-pointer">
+            <div className="flex items-start justify-between mb-4">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">A Receber (7d)</span>
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
+                <TrendingUp className="w-5 h-5 text-emerald-600" />
+              </div>
+            </div>
+            <p className="text-2xl font-bold tracking-tight text-emerald-700 font-mono">
+              {formatCurrency(somaVencendo)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">{vencendoCount} lançamento{vencendoCount !== 1 ? 's' : ''}</p>
+          </div>
+        </Link>
+
+        {/* Em atraso */}
+        <Link href="/financeiro?status=atrasado" className="group">
+          <div className={cn(
+            'bg-card card-shadow hover:card-shadow-hover rounded-2xl p-5 border transition-all duration-200 h-full cursor-pointer',
+            atrasadosCount > 0
+              ? 'border-red-200/60 bg-red-50/30 hover:border-red-300/50'
+              : 'border-border/60 hover:border-red-200/40'
+          )}>
+            <div className="flex items-start justify-between mb-4">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Em Atraso</span>
+              <div className={cn(
+                'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
+                atrasadosCount > 0 ? 'bg-red-100' : 'bg-red-50'
+              )}>
+                <AlertTriangle className={cn('w-5 h-5', atrasadosCount > 0 ? 'text-red-600' : 'text-red-400')} />
+              </div>
+            </div>
+            <p className={cn(
+              'text-2xl font-bold tracking-tight font-mono',
+              atrasadosCount > 0 ? 'text-red-700' : 'text-foreground'
+            )}>
+              {formatCurrency(somaAtrasados)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-2">{atrasadosCount} lançamento{atrasadosCount !== 1 ? 's' : ''}</p>
+          </div>
+        </Link>
       </div>
 
-      {/* Listas rápidas */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      {/* ── Quick lists ─────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+
         {/* Tarefas vencidas */}
-        <Card>
-          <CardHeader className="border-b">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold">Tarefas Vencidas</CardTitle>
-              <Link href="/tarefas" className="text-xs text-primary hover:underline">
-                Ver todas
-              </Link>
+        <div className="bg-card card-shadow rounded-2xl border border-border/60 overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-red-500" />
+              <h2 className="text-sm font-semibold">Tarefas Vencidas</h2>
             </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            {tarefasVencidas.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground">Nenhuma tarefa vencida.</p>
-            ) : (
-              <ul className="divide-y">
-                {tarefasVencidas.map((t) => (
-                  <li key={t.id}>
-                    <Link
-                      href={`/tarefas/${t.id}`}
-                      className="flex flex-col gap-0.5 px-4 py-3 hover:bg-muted/50 transition-colors"
-                    >
-                      <span className="text-sm font-medium truncate">{t.titulo}</span>
-                      <span className="text-xs text-muted-foreground truncate">
-                        {t.clienteNome ?? '—'}
-                      </span>
-                      {t.dataPrazo ? (
-                        <span className="text-xs text-destructive">
-                          Prazo: {formatDate(t.dataPrazo.toDate())}
-                        </span>
-                      ) : null}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+            <Link href="/tarefas" className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+              Ver todas <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+          {tarefasVencidas.length === 0 ? (
+            <div className="px-5 py-10 text-center">
+              <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mx-auto mb-3">
+                <CheckCircle2 className="w-6 h-6 text-muted-foreground/40" />
+              </div>
+              <p className="text-sm text-muted-foreground">Nenhuma tarefa vencida</p>
+            </div>
+          ) : (
+            <ul>
+              {tarefasVencidas.map((t) => (
+                <li key={t.id} className="border-b border-border/40 last:border-0">
+                  <Link href={`/tarefas/${t.id}`} className="flex items-start gap-3 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer">
+                    <div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-[7px] shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{t.titulo}</p>
+                      <p className="text-xs text-muted-foreground truncate">{t.clienteNome ?? '—'}</p>
+                      {t.dataPrazo && (
+                        <p className="text-xs text-red-600 mt-0.5 font-medium">Prazo: {formatDate(t.dataPrazo.toDate())}</p>
+                      )}
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         {/* Competências abertas mês anterior */}
-        <Card>
-          <CardHeader className="border-b">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold">
-                Competências Abertas — {formatMesAno(mesAnterior, anoAnterior)}
-              </CardTitle>
-              <Link
-                href={`/competencias?mes=${mesAnterior}&ano=${anoAnterior}&status=aberta`}
-                className="text-xs text-primary hover:underline"
-              >
-                Ver todas
-              </Link>
+        <div className="bg-card card-shadow rounded-2xl border border-border/60 overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-amber-500" />
+              <h2 className="text-sm font-semibold">
+                Abertas — {formatMesAno(mesAnterior, anoAnterior)}
+              </h2>
             </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            {competenciasAbertasAnteriores.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground">Nenhuma competência em aberto.</p>
-            ) : (
-              <ul className="divide-y">
-                {competenciasAbertasAnteriores.map((c) => (
-                  <li key={c.id}>
-                    <Link
-                      href={`/competencias/${c.id}`}
-                      className="flex flex-col gap-0.5 px-4 py-3 hover:bg-muted/50 transition-colors"
-                    >
-                      <span className="text-sm font-medium truncate">
-                        {c.clienteNome ?? '—'}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {formatMesAno(c.mes, c.ano)}
-                      </span>
-                      <Badge variant="outline" className="w-fit text-xs">
-                        aberta
-                      </Badge>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+            <Link
+              href={`/competencias?mes=${mesAnterior}&ano=${anoAnterior}&status=aberta`}
+              className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+            >
+              Ver todas <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+          {competenciasAbertas.length === 0 ? (
+            <div className="px-5 py-10 text-center">
+              <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mx-auto mb-3">
+                <CheckCircle2 className="w-6 h-6 text-muted-foreground/40" />
+              </div>
+              <p className="text-sm text-muted-foreground">Nenhuma competência em aberto</p>
+            </div>
+          ) : (
+            <ul>
+              {competenciasAbertas.map((c) => (
+                <li key={c.id} className="border-b border-border/40 last:border-0">
+                  <Link href={`/competencias/${c.id}`} className="flex items-center gap-3 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer">
+                    <div className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{c.clienteNome ?? '—'}</p>
+                      <p className="text-xs text-muted-foreground">{formatMesAno(c.mes, c.ano)}</p>
+                    </div>
+                    <Badge variant="outline" className="text-xs shrink-0 text-amber-600 border-amber-200 bg-amber-50">
+                      aberta
+                    </Badge>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         {/* Lançamentos vencidos */}
-        <Card>
-          <CardHeader className="border-b">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold">Lançamentos Vencidos</CardTitle>
-              <Link href="/financeiro?status=pendente" className="text-xs text-primary hover:underline">
-                Ver todos
-              </Link>
+        <div className="bg-card card-shadow rounded-2xl border border-border/60 overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-red-500" />
+              <h2 className="text-sm font-semibold">Lançamentos Vencidos</h2>
             </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            {lancamentosVencidos.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground">Nenhum lançamento vencido.</p>
-            ) : (
-              <ul className="divide-y">
-                {lancamentosVencidos.map((l) => (
-                  <li key={l.id}>
-                    <Link
-                      href="/financeiro"
-                      className="flex flex-col gap-0.5 px-4 py-3 hover:bg-muted/50 transition-colors"
-                    >
-                      <span className="text-sm font-medium truncate">{l.descricao}</span>
-                      <span className="text-xs text-muted-foreground truncate">
-                        {l.clienteNome ?? '—'}
-                      </span>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-destructive">
-                          Venc.: {formatDate(l.dataVencimento.toDate())}
-                        </span>
-                        <span className="text-xs font-medium">{formatCurrency(l.valor)}</span>
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+            <Link href="/financeiro?status=pendente" className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+              Ver todos <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+          {lancamentosVencidos.length === 0 ? (
+            <div className="px-5 py-10 text-center">
+              <div className="w-12 h-12 rounded-full bg-muted/60 flex items-center justify-center mx-auto mb-3">
+                <CheckCircle2 className="w-6 h-6 text-muted-foreground/40" />
+              </div>
+              <p className="text-sm text-muted-foreground">Nenhum lançamento vencido</p>
+            </div>
+          ) : (
+            <ul>
+              {lancamentosVencidos.map((l) => (
+                <li key={l.id} className="border-b border-border/40 last:border-0">
+                  <Link href="/financeiro" className="flex items-start gap-3 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer">
+                    <div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-[7px] shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{l.descricao}</p>
+                      <p className="text-xs text-muted-foreground truncate">{l.clienteNome ?? '—'}</p>
+                      <p className="text-xs text-red-600 mt-0.5 font-medium">Venc.: {formatDate(l.dataVencimento.toDate())}</p>
+                    </div>
+                    <span className="text-sm font-bold shrink-0 tabular-nums">{formatCurrency(l.valor)}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* ── Quick access ─────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { href: '/clientes/novo',       label: 'Novo Cliente',    color: 'text-primary',     bg: 'bg-primary/8'    },
+          { href: '/competencias/nova',   label: 'Nova Competência',color: 'text-blue-600',    bg: 'bg-blue-50'      },
+          { href: '/tarefas/nova',        label: 'Nova Tarefa',     color: 'text-purple-600',  bg: 'bg-purple-50'    },
+          { href: '/financeiro/novo',     label: 'Novo Lançamento', color: 'text-emerald-600', bg: 'bg-emerald-50'   },
+        ].map((item) => (
+          <Link key={item.href} href={item.href}>
+            <div className="bg-card card-shadow hover:card-shadow-hover rounded-xl p-4 border border-border/60 hover:border-border transition-all duration-200 cursor-pointer flex items-center gap-3">
+              <div className={cn('w-2 h-2 rounded-full shrink-0', item.bg.replace('bg-', 'bg-').replace('/8', ''), item.color.replace('text-', 'bg-').replace('-600', '-500').replace('-700', '-500'))} />
+              <span className={cn('text-sm font-medium', item.color)}>{item.label}</span>
+              <ArrowRight className="w-3 h-3 ml-auto text-muted-foreground/50" />
+            </div>
+          </Link>
+        ))}
       </div>
     </div>
   )

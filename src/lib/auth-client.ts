@@ -20,15 +20,34 @@ export interface UserSession {
 
 export async function signIn(email: string, password: string): Promise<UserSession> {
   const cred = await signInWithEmailAndPassword(auth, email, password)
-  const snap = await getDoc(doc(db, 'usuarios', cred.user.uid))
-  if (!snap.exists()) throw new Error('Usuário não encontrado no sistema')
-  const data = snap.data()
-  if (data.ativo === false) throw new Error('Usuário inativo')
+
+  // Try to fetch the Firestore profile. If the document doesn't exist yet
+  // (e.g. user was created directly in Firebase Auth console), we still allow
+  // login and fall back to safe defaults so the admin can set up the account.
+  let nome = email
+  let perfil = 'leitura'
+  try {
+    const snap = await getDoc(doc(db, 'usuarios', cred.user.uid))
+    if (snap.exists()) {
+      const data = snap.data()
+      if (data.ativo === false) throw new Error('Usuário inativo. Contate o administrador.')
+      nome   = data.nome   ?? email
+      perfil = data.perfil ?? 'leitura'
+    }
+    // If document doesn't exist, proceed with defaults — admin should run seed
+  } catch (err) {
+    const msg = (err as { message?: string }).message ?? ''
+    // Re-throw business errors (inactive user)
+    if (msg.startsWith('Usuário inativo')) throw err
+    // For permission/network errors reading the profile, still allow login
+    // The user is authenticated with Firebase Auth — that's the source of truth
+  }
+
   return {
     uid:    cred.user.uid,
     email:  cred.user.email ?? email,
-    nome:   data.nome ?? email,
-    perfil: data.perfil ?? 'leitura',
+    nome,
+    perfil,
   }
 }
 
@@ -39,18 +58,21 @@ export async function signOut() {
 export function onSession(callback: (session: UserSession | null) => void) {
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (!user) { callback(null); return }
+    // Firebase Auth is the source of truth — if the user is authenticated,
+    // we always return a session. The Firestore profile is optional metadata.
+    let nome = user.email ?? ''
+    let perfil = 'leitura'
     try {
       const snap = await getDoc(doc(db, 'usuarios', user.uid))
-      if (!snap.exists()) { callback(null); return }
-      const data = snap.data()
-      callback({
-        uid:    user.uid,
-        email:  user.email ?? '',
-        nome:   data.nome ?? '',
-        perfil: data.perfil ?? 'leitura',
-      })
+      if (snap.exists()) {
+        const data = snap.data()
+        if (data.ativo === false) { callback(null); return }
+        nome   = data.nome   ?? nome
+        perfil = data.perfil ?? perfil
+      }
     } catch {
-      callback(null)
+      // Firestore unavailable — still allow access with defaults
     }
+    callback({ uid: user.uid, email: user.email ?? '', nome, perfil })
   })
 }

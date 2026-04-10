@@ -11,6 +11,7 @@ const ROUTE_LABELS: Record<string, string> = {
   '/ir': 'Imposto de Renda',
   '/financeiro': 'Financeiro',
   '/fiscal': 'Fiscal / NFS-e',
+  '/fechamento': 'Fechamento Mensal',
   '/documentos': 'Documentos',
   '/admin': 'Administração',
   '/admin/usuarios': 'Usuários',

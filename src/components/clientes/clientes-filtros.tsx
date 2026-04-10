@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useCallback, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useTransition } from 'react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,11 @@ export function ClientesFiltros({
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
+  const buscaTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  useEffect(() => {
+    return () => { if (buscaTimeoutRef.current) clearTimeout(buscaTimeoutRef.current) }
+  }, [])
 
   const update = useCallback(
     (key: string, value: string) => {
@@ -49,8 +54,8 @@ export function ClientesFiltros({
           className="pl-9"
           onChange={(e) => {
             const val = e.target.value
-            clearTimeout((window as any)._buscaTimeout)
-            ;(window as any)._buscaTimeout = setTimeout(() => update('busca', val), 400)
+            if (buscaTimeoutRef.current) clearTimeout(buscaTimeoutRef.current)
+            buscaTimeoutRef.current = setTimeout(() => update('busca', val), 400)
           }}
         />
       </div>

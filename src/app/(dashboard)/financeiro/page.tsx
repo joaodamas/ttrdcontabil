@@ -42,10 +42,9 @@ function FinanceiroContent() {
   const [somaEmAtraso, setSomaEmAtraso] = useState(0)
   const [loading, setLoading] = useState(true)
 
-  const hoje = new Date()
-
   useEffect(() => {
     setLoading(true)
+    const hoje = new Date()
     const hojeTs = Timestamp.fromDate(hoje)
     const inicioMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
     const fimMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0, 23, 59, 59))
@@ -223,7 +222,7 @@ function FinanceiroContent() {
                 const dataVenc = l.dataVencimento as Timestamp | undefined
                 const atrasado =
                   dataVenc &&
-                  dataVenc.toDate() < hoje &&
+                  dataVenc.toDate() < new Date() &&
                   l.status === 'pendente'
 
                 return (
@@ -248,7 +247,16 @@ function FinanceiroContent() {
                     </td>
                     <td className="px-4 py-3">
                       {l.status === 'pendente' ? (
-                        <LancamentoBaixar lancamentoId={l.id as string} />
+                        <LancamentoBaixar
+                          lancamentoId={l.id as string}
+                          onBaixado={() =>
+                            setAllLancamentos((prev) =>
+                              prev.map((x) =>
+                                x.id === l.id ? { ...x, status: 'pago' } : x
+                              )
+                            )
+                          }
+                        />
                       ) : null}
                     </td>
                   </tr>

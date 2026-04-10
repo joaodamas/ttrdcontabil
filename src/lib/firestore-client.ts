@@ -44,7 +44,7 @@ export async function deleteDocument(col: string, id: string) {
 export async function getClientes(opts: { status?: string; limit?: number } = {}) {
   const constraints: QueryConstraint[] = [orderBy('razaoSocial')]
   if (opts.status) constraints.push(where('status', '==', opts.status))
-  if (opts.limit)  constraints.push(limit(opts.limit))
+  constraints.push(limit(opts.limit ?? 500))
   return listDocuments('clientes', constraints)
 }
 
@@ -53,7 +53,7 @@ export async function getCliente(id: string) {
 }
 
 export async function getServicos() {
-  return listDocuments('servicos', [orderBy('nome')])
+  return listDocuments('servicos', [orderBy('nome'), limit(500)])
 }
 
 export async function getClienteServicos(clienteId: string) {
@@ -66,7 +66,7 @@ export async function getClienteServicos(clienteId: string) {
 export async function getCompetencias(opts: { clienteId?: string; limit?: number } = {}) {
   const c: QueryConstraint[] = [orderBy('ano', 'desc'), orderBy('mes', 'desc')]
   if (opts.clienteId) c.push(where('clienteId', '==', opts.clienteId))
-  if (opts.limit) c.push(limit(opts.limit))
+  c.push(limit(opts.limit ?? 200))
   return listDocuments('competencias', c)
 }
 
@@ -74,7 +74,7 @@ export async function getLancamentos(opts: { clienteId?: string; status?: string
   const c: QueryConstraint[] = [orderBy('dataVencimento', 'desc')]
   if (opts.clienteId) c.push(where('clienteId', '==', opts.clienteId))
   if (opts.status)    c.push(where('status', '==', opts.status))
-  if (opts.limit)     c.push(limit(opts.limit))
+  c.push(limit(opts.limit ?? 200))
   return listDocuments('lancamentos', c)
 }
 
@@ -82,7 +82,7 @@ export async function getTarefas(opts: { responsavelId?: string; status?: string
   const c: QueryConstraint[] = [orderBy('dataVencimento', 'asc')]
   if (opts.responsavelId) c.push(where('responsavelId', '==', opts.responsavelId))
   if (opts.status)        c.push(where('status', '==', opts.status))
-  if (opts.limit)         c.push(limit(opts.limit))
+  c.push(limit(opts.limit ?? 200))
   return listDocuments('tarefas', c)
 }
 
@@ -97,11 +97,11 @@ export async function getFechamentos(mes: number, ano: number, regime?: string) 
 }
 
 export async function getUsuarios() {
-  return listDocuments('usuarios', [orderBy('nome')])
+  return listDocuments('usuarios', [orderBy('nome'), limit(100)])
 }
 
 export async function getNfseRascunhos(clienteId?: string) {
-  const c: QueryConstraint[] = [orderBy('criadoEm', 'desc')]
+  const c: QueryConstraint[] = [orderBy('criadoEm', 'desc'), limit(50)]
   if (clienteId) c.push(where('clienteId', '==', clienteId))
   return listDocuments('nfse_rascunhos', c)
 }

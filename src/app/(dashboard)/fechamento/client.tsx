@@ -1,13 +1,19 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useTransition, useCallback, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { FechamentoTable } from '@/components/fechamento/fechamento-table'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
-import { RefreshCw, Plus, CheckCircle2, Clock, AlertCircle } from 'lucide-react'
+import { RefreshCw, Plus, CheckCircle2, Clock, AlertCircle, Loader2 } from 'lucide-react'
+import {
+  getFechamentos,
+  getClientes,
+  createDocument,
+  updateDocument,
+} from '@/lib/firestore-client'
 
 const MESES = [
   { value: 1,  label: 'Janeiro'   },
@@ -34,20 +40,57 @@ const REGIMES = [
   { value: 'mei',               label: 'MEI'              },
 ]
 
-interface Props {
-  fechamentos: Array<Record<string, unknown>>
-  mes: number
-  ano: number
+type FechamentoRecord = {
+  id: string
+  clienteId: string
+  clienteCodigo: number
+  clienteNome: string
   regime: string
-  mesLabel: string
-  resumo: { total: number; enviados: number; pendentes: number; parciais: number }
+  responsavel: string
+  portalUrl?: string
+  formaEntrega?: string
+  dasStatus: 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
+  esocialStatus: 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
+  reinfStatus: 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
+  fgtsStatus: 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
 }
 
-export function FechamentoClientPage({ fechamentos: initial, mes, ano, regime, mesLabel, resumo }: Props) {
+function FechamentoContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
+
+  const now = new Date()
+  const mes = parseInt(searchParams.get('mes') ?? String(now.getMonth() + 1))
+  const ano = parseInt(searchParams.get('ano') ?? String(now.getFullYear()))
+  const regime = searchParams.get('regime') ?? ''
+  const mesLabel = MESES.find((m) => m.value === mes)?.label ?? ''
+
+  const [fechamentos, setFechamentos] = useState<FechamentoRecord[]>([])
+  const [loading, setLoading] = useState(true)
   const [gerando, setGerando] = useState(false)
-  const [data, setData] = useState(initial)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    getFechamentos(mes, ano, regime || undefined)
+      .then((data) => { if (!cancelled) setFechamentos(data as FechamentoRecord[]) })
+      .catch(() => { if (!cancelled) toast.error('Erro ao carregar fechamentos') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [mes, ano, regime])
+
+  async function load() {
+    setLoading(true)
+    try {
+      const data = await getFechamentos(mes, ano, regime || undefined)
+      setFechamentos(data as FechamentoRecord[])
+    } catch {
+      toast.error('Erro ao carregar fechamentos')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   function navigate(params: Record<string, string | number>) {
     const sp = new URLSearchParams({
@@ -56,64 +99,72 @@ export function FechamentoClientPage({ fechamentos: initial, mes, ano, regime, m
       ...(regime ? { regime } : {}),
       ...Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])),
     })
-    // Remove empty
     if (!sp.get('regime')) sp.delete('regime')
     startTransition(() => {
       router.push(`/fechamento?${sp.toString()}`)
-      router.refresh()
     })
   }
 
   async function gerarFechamento() {
     setGerando(true)
     try {
-      const res = await fetch('/api/fechamento', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mes, ano, gerarParaTodos: true }),
-      })
-      const json = await res.json()
-      if (!res.ok) { toast.error(json.error ?? 'Erro ao gerar fechamento'); return }
-      toast.success(`${json.criados} registros gerados para ${mesLabel}/${ano}`)
-      router.refresh()
+      const clientes = await getClientes({ status: 'ativo' })
+      let criados = 0
+
+      // Existing fechamentos for this month
+      const existentes = await getFechamentos(mes, ano)
+      const existentesIds = new Set(existentes.map((f) => (f as Record<string, unknown>).clienteId as string))
+
+      for (const cliente of clientes) {
+        const c = cliente as Record<string, unknown>
+        if (existentesIds.has(c.id as string)) continue
+
+        await createDocument('fechamentos', {
+          clienteId: c.id,
+          clienteNome: c.razaoSocial ?? '',
+          clienteCodigo: c.codigo ?? 0,
+          mes,
+          ano,
+          regime: c.regimeTributario ?? 'simples_nacional',
+          responsavel: c.responsavelNome ?? '',
+          portalUrl: c.portalUrl ?? null,
+          formaEntrega: c.formaEntrega ?? null,
+          dasStatus: 'pendente',
+          esocialStatus: 'na',
+          reinfStatus: 'na',
+          fgtsStatus: 'na',
+        })
+        criados++
+      }
+
+      toast.success(`${criados} registros gerados para ${mesLabel}/${ano}`)
+      await load()
     } catch {
-      toast.error('Erro de conexão')
+      toast.error('Erro ao gerar fechamento')
     } finally {
       setGerando(false)
     }
   }
 
-  async function handleUpdate(id: string, field: string, value: string) {
-    const res = await fetch(`/api/fechamento/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ [field]: value }),
-    })
-    if (!res.ok) {
+  const handleUpdate = useCallback(async (id: string, field: string, value: string) => {
+    try {
+      await updateDocument('fechamentos', id, { [field]: value })
+      setFechamentos((prev) =>
+        prev.map((f) => (f.id === id ? { ...f, [field]: value } : f))
+      )
+    } catch {
       toast.error('Erro ao salvar')
-      return
     }
-    // Atualiza localmente sem reload
-    setData((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, [field]: value } : f))
-    )
-  }
+  }, [])
 
-  const fechamentosTyped = data as Array<{
-    id: string
-    clienteCodigo: number
-    clienteNome: string
-    regime: string
-    responsavel: string
-    portalUrl?: string
-    formaEntrega?: string
-    dasStatus: 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
-    esocialStatus: 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
-    reinfStatus: 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
-    fgtsStatus: 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
-  }>
-
-  const pct = resumo.total > 0 ? Math.round((resumo.enviados / resumo.total) * 100) : 0
+  // Resumo stats
+  const total = fechamentos.length
+  const enviados = fechamentos.filter(
+    (f) => f.dasStatus === 'enviado' || f.dasStatus === 'ok' || f.dasStatus === 'sm'
+  ).length
+  const pendentes = fechamentos.filter((f) => f.dasStatus === 'pendente').length
+  const parciais = fechamentos.filter((f) => f.dasStatus === 'parcial').length
+  const pct = total > 0 ? Math.round((enviados / total) * 100) : 0
 
   return (
     <div className="space-y-5">
@@ -127,13 +178,13 @@ export function FechamentoClientPage({ fechamentos: initial, mes, ano, regime, m
           <Button
             variant="outline"
             size="sm"
-            onClick={() => { startTransition(() => router.refresh()) }}
-            disabled={isPending}
+            onClick={() => { startTransition(() => load()) }}
+            disabled={isPending || loading}
           >
-            <RefreshCw className={`w-4 h-4 mr-1 ${isPending ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
             Atualizar
           </Button>
-          <Button size="sm" onClick={gerarFechamento} disabled={gerando}>
+          <Button size="sm" onClick={gerarFechamento} disabled={gerando || loading}>
             <Plus className="w-4 h-4 mr-1" />
             {gerando ? 'Gerando...' : 'Gerar Fechamento'}
           </Button>
@@ -187,12 +238,12 @@ export function FechamentoClientPage({ fechamentos: initial, mes, ano, regime, m
       </div>
 
       {/* Resumo */}
-      {resumo.total > 0 && (
+      {total > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Card>
             <CardContent className="pt-4 pb-3">
               <p className="text-xs text-muted-foreground">Total</p>
-              <p className="text-2xl font-bold">{resumo.total}</p>
+              <p className="text-2xl font-bold">{total}</p>
             </CardContent>
           </Card>
           <Card>
@@ -200,7 +251,7 @@ export function FechamentoClientPage({ fechamentos: initial, mes, ano, regime, m
               <CheckCircle2 className="w-4 h-4 text-green-600 mt-1 shrink-0" />
               <div>
                 <p className="text-xs text-muted-foreground">Enviados</p>
-                <p className="text-2xl font-bold text-green-700">{resumo.enviados}</p>
+                <p className="text-2xl font-bold text-green-700">{enviados}</p>
               </div>
             </CardContent>
           </Card>
@@ -209,7 +260,7 @@ export function FechamentoClientPage({ fechamentos: initial, mes, ano, regime, m
               <Clock className="w-4 h-4 text-yellow-600 mt-1 shrink-0" />
               <div>
                 <p className="text-xs text-muted-foreground">Pendentes</p>
-                <p className="text-2xl font-bold text-yellow-700">{resumo.pendentes}</p>
+                <p className="text-2xl font-bold text-yellow-700">{pendentes}</p>
               </div>
             </CardContent>
           </Card>
@@ -218,7 +269,7 @@ export function FechamentoClientPage({ fechamentos: initial, mes, ano, regime, m
               <AlertCircle className="w-4 h-4 text-orange-600 mt-1 shrink-0" />
               <div>
                 <p className="text-xs text-muted-foreground">Parciais</p>
-                <p className="text-2xl font-bold text-orange-700">{resumo.parciais}</p>
+                <p className="text-2xl font-bold text-orange-700">{parciais}</p>
               </div>
             </CardContent>
           </Card>
@@ -226,7 +277,7 @@ export function FechamentoClientPage({ fechamentos: initial, mes, ano, regime, m
       )}
 
       {/* Progress */}
-      {resumo.total > 0 && (
+      {total > 0 && (
         <div className="space-y-1">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>Progresso do mês</span>
@@ -241,8 +292,26 @@ export function FechamentoClientPage({ fechamentos: initial, mes, ano, regime, m
         </div>
       )}
 
-      {/* Tabela */}
-      <FechamentoTable fechamentos={fechamentosTyped} onUpdate={handleUpdate} />
+      {/* Loading state */}
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <FechamentoTable fechamentos={fechamentos} onUpdate={handleUpdate} />
+      )}
     </div>
+  )
+}
+
+export function FechamentoClientPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-5 h-5 animate-spin" />
+      </div>
+    }>
+      <FechamentoContent />
+    </Suspense>
   )
 }
