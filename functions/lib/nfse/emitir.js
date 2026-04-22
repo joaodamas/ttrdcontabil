@@ -76,7 +76,7 @@ async function getCertificado(clienteId, config) {
     };
 }
 // ─── Function: emitirNfse ─────────────────────────────────────────────────────
-exports.emitirNfse = (0, https_1.onCall)({ region: 'southamerica-east1', timeoutSeconds: 60, memory: '512MiB' }, async (request) => {
+exports.emitirNfse = (0, https_1.onCall)({ region: 'southamerica-east1', timeoutSeconds: 60, memory: '512MiB', invoker: 'public' }, async (request) => {
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Autenticação necessária.');
     const input = request.data;
@@ -154,7 +154,7 @@ exports.emitirNfse = (0, https_1.onCall)({ region: 'southamerica-east1', timeout
     return resultado;
 });
 // ─── Function: uploadCertificado ──────────────────────────────────────────────
-exports.uploadCertificado = (0, https_1.onCall)({ region: 'southamerica-east1', timeoutSeconds: 30 }, async (request) => {
+exports.uploadCertificado = (0, https_1.onCall)({ region: 'southamerica-east1', timeoutSeconds: 30, invoker: 'public' }, async (request) => {
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Autenticação necessária.');
     const { clienteId, pfxBase64, senha } = request.data;
@@ -204,7 +204,7 @@ exports.uploadCertificado = (0, https_1.onCall)({ region: 'southamerica-east1', 
     };
 });
 // ─── Function: validarCertificado ─────────────────────────────────────────────
-exports.validarCertificado = (0, https_1.onCall)({ region: 'southamerica-east1', timeoutSeconds: 15 }, async (request) => {
+exports.validarCertificado = (0, https_1.onCall)({ region: 'southamerica-east1', timeoutSeconds: 15, invoker: 'public' }, async (request) => {
     if (!request.auth)
         throw new https_1.HttpsError('unauthenticated', 'Autenticação necessária.');
     const { pfxBase64, senha } = request.data;

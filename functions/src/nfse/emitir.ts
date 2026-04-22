@@ -48,7 +48,7 @@ async function getCertificado(clienteId: string, config: ConfigFiscalCliente): P
 // ─── Function: emitirNfse ─────────────────────────────────────────────────────
 
 export const emitirNfse = onCall(
-  { region: 'southamerica-east1', timeoutSeconds: 60, memory: '512MiB' },
+  { region: 'southamerica-east1', timeoutSeconds: 60, memory: '512MiB', invoker: 'public' },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Autenticação necessária.')
 
@@ -133,7 +133,7 @@ export const emitirNfse = onCall(
 // ─── Function: uploadCertificado ──────────────────────────────────────────────
 
 export const uploadCertificado = onCall(
-  { region: 'southamerica-east1', timeoutSeconds: 30 },
+  { region: 'southamerica-east1', timeoutSeconds: 30, invoker: 'public' },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Autenticação necessária.')
 
@@ -198,7 +198,7 @@ export const uploadCertificado = onCall(
 // ─── Function: validarCertificado ─────────────────────────────────────────────
 
 export const validarCertificado = onCall(
-  { region: 'southamerica-east1', timeoutSeconds: 15 },
+  { region: 'southamerica-east1', timeoutSeconds: 15, invoker: 'public' },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Autenticação necessária.')
 

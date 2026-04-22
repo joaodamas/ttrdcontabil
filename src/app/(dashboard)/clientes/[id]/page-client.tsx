@@ -7,7 +7,7 @@ import { Timestamp } from 'firebase/firestore'
 import { where, orderBy, limit } from 'firebase/firestore'
 
 import { getDocument, listDocuments } from '@/lib/firestore-client'
-import { formatCpfCnpj, formatDate, formatCurrency, formatMesAno } from '@/lib/utils'
+import { formatCpfCnpj, formatDate, formatCurrency, formatMesAno , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -186,7 +186,7 @@ export default function ClienteDetailPage() {
                         <p className="text-xs text-muted-foreground">
                           {formatCurrency(s.valor as number)} •{' '}
                           {s.dataInicio
-                            ? formatDate((s.dataInicio as Timestamp).toDate())
+                            ? formatDate(tsToDate(s.dataInicio))
                             : '—'}
                         </p>
                       </div>
@@ -261,7 +261,7 @@ export default function ClienteDetailPage() {
                         <p className="text-xs text-muted-foreground">
                           Venc.:{' '}
                           {l.dataVencimento
-                            ? formatDate((l.dataVencimento as Timestamp).toDate())
+                            ? formatDate(tsToDate(l.dataVencimento))
                             : '—'}
                         </p>
                       </div>

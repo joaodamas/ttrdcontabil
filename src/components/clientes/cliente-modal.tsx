@@ -5,7 +5,7 @@ import { Timestamp, where, orderBy, limit } from 'firebase/firestore'
 import Link from 'next/link'
 
 import { getDocument, listDocuments } from '@/lib/firestore-client'
-import { formatCpfCnpj, formatDate, formatCurrency, formatMesAno } from '@/lib/utils'
+import { formatCpfCnpj, formatDate, formatCurrency, formatMesAno, tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -227,7 +227,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                                 <div>
                                   <p className="text-sm font-medium">{s.servicoNome as string}</p>
                                   <p className="text-xs text-muted-foreground">
-                                    {s.dataInicio ? `Desde ${formatDate((s.dataInicio as Timestamp).toDate())}` : ''}
+                                    {s.dataInicio ? `Desde ${formatDate(tsToDate(s.dataInicio))}` : ''}
                                   </p>
                                 </div>
                                 <div className="flex items-center gap-3">
@@ -288,7 +288,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                                 <div>
                                   <p className="text-sm font-medium">{l.descricao as string}</p>
                                   <p className="text-xs text-muted-foreground">
-                                    Venc.: {l.dataVencimento ? formatDate((l.dataVencimento as Timestamp).toDate()) : '—'}
+                                    Venc.: {l.dataVencimento ? formatDate(tsToDate(l.dataVencimento)) : '—'}
                                   </p>
                                 </div>
                                 <div className="text-right">
@@ -470,7 +470,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                                 return (
                                   <tr key={n.id as string} className="hover:bg-muted/30">
                                     <td className="py-2.5 font-mono text-xs">{(n.numeroNfse as string) ?? '—'}</td>
-                                    <td className="py-2.5 text-muted-foreground">{dataEmissao ? formatDate(dataEmissao.toDate()) : '—'}</td>
+                                    <td className="py-2.5 text-muted-foreground">{dataEmissao ? formatDate(tsToDate(dataEmissao)) : '—'}</td>
                                     <td className="py-2.5 text-right font-medium">{formatCurrency((n.valorServico as number) ?? 0)}</td>
                                     <td className="py-2.5 pl-4"><Badge variant={st.variant}>{st.label}</Badge></td>
                                   </tr>

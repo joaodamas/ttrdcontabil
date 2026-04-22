@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { where, orderBy, Timestamp } from 'firebase/firestore'
 
 import { listDocuments } from '@/lib/firestore-client'
-import { formatDate } from '@/lib/utils'
+import { formatDate , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Plus, Loader2 } from 'lucide-react'
@@ -157,7 +157,7 @@ function IrContent() {
                       {(d.responsavelNome as string) ?? '—'}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
-                      {dataEntrega ? formatDate(dataEntrega.toDate()) : '—'}
+                      {dataEntrega ? formatDate(tsToDate(dataEntrega)) : '—'}
                     </td>
                   </tr>
                 )

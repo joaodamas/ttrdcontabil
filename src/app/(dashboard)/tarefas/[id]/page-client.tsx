@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { where, orderBy, Timestamp } from 'firebase/firestore'
 
 import { getDocument, listDocuments } from '@/lib/firestore-client'
-import { formatDate, formatMesAno } from '@/lib/utils'
+import { formatDate, formatMesAno , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -53,7 +53,7 @@ export default function TarefaDetalhePage() {
       const serialized = (comentariosData as Array<Record<string, unknown>>).map((d) => ({
         id: d.id as string,
         texto: d.texto as string,
-        criadoEm: d.criadoEm ? (d.criadoEm as Timestamp).toDate().toISOString() : new Date().toISOString(),
+        criadoEm: d.criadoEm ? (tsToDate(d.criadoEm) ?? new Date()).toISOString() : new Date().toISOString(),
         usuarioNome: (d.usuarioNome as string) ?? '—',
       }))
       setComentariosSerializados(serialized)
@@ -82,7 +82,7 @@ export default function TarefaDetalhePage() {
 
   const vencida =
     dataPrazo &&
-    dataPrazo.toDate() < hoje &&
+    tsToDate(dataPrazo)! < hoje &&
     !['concluida', 'cancelada'].includes(tarefa.status as string)
 
   return (
@@ -185,7 +185,7 @@ export default function TarefaDetalhePage() {
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Prazo</p>
                 {dataPrazo ? (
                   <p className={`font-medium ${vencida ? 'text-destructive' : ''}`}>
-                    {formatDate(dataPrazo.toDate())}
+                    {formatDate(tsToDate(dataPrazo))}
                     {vencida ? ' (vencida)' : ''}
                   </p>
                 ) : (
@@ -202,7 +202,7 @@ export default function TarefaDetalhePage() {
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wide">Criada em</p>
                   <p className="text-muted-foreground">
-                    {formatDate((tarefa.criadoEm as Timestamp).toDate())}
+                    {formatDate(tsToDate(tarefa.criadoEm))}
                   </p>
                 </div>
               ) : null}

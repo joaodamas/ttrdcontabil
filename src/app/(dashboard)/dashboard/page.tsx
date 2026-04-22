@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
 import { listDocuments } from '@/lib/firestore-client'
-import { formatCurrency, formatDate, formatMesAno } from '@/lib/utils'
+import { formatCurrency, formatDate, formatMesAno , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import {
@@ -128,8 +128,8 @@ export default function DashboardPage() {
       // Filter overdue tasks client-side
       const vencidas = tarefasStatusData.filter((t) => {
         if (!t.dataPrazo) return false
-        const prazo = (t.dataPrazo as Timestamp).toDate()
-        return prazo < hoje
+        const prazo = tsToDate(t.dataPrazo)
+        return prazo != null && prazo < hoje
       }).slice(0, 5)
       setTarefasVencidas(vencidas as Array<{ id: string; titulo: string; clienteNome?: string; dataPrazo?: Timestamp }>)
 
@@ -310,7 +310,7 @@ export default function DashboardPage() {
                       <p className="text-sm font-medium truncate">{t.titulo}</p>
                       <p className="text-xs text-muted-foreground truncate">{t.clienteNome ?? '—'}</p>
                       {t.dataPrazo && (
-                        <p className="text-xs text-red-600 mt-0.5 font-medium">Prazo: {formatDate(t.dataPrazo.toDate())}</p>
+                        <p className="text-xs text-red-600 mt-0.5 font-medium">Prazo: {formatDate(tsToDate(t.dataPrazo))}</p>
                       )}
                     </div>
                   </Link>
@@ -390,7 +390,7 @@ export default function DashboardPage() {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">{l.descricao}</p>
                       <p className="text-xs text-muted-foreground truncate">{l.clienteNome ?? '—'}</p>
-                      <p className="text-xs text-red-600 mt-0.5 font-medium">Venc.: {formatDate(l.dataVencimento.toDate())}</p>
+                      <p className="text-xs text-red-600 mt-0.5 font-medium">Venc.: {formatDate(tsToDate(l.dataVencimento))}</p>
                     </div>
                     <span className="text-sm font-bold shrink-0 tabular-nums">{formatCurrency(l.valor)}</span>
                   </Link>

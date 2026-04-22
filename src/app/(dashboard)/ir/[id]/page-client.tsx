@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { where, orderBy, Timestamp } from 'firebase/firestore'
 
 import { getDocument, listDocuments } from '@/lib/firestore-client'
-import { formatDate } from '@/lib/utils'
+import { formatDate , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -85,7 +85,7 @@ export default function IrDetalhePage() {
             </div>
             <p className="text-sm text-muted-foreground">
               Responsável: {(declaracao.responsavelNome as string) ?? '—'}
-              {dataEntrega && ` · Entrega: ${formatDate(dataEntrega.toDate())}`}
+              {dataEntrega && ` · Entrega: ${formatDate(tsToDate(dataEntrega))}`}
             </p>
           </div>
         </div>
@@ -135,7 +135,7 @@ export default function IrDetalhePage() {
                         </label>
                         {item.recebido && dataRecebimento ? (
                           <span className="text-xs text-muted-foreground">
-                            {formatDate(dataRecebimento.toDate())}
+                            {formatDate(tsToDate(dataRecebimento))}
                           </span>
                         ) : null}
                       </li>
@@ -187,7 +187,7 @@ export default function IrDetalhePage() {
                   <p className="text-xs text-muted-foreground uppercase tracking-wide">
                     Data de Entrega
                   </p>
-                  <p className="font-medium">{formatDate(dataEntrega.toDate())}</p>
+                  <p className="font-medium">{formatDate(tsToDate(dataEntrega))}</p>
                 </div>
               ) : null}
 
@@ -214,7 +214,7 @@ export default function IrDetalhePage() {
               {criadoEm ? (
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wide">Criada em</p>
-                  <p className="text-muted-foreground">{formatDate(criadoEm.toDate())}</p>
+                  <p className="text-muted-foreground">{formatDate(tsToDate(criadoEm))}</p>
                 </div>
               ) : null}
             </CardContent>

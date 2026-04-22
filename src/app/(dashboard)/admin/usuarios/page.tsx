@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Timestamp } from 'firebase/firestore'
 import { getUsuarios } from '@/lib/firestore-client'
-import { formatDate } from '@/lib/utils'
+import { formatDate , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { UsuarioForm, TELAS_LIST } from '@/components/admin/usuario-form'
@@ -135,7 +135,7 @@ export default function AdminUsuariosPage() {
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground text-xs">
-                        {u.ultimoAcesso ? formatDate(u.ultimoAcesso.toDate()) : '—'}
+                        {u.ultimoAcesso ? formatDate(tsToDate(u.ultimoAcesso)) : '—'}
                       </td>
                       <td className="px-4 py-3">
                         <UsuarioForm usuario={u} onSaved={load} />

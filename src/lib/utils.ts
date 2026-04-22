@@ -42,6 +42,22 @@ export function formatCurrency(value: number | string | { toString(): string }):
   }).format(isNaN(num) ? 0 : num)
 }
 
+/**
+ * Converts a Firestore Timestamp, ISO string, number or Date to a JS Date.
+ * Returns null if the value is falsy or unparseable.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function tsToDate(val: unknown): Date | null {
+  if (!val) return null
+  if (val instanceof Date) return val
+  if (typeof (val as any).toDate === 'function') return (val as any).toDate()
+  if (typeof val === 'string' || typeof val === 'number') {
+    const d = new Date(val)
+    return isNaN(d.getTime()) ? null : d
+  }
+  return null
+}
+
 export function formatDate(date: Date | string | null | undefined): string {
   if (!date) return '—'
   const d = typeof date === 'string' ? new Date(date) : date

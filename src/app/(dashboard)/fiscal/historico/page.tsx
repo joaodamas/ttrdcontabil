@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { where, orderBy, Timestamp } from 'firebase/firestore'
 
 import { listDocuments } from '@/lib/firestore-client'
-import { formatDate, formatCurrency } from '@/lib/utils'
+import { formatDate, formatCurrency , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, Loader2 } from 'lucide-react'
@@ -45,7 +45,8 @@ function FiscalHistoricoContent() {
         filtered = filtered.filter((n) => {
           const dataEmissao = n.dataEmissao as Timestamp | undefined
           if (!dataEmissao) return false
-          const dt = dataEmissao.toDate()
+          const dt = tsToDate(dataEmissao)
+          if (!dt) return false
           if (mes && dt.getMonth() + 1 !== mes) return false
           if (ano && dt.getFullYear() !== ano) return false
           return true
@@ -147,7 +148,7 @@ function FiscalHistoricoContent() {
                       {(n.tomadorNome as string) ?? '—'}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
-                      {dataEmissao ? formatDate(dataEmissao.toDate()) : '—'}
+                      {dataEmissao ? formatDate(tsToDate(dataEmissao)) : '—'}
                     </td>
                     <td className="px-4 py-3 text-right font-medium">
                       {formatCurrency(n.valorServico as number)}

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
 
 import { listDocuments, deleteDocument } from '@/lib/firestore-client'
-import { formatDate, formatCurrency } from '@/lib/utils'
+import { formatDate, formatCurrency, tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -221,7 +221,7 @@ export default function FiscalPage() {
                         {(n.numeroNfse as string) ?? '—'}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        {dataEmissao ? formatDate(dataEmissao.toDate()) : '—'}
+                        {dataEmissao ? formatDate(tsToDate(dataEmissao)) : '—'}
                       </td>
                       <td className="px-4 py-3 text-right font-medium">
                         {formatCurrency((n.valorServico as number) ?? 0)}

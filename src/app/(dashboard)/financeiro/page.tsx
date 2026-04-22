@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { where, orderBy, Timestamp } from 'firebase/firestore'
 
 import { listDocuments } from '@/lib/firestore-client'
-import { formatDate, formatCurrency } from '@/lib/utils'
+import { formatDate, formatCurrency, tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -219,10 +219,10 @@ function FinanceiroContent() {
                   label: l.tipo as string,
                   variant: 'outline' as const,
                 }
-                const dataVenc = l.dataVencimento as Timestamp | undefined
+                const dataVenc = tsToDate(l.dataVencimento)
                 const atrasado =
                   dataVenc &&
-                  dataVenc.toDate() < new Date() &&
+                  dataVenc < new Date() &&
                   l.status === 'pendente'
 
                 return (
@@ -236,7 +236,7 @@ function FinanceiroContent() {
                     </td>
                     <td className="px-4 py-3">
                       <span className={atrasado ? 'text-destructive font-medium' : ''}>
-                        {dataVenc ? formatDate(dataVenc.toDate()) : '—'}
+                        {dataVenc ? formatDate(dataVenc) : '—'}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right font-medium">

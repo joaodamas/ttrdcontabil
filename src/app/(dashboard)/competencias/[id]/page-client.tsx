@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
 
 import { getDocument, listDocuments } from '@/lib/firestore-client'
-import { formatDate, formatMesAno, formatCurrency } from '@/lib/utils'
+import { formatDate, formatMesAno, formatCurrency , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -161,7 +161,7 @@ export default function CompetenciaDetalhePage() {
                         </div>
                         {t.dataPrazo ? (
                           <span className="text-xs text-muted-foreground">
-                            Prazo: {formatDate((t.dataPrazo as Timestamp).toDate())}
+                            Prazo: {formatDate(tsToDate(t.dataPrazo))}
                           </span>
                         ) : null}
                       </Link>
@@ -190,7 +190,7 @@ export default function CompetenciaDetalhePage() {
                     </span>
                     {n.dataEmissao ? (
                       <span className="text-xs text-muted-foreground">
-                        Emissão: {formatDate((n.dataEmissao as Timestamp).toDate())}
+                        Emissão: {formatDate(tsToDate(n.dataEmissao))}
                       </span>
                     ) : null}
                     <span className="text-xs font-medium">
@@ -234,7 +234,7 @@ export default function CompetenciaDetalhePage() {
                       <div className="flex items-center justify-between">
                         {l.dataVencimento ? (
                           <span className="text-xs text-muted-foreground">
-                            Venc.: {formatDate((l.dataVencimento as Timestamp).toDate())}
+                            Venc.: {formatDate(tsToDate(l.dataVencimento))}
                           </span>
                         ) : null}
                         <span className="text-xs font-medium">

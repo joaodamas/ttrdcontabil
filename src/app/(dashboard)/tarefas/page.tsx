@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { where, orderBy, Timestamp } from 'firebase/firestore'
 
 import { listDocuments } from '@/lib/firestore-client'
-import { formatDate } from '@/lib/utils'
+import { formatDate , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Plus, Loader2 } from 'lucide-react'
@@ -159,7 +159,7 @@ function TarefasContent() {
                 const dataPrazo = t.dataPrazo as Timestamp | undefined
                 const vencida =
                   dataPrazo &&
-                  dataPrazo.toDate() < hoje &&
+                  tsToDate(dataPrazo)! < hoje &&
                   !['concluida', 'cancelada'].includes(t.status as string)
 
                 return (
@@ -188,7 +188,7 @@ function TarefasContent() {
                     <td className="px-4 py-3">
                       {dataPrazo ? (
                         <span className={vencida ? 'text-destructive font-medium' : ''}>
-                          {formatDate(dataPrazo.toDate())}
+                          {formatDate(tsToDate(dataPrazo))}
                         </span>
                       ) : (
                         <span className="text-muted-foreground">—</span>

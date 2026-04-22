@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -43,6 +43,8 @@ interface Competencia { id: string; mes: number; ano: number; servicoNome?: stri
 
 export function NfseEmissaoForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const clienteIdParam = searchParams.get('clienteId') ?? ''
 
   const [clientes,           setClientes]           = useState<Cliente[]>([])
   const [competencias,       setCompetencias]       = useState<Competencia[]>([])
@@ -60,7 +62,7 @@ export function NfseEmissaoForm() {
     formState: { errors },
   } = useForm<NfseFormData>({
     resolver: zodResolver(nfseSchema),
-    defaultValues: { issRetido: false },
+    defaultValues: { issRetido: false, clienteId: clienteIdParam || undefined },
   })
 
   const selectedClienteId = watch('clienteId')
