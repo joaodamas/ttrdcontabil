@@ -2,47 +2,172 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isAuth() { return request.auth != null; }
+    // ─── Funções auxiliares ───────────────────────────────────────────────────
 
-    function isAdmin() {
-      return isAuth() &&
-        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.perfil == 'admin';
+    function isAuth() {
+      return request.auth != null;
     }
 
+    function userDoc() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    // Usuário existe no sistema e está ativo
     function isAtivo() {
-      // Active if: authenticated AND (document doesn't exist yet OR ativo is not explicitly false)
-      // This avoids blocking users whose document was created without setting ativo:true
       return isAuth() && (
         !exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) ||
-        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.ativo != false
+        userDoc().ativo != false
       );
     }
 
+    // Helpers de perfil — hierarquia: admin > operacional/fiscal/financeiro > leitura
+    function isAdmin()       { return isAtivo() && userDoc().perfil == 'admin'; }
+    function isOperacional() { return isAtivo() && userDoc().perfil in ['admin', 'operacional']; }
+    function isFiscal()      { return isAtivo() && userDoc().perfil in ['admin', 'fiscal']; }
+    function isFinanceiro()  { return isAtivo() && userDoc().perfil in ['admin', 'financeiro']; }
+    function canRead()       { return isAtivo(); }
+
+    // ─── Usuários ─────────────────────────────────────────────────────────────
+
     match /usuarios/{uid} {
-      // Any active user can read the usuarios list (needed for responsável selects in forms)
-      allow read: if isAtivo();
-      // Own document: only allow updating safe fields — never perfil/ativo (prevents self-promotion)
-      allow update: if isAuth() && request.auth.uid == uid
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['perfil', 'ativo']);
-      // Admin can write any field
+      // Qualquer usuário ativo pode ler a lista (selects de responsável nos formulários)
+      allow read: if canRead();
+      // Usuário pode atualizar apenas campos não-sensíveis do próprio documento
+      allow update: if (isAuth() && request.auth.uid == uid
+          && !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['perfil', 'ativo', 'criadoEm']))
+        || isAdmin();
+      // Criar e deletar usuários: apenas admin
+      allow create, delete: if isAdmin();
+    }
+
+    // ─── Clientes ─────────────────────────────────────────────────────────────
+
+    match /clientes/{id} {
+      allow read: if canRead();
+      allow write: if isOperacional();
+    }
+
+    match /clientes_servicos/{id} {
+      allow read: if canRead();
+      allow write: if isOperacional();
+    }
+
+    // ─── Serviços (tipos cadastrais do escritório) ────────────────────────────
+
+    match /servicos/{id} {
+      allow read: if canRead();
       allow write: if isAdmin();
     }
 
-    match /clientes/{id}         { allow read, write: if isAtivo(); }
-    match /clientes_servicos/{id}{ allow read, write: if isAtivo(); }
-    match /clientes_fiscal/{id}  { allow read, write: if isAtivo(); }
-    match /servicos/{id}         { allow read, write: if isAtivo(); }
-    match /competencias/{id}     { allow read, write: if isAtivo(); }
-    match /fechamentos/{id}      { allow read, write: if isAtivo(); }
-    match /lancamentos/{id}      { allow read, write: if isAtivo(); }
-    match /tarefas/{id}          { allow read, write: if isAtivo(); }
-    match /tarefa_comentarios/{id}{ allow read, write: if isAtivo(); }
-    match /ir_declaracoes/{id}   { allow read, write: if isAtivo(); }
-    match /ir_checklist/{id}     { allow read, write: if isAtivo(); }
-    match /nfse_rascunhos/{id}   { allow read, write: if isAtivo(); }
-    match /nfse_emitidas/{id}    { allow read, write: if isAtivo(); }
-    match /nfse_eventos/{id}     { allow read: if isAtivo(); allow create: if isAtivo(); }
-    match /nfse_fila_processamento/{id}{ allow read, write: if isAtivo(); }
-    match /fiscal_conectores/{id}{ allow read: if isAtivo(); allow write: if isAdmin(); }
+    // ─── Competências ─────────────────────────────────────────────────────────
+
+    match /competencias/{id} {
+      allow read: if canRead();
+      allow write: if isOperacional();
+    }
+
+    // ─── Tarefas ──────────────────────────────────────────────────────────────
+
+    match /tarefas/{id} {
+      allow read: if canRead();
+      allow write: if isAtivo(); // todos os ativos podem criar e editar tarefas
+    }
+
+    match /tarefas_comentarios/{id} {
+      allow read: if canRead();
+      allow create: if isAtivo();
+      allow update, delete: if isAdmin();
+    }
+
+    // ─── Declarações de IR ────────────────────────────────────────────────────
+
+    match /ir_declaracoes/{id} {
+      allow read: if canRead();
+      allow write: if isOperacional();
+    }
+
+    match /ir_checklist/{id} {
+      allow read: if canRead();
+      allow write: if isOperacional();
+    }
+
+    // ─── Financeiro ───────────────────────────────────────────────────────────
+
+    match /lancamentos/{id} {
+      allow read: if canRead();
+      allow write: if isFinanceiro();
+    }
+
+    // ─── Fechamento mensal ────────────────────────────────────────────────────
+
+    match /fechamentos/{id} {
+      allow read: if canRead();
+      allow write: if isOperacional();
+    }
+
+    // ─── Fiscal — configuração ────────────────────────────────────────────────
+
+    match /clientes_fiscal/{id} {
+      allow read: if canRead();
+      allow write: if isFiscal();
+    }
+
+    match /fiscal_conectores/{id} {
+      allow read: if canRead();
+      allow write: if isAdmin();
+    }
+
+    match /clientes_fiscal_integracao/{id} {
+      allow read: if canRead();
+      allow write: if isFiscal();
+    }
+
+    // ─── NFS-e ────────────────────────────────────────────────────────────────
+
+    match /nfse_rascunhos/{id} {
+      allow read: if canRead();
+      allow write: if isFiscal();
+    }
+
+    // nfse_emitidas: NUNCA escrita direta do browser — apenas Admin SDK via Cloud Functions
+    match /nfse_emitidas/{id} {
+      allow read: if canRead();
+      allow write: if false;
+    }
+
+    match /nfse_eventos/{id} {
+      allow read: if canRead();
+      allow create: if isFiscal();
+      allow update, delete: if false;
+    }
+
+    // nfse_fila_processamento: somente Cloud Functions
+    match /nfse_fila_processamento/{id} {
+      allow read: if isFiscal();
+      allow write: if false;
+    }
+
+    // ─── Logs de auditoria — append-only, nunca deletar ──────────────────────
+
+    match /logs_auditoria/{id} {
+      allow read: if isAdmin();
+      allow create: if isAtivo();
+      allow update, delete: if false;
+    }
+
+    // ─── Configurações do sistema ─────────────────────────────────────────────
+
+    match /configuracoes/{id} {
+      allow read: if canRead();
+      allow write: if isAdmin();
+    }
+
+    // ─── Documentos (referências de arquivos no Storage) ─────────────────────
+
+    match /documentos/{id} {
+      allow read: if canRead();
+      allow write: if isAtivo();
+    }
   }
 }

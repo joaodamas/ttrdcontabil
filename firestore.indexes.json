@@ -1,6 +1,23 @@
 {
   "indexes": [
     {
+      "collectionGroup": "clientes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "deletedAt", "order": "ASCENDING" },
+        { "fieldPath": "razaoSocial", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "competencias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clienteId", "order": "ASCENDING" },
+        { "fieldPath": "ano", "order": "DESCENDING" },
+        { "fieldPath": "mes", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "competencias",
       "queryScope": "COLLECTION",
       "fields": [
@@ -13,9 +30,34 @@
       "collectionGroup": "competencias",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "mes", "order": "ASCENDING" },
+        { "fieldPath": "ano", "order": "ASCENDING" },
+        { "fieldPath": "clienteId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "clienteId", "order": "ASCENDING" },
-        { "fieldPath": "ano", "order": "DESCENDING" },
-        { "fieldPath": "mes", "order": "DESCENDING" }
+        { "fieldPath": "dataVencimento", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "dataVencimento", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clienteId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "dataVencimento", "order": "DESCENDING" }
       ]
     },
     {
@@ -37,11 +79,11 @@
       ]
     },
     {
-      "collectionGroup": "lancamentos",
+      "collectionGroup": "tarefas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "clienteId", "order": "ASCENDING" },
-        { "fieldPath": "dataVencimento", "order": "DESCENDING" }
+        { "fieldPath": "responsavelId", "order": "ASCENDING" },
+        { "fieldPath": "dataVencimento", "order": "ASCENDING" }
       ]
     },
     {
@@ -49,24 +91,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataPrazo", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "tarefas",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "dataPrazo", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "competencias",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "mes", "order": "ASCENDING" },
-        { "fieldPath": "ano", "order": "ASCENDING" },
-        { "fieldPath": "clienteId", "order": "ASCENDING" }
+        { "fieldPath": "dataVencimento", "order": "ASCENDING" }
       ]
     },
     {
@@ -74,7 +99,16 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "responsavelId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "dataVencimento", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clientes_servicos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clienteId", "order": "ASCENDING" },
+        { "fieldPath": "dataInicio", "order": "DESCENDING" }
       ]
     },
     {
@@ -97,15 +131,7 @@
       ]
     },
     {
-      "collectionGroup": "clientes_servicos",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "clienteId", "order": "ASCENDING" },
-        { "fieldPath": "dataInicio", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "nfse_rascunhos",
+      "collectionGroup": "nfse_emitidas",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "clienteId", "order": "ASCENDING" },
@@ -118,6 +144,30 @@
       "fields": [
         { "fieldPath": "clienteId", "order": "ASCENDING" },
         { "fieldPath": "dataEmissao", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "nfse_rascunhos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clienteId", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ir_declaracoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clienteId", "order": "ASCENDING" },
+        { "fieldPath": "anoBase", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ir_declaracoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "anoBase", "order": "DESCENDING" }
       ]
     }
   ],

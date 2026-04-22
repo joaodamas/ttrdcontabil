@@ -63,6 +63,9 @@ export interface ClienteDoc {
   criadoPorId?: string
   criadoEm: Timestamp
   atualizadoEm: Timestamp
+  // Soft-delete: definido ao excluir, nunca deletar fisicamente
+  deletedAt?: Timestamp
+  deletedById?: string
 }
 
 // Coleção: servicos

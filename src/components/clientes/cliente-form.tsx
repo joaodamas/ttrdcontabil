@@ -13,8 +13,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCpfCnpj, formatPhone, formatCep, UFS } from '@/lib/utils'
-import { Loader2, Search, CheckCircle2 } from 'lucide-react'
+import { Loader2, CheckCircle2 } from 'lucide-react'
 import { createDocument, updateDocument, getNextClienteCodigo } from '@/lib/firestore-client'
+import { useViaCep } from '@/hooks/use-viacep'
 
 const clienteSchema = z.object({
   tipoPessoa: z.enum(['pf', 'pj']).default('pj'),
@@ -50,7 +51,7 @@ interface ClienteFormProps {
 export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProps) {
   const router = useRouter()
   const isEditing = !!initialData?.id
-  const [buscandoCep, setBuscandoCep] = useState(false)
+  const { buscar: buscarCepHook, loading: buscandoCep } = useViaCep()
   const [buscandoCnpj, setBuscandoCnpj] = useState(false)
   const [cnpjOk, setCnpjOk] = useState(false)
 
@@ -72,20 +73,13 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
   const tipoPessoa = watch('tipoPessoa')
 
   async function buscarCep(cepRaw: string) {
-    const digits = cepRaw.replace(/\D/g, '')
-    if (digits.length !== 8) return
-    setBuscandoCep(true)
-    try {
-      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
-      const data = await res.json()
-      if (!data.erro) {
-        if (data.logradouro) setValue('logradouro', data.logradouro)
-        if (data.bairro)     setValue('bairro', data.bairro)
-        if (data.localidade) setValue('cidade', data.localidade)
-        if (data.uf)         setValue('uf', data.uf)
-      }
-    } catch {}
-    finally { setBuscandoCep(false) }
+    const resultado = await buscarCepHook(cepRaw)
+    if (resultado) {
+      if (resultado.logradouro) setValue('logradouro', resultado.logradouro)
+      if (resultado.bairro)     setValue('bairro',     resultado.bairro)
+      if (resultado.cidade)     setValue('cidade',     resultado.cidade)
+      if (resultado.uf)         setValue('uf',         resultado.uf)
+    }
   }
 
   async function buscarCnpj(cnpjRaw: string) {

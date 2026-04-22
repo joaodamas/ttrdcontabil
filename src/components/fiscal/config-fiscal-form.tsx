@@ -15,6 +15,8 @@ import {
 } from '@/components/ui/select'
 import { Loader2 } from 'lucide-react'
 import { createDocument, updateDocument } from '@/lib/firestore-client'
+import { getFunctions, httpsCallable } from 'firebase/functions'
+import app from '@/lib/firebase'
 
 export const MUNICIPIOS = [
   { ibge: '3525904', nome: 'Jundiaí' },
@@ -104,39 +106,42 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
   async function onSubmit(data: FormData) {
     setSaving(true)
     try {
-      const credenciais: Record<string, unknown> = {}
+      // Payload sem credenciais — dados de configuração salvos diretamente
+      const payload: Record<string, unknown> = {
+        clienteId,
+        municipioIbge:        data.municipioIbge,
+        municipioEmissor:     municipioNome,
+        inscricaoMunicipal:   data.inscricaoMunicipal,
+        inscricaoEstadual:    data.inscricaoEstadual  || null,
+        ambienteEmissao:      data.ambienteEmissao,
+        regimeTributario:     data.regimeTributario,
+        optanteSimples:       data.optanteSimples,
+        incentivadorCultural: data.incentivadorCultural ?? false,
+        naturezaOperacao:     data.naturezaOperacao || '1',
+        itemListaServico:     data.itemListaServico  || null,
+        cnae:                 data.cnae              || null,
+        aliquotaPadrao:       data.aliquotaPadrao    ?? null,
+      }
+
+      let savedDocId = docId
+      if (docId) {
+        await updateDocument('clientes_fiscal', docId, payload)
+      } else {
+        savedDocId = await createDocument('clientes_fiscal', payload)
+      }
+
+      // Credenciais sensíveis enviadas via Cloud Function (criptografadas no servidor)
+      const credenciais: Record<string, string> = {}
       if (tipo === 'simpliss' && data.simplissToken)            credenciais.simplissToken = data.simplissToken
       if (tipo === 'conam'    && data.conamCodigoUsuario)       credenciais.conamCodigoUsuario = data.conamCodigoUsuario
       if (tipo === 'conam'    && data.conamCodigoContribuinte)  credenciais.conamCodigoContribuinte = data.conamCodigoContribuinte
       if (tipo === 'giap'     && data.giaplogin)                credenciais.giaplogin = data.giaplogin
       if (tipo === 'giap'     && data.giapSenha)                credenciais.giapSenha = data.giapSenha
-      // preserve existing cert fields
-      if (defaultValues?.credenciais?.certificadoStoragePath) {
-        credenciais.certificadoStoragePath = defaultValues.credenciais.certificadoStoragePath
-        credenciais.certificadoSenha       = defaultValues.credenciais.certificadoSenha
-      }
 
-      const payload: Record<string, unknown> = {
-        clienteId,
-        municipioIbge:       data.municipioIbge,
-        municipioEmissor:    municipioNome,
-        inscricaoMunicipal:  data.inscricaoMunicipal,
-        inscricaoEstadual:   data.inscricaoEstadual  || null,
-        ambienteEmissao:     data.ambienteEmissao,
-        regimeTributario:    data.regimeTributario,
-        optanteSimples:      data.optanteSimples,
-        incentivadorCultural: data.incentivadorCultural ?? false,
-        naturezaOperacao:    data.naturezaOperacao || '1',
-        itemListaServico:    data.itemListaServico  || null,
-        cnae:                data.cnae              || null,
-        aliquotaPadrao:      data.aliquotaPadrao    ?? null,
-        credenciais:         Object.keys(credenciais).length > 0 ? credenciais : null,
-      }
-
-      if (docId) {
-        await updateDocument('clientes_fiscal', docId, payload)
-      } else {
-        await createDocument('clientes_fiscal', payload)
+      if (Object.keys(credenciais).length > 0) {
+        const functions = getFunctions(app, 'southamerica-east1')
+        const salvar = httpsCallable(functions, 'salvarCredenciaisFiscais')
+        await salvar({ clienteId, docId: savedDocId, credenciais })
       }
 
       toast.success('Configuração fiscal salva!')

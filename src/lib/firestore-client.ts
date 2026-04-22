@@ -8,6 +8,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore'
 import { db } from './firebase'
+import { getAuth } from 'firebase/auth'
 
 // ── Generic helpers ───────────────────────────────────────────────────────────
 
@@ -49,14 +50,27 @@ export async function deleteDocument(col: string, id: string) {
   await deleteDoc(doc(db, col, id))
 }
 
+/**
+ * Soft-delete: marca o documento com deletedAt em vez de apagar fisicamente.
+ * Usado exclusivamente para clientes — mantém integridade referencial.
+ */
+export async function softDeleteDocument(col: string, id: string) {
+  const uid = getAuth().currentUser?.uid ?? null
+  await updateDoc(doc(db, col, id), {
+    deletedAt:    serverTimestamp(),
+    deletedById:  uid,
+    atualizadoEm: serverTimestamp(),
+  })
+}
+
 // ── Domain queries ────────────────────────────────────────────────────────────
 
 export async function getClientes(opts: { status?: string; limit?: number } = {}) {
-  // Fetch all then filter client-side to avoid composite index requirement
-  // (orderBy + where on different fields requires a deployed composite index)
+  // Filtra deletados client-side junto com status para evitar índice composto extra
   const all = await listDocuments<Record<string, unknown>>('clientes', [orderBy('razaoSocial'), limit(opts.limit ?? 500)])
-  if (!opts.status) return all
-  return all.filter((c) => c.status === opts.status)
+  const ativos = all.filter((c) => !c.deletedAt) // exclui soft-deleted
+  if (!opts.status) return ativos
+  return ativos.filter((c) => c.status === opts.status)
 }
 
 export async function getCliente(id: string) {

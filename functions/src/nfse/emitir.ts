@@ -7,6 +7,7 @@ import { Timestamp } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { rotearEmissao } from './municipios/router'
 import { validarCertificado as validarCert } from './xml/signer'
+import { encrypt, decrypt } from './encrypt'
 import type {
   EmitirNfseInput, ConfigFiscalCliente,
   Prestador, CertificadoA1,
@@ -35,13 +36,18 @@ async function getCertificado(clienteId: string, config: ConfigFiscalCliente): P
   const path = config.credenciais?.certificadoStoragePath
   if (!path) return undefined
   const bucket = getStorage().bucket()
-  const file   = bucket.file(path)
+  const file   = bucket.file(path as string)
   const [exists] = await file.exists()
   if (!exists) return undefined
   const [buffer] = await file.download()
+
+  // Descriptografa a senha do certificado
+  const senhaRaw     = config.credenciais?.certificadoSenha as string | undefined
+  const senhaDecrypt = senhaRaw ? (decrypt(senhaRaw) ?? senhaRaw) : ''
+
   return {
     pfxBase64: buffer.toString('base64'),
-    senha:     config.credenciais?.certificadoSenha ?? '',
+    senha:     senhaDecrypt,
   }
 }
 
@@ -57,29 +63,25 @@ export const emitirNfse = onCall(
     if (!input.tomador)   throw new HttpsError('invalid-argument', 'Dados do tomador obrigatórios.')
     if (!input.servico)   throw new HttpsError('invalid-argument', 'Dados do serviço obrigatórios.')
 
-    // Busca configurações
     const [config, cliente] = await Promise.all([
       getConfigFiscal(input.clienteId),
       getCliente(input.clienteId),
     ])
 
-    if (!config.municipioIbge) throw new HttpsError('failed-precondition', 'Código IBGE do município não configurado.')
-    if (!config.inscricaoMunicipal) throw new HttpsError('failed-precondition', 'Inscrição municipal não configurada.')
+    if (!config.municipioIbge)       throw new HttpsError('failed-precondition', 'Código IBGE do município não configurado.')
+    if (!config.inscricaoMunicipal)  throw new HttpsError('failed-precondition', 'Inscrição municipal não configurada.')
 
     const prestador: Prestador = {
-      cnpj:              (cliente.cpfCnpj as string).replace(/\D/g, ''),
-      inscricaoMunicipal: config.inscricaoMunicipal,
-      razaoSocial:        cliente.razaoSocial as string,
-      municipioIbge:      config.municipioIbge,
+      cnpj:               (cliente.cpfCnpj as string).replace(/\D/g, ''),
+      inscricaoMunicipal:  config.inscricaoMunicipal,
+      razaoSocial:         cliente.razaoSocial as string,
+      municipioIbge:       config.municipioIbge,
     }
 
-    // Busca certificado (se necessário)
     const cert = await getCertificado(input.clienteId, config)
 
-    // Emite via roteador de municípios
     const resultado = await rotearEmissao(input, config, prestador, cert)
 
-    // Persiste resultado no Firestore
     const now = Timestamp.now()
     if (resultado.sucesso) {
       await db().collection('nfse_emitidas').add({
@@ -104,17 +106,16 @@ export const emitirNfse = onCall(
         criadoEm:          now,
         criadoPorId:       request.auth.uid,
         ambienteEmissao:   config.ambienteEmissao,
+        valorDeducoes:     0,
       })
 
-      // Remove rascunho se existia
       if (input.rascunhoId) {
         await db().collection('nfse_rascunhos').doc(input.rascunhoId).update({
-          status:      'emitida',
+          status:       'emitida',
           atualizadoEm: now,
         })
       }
     } else {
-      // Registra tentativa com falha
       await db().collection('nfse_erros').add({
         clienteId:   input.clienteId,
         clienteNome: cliente.razaoSocial as string,
@@ -147,7 +148,6 @@ export const uploadCertificado = onCall(
       throw new HttpsError('invalid-argument', 'clienteId, pfxBase64 e senha são obrigatórios.')
     }
 
-    // Valida certificado antes de salvar
     let info: { valido: boolean; vencimento: Date; titular: string }
     try {
       info = validarCert(pfxBase64, senha)
@@ -168,7 +168,9 @@ export const uploadCertificado = onCall(
       metadata:    { titularCertificado: info.titular },
     })
 
-    // Atualiza config fiscal com referência + senha
+    // Criptografa a senha antes de salvar no Firestore
+    const senhaCriptografada = encrypt(senha)
+
     const snap = await db().collection('clientes_fiscal')
       .where('clienteId', '==', clienteId)
       .limit(1)
@@ -177,7 +179,7 @@ export const uploadCertificado = onCall(
     if (!snap.empty) {
       await snap.docs[0].ref.update({
         'credenciais.certificadoStoragePath': path,
-        'credenciais.certificadoSenha':       senha,
+        'credenciais.certificadoSenha':       senhaCriptografada, // criptografada
         'credenciais.certTitular':            info.titular,
         'credenciais.certVencimento':         info.vencimento.toISOString(),
         'credenciais.certValido':             info.valido,
@@ -186,10 +188,10 @@ export const uploadCertificado = onCall(
     }
 
     return {
-      sucesso:    true,
-      titular:    info.titular,
-      vencimento: info.vencimento.toISOString(),
-      valido:     info.valido,
+      sucesso:     true,
+      titular:     info.titular,
+      vencimento:  info.vencimento.toISOString(),
+      valido:      info.valido,
       storagePath: path,
     }
   }
@@ -211,5 +213,63 @@ export const validarCertificado = onCall(
     } catch {
       throw new HttpsError('invalid-argument', 'Certificado inválido ou senha incorreta.')
     }
+  }
+)
+
+// ─── Function: salvarCredenciaisFiscais ───────────────────────────────────────
+// Recebe tokens/senhas de portais (Simpliss, CONAM, GIAP) e os criptografa
+// antes de salvar no Firestore. O frontend NUNCA salva credenciais diretamente.
+
+export const salvarCredenciaisFiscais = onCall(
+  { region: 'southamerica-east1', timeoutSeconds: 15, invoker: 'public' },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Autenticação necessária.')
+
+    const { clienteId, docId, credenciais } = request.data as {
+      clienteId:   string
+      docId?:      string
+      credenciais: Record<string, string>
+    }
+
+    if (!clienteId || !credenciais) {
+      throw new HttpsError('invalid-argument', 'clienteId e credenciais são obrigatórios.')
+    }
+
+    // Criptografa cada campo de credencial fornecido
+    const credenciaisCriptografadas: Record<string, string> = {}
+    for (const [key, value] of Object.entries(credenciais)) {
+      if (value && typeof value === 'string') {
+        credenciaisCriptografadas[key] = encrypt(value)
+      }
+    }
+
+    const now = Timestamp.now()
+
+    if (docId) {
+      // Atualiza doc existente — merge no sub-objeto credenciais
+      const updates: Record<string, unknown> = { atualizadoEm: now }
+      for (const [key, value] of Object.entries(credenciaisCriptografadas)) {
+        updates[`credenciais.${key}`] = value
+      }
+      await db().collection('clientes_fiscal').doc(docId).update(updates)
+    } else {
+      // Busca pelo clienteId se docId não fornecido
+      const snap = await db().collection('clientes_fiscal')
+        .where('clienteId', '==', clienteId)
+        .limit(1)
+        .get()
+
+      if (snap.empty) {
+        throw new HttpsError('not-found', 'Configuração fiscal não encontrada para este cliente.')
+      }
+
+      const updates: Record<string, unknown> = { atualizadoEm: now }
+      for (const [key, value] of Object.entries(credenciaisCriptografadas)) {
+        updates[`credenciais.${key}`] = value
+      }
+      await snap.docs[0].ref.update(updates)
+    }
+
+    return { sucesso: true }
   }
 )

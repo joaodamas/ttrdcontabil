@@ -9,8 +9,9 @@ import { formatDate, formatCurrency, tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { FileText, CheckCircle, XCircle, AlertTriangle, Plus, Loader2, Trash2 } from 'lucide-react'
+import { FileText, CheckCircle, XCircle, AlertTriangle, Plus, Loader2, Trash2, Layers } from 'lucide-react'
 import { toast } from 'sonner'
+import { EmitirLoteModal } from '@/components/fiscal/emitir-lote-modal'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   emitida: { label: 'Emitida', variant: 'default' },
@@ -22,6 +23,7 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
 }
 
 export default function FiscalPage() {
+  const [loteOpen, setLoteOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [emitidaMesCount, setEmitidaMesCount] = useState(0)
   const [somaEmitidaMes, setSomaEmitidaMes] = useState(0)
@@ -113,6 +115,10 @@ export default function FiscalPage() {
           <Link href="/fiscal/historico">
             <Button variant="outline" size="sm">Histórico</Button>
           </Link>
+          <Button variant="outline" size="sm" onClick={() => setLoteOpen(true)}>
+            <Layers className="w-4 h-4 mr-1" />
+            Lote
+          </Button>
           <Link href="/fiscal/emitir">
             <Button size="sm">
               <Plus className="w-4 h-4 mr-1" />
@@ -248,6 +254,15 @@ export default function FiscalPage() {
           </table>
         </div>
       </Card>
+      <EmitirLoteModal
+        open={loteOpen}
+        onOpenChange={setLoteOpen}
+        onSuccess={() => {
+          setLoteOpen(false)
+          // Re-render the page to reflect new emission counts
+          setLoading(true)
+        }}
+      />
     </div>
   )
 }
