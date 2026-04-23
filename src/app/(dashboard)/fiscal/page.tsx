@@ -24,6 +24,7 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
 
 export default function FiscalPage() {
   const [loteOpen, setLoteOpen] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   const [loading, setLoading] = useState(true)
   const [emitidaMesCount, setEmitidaMesCount] = useState(0)
   const [somaEmitidaMes, setSomaEmitidaMes] = useState(0)
@@ -92,7 +93,7 @@ export default function FiscalPage() {
       })
       setNotas([...rascunhosNormalizados, ...(recentesData as Array<Record<string, unknown>>)].slice(0, 10))
     }).finally(() => setLoading(false))
-  }, [])
+  }, [reloadKey])
 
   if (loading) {
     return (
@@ -259,8 +260,7 @@ export default function FiscalPage() {
         onOpenChange={setLoteOpen}
         onSuccess={() => {
           setLoteOpen(false)
-          // Re-render the page to reflect new emission counts
-          setLoading(true)
+          setReloadKey((k) => k + 1)
         }}
       />
     </div>

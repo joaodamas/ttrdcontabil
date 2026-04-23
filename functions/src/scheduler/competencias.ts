@@ -56,7 +56,8 @@ export const criarCompetenciasMensais = onSchedule(
     }
 
     // 3. Para cada cliente, verifica se a competência já existe antes de criar
-    const batch = db().batch()
+    let batch    = db().batch()
+    let batchOps = 0
     let criadas  = 0
     let ignoradas = 0
 
@@ -91,7 +92,7 @@ export const criarCompetenciasMensais = onSchedule(
         clienteNome:   razaoSocial,
         mes,
         ano,
-        competencia:   `${String(mes).padStart(2, '0')}/${ano}`, // "01/2025"
+        competencia:   `${String(mes).padStart(2, '0')}/${ano}`,
         status:        'pendente',
         valorTotal,
         servicosIds:   servicos.map((s) => s.id),
@@ -101,14 +102,17 @@ export const criarCompetenciasMensais = onSchedule(
         criadoAutomaticamente: true,
       })
       criadas++
+      batchOps++
 
-      // Firestore batch limit is 500 — commit in chunks
-      if (criadas % 400 === 0) {
+      // Firestore batch limit is 500 — commit and start a fresh batch
+      if (batchOps === 400) {
         await batch.commit()
+        batch    = db().batch()
+        batchOps = 0
       }
     }
 
-    await batch.commit()
+    if (batchOps > 0) await batch.commit()
     console.log(`[competencias] Criadas: ${criadas} | Ignoradas (já existiam ou inativo): ${ignoradas}`)
   }
 )
