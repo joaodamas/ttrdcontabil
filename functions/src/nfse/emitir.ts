@@ -6,7 +6,6 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { Timestamp } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { rotearEmissao } from './municipios/router'
-import { validarCertificado as validarCert } from './xml/signer'
 import { encrypt, decrypt } from './encrypt'
 import type {
   EmitirNfseInput, ConfigFiscalCliente,
@@ -14,6 +13,11 @@ import type {
 } from './types'
 
 const db = () => admin.firestore()
+
+async function validarCert(pfxBase64: string, senha: string) {
+  const { validarCertificado } = await import('./xml/signer')
+  return validarCertificado(pfxBase64, senha)
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -150,7 +154,7 @@ export const uploadCertificado = onCall(
 
     let info: { valido: boolean; vencimento: Date; titular: string }
     try {
-      info = validarCert(pfxBase64, senha)
+      info = await validarCert(pfxBase64, senha)
     } catch {
       throw new HttpsError('invalid-argument', 'Certificado inválido ou senha incorreta.')
     }
@@ -208,7 +212,7 @@ export const validarCertificado = onCall(
     if (!pfxBase64 || !senha) throw new HttpsError('invalid-argument', 'pfxBase64 e senha são obrigatórios.')
 
     try {
-      const info = validarCert(pfxBase64, senha)
+      const info = await validarCert(pfxBase64, senha)
       return { valido: info.valido, titular: info.titular, vencimento: info.vencimento.toISOString() }
     } catch {
       throw new HttpsError('invalid-argument', 'Certificado inválido ou senha incorreta.')
