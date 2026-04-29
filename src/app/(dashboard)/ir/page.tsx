@@ -9,6 +9,8 @@ import { listDocuments } from '@/lib/firestore-client'
 import { formatDate , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { InlineAlert } from '@/components/ui/inline-alert'
+import { TableEmptyState } from '@/components/ui/empty-state'
 import { Plus, Loader2 } from 'lucide-react'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
@@ -30,19 +32,24 @@ function IrContent() {
 
   const [allDeclaracoes, setAllDeclaracoes] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState<string | null>(null)
 
   const anosDisponiveis = [anoBaseAtual, anoBaseAtual - 1, anoBaseAtual - 2, anoBaseAtual - 3]
 
   useEffect(() => {
-    setLoading(true)
-    const constraints = [
-      where('anoBase', '==', anoBase),
-      ...(status ? [where('status', '==', status)] : []),
-      orderBy('clienteNome', 'asc'),
-    ]
-    listDocuments('ir_declaracoes', constraints)
-      .then((data) => setAllDeclaracoes(data as Array<Record<string, unknown>>))
-      .finally(() => setLoading(false))
+    queueMicrotask(() => {
+      setLoading(true)
+      setErro(null)
+      const constraints = [
+        where('anoBase', '==', anoBase),
+        ...(status ? [where('status', '==', status)] : []),
+        orderBy('clienteNome', 'asc'),
+      ]
+      listDocuments('ir_declaracoes', constraints)
+        .then((data) => setAllDeclaracoes(data as Array<Record<string, unknown>>))
+        .catch(() => setErro('Não foi possível carregar as declarações de IR.'))
+        .finally(() => setLoading(false))
+    })
   }, [anoBase, status])
 
   function buildUrl(overrides: Record<string, string | number>) {
@@ -63,16 +70,28 @@ function IrContent() {
     )
   }
 
+  if (erro) {
+    return (
+      <div className="stack-6">
+        <InlineAlert tone="danger" title="Erro ao carregar IR" description={erro} />
+        <div>
+          <Button onClick={() => window.location.reload()}>Tentar novamente</Button>
+        </div>
+      </div>
+    )
+  }
+
   const total = allDeclaracoes.length
   const totalPages = Math.ceil(total / PAGE_SIZE)
   const declaracoes = allDeclaracoes.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const pendentes = allDeclaracoes.filter((d) => ['pendente', 'em_andamento'].includes((d.status as string) ?? '')).length
 
   return (
-    <div className="space-y-5">
+    <div className="stack-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Declarações de IR</h2>
-          <p className="text-sm text-muted-foreground">
+          <h2 className="text-title">Declarações de IR</h2>
+          <p className="text-subtle">
             {total} declaraç{total !== 1 ? 'ões' : 'ão'} — Ano-base {anoBase}
           </p>
         </div>
@@ -83,6 +102,14 @@ function IrContent() {
           </Button>
         </Link>
       </div>
+
+      {pendentes > 0 && (
+        <InlineAlert
+          tone="warning"
+          title={`${pendentes} declaração(ões) pendente(s) ou em andamento`}
+          description="Priorize pendências para reduzir risco de prazo fiscal."
+        />
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-1">
@@ -127,11 +154,12 @@ function IrContent() {
           </thead>
           <tbody className="divide-y">
             {declaracoes.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
-                  Nenhuma declaração encontrada.
-                </td>
-              </tr>
+              <TableEmptyState
+                colSpan={5}
+                title="Nenhuma declaração encontrada"
+                description="Ajuste os filtros ou crie uma nova declaração."
+                action={{ label: 'Nova Declaração', href: '/ir/nova' }}
+              />
             ) : (
               declaracoes.map((d) => {
                 const s = STATUS_MAP[d.status as string] ?? {

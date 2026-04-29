@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
+import { canAccessTela, type TelaKey } from '@/lib/permissions'
 import {
   Plus,
   Bell,
@@ -73,18 +74,20 @@ type QuickAction = {
   href: string
   icon: React.ComponentType<{ size?: number; className?: string }>
   perfis?: string[]
+  telaKey?: TelaKey
 }
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { label: 'Novo Cliente',    href: '/clientes/novo',    icon: Users },
-  { label: 'Nova Tarefa',     href: '/tarefas/nova',     icon: CheckSquare },
-  { label: 'Nova Declaração', href: '/ir/nova',           icon: FileText },
-  { label: 'Novo Lançamento', href: '/financeiro/novo',  icon: DollarSign },
-  { label: 'Emitir NFS-e',   href: '/fiscal/emitir',    icon: Receipt, perfis: ['admin', 'fiscal', 'financeiro'] },
+  { label: 'Novo Cliente',    href: '/clientes/novo',    icon: Users, telaKey: 'clientes' },
+  { label: 'Nova Tarefa',     href: '/tarefas/nova',     icon: CheckSquare, telaKey: 'tarefas' },
+  { label: 'Nova Declaração', href: '/ir/nova',          icon: FileText, telaKey: 'ir', perfis: ['admin', 'fiscal'] },
+  { label: 'Novo Lançamento', href: '/financeiro/novo',  icon: DollarSign, telaKey: 'financeiro', perfis: ['admin', 'financeiro'] },
+  { label: 'Emitir NFS-e',    href: '/fiscal/emitir',    icon: Receipt, telaKey: 'fiscal', perfis: ['admin', 'fiscal', 'financeiro'] },
 ]
 
 function QuickActionsButton() {
   const { usuario } = useAuth()
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -96,9 +99,39 @@ function QuickActionsButton() {
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  const visible = QUICK_ACTIONS.filter(
-    (a) => !a.perfis || (usuario && a.perfis.includes(usuario.perfil))
-  )
+  function canSeeAction(action: QuickAction) {
+    if (action.perfis && (!usuario || !action.perfis.includes(usuario.perfil))) return false
+    if (action.telaKey) return canAccessTela(usuario, action.telaKey)
+    return true
+  }
+
+  const visibleBase = QUICK_ACTIONS.filter(canSeeAction)
+
+  const contextual: QuickAction[] = []
+  const pathParts = pathname.split('/').filter(Boolean)
+  const clienteIdCtx = pathParts[0] === 'clientes' && pathParts[1] ? pathParts[1] : null
+  if (pathname.startsWith('/clientes/')) {
+    contextual.push({
+      label: 'Nova Tarefa (Cliente)',
+      href: clienteIdCtx ? `/tarefas/nova?clienteId=${clienteIdCtx}` : '/tarefas/nova',
+      icon: CheckSquare,
+    })
+    contextual.push({
+      label: 'Novo Lançamento (Cliente)',
+      href: clienteIdCtx ? `/financeiro/novo?clienteId=${clienteIdCtx}` : '/financeiro/novo',
+      icon: DollarSign,
+    })
+  } else if (pathname.startsWith('/tarefas')) {
+    contextual.push({ label: 'Nova Tarefa', href: '/tarefas/nova', icon: CheckSquare })
+  } else if (pathname.startsWith('/financeiro')) {
+    contextual.push({ label: 'Novo Lançamento', href: '/financeiro/novo', icon: DollarSign })
+  } else if (pathname.startsWith('/fiscal')) {
+    contextual.push({ label: 'Emitir NFS-e', href: '/fiscal/emitir', icon: Receipt, perfis: ['admin', 'fiscal', 'financeiro'], telaKey: 'fiscal' })
+  }
+
+  const visible = [...contextual, ...visibleBase].filter(
+    (a, idx, arr) => arr.findIndex((x) => x.label === a.label && x.href === a.href) === idx
+  ).filter(canSeeAction)
 
   return (
     <div ref={ref} className="relative">

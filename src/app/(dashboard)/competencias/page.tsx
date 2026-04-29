@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { where, orderBy } from 'firebase/firestore'
 
@@ -37,17 +37,19 @@ function CompetenciasContent() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setLoading(true)
-    const constraints = [
-      where('mes', '==', mes),
-      where('ano', '==', ano),
-      ...(status ? [where('status', '==', status)] : []),
-      ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
-      orderBy('clienteNome', 'asc'),
-    ]
-    listDocuments('competencias', constraints)
-      .then((data) => setAllCompetencias(data as Array<Record<string, unknown>>))
-      .finally(() => setLoading(false))
+    queueMicrotask(() => {
+      setLoading(true)
+      const constraints = [
+        where('mes', '==', mes),
+        where('ano', '==', ano),
+        ...(status ? [where('status', '==', status)] : []),
+        ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
+        orderBy('clienteNome', 'asc'),
+      ]
+      listDocuments('competencias', constraints)
+        .then((data) => setAllCompetencias(data as Array<Record<string, unknown>>))
+        .finally(() => setLoading(false))
+    })
   }, [mes, ano, status, clienteId])
 
   function buildUrl(overrides: Record<string, string | number>) {

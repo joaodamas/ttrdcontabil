@@ -173,6 +173,26 @@ export function LoginForm() {
               ))}
             </div>
 
+            {/* Comparativo posicionamento (ERP cliente vs. escritório) */}
+            <div
+              className="rounded-xl p-4 space-y-3 max-w-md"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
+            >
+              <p className="text-xs font-semibold uppercase tracking-wider text-white/50">
+                Conta Azul / Omie vs. fluxo do escritório
+              </p>
+              <p className="text-sm text-white/55 leading-relaxed">
+                ERPs populares organizam o financeiro <em className="text-white/70 not-italic">da empresa do cliente</em>.
+                A TTRD organiza o <strong className="text-white/85">trabalho do contador</strong>: competências, fechamento,
+                obrigações e fiscal — com cliente 360 e cockpit diário.
+              </p>
+              <ul className="text-xs text-white/45 space-y-1.5 leading-relaxed">
+                <li>Fechamento guiado e fila crítica (DAS, eSocial, Reinf, FGTS)</li>
+                <li>Cockpit &quot;Hoje&quot; com SLA, lote e bloqueios de mês</li>
+                <li>Timeline unificada por cliente (operacional + fiscal + financeiro)</li>
+              </ul>
+            </div>
+
             {/* Stats cards */}
             <div className="grid grid-cols-3 gap-3">
               {STATS.map(({ label, value, icon: Icon, color }) => (

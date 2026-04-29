@@ -2,7 +2,7 @@
 
 import { forwardRef, useState, useCallback } from 'react'
 import { Input } from './input'
-import { cn, formatCpfCnpj, validateCpf, validateCnpj } from '@/lib/utils'
+import { cn, validateCpf, validateCnpj } from '@/lib/utils'
 import { CheckCircle2, AlertCircle } from 'lucide-react'
 
 type TipoPessoa = 'pf' | 'pj' | 'auto'

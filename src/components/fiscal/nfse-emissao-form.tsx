@@ -21,7 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, Save, Send } from 'lucide-react'
 import { getClientes, getCompetencias, createDocument } from '@/lib/firestore-client'
 import { getFunctions, httpsCallable } from 'firebase/functions'
-import app from '@/lib/firebase'
+import { getFirebaseApp } from '@/lib/firebase'
 
 const nfseSchema = z.object({
   clienteId:        z.string().min(1, 'Cliente é obrigatório'),
@@ -126,7 +126,7 @@ export function NfseEmissaoForm() {
   async function handleEmitir(data: NfseFormData) {
     setEmitting(true)
     try {
-      const functions = getFunctions(app, 'southamerica-east1')
+      const functions = getFunctions(getFirebaseApp(), 'southamerica-east1')
       const emitirNfse = httpsCallable<Record<string, unknown>, { sucesso: boolean; numeroNfse?: string; codigoVerificacao?: string; erro?: string }>(
         functions,
         'emitirNfse'

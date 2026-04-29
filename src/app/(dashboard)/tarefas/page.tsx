@@ -9,6 +9,8 @@ import { listDocuments } from '@/lib/firestore-client'
 import { formatDate , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { InlineAlert } from '@/components/ui/inline-alert'
+import { TableEmptyState } from '@/components/ui/empty-state'
 import { Plus, Loader2 } from 'lucide-react'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
@@ -38,22 +40,27 @@ function TarefasContent() {
 
   const [allTarefas, setAllTarefas] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState<string | null>(null)
 
   const hoje = new Date()
 
   useEffect(() => {
-    setLoading(true)
-    const constraints = [
-      ...(status ? [where('status', '==', status)] : []),
-      ...(prioridade ? [where('prioridade', '==', prioridade)] : []),
-      ...(responsavelId ? [where('responsavelId', '==', responsavelId)] : []),
-      ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
-      ...(competenciaId ? [where('competenciaId', '==', competenciaId)] : []),
-      orderBy('dataVencimento', 'asc'),
-    ]
-    listDocuments('tarefas', constraints)
-      .then((data) => setAllTarefas(data as Array<Record<string, unknown>>))
-      .finally(() => setLoading(false))
+    queueMicrotask(() => {
+      setLoading(true)
+      setErro(null)
+      const constraints = [
+        ...(status ? [where('status', '==', status)] : []),
+        ...(prioridade ? [where('prioridade', '==', prioridade)] : []),
+        ...(responsavelId ? [where('responsavelId', '==', responsavelId)] : []),
+        ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
+        ...(competenciaId ? [where('competenciaId', '==', competenciaId)] : []),
+        orderBy('dataVencimento', 'asc'),
+      ]
+      listDocuments('tarefas', constraints)
+        .then((data) => setAllTarefas(data as Array<Record<string, unknown>>))
+        .catch(() => setErro('Não foi possível carregar as tarefas.'))
+        .finally(() => setLoading(false))
+    })
   }, [status, prioridade, responsavelId, clienteId, competenciaId])
 
   function buildUrl(overrides: Record<string, string | number>) {
@@ -77,16 +84,33 @@ function TarefasContent() {
     )
   }
 
+  if (erro) {
+    return (
+      <div className="stack-6">
+        <InlineAlert tone="danger" title="Erro ao carregar tarefas" description={erro} />
+        <div>
+          <Button onClick={() => window.location.reload()}>Tentar novamente</Button>
+        </div>
+      </div>
+    )
+  }
+
   const total = allTarefas.length
   const totalPages = Math.ceil(total / PAGE_SIZE)
   const tarefas = allTarefas.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const atrasadas = allTarefas.filter((t) => {
+    const dataPrazo = t.dataPrazo as Timestamp | undefined
+    if (!dataPrazo) return false
+    const dt = tsToDate(dataPrazo)
+    return !!dt && dt < hoje && !['concluida', 'cancelada'].includes(t.status as string)
+  }).length
 
   return (
-    <div className="space-y-5">
+    <div className="stack-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Tarefas</h2>
-          <p className="text-sm text-muted-foreground">
+          <h2 className="text-title">Tarefas</h2>
+          <p className="text-subtle">
             {total} tarefa{total !== 1 ? 's' : ''} encontrada{total !== 1 ? 's' : ''}
           </p>
         </div>
@@ -97,6 +121,14 @@ function TarefasContent() {
           </Button>
         </Link>
       </div>
+
+      {atrasadas > 0 && (
+        <InlineAlert
+          tone="danger"
+          title={`${atrasadas} tarefa(s) em atraso`}
+          description="Use os filtros para priorizar pendências críticas da operação."
+        />
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-1">
@@ -142,11 +174,12 @@ function TarefasContent() {
           </thead>
           <tbody className="divide-y">
             {tarefas.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                  Nenhuma tarefa encontrada.
-                </td>
-              </tr>
+              <TableEmptyState
+                colSpan={6}
+                title="Nenhuma tarefa encontrada"
+                description="Ajuste os filtros ou crie uma nova tarefa para iniciar o fluxo."
+                action={{ label: 'Nova Tarefa', href: '/tarefas/nova' }}
+              />
             ) : tarefas.map((t) => {
                 const st = STATUS_MAP[t.status as string] ?? {
                   label: t.status as string,

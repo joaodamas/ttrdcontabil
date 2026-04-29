@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { where, orderBy, Timestamp } from 'firebase/firestore'
 
 import { getDocument, listDocuments } from '@/lib/firestore-client'
-import { formatDate, formatMesAno , tsToDate } from '@/lib/utils'
+import { formatDate, tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -37,27 +37,29 @@ export default function TarefaDetalhePage() {
 
   useEffect(() => {
     if (!id) return
-    setLoading(true)
-    Promise.all([
-      getDocument('tarefas', id),
-      listDocuments('tarefas_comentarios', [
-        where('tarefaId', '==', id),
-        orderBy('criadoEm', 'asc'),
-      ]),
-    ]).then(([tarefaData, comentariosData]) => {
-      if (!tarefaData) {
-        router.push('/tarefas')
-        return
-      }
-      setTarefa(tarefaData as Record<string, unknown>)
-      const serialized = (comentariosData as Array<Record<string, unknown>>).map((d) => ({
-        id: d.id as string,
-        texto: d.texto as string,
-        criadoEm: d.criadoEm ? (tsToDate(d.criadoEm) ?? new Date()).toISOString() : new Date().toISOString(),
-        usuarioNome: (d.usuarioNome as string) ?? '—',
-      }))
-      setComentariosSerializados(serialized)
-    }).finally(() => setLoading(false))
+    queueMicrotask(() => {
+      setLoading(true)
+      Promise.all([
+        getDocument('tarefas', id),
+        listDocuments('tarefas_comentarios', [
+          where('tarefaId', '==', id),
+          orderBy('criadoEm', 'asc'),
+        ]),
+      ]).then(([tarefaData, comentariosData]) => {
+        if (!tarefaData) {
+          router.push('/tarefas')
+          return
+        }
+        setTarefa(tarefaData as Record<string, unknown>)
+        const serialized = (comentariosData as Array<Record<string, unknown>>).map((d) => ({
+          id: d.id as string,
+          texto: d.texto as string,
+          criadoEm: d.criadoEm ? (tsToDate(d.criadoEm) ?? new Date()).toISOString() : new Date().toISOString(),
+          usuarioNome: (d.usuarioNome as string) ?? '—',
+        }))
+        setComentariosSerializados(serialized)
+      }).finally(() => setLoading(false))
+    })
   }, [id, router])
 
   if (loading) {

@@ -37,10 +37,12 @@ function ClientesContent() {
   const [modalClienteNome, setModalClienteNome] = useState('')
 
   useEffect(() => {
-    setLoading(true)
-    getClientes(status ? { status } : {})
-      .then((data) => setAllClientes(data as Array<Record<string, string>>))
-      .finally(() => setLoading(false))
+    queueMicrotask(() => {
+      setLoading(true)
+      getClientes(status ? { status } : {})
+        .then((data) => setAllClientes(data as Array<Record<string, string>>))
+        .finally(() => setLoading(false))
+    })
   }, [status])
 
   let clientes = allClientes

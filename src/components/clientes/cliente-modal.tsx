@@ -79,7 +79,8 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
   }, [clienteId])
 
   useEffect(() => {
-    if (open) load()
+    if (!open) return
+    queueMicrotask(() => { void load() })
   }, [open, load])
 
   const valorMensalAtivo = servicos

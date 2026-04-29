@@ -17,7 +17,6 @@ import {
   Clock,
   CheckCircle2,
   Circle,
-  Calendar,
 } from 'lucide-react'
 
 /* ─── Skeleton ─────────────────────────────────────────────── */
@@ -206,7 +205,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="space-y-2">
-              {Object.entries(COMP_STATUS).map(([key, { label, icon: Icon, color, dot }]) => (
+              {Object.entries(COMP_STATUS).map(([key, { label, color, dot }]) => (
                 <div key={key} className="flex items-center justify-between text-xs">
                   <span className={cn('flex items-center gap-1.5 font-medium', color)}>
                     <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', dot)} />

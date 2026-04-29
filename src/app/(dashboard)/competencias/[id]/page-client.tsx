@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
+import { where, orderBy, limit } from 'firebase/firestore'
 
 import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { formatDate, formatMesAno, formatCurrency , tsToDate } from '@/lib/utils'
@@ -38,22 +38,24 @@ export default function CompetenciaDetalhePage() {
 
   useEffect(() => {
     if (!id) return
-    setLoading(true)
-    Promise.all([
-      getDocument('competencias', id),
-      listDocuments('tarefas', [where('competenciaId', '==', id), orderBy('criadoEm', 'asc'), limit(5)]),
-      listDocuments('lancamentos', [where('competenciaId', '==', id), orderBy('dataVencimento', 'asc'), limit(5)]),
-      listDocuments('nfse_emitidas', [where('competenciaId', '==', id), orderBy('criadoEm', 'desc'), limit(3)]),
-    ]).then(([compData, tarefasData, lancamentosData, nfseData]) => {
-      if (!compData) {
-        router.push('/competencias')
-        return
-      }
-      setCompetencia(compData as Record<string, unknown>)
-      setTarefas(tarefasData as Array<Record<string, unknown>>)
-      setLancamentos(lancamentosData as Array<Record<string, unknown>>)
-      setNfse(nfseData as Array<Record<string, unknown>>)
-    }).finally(() => setLoading(false))
+    queueMicrotask(() => {
+      setLoading(true)
+      Promise.all([
+        getDocument('competencias', id),
+        listDocuments('tarefas', [where('competenciaId', '==', id), orderBy('criadoEm', 'asc'), limit(5)]),
+        listDocuments('lancamentos', [where('competenciaId', '==', id), orderBy('dataVencimento', 'asc'), limit(5)]),
+        listDocuments('nfse_emitidas', [where('competenciaId', '==', id), orderBy('criadoEm', 'desc'), limit(3)]),
+      ]).then(([compData, tarefasData, lancamentosData, nfseData]) => {
+        if (!compData) {
+          router.push('/competencias')
+          return
+        }
+        setCompetencia(compData as Record<string, unknown>)
+        setTarefas(tarefasData as Array<Record<string, unknown>>)
+        setLancamentos(lancamentosData as Array<Record<string, unknown>>)
+        setNfse(nfseData as Array<Record<string, unknown>>)
+      }).finally(() => setLoading(false))
+    })
   }, [id, router])
 
   if (loading) {

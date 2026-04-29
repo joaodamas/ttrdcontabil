@@ -16,7 +16,7 @@ import {
 import { Loader2 } from 'lucide-react'
 import { createDocument, updateDocument } from '@/lib/firestore-client'
 import { getFunctions, httpsCallable } from 'firebase/functions'
-import app from '@/lib/firebase'
+import { getFirebaseApp } from '@/lib/firebase'
 
 export const MUNICIPIOS = [
   { ibge: '3525904', nome: 'Jundiaí' },
@@ -139,7 +139,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       if (tipo === 'giap'     && data.giapSenha)                credenciais.giapSenha = data.giapSenha
 
       if (Object.keys(credenciais).length > 0) {
-        const functions = getFunctions(app, 'southamerica-east1')
+        const functions = getFunctions(getFirebaseApp(), 'southamerica-east1')
         const salvar = httpsCallable(functions, 'salvarCredenciaisFiscais')
         await salvar({ clienteId, docId: savedDocId, credenciais })
       }

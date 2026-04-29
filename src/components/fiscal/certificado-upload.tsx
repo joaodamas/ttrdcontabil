@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, ShieldCheck, ShieldAlert, Upload } from 'lucide-react'
-import app from '@/lib/firebase'
+import { getFirebaseApp } from '@/lib/firebase'
 
 export interface CertInfo {
   titular:     string
@@ -41,7 +41,7 @@ export function CertificadoUpload({ clienteId, certInfo, onUploaded }: Props) {
       bytes.forEach(b => (binary += String.fromCharCode(b)))
       const pfxBase64 = btoa(binary)
 
-      const functions = getFunctions(app, 'southamerica-east1')
+      const functions = getFunctions(getFirebaseApp(), 'southamerica-east1')
       const upload    = httpsCallable<Record<string, unknown>, CertInfo & { sucesso: boolean }>(
         functions, 'uploadCertificado'
       )

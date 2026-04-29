@@ -33,27 +33,29 @@ function FiscalHistoricoContent() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setLoading(true)
-    const constraints = [
-      ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
-      ...(status ? [where('status', '==', status)] : []),
-      orderBy('criadoEm', 'desc'),
-    ]
-    listDocuments('nfse_emitidas', constraints).then((data) => {
-      let filtered = data as Array<Record<string, unknown>>
-      if (mes || ano) {
-        filtered = filtered.filter((n) => {
-          const dataEmissao = n.dataEmissao as Timestamp | undefined
-          if (!dataEmissao) return false
-          const dt = tsToDate(dataEmissao)
-          if (!dt) return false
-          if (mes && dt.getMonth() + 1 !== mes) return false
-          if (ano && dt.getFullYear() !== ano) return false
-          return true
-        })
-      }
-      setAllNotas(filtered)
-    }).finally(() => setLoading(false))
+    queueMicrotask(() => {
+      setLoading(true)
+      const constraints = [
+        ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
+        ...(status ? [where('status', '==', status)] : []),
+        orderBy('criadoEm', 'desc'),
+      ]
+      listDocuments('nfse_emitidas', constraints).then((data) => {
+        let filtered = data as Array<Record<string, unknown>>
+        if (mes || ano) {
+          filtered = filtered.filter((n) => {
+            const dataEmissao = n.dataEmissao as Timestamp | undefined
+            if (!dataEmissao) return false
+            const dt = tsToDate(dataEmissao)
+            if (!dt) return false
+            if (mes && dt.getMonth() + 1 !== mes) return false
+            if (ano && dt.getFullYear() !== ano) return false
+            return true
+          })
+        }
+        setAllNotas(filtered)
+      }).finally(() => setLoading(false))
+    })
   }, [clienteId, status, mes, ano])
 
   function buildUrl(overrides: Record<string, string | number>) {

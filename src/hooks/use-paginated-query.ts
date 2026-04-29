@@ -5,7 +5,7 @@ import {
   collection, query, getDocs, startAfter, limit as fsLimit,
   type QueryConstraint, type DocumentSnapshot,
 } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { getClientDb } from '@/lib/firebase'
 
 interface UsePaginatedQueryOptions {
   /** Nome da coleção Firestore. */
@@ -62,7 +62,7 @@ export function usePaginatedQuery<T = Record<string, unknown>>({
         ...(cursor ? [startAfter(cursor)] : []),
         fsLimit(pageSize + 1), // fetch one extra to detect if there's a next page
       ]
-      const snap = await getDocs(query(collection(db, col), ...pageConstraints))
+      const snap = await getDocs(query(collection(getClientDb(), col), ...pageConstraints))
       const docs = snap.docs
 
       setHasNext(docs.length > pageSize)

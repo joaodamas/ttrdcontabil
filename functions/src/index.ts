@@ -21,3 +21,12 @@ export { enviarAlertasDiarios     } from './scheduler/alertas'
 
 // ── Triggers ──────────────────────────────────────────────────────────────────
 export { propagarRazaoSocial } from './triggers/cliente-update'
+export {
+  eventoTarefaCriada,
+  eventoTarefaAtualizada,
+  eventoLancamentoCriado,
+  eventoLancamentoAtualizado,
+  eventoCompetenciaCriada,
+  eventoNfseEmitidaCriada,
+  eventoFiscalAtualizado,
+} from './triggers/cliente-events'

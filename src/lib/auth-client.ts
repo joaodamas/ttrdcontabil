@@ -9,7 +9,7 @@ import {
   type User,
 } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
-import { auth, db } from './firebase'
+import { getClientAuth, getClientDb } from './firebase'
 
 export interface UserSession {
   uid: string
@@ -20,7 +20,7 @@ export interface UserSession {
 }
 
 export async function signIn(email: string, password: string): Promise<UserSession> {
-  const cred = await signInWithEmailAndPassword(auth, email, password)
+  const cred = await signInWithEmailAndPassword(getClientAuth(), email, password)
 
   // Try to fetch the Firestore profile. If the document doesn't exist yet
   // (e.g. user was created directly in Firebase Auth console), we still allow
@@ -28,7 +28,7 @@ export async function signIn(email: string, password: string): Promise<UserSessi
   let nome = email
   let perfil = 'leitura'
   try {
-    const snap = await getDoc(doc(db, 'usuarios', cred.user.uid))
+    const snap = await getDoc(doc(getClientDb(), 'usuarios', cred.user.uid))
     if (snap.exists()) {
       const data = snap.data()
       if (data.ativo === false) throw new Error('Usuário inativo. Contate o administrador.')
@@ -56,18 +56,18 @@ export async function signIn(email: string, password: string): Promise<UserSessi
 }
 
 export async function signOut() {
-  await firebaseSignOut(auth)
+  await firebaseSignOut(getClientAuth())
 }
 
 export function onSession(callback: (session: UserSession | null) => void) {
-  return onAuthStateChanged(auth, async (user: User | null) => {
+  return onAuthStateChanged(getClientAuth(), async (user: User | null) => {
     if (!user) { callback(null); return }
     // Firebase Auth is the source of truth — if the user is authenticated,
     // we always return a session. The Firestore profile is optional metadata.
     let nome = user.email ?? ''
     let perfil = 'leitura'
     try {
-      const snap = await getDoc(doc(db, 'usuarios', user.uid))
+      const snap = await getDoc(doc(getClientDb(), 'usuarios', user.uid))
       if (snap.exists()) {
         const data = snap.data()
         if (data.ativo === false) { callback(null); return }

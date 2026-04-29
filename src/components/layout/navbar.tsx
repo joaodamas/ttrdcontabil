@@ -2,7 +2,7 @@
 
 import { memo, useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
 import {
@@ -17,15 +17,11 @@ import {
   CalendarDays,
   CheckSquare,
   FileText,
-  DollarSign,
   ClipboardCheck,
   Settings,
   Menu,
   X,
   Plus,
-  UserCog,
-  Wrench,
-  BarChart3,
   Wallet,
 } from 'lucide-react'
 import { getInitials } from '@/lib/utils'
@@ -94,8 +90,10 @@ export const Navbar = memo(function Navbar() {
   const cta = useCTA(pathname)
 
   useEffect(() => {
-    setOpenDropdown(null)
-    setMobileOpen(false)
+    queueMicrotask(() => {
+      setOpenDropdown(null)
+      setMobileOpen(false)
+    })
   }, [pathname])
 
   // Cleanup timer on unmount

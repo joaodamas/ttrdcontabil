@@ -31,21 +31,23 @@ export default function IrDetalhePage() {
 
   useEffect(() => {
     if (!id) return
-    setLoading(true)
-    Promise.all([
-      getDocument('ir_declaracoes', id),
-      listDocuments('ir_checklist', [
-        where('declaracaoId', '==', id),
-        orderBy('criadoEm', 'asc'),
-      ]),
-    ]).then(([declaracaoData, checklistData]) => {
-      if (!declaracaoData) {
-        router.push('/ir')
-        return
-      }
-      setDeclaracao(declaracaoData as Record<string, unknown>)
-      setChecklist(checklistData as Array<Record<string, unknown>>)
-    }).finally(() => setLoading(false))
+    queueMicrotask(() => {
+      setLoading(true)
+      Promise.all([
+        getDocument('ir_declaracoes', id),
+        listDocuments('ir_checklist', [
+          where('declaracaoId', '==', id),
+          orderBy('criadoEm', 'asc'),
+        ]),
+      ]).then(([declaracaoData, checklistData]) => {
+        if (!declaracaoData) {
+          router.push('/ir')
+          return
+        }
+        setDeclaracao(declaracaoData as Record<string, unknown>)
+        setChecklist(checklistData as Array<Record<string, unknown>>)
+      }).finally(() => setLoading(false))
+    })
   }, [id, router])
 
   if (loading) {

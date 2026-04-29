@@ -22,6 +22,13 @@ export type StatusRascunhoNfse = 'rascunho' | 'validando' | 'pronto_para_emitir'
 export type StatusNfse = 'emitida' | 'pendente_processamento' | 'rejeitada' | 'cancelada' | 'erro_integracao'
 export type TipoEventoNfse = 'emissao' | 'consulta' | 'cancelamento' | 'download_xml' | 'download_pdf' | 'erro' | 'reenvio'
 export type StatusFila = 'aguardando' | 'processando' | 'processado' | 'erro' | 'cancelado'
+export type TipoEventoCliente =
+  | 'tarefa'
+  | 'lancamento'
+  | 'competencia'
+  | 'nfse'
+  | 'fiscal'
+  | 'manual'
 
 // ============================================================
 // COLEÇÕES DO FIRESTORE
@@ -222,6 +229,22 @@ export interface LogAuditoriaDoc {
   dadosAntes?: Record<string, unknown>
   dadosDepois?: Record<string, unknown>
   ip?: string
+  criadoEm: Timestamp
+}
+
+// Coleção: events (timeline unificada do cliente)
+export interface ClienteEventoDoc {
+  clienteId: string
+  tipo: TipoEventoCliente
+  titulo: string
+  descricao?: string
+  origemColecao?: string
+  origemId?: string
+  metadata?: Record<string, unknown>
+  actorId?: string
+  actorNome?: string
+  actorAvatarUrl?: string
+  criadoPorId?: string
   criadoEm: Timestamp
 }
 

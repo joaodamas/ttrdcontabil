@@ -54,7 +54,9 @@ export default function ClienteFiscalPage() {
     }).finally(() => setLoading(false))
   }, [id, router])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    queueMicrotask(() => { void load() })
+  }, [load])
 
   if (loading) {
     return (

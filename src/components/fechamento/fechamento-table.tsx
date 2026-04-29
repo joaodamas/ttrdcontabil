@@ -1,10 +1,7 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import { toast } from 'sonner'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { ExternalLink, RefreshCw } from 'lucide-react'
+import { useState } from 'react'
+import { ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type StatusObrigacao = 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
@@ -57,7 +54,7 @@ const STATUS_LABEL: Record<StatusObrigacao, string> = {
   na:       '—',
 }
 
-function StatusCell({
+export function StatusCell({
   status,
   campo,
   id,

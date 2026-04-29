@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // JS gerado pelo tsc das Cloud Functions — não lintar na raiz
+    "functions/lib/**",
+    "functions/node_modules/**",
   ]),
 ]);
 

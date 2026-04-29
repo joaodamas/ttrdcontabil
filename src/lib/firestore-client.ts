@@ -4,16 +4,15 @@
  */
 import {
   collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, limit, serverTimestamp,
+  query, where, orderBy, limit, serverTimestamp, Timestamp,
   type QueryConstraint,
 } from 'firebase/firestore'
-import { db } from './firebase'
-import { getAuth } from 'firebase/auth'
+import { getClientDb, getClientAuth } from './firebase'
 
 // ── Generic helpers ───────────────────────────────────────────────────────────
 
 export async function getDocument<T>(col: string, id: string): Promise<(T & { id: string }) | null> {
-  const snap = await getDoc(doc(db, col, id))
+  const snap = await getDoc(doc(getClientDb(), col, id))
   if (!snap.exists()) return null
   return { id: snap.id, ...(snap.data() as T) }
 }
@@ -22,7 +21,7 @@ export async function listDocuments<T>(
   col: string,
   constraints: QueryConstraint[] = []
 ): Promise<Array<T & { id: string }>> {
-  const q = query(collection(db, col), ...constraints)
+  const q = query(collection(getClientDb(), col), ...constraints)
   const snap = await getDocs(q)
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as T) }))
 }
@@ -33,7 +32,7 @@ function stripUndefined(data: Record<string, unknown>): Record<string, unknown> 
 
 export async function createDocument(col: string, data: Record<string, unknown>) {
   const ref = await addDoc(
-    collection(db, col),
+    collection(getClientDb(), col),
     { ...stripUndefined(data), criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp() }
   )
   return ref.id
@@ -41,13 +40,13 @@ export async function createDocument(col: string, data: Record<string, unknown>)
 
 export async function updateDocument(col: string, id: string, data: Record<string, unknown>) {
   await updateDoc(
-    doc(db, col, id),
+    doc(getClientDb(), col, id),
     { ...stripUndefined(data), atualizadoEm: serverTimestamp() }
   )
 }
 
 export async function deleteDocument(col: string, id: string) {
-  await deleteDoc(doc(db, col, id))
+  await deleteDoc(doc(getClientDb(), col, id))
 }
 
 /**
@@ -55,8 +54,8 @@ export async function deleteDocument(col: string, id: string) {
  * Usado exclusivamente para clientes — mantém integridade referencial.
  */
 export async function softDeleteDocument(col: string, id: string) {
-  const uid = getAuth().currentUser?.uid ?? null
-  await updateDoc(doc(db, col, id), {
+  const uid = getClientAuth().currentUser?.uid ?? null
+  await updateDoc(doc(getClientDb(), col, id), {
     deletedAt:    serverTimestamp(),
     deletedById:  uid,
     atualizadoEm: serverTimestamp(),
@@ -153,4 +152,204 @@ export async function getNfseEmitidas(clienteId?: string) {
   const c: QueryConstraint[] = [orderBy('dataEmissao', 'desc'), limit(50)]
   if (clienteId) c.push(where('clienteId', '==', clienteId))
   return listDocuments('nfse_emitidas', c)
+}
+
+export type ClienteTimelineEvento = {
+  id: string
+  tipo: 'tarefa' | 'lancamento' | 'competencia' | 'nfse' | 'fiscal' | 'manual'
+  titulo: string
+  descricao?: string
+  data: Timestamp
+  severidade: 'baixa' | 'media' | 'alta'
+  actorId?: string
+  actorNome?: string
+  actorAvatarUrl?: string
+  href?: string
+  origemColecao?: string
+  origemId?: string
+}
+
+function toTs(value: unknown): Timestamp | null {
+  if (value && typeof value === 'object' && 'toDate' in (value as Record<string, unknown>)) {
+    return value as Timestamp
+  }
+  return null
+}
+
+/** Garante nome de ator sempre preenchido na timeline (UI / auditoria legível). */
+function nomeAtorOu(opcional: string | undefined, fallback: string): string {
+  const t = opcional?.trim()
+  return t && t.length > 0 ? t : fallback
+}
+
+export async function getClienteTimeline(clienteId: string, maxItems = 80): Promise<ClienteTimelineEvento[]> {
+  const [events, tarefas, lancamentos, competencias, nfse] = await Promise.all([
+    listDocuments<Record<string, unknown>>('events', [where('clienteId', '==', clienteId), limit(maxItems)]).catch(() => []),
+    listDocuments<Record<string, unknown>>('tarefas', [where('clienteId', '==', clienteId), limit(maxItems)]).catch(() => []),
+    listDocuments<Record<string, unknown>>('lancamentos', [where('clienteId', '==', clienteId), limit(maxItems)]).catch(() => []),
+    listDocuments<Record<string, unknown>>('competencias', [where('clienteId', '==', clienteId), limit(maxItems)]).catch(() => []),
+    listDocuments<Record<string, unknown>>('nfse_emitidas', [where('clienteId', '==', clienteId), limit(maxItems)]).catch(() => []),
+  ])
+
+  const mapped: ClienteTimelineEvento[] = [
+    ...events.map((e) => {
+      const md = e.metadata as Record<string, unknown> | undefined
+      const actorNomeMeta = md?.actorNome as string | undefined
+      const actorIdMeta = md?.actorId as string | undefined
+      const actorAvMeta = md?.actorAvatarUrl as string | undefined
+      return {
+        id: `event:${e.id}`,
+        tipo: (e.tipo as ClienteTimelineEvento['tipo']) ?? 'manual',
+        titulo: (e.titulo as string) ?? 'Evento',
+        descricao: e.descricao as string | undefined,
+        data: (toTs(e.criadoEm) ?? Timestamp.now()),
+        severidade: (md?.severidade as ClienteTimelineEvento['severidade']) ?? 'media',
+        actorId: actorIdMeta ?? (e.actorId as string | undefined) ?? 'system',
+        actorNome: nomeAtorOu(actorNomeMeta ?? (e.actorNome as string | undefined), 'Sistema'),
+        actorAvatarUrl: actorAvMeta ?? (e.actorAvatarUrl as string | undefined),
+        href: md?.href as string | undefined,
+        origemColecao: (e.origemColecao as string) ?? 'events',
+        origemId: (e.origemId as string) ?? e.id,
+      }
+    }),
+    ...tarefas.map((t) => ({
+      id: `tarefa:${t.id}`,
+      tipo: 'tarefa' as const,
+      titulo: `Tarefa: ${(t.titulo as string) ?? 'Sem título'}`,
+      descricao: `Status: ${(t.status as string) ?? '—'} • Prioridade: ${(t.prioridade as string) ?? 'normal'}`,
+      data: toTs(t.atualizadoEm) ?? toTs(t.criadoEm) ?? toTs(t.dataPrazo) ?? Timestamp.now(),
+      severidade: ((t.prioridade === 'urgente' || t.prioridade === 'alta') ? 'alta' : 'media') as ClienteTimelineEvento['severidade'],
+      actorId: (t.responsavelId as string | undefined) || undefined,
+      actorNome: nomeAtorOu(t.responsavelNome as string | undefined, 'Sem responsável'),
+      href: `/tarefas/${t.id}`,
+      origemColecao: 'tarefas',
+      origemId: t.id,
+    })),
+    ...lancamentos.map((l) => ({
+      id: `lancamento:${l.id}`,
+      tipo: 'lancamento' as const,
+      titulo: `Lançamento: ${(l.descricao as string) ?? 'Sem descrição'}`,
+      descricao: `Status: ${(l.status as string) ?? '—'} • Valor: ${String(l.valor ?? 0)}`,
+      data: toTs(l.atualizadoEm) ?? toTs(l.dataVencimento) ?? toTs(l.criadoEm) ?? Timestamp.now(),
+      severidade: (l.status === 'atrasado' ? 'alta' : 'media') as ClienteTimelineEvento['severidade'],
+      actorId:
+        (l.atualizadoPorId as string | undefined)
+        || (l.criadoPorId as string | undefined)
+        || undefined,
+      actorNome: nomeAtorOu(
+        (l.atualizadoPorNome as string | undefined) ?? (l.criadoPorNome as string | undefined),
+        'Sistema'
+      ),
+      href: '/financeiro',
+      origemColecao: 'lancamentos',
+      origemId: l.id,
+    })),
+    ...competencias.map((c) => ({
+      id: `competencia:${c.id}`,
+      tipo: 'competencia' as const,
+      titulo: `Competência: ${String(c.mes ?? '—')}/${String(c.ano ?? '—')}`,
+      descricao: `Status: ${(c.status as string) ?? '—'}`,
+      data: toTs(c.atualizadoEm) ?? toTs(c.criadoEm) ?? Timestamp.now(),
+      severidade: (c.status === 'aberta' ? 'alta' : c.status === 'em_andamento' ? 'media' : 'baixa') as ClienteTimelineEvento['severidade'],
+      actorId: (c.responsavelId as string | undefined) || undefined,
+      actorNome: nomeAtorOu(c.responsavelNome as string | undefined, 'Sem responsável'),
+      href: `/competencias/${c.id}`,
+      origemColecao: 'competencias',
+      origemId: c.id,
+    })),
+    ...nfse.map((n) => ({
+      id: `nfse:${n.id}`,
+      tipo: 'nfse' as const,
+      titulo: `NFS-e: ${(n.numeroNfse as string) ?? 'Sem número'}`,
+      descricao: `Status: ${(n.status as string) ?? '—'}`,
+      data: toTs(n.dataEmissao) ?? toTs(n.atualizadoEm) ?? toTs(n.criadoEm) ?? Timestamp.now(),
+      severidade: (n.status === 'rejeitada' || n.status === 'erro_integracao' ? 'alta' : 'media') as ClienteTimelineEvento['severidade'],
+      actorId: (n.emitidoPorId as string | undefined) || undefined,
+      actorNome: nomeAtorOu(n.emitidoPorNome as string | undefined, 'Sistema'),
+      href: '/fiscal/historico',
+      origemColecao: 'nfse_emitidas',
+      origemId: n.id,
+    })),
+  ]
+
+  return mapped
+    .sort((a, b) => b.data.toMillis() - a.data.toMillis())
+    .slice(0, maxItems)
+}
+
+type HojeTaskLike = {
+  id: string
+  titulo?: string
+  status?: string
+  prioridade?: string
+  responsavelId?: string
+  responsavelNome?: string
+  clienteNome?: string
+  dataPrazo?: Timestamp
+}
+
+type FechamentoBloqueioLike = {
+  id: string
+  clienteNome?: string
+  dasStatus?: string
+  esocialStatus?: string
+  reinfStatus?: string
+  fgtsStatus?: string
+  mes?: number
+  ano?: number
+}
+
+export async function getHojeCockpit(opts: { responsavelId?: string } = {}) {
+  const hoje = new Date()
+  const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 0, 0, 0)
+  const fimHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 23, 59, 59)
+  const em7Dias = new Date(fimHoje)
+  em7Dias.setDate(em7Dias.getDate() + 7)
+
+  const inicioHojeTs = Timestamp.fromDate(inicioHoje)
+  const fimHojeTs = Timestamp.fromDate(fimHoje)
+  const em7DiasTs = Timestamp.fromDate(em7Dias)
+
+  const tarefasBase: QueryConstraint[] = [
+    where('status', 'in', ['pendente', 'em_andamento']),
+    ...(opts.responsavelId ? [where('responsavelId', '==', opts.responsavelId)] : []),
+    orderBy('dataPrazo', 'asc'),
+    limit(300),
+  ]
+
+  const [tarefas, fechamentos] = await Promise.all([
+    listDocuments<Record<string, unknown>>('tarefas', tarefasBase),
+    listDocuments<Record<string, unknown>>(
+      'fechamentos',
+      [where('mes', '==', hoje.getMonth() + 1), where('ano', '==', hoje.getFullYear()), limit(500)]
+    ),
+  ])
+
+  const atrasadas: HojeTaskLike[] = []
+  const hojeList: HojeTaskLike[] = []
+  const proximos7Dias: HojeTaskLike[] = []
+
+  for (const t of tarefas as HojeTaskLike[]) {
+    if (!t.dataPrazo) continue
+    const prazo = t.dataPrazo
+    if (prazo < inicioHojeTs) {
+      atrasadas.push(t)
+    } else if (prazo >= inicioHojeTs && prazo <= fimHojeTs) {
+      hojeList.push(t)
+    } else if (prazo > fimHojeTs && prazo <= em7DiasTs) {
+      proximos7Dias.push(t)
+    }
+  }
+
+  const bloqueiosFechamento: FechamentoBloqueioLike[] = (fechamentos as FechamentoBloqueioLike[]).filter((f) => {
+    const status = [f.dasStatus, f.esocialStatus, f.reinfStatus, f.fgtsStatus]
+    return status.some((s) => s === 'pendente' || s === 'parcial')
+  })
+
+  return {
+    atrasadas,
+    hoje: hojeList,
+    proximos7Dias,
+    bloqueiosFechamento,
+  }
 }

@@ -1,18 +1,37 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Timestamp } from 'firebase/firestore'
 import { where, orderBy, limit } from 'firebase/firestore'
 
-import { getDocument, listDocuments } from '@/lib/firestore-client'
-import { formatCpfCnpj, formatDate, formatCurrency, formatMesAno , tsToDate } from '@/lib/utils'
+import { getDocument, listDocuments, getClienteTimeline, type ClienteTimelineEvento } from '@/lib/firestore-client'
+import {
+  cn,
+  formatCpfCnpj,
+  formatDate,
+  formatCurrency,
+  formatMesAno,
+  tsToDate,
+} from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Mail, MapPin, Loader2, Pencil, ShieldCheck, ShieldAlert, ShieldOff } from 'lucide-react'
+import { InlineAlert } from '@/components/ui/inline-alert'
+import {
+  ArrowLeft,
+  Mail,
+  MapPin,
+  Loader2,
+  Pencil,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldOff,
+  LayoutDashboard,
+  ListChecks,
+  Wallet,
+  FileText,
+} from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 
@@ -30,6 +49,45 @@ const REGIME_LABELS: Record<string, string> = {
   isento: 'Isento',
 }
 
+type SaudeChip = 'ok' | 'atencao' | 'risco'
+
+function HealthChip({ label, estado }: { label: string; estado: SaudeChip }) {
+  const cfg = {
+    ok: {
+      dot: 'bg-emerald-500',
+      border: 'border-emerald-500/20',
+      bg: 'bg-emerald-500/5',
+      titulo: 'text-emerald-900 dark:text-emerald-100',
+      sub: 'Sem alertas no escopo atual',
+    },
+    atencao: {
+      dot: 'bg-amber-500',
+      border: 'border-amber-500/25',
+      bg: 'bg-amber-500/5',
+      titulo: 'text-amber-950 dark:text-amber-100',
+      sub: 'Acompanhar',
+    },
+    risco: {
+      dot: 'bg-destructive',
+      border: 'border-destructive/25',
+      bg: 'bg-destructive/5',
+      titulo: 'text-destructive',
+      sub: 'Ação necessária',
+    },
+  }[estado]
+  return (
+    <div
+      className={`flex min-w-[140px] flex-1 items-center gap-2 rounded-xl border px-3 py-2 ${cfg.border} ${cfg.bg}`}
+    >
+      <span className={`h-2 w-2 shrink-0 rounded-full ${cfg.dot}`} />
+      <div className="min-w-0">
+        <p className={`text-xs font-semibold ${cfg.titulo}`}>{label}</p>
+        <p className="truncate text-[10px] text-muted-foreground">{cfg.sub}</p>
+      </div>
+    </div>
+  )
+}
+
 export default function ClienteDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
@@ -39,8 +97,22 @@ export default function ClienteDetailPage() {
   const [competencias,setCompetencias]= useState<Array<Record<string, unknown>>>([])
   const [lancamentos, setLancamentos] = useState<Array<Record<string, unknown>>>([])
   const [fiscal,      setFiscal]      = useState<Record<string, unknown> | null>(null)
+  const [timeline,    setTimeline]    = useState<ClienteTimelineEvento[]>([])
   const [loading,     setLoading]     = useState(true)
   const [configOpen,  setConfigOpen]  = useState(false)
+  const [activeSection, setActiveSection] = useState<string>('sec-timeline')
+
+  const sectionNavItems = useMemo(
+    () =>
+      [
+        { id: 'sec-timeline', label: 'Timeline', count: timeline.length },
+        { id: 'sec-servicos', label: 'Serviços', count: servicos.length },
+        { id: 'sec-competencias', label: 'Competências', count: competencias.length },
+        { id: 'sec-financeiro', label: 'Financeiro', count: lancamentos.length },
+        { id: 'sec-fiscal', label: 'Fiscal' },
+      ] as const,
+    [timeline.length, servicos.length, competencias.length, lancamentos.length]
+  )
 
   function loadFiscal() {
     if (!id) return
@@ -51,30 +123,63 @@ export default function ClienteDetailPage() {
 
   useEffect(() => {
     if (!id) return
-    setLoading(true)
+    queueMicrotask(() => {
+      setLoading(true)
 
-    function get<T>(p: Promise<T>): Promise<T | null> {
-      return p.catch(() => null)
-    }
-
-    Promise.all([
-      get(getDocument('clientes', id)),
-      get(listDocuments('clientes_servicos', [where('clienteId', '==', id), orderBy('dataInicio', 'desc')])),
-      get(listDocuments('competencias', [where('clienteId', '==', id), orderBy('ano', 'desc'), orderBy('mes', 'desc'), limit(20)])),
-      get(listDocuments('lancamentos', [where('clienteId', '==', id), orderBy('dataVencimento', 'desc'), limit(20)])),
-      get(listDocuments('clientes_fiscal', [where('clienteId', '==', id), limit(1)])),
-    ]).then(([clienteData, servicosData, competenciasData, lancamentosData, fiscalData]) => {
-      if (!clienteData) {
-        router.push('/clientes')
-        return
+      function get<T>(p: Promise<T>): Promise<T | null> {
+        return p.catch(() => null)
       }
-      setCliente(clienteData as Record<string, unknown>)
-      setServicos((servicosData ?? []) as Array<Record<string, unknown>>)
-      setCompetencias((competenciasData ?? []) as Array<Record<string, unknown>>)
-      setLancamentos((lancamentosData ?? []) as Array<Record<string, unknown>>)
-      setFiscal(fiscalData && fiscalData.length > 0 ? fiscalData[0] as Record<string, unknown> : null)
-    }).finally(() => setLoading(false))
+
+      Promise.all([
+        get(getDocument('clientes', id)),
+        get(listDocuments('clientes_servicos', [where('clienteId', '==', id), orderBy('dataInicio', 'desc')])),
+        get(listDocuments('competencias', [where('clienteId', '==', id), orderBy('ano', 'desc'), orderBy('mes', 'desc'), limit(20)])),
+        get(listDocuments('lancamentos', [where('clienteId', '==', id), orderBy('dataVencimento', 'desc'), limit(20)])),
+        get(listDocuments('clientes_fiscal', [where('clienteId', '==', id), limit(1)])),
+        get(getClienteTimeline(id, 60)),
+      ]).then(([clienteData, servicosData, competenciasData, lancamentosData, fiscalData, timelineData]) => {
+        if (!clienteData) {
+          router.push('/clientes')
+          return
+        }
+        setCliente(clienteData as Record<string, unknown>)
+        setServicos((servicosData ?? []) as Array<Record<string, unknown>>)
+        setCompetencias((competenciasData ?? []) as Array<Record<string, unknown>>)
+        setLancamentos((lancamentosData ?? []) as Array<Record<string, unknown>>)
+        setFiscal(fiscalData && fiscalData.length > 0 ? fiscalData[0] as Record<string, unknown> : null)
+        setTimeline((timelineData ?? []) as ClienteTimelineEvento[])
+      }).finally(() => setLoading(false))
+    })
   }, [id, router])
+
+  useEffect(() => {
+    if (!cliente || loading) return
+    let obs: IntersectionObserver | null = null
+    let cancelled = false
+    const t = window.setTimeout(() => {
+      if (cancelled) return
+      const els = sectionNavItems
+        .map((s) => document.getElementById(s.id))
+        .filter((n): n is HTMLElement => !!n)
+      if (els.length === 0) return
+      obs = new IntersectionObserver(
+        (entries) => {
+          const visible = entries
+            .filter((e) => e.isIntersecting && e.intersectionRatio > 0)
+            .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
+          const sid = visible[0]?.target?.id
+          if (sid) setActiveSection(sid)
+        },
+        { root: null, rootMargin: '-10% 0px -42% 0px', threshold: [0, 0.08, 0.2, 0.35] }
+      )
+      els.forEach((el) => obs!.observe(el))
+    }, 0)
+    return () => {
+      cancelled = true
+      window.clearTimeout(t)
+      obs?.disconnect()
+    }
+  }, [cliente, loading, sectionNavItems])
 
   if (loading) {
     return (
@@ -88,8 +193,75 @@ export default function ClienteDetailPage() {
 
   const statusInfo = STATUS_LABELS[cliente.status as string] ?? { label: String(cliente.status), variant: 'outline' as const }
 
+  const agora = new Date()
+  const saudeFinanceiro: SaudeChip = (() => {
+    const overdue = lancamentos.some((l) => {
+      if (l.status !== 'pendente' || l.tipo !== 'receita') return false
+      const d = tsToDate(l.dataVencimento)
+      return !!d && d < agora
+    })
+    if (overdue) return 'risco'
+    if (lancamentos.some((l) => l.status === 'pendente' && l.tipo === 'receita')) return 'atencao'
+    return 'ok'
+  })()
+
+  const saudeFiscal: SaudeChip = fiscal ? 'ok' : 'risco'
+
+  const saudeOperacional: SaudeChip = (() => {
+    const critico = timeline.some(
+      (e) =>
+        e.severidade === 'alta' &&
+        ['tarefa', 'competencia', 'fiscal', 'nfse', 'lancamento'].includes(e.tipo)
+    )
+    if (critico) return 'risco'
+    if (competencias.some((c) => c.status === 'aberta' || c.status === 'em_andamento')) return 'atencao'
+    return 'ok'
+  })()
+
+  type ProximoPasso = { titulo: string; desc: string; href: string; destaque: 'danger' | 'warning' | 'default' }
+  const proximosPassos: ProximoPasso[] = []
+  if (!fiscal) {
+    proximosPassos.push({
+      titulo: 'Configurar NFS-e',
+      desc: 'Sem configuração fiscal — emissão e conformidade ficam bloqueadas.',
+      href: `/clientes/${id}/fiscal`,
+      destaque: 'danger',
+    })
+  }
+  const recebivelAtrasado = lancamentos.find((l) => {
+    if (l.status !== 'pendente' || l.tipo !== 'receita') return false
+    const d = tsToDate(l.dataVencimento)
+    return !!d && d < agora
+  })
+  if (recebivelAtrasado) {
+    proximosPassos.push({
+      titulo: 'Cobrar recebível atrasado',
+      desc: String(recebivelAtrasado.descricao ?? 'Receita pendente'),
+      href: `/financeiro?clienteId=${id}&status=pendente`,
+      destaque: 'danger',
+    })
+  }
+  const compAberta = competencias.find((c) => c.status === 'aberta' || c.status === 'em_andamento')
+  if (compAberta) {
+    proximosPassos.push({
+      titulo: `Competência ${formatMesAno(compAberta.mes as number, compAberta.ano as number)}`,
+      desc: 'Avance o fechamento operacional deste período.',
+      href: `/competencias/${compAberta.id}`,
+      destaque: 'warning',
+    })
+  }
+  if (proximosPassos.length === 0) {
+    proximosPassos.push({
+      titulo: 'Próxima entrega com o cliente',
+      desc: 'Sem pendências críticas detectadas — registre tarefa ou cobrança preventiva.',
+      href: `/tarefas?clienteId=${id}`,
+      destaque: 'default',
+    })
+  }
+  const passosExibir = proximosPassos.slice(0, 3)
+
   return (
-    <div className="space-y-6">
+    <div className="stack-6">
       <div className="flex items-center gap-3">
         <Link href="/clientes">
           <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -98,11 +270,11 @@ export default function ClienteDetailPage() {
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">{cliente.razaoSocial as string}</h2>
+            <h2 className="text-title">{cliente.razaoSocial as string}</h2>
             <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
           </div>
           {cliente.nomeFantasia ? (
-            <p className="text-sm text-muted-foreground">{cliente.nomeFantasia as string}</p>
+            <p className="text-subtle">{cliente.nomeFantasia as string}</p>
           ) : null}
         </div>
         <Link href={`/clientes/${id}/editar`}>
@@ -112,61 +284,219 @@ export default function ClienteDetailPage() {
         </Link>
       </div>
 
-      {/* Info geral */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardContent className="pt-4 space-y-1">
-            <p className="text-xs text-muted-foreground">CPF / CNPJ</p>
-            <p className="font-mono text-sm font-medium">
-              {formatCpfCnpj(cliente.cpfCnpj as string)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 space-y-1">
-            <p className="text-xs text-muted-foreground">Regime Tributário</p>
-            <p className="text-sm font-medium">
-              {cliente.regimeTributario
-                ? REGIME_LABELS[cliente.regimeTributario as string] ?? String(cliente.regimeTributario)
-                : '—'}
-            </p>
-          </CardContent>
-        </Card>
-        {cliente.email ? (
-          <Card>
-            <CardContent className="pt-4 space-y-1">
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <Mail className="h-3 w-3" /> E-mail
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(260px,3fr)] lg:items-start">
+        <aside className="order-1 space-y-4 lg:order-2 lg:sticky lg:top-6 lg:self-start">
+          <div className="space-y-4">
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Saúde do cliente
               </p>
-              <p className="text-sm font-medium truncate">{cliente.email as string}</p>
+              <div className="flex flex-col gap-2">
+                <HealthChip label="Operacional" estado={saudeOperacional} />
+                <HealthChip label="Fiscal" estado={saudeFiscal} />
+                <HealthChip label="Financeiro" estado={saudeFinanceiro} />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href={`/tarefas?clienteId=${id}`}
+                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+              >
+                <ListChecks className="mr-1.5 h-3.5 w-3.5" />
+                Tarefas
+              </Link>
+              <Link
+                href={`/financeiro?clienteId=${id}`}
+                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+              >
+                <Wallet className="mr-1.5 h-3.5 w-3.5" />
+                Financeiro
+              </Link>
+              <Link
+                href={`/clientes/${id}/fiscal`}
+                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+              >
+                <FileText className="mr-1.5 h-3.5 w-3.5" />
+                Fiscal
+              </Link>
+              <Link
+                href={`/competencias?clienteId=${id}`}
+                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+              >
+                <LayoutDashboard className="mr-1.5 h-3.5 w-3.5" />
+                Competências
+              </Link>
+            </div>
+
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Próximos passos sugeridos</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {passosExibir.map((p, i) => (
+                  <Link
+                    key={`${p.href}-${i}`}
+                    href={p.href}
+                    className={`flex flex-col rounded-lg border px-3 py-2 transition-colors hover:bg-background/80 sm:flex-row sm:items-center sm:justify-between ${
+                      p.destaque === 'danger'
+                        ? 'border-destructive/30 bg-destructive/5'
+                        : p.destaque === 'warning'
+                          ? 'border-amber-500/30 bg-amber-500/5'
+                          : 'border-border/80 bg-card'
+                    }`}
+                  >
+                    <div>
+                      <p className="text-sm font-semibold">{p.titulo}</p>
+                      <p className="text-xs text-muted-foreground">{p.desc}</p>
+                    </div>
+                    <span className="mt-1 text-xs font-medium text-primary sm:mt-0">Abrir →</span>
+                  </Link>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Resumo cadastral
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div>
+                <p className="text-[10px] text-muted-foreground">CPF / CNPJ</p>
+                <p className="font-mono text-xs font-medium break-all">
+                  {formatCpfCnpj(cliente.cpfCnpj as string)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground">Regime tributário</p>
+                <p className="text-xs font-medium">
+                  {cliente.regimeTributario
+                    ? REGIME_LABELS[cliente.regimeTributario as string] ?? String(cliente.regimeTributario)
+                    : '—'}
+                </p>
+              </div>
+              {cliente.email ? (
+                <div>
+                  <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    <Mail className="h-3 w-3 shrink-0" /> E-mail
+                  </p>
+                  <p className="text-xs font-medium break-all">{cliente.email as string}</p>
+                </div>
+              ) : null}
+              {(cliente.cidade || cliente.uf) ? (
+                <div>
+                  <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    <MapPin className="h-3 w-3 shrink-0" /> Localização
+                  </p>
+                  <p className="text-xs font-medium">
+                    {[cliente.cidade, cliente.uf].filter(Boolean).join(' / ')}
+                  </p>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
-        ) : null}
-        {(cliente.cidade || cliente.uf) ? (
+        </aside>
+
+        <div className="order-2 min-w-0 space-y-8 lg:order-1">
+          <nav
+            aria-label="Seções do cliente"
+            className="sticky top-14 z-20 -mx-1 flex gap-1 overflow-x-auto rounded-xl border border-border/80 bg-card/95 px-2 py-2 shadow-sm backdrop-blur-md supports-backdrop-filter:bg-card/80"
+          >
+            {sectionNavItems.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => {
+                  document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  setActiveSection(s.id)
+                }}
+                className={cn(
+                  'shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
+                  activeSection === s.id
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+                )}
+              >
+                {s.label}
+                {'count' in s ? ` (${s.count})` : ''}
+              </button>
+            ))}
+          </nav>
+
+          <section id="sec-timeline" className="scroll-mt-28">
           <Card>
-            <CardContent className="pt-4 space-y-1">
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <MapPin className="h-3 w-3" /> Localização
-              </p>
-              <p className="text-sm font-medium">
-                {[cliente.cidade, cliente.uf].filter(Boolean).join(' / ')}
-              </p>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Cliente 360 — Histórico unificado</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {timeline.some((ev) => ev.severidade === 'alta') && (
+                <InlineAlert
+                  tone="warning"
+                  title="Há eventos de alta severidade"
+                  description="Priorize os itens críticos para evitar impacto no fechamento e no financeiro."
+                  className="mb-3"
+                />
+              )}
+              {timeline.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhum evento ainda nesta linha do tempo. Tarefas, competências, fiscal e financeiro passam a aparecer aqui
+                  conforme o time trabalha o cliente.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {timeline.map((ev) => (
+                    <div key={ev.id} className="surface-card p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium">{ev.titulo}</p>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={ev.severidade === 'alta' ? 'destructive' : ev.severidade === 'media' ? 'secondary' : 'outline'}>
+                            {ev.severidade}
+                          </Badge>
+                          <Badge variant="outline">{ev.tipo}</Badge>
+                        </div>
+                      </div>
+                      {ev.descricao ? (
+                        <p className="text-xs text-muted-foreground mt-1">{ev.descricao}</p>
+                      ) : null}
+                      <div className="mt-1 flex items-center gap-2">
+                        {ev.actorAvatarUrl ? (
+                          <img
+                            src={ev.actorAvatarUrl}
+                            alt={ev.actorNome ?? 'Ator'}
+                            className="h-5 w-5 rounded-full object-cover"
+                          />
+                        ) : (
+                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
+                            {(ev.actorNome ?? '—').slice(0, 1).toUpperCase()}
+                          </span>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground/80">Ator: </span>
+                          {ev.actorNome ?? 'Sistema'}
+                        </p>
+                      </div>
+                      <div className="mt-1.5 flex items-center justify-between gap-2">
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(tsToDate(ev.data))} • {ev.origemColecao ?? 'events'}
+                        </p>
+                        {ev.href ? (
+                          <Link href={ev.href} className="text-xs text-primary hover:underline">
+                            Abrir
+                          </Link>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
-        ) : null}
-      </div>
+          </section>
 
-      {/* Tabs */}
-      <Tabs defaultValue="servicos">
-        <TabsList>
-          <TabsTrigger value="servicos">Serviços ({servicos.length})</TabsTrigger>
-          <TabsTrigger value="competencias">Competências ({competencias.length})</TabsTrigger>
-          <TabsTrigger value="financeiro">Financeiro ({lancamentos.length})</TabsTrigger>
-          <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
-        </TabsList>
-
-        {/* Serviços */}
-        <TabsContent value="servicos" className="mt-4">
+          <section id="sec-servicos" className="scroll-mt-28">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <CardTitle className="text-sm">Serviços Vinculados</CardTitle>
@@ -176,7 +506,9 @@ export default function ClienteDetailPage() {
             </CardHeader>
             <CardContent>
               {servicos.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum serviço vinculado.</p>
+                <p className="text-sm text-muted-foreground">
+                  Nenhum serviço vinculado. Cadastre contratos e honorários para refletir o escopo atendido.
+                </p>
               ) : (
                 <div className="divide-y">
                   {servicos.map((s) => (
@@ -201,10 +533,9 @@ export default function ClienteDetailPage() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+          </section>
 
-        {/* Competências */}
-        <TabsContent value="competencias" className="mt-4">
+          <section id="sec-competencias" className="scroll-mt-28">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <CardTitle className="text-sm">Competências</CardTitle>
@@ -214,7 +545,9 @@ export default function ClienteDetailPage() {
             </CardHeader>
             <CardContent>
               {competencias.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma competência.</p>
+                <p className="text-sm text-muted-foreground">
+                  Nenhuma competência registrada. Abra uma competência para acompanhar o fechamento por período.
+                </p>
               ) : (
                 <div className="divide-y">
                   {competencias.map((c) => (
@@ -238,10 +571,9 @@ export default function ClienteDetailPage() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+          </section>
 
-        {/* Financeiro */}
-        <TabsContent value="financeiro" className="mt-4">
+          <section id="sec-financeiro" className="scroll-mt-28">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <CardTitle className="text-sm">Lançamentos</CardTitle>
@@ -251,7 +583,9 @@ export default function ClienteDetailPage() {
             </CardHeader>
             <CardContent>
               {lancamentos.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum lançamento.</p>
+                <p className="text-sm text-muted-foreground">
+                  Nenhum lançamento recente. Lançamentos de receita e despesa aparecem aqui com atalho para o financeiro.
+                </p>
               ) : (
                 <div className="divide-y">
                   {lancamentos.map((l) => (
@@ -287,10 +621,9 @@ export default function ClienteDetailPage() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+          </section>
 
-        {/* Fiscal */}
-        <TabsContent value="fiscal" className="mt-4 space-y-4">
+          <section id="sec-fiscal" className="scroll-mt-28 space-y-4">
           {(() => {
             const creds      = (fiscal?.credenciais ?? {}) as Record<string, unknown>
             const ibge       = fiscal?.municipioIbge as string | undefined
@@ -429,8 +762,9 @@ export default function ClienteDetailPage() {
             } : undefined}
             onSaved={loadFiscal}
           />
-        </TabsContent>
-      </Tabs>
+          </section>
+        </div>
+      </div>
     </div>
   )
 }

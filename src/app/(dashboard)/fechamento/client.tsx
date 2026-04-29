@@ -1,13 +1,25 @@
 'use client'
 
-import { useState, useEffect, useTransition, useCallback, Suspense } from 'react'
+import { useState, useEffect, useTransition, useCallback, Suspense, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { FechamentoTable } from '@/components/fechamento/fechamento-table'
+import { FechamentoPendenciasCards } from '@/components/fechamento/fechamento-pendencias-cards'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
-import { RefreshCw, Plus, CheckCircle2, Clock, AlertCircle, Loader2 } from 'lucide-react'
+import { InlineAlert } from '@/components/ui/inline-alert'
+import { TableRowSkeleton } from '@/components/ui/skeleton'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { RefreshCw, Plus, CheckCircle2, Clock, AlertCircle, ClipboardList } from 'lucide-react'
 import {
   getFechamentos,
   getClientes,
@@ -59,6 +71,7 @@ function FechamentoContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
+  const tabelaRef = useRef<HTMLDivElement>(null)
 
   const now = new Date()
   const mes = parseInt(searchParams.get('mes') ?? String(now.getMonth() + 1))
@@ -69,6 +82,21 @@ function FechamentoContent() {
   const [fechamentos, setFechamentos] = useState<FechamentoRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [gerando, setGerando] = useState(false)
+  const [revisaoDialogOpen, setRevisaoDialogOpen] = useState(false)
+  const [revisaoNota, setRevisaoNota] = useState('')
+  const [revisaoSalva, setRevisaoSalva] = useState<{ nota: string; at: string } | null>(null)
+
+  const revisaoStorageKey = `ttrd-fechamento-revisao:v1:${ano}:${mes}`
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(revisaoStorageKey)
+      if (raw) setRevisaoSalva(JSON.parse(raw) as { nota: string; at: string })
+      else setRevisaoSalva(null)
+    } catch {
+      setRevisaoSalva(null)
+    }
+  }, [revisaoStorageKey])
 
   useEffect(() => {
     let cancelled = false
@@ -157,6 +185,20 @@ function FechamentoContent() {
     }
   }, [])
 
+  function registrarRevisaoMes() {
+    const payload = { nota: revisaoNota.trim(), at: new Date().toISOString() }
+    try {
+      localStorage.setItem(revisaoStorageKey, JSON.stringify(payload))
+      setRevisaoSalva(payload)
+      toast.success('Revisão registrada neste dispositivo.')
+    } catch {
+      toast.error('Não foi possível salvar o registro')
+      return
+    }
+    setRevisaoDialogOpen(false)
+    setRevisaoNota('')
+  }
+
   // Resumo stats
   const total = fechamentos.length
   const enviados = fechamentos.filter(
@@ -167,14 +209,14 @@ function FechamentoContent() {
   const pct = total > 0 ? Math.round((enviados / total) * 100) : 0
 
   return (
-    <div className="space-y-5">
+    <div className="stack-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Fechamento Mensal</h2>
-          <p className="text-sm text-muted-foreground">{mesLabel} / {ano}</p>
+          <h2 className="text-title">Fechamento Mensal</h2>
+          <p className="text-subtle">{mesLabel} / {ano}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -184,12 +226,65 @@ function FechamentoContent() {
             <RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
             Atualizar
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setRevisaoDialogOpen(true)}
+            disabled={loading}
+          >
+            <ClipboardList className="w-4 h-4 mr-1" />
+            Encerrar revisão do mês
+          </Button>
           <Button size="sm" onClick={gerarFechamento} disabled={gerando || loading}>
             <Plus className="w-4 h-4 mr-1" />
             {gerando ? 'Gerando...' : 'Gerar Fechamento'}
           </Button>
         </div>
       </div>
+
+      <Dialog open={revisaoDialogOpen} onOpenChange={setRevisaoDialogOpen}>
+        <DialogContent className="max-w-md" showCloseButton>
+          <DialogHeader>
+            <DialogTitle>Encerrar revisão de {mesLabel} / {ano}</DialogTitle>
+            <DialogDescription>
+              Registro local neste navegador (por competência). Útil para ritual de fechamento; auditoria no servidor pode ser adicionada depois.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Observação opcional (ex.: conferido com sócio, pendências externas…)"
+            value={revisaoNota}
+            onChange={(e) => setRevisaoNota(e.target.value)}
+            className="min-h-24"
+          />
+          <DialogFooter className="flex flex-row flex-wrap justify-end gap-2 border-0 bg-transparent p-0 sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => setRevisaoDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={registrarRevisaoMes}>
+              Confirmar encerramento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {revisaoSalva ? (
+        <InlineAlert
+          tone="success"
+          title="Revisão do mês registrada neste dispositivo"
+          description={
+            `${new Date(revisaoSalva.at).toLocaleString('pt-BR')}` +
+            (revisaoSalva.nota ? ` — ${revisaoSalva.nota}` : '')
+          }
+        />
+      ) : null}
+
+      {pendentes > 0 && (
+        <InlineAlert
+          tone="warning"
+          title={`${pendentes} cliente(s) com pendência de fechamento`}
+          description="Use os filtros e atualização em lote para avançar os status críticos primeiro."
+        />
+      )}
 
       {/* Filtros */}
       <div className="flex flex-wrap gap-3">
@@ -292,14 +387,30 @@ function FechamentoContent() {
         </div>
       )}
 
+      {!loading && total > 0 ? (
+        <FechamentoPendenciasCards
+          fechamentos={fechamentos}
+          onUpdate={handleUpdate}
+          onIrParaTabela={() =>
+            tabelaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+        />
+      ) : null}
+
       {/* Loading state */}
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-        </div>
-      ) : (
-        <FechamentoTable fechamentos={fechamentos} onUpdate={handleUpdate} />
-      )}
+      <div ref={tabelaRef} id="fechamento-tabela">
+        {loading ? (
+          <div className="rounded-lg border bg-card overflow-hidden">
+            <table className="w-full text-sm">
+              <tbody className="divide-y divide-border">
+                <TableRowSkeleton cols={6} rows={8} />
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <FechamentoTable fechamentos={fechamentos} onUpdate={handleUpdate} />
+        )}
+      </div>
     </div>
   )
 }
@@ -307,8 +418,12 @@ function FechamentoContent() {
 export function FechamentoClientPage() {
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="w-5 h-5 animate-spin" />
+      <div className="rounded-lg border bg-card overflow-hidden">
+        <table className="w-full text-sm">
+          <tbody className="divide-y divide-border">
+            <TableRowSkeleton cols={6} rows={8} />
+          </tbody>
+        </table>
       </div>
     }>
       <FechamentoContent />

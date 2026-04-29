@@ -1,28 +1,23 @@
 'use client'
 
-import { memo, useState, useEffect } from 'react'
+import { memo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
+import { canAccessTela, type TelaKey } from '@/lib/permissions'
 import {
-  LayoutDashboard,
+  Sun,
   Users,
-  CalendarDays,
-  CheckSquare,
-  FileText,
-  DollarSign,
-  Receipt,
+  BriefcaseBusiness,
+  Wallet,
+  BarChart3,
   Settings,
   Building2,
   LogOut,
   ChevronRight,
-  ClipboardCheck,
   PanelLeftClose,
   PanelLeftOpen,
-  Wallet,
-  UserCog,
-  Wrench,
 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { getInitials } from '@/lib/utils'
@@ -31,7 +26,8 @@ type NavItem = {
   href: string
   label: string
   icon: React.ComponentType<{ className?: string; size?: number }>
-  telaKey?: string
+  telaKey?: TelaKey
+  perfis?: string[]
 }
 
 type NavSection = {
@@ -42,40 +38,16 @@ type NavSection = {
 
 const NAV_SECTIONS: NavSection[] = [
   {
-    label: 'Principal',
+    label: 'Navegação',
     items: [
-      { href: '/dashboard',  label: 'Dashboard', icon: LayoutDashboard },
-      { href: '/clientes',   label: 'Clientes',  icon: Users,           telaKey: 'clientes' },
+      { href: '/hoje',       label: 'Hoje',          icon: Sun },
+      { href: '/clientes',   label: 'Clientes',      icon: Users,             telaKey: 'clientes' },
+      { href: '/tarefas',    label: 'Operação',      icon: BriefcaseBusiness, telaKey: 'tarefas' },
+      { href: '/financeiro', label: 'Financeiro',    icon: Wallet,           telaKey: 'financeiro', perfis: ['admin', 'financeiro'] },
+      { href: '/dashboard',  label: 'Relatórios',    icon: BarChart3,         perfis: ['admin', 'fiscal', 'financeiro'] },
+      { href: '/admin',      label: 'Configurações', icon: Settings,         telaKey: 'admin', perfis: ['admin'] },
     ],
   },
-  {
-    label: 'Operação',
-    items: [
-      { href: '/competencias', label: 'Competências',      icon: CalendarDays,    telaKey: 'competencias' },
-      { href: '/tarefas',      label: 'Tarefas',           icon: CheckSquare,     telaKey: 'tarefas' },
-      { href: '/fechamento',   label: 'Fechamento Mensal', icon: ClipboardCheck,  telaKey: 'fechamento' },
-    ],
-  },
-  {
-    label: 'Fiscal & Faturamento',
-    perfis: ['admin', 'fiscal', 'financeiro'],
-    items: [
-      { href: '/fiscal', label: 'NFS-e',            icon: Receipt,  telaKey: 'fiscal' },
-      { href: '/ir',     label: 'Imposto de Renda', icon: FileText, telaKey: 'ir' },
-    ],
-  },
-  {
-    label: 'Financeiro',
-    items: [
-      { href: '/financeiro', label: 'Lançamentos', icon: Wallet, telaKey: 'financeiro' },
-    ],
-  },
-]
-
-const ADMIN_ITEMS: NavItem[] = [
-  { href: '/admin',          label: 'Administração',    icon: Settings, telaKey: 'admin' },
-  { href: '/admin/usuarios', label: 'Usuários',         icon: UserCog,  telaKey: 'admin' },
-  { href: '/admin/servicos', label: 'Tipos de Serviço', icon: Wrench,   telaKey: 'servicos' },
 ]
 
 const COLLAPSED_KEY = 'sidebar-collapsed'
@@ -83,12 +55,10 @@ const COLLAPSED_KEY = 'sidebar-collapsed'
 export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname()
   const { usuario, logout } = useAuth()
-  const [collapsed, setCollapsed] = useState(false)
-
-  useEffect(() => {
-    const stored = localStorage.getItem(COLLAPSED_KEY)
-    if (stored === 'true') setCollapsed(true)
-  }, [])
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem(COLLAPSED_KEY) === 'true'
+  })
 
   function toggleCollapsed() {
     setCollapsed(prev => {
@@ -98,7 +68,11 @@ export const Sidebar = memo(function Sidebar() {
   }
 
   function canSeeItem(item: NavItem) {
-    if (item.telaKey && usuario?.telas) return usuario.telas.includes(item.telaKey)
+    if (item.perfis) {
+      if (!usuario) return false
+      if (!item.perfis.includes(usuario.perfil)) return false
+    }
+    if (item.telaKey) return canAccessTela(usuario, item.telaKey)
     return true
   }
 
@@ -112,8 +86,6 @@ export const Sidebar = memo(function Sidebar() {
   function isActive(href: string) {
     return pathname === href || pathname.startsWith(href + '/')
   }
-
-  const isAdmin = usuario?.perfil === 'admin'
 
   return (
     <aside
@@ -224,50 +196,6 @@ export const Sidebar = memo(function Sidebar() {
           </div>
         ))}
 
-        {isAdmin && (
-          <div>
-            {!collapsed && (
-              <p className="px-2 mb-1 text-[10px] font-semibold tracking-widest uppercase text-white/25 select-none">
-                Administração
-              </p>
-            )}
-            <div className="space-y-0.5">
-              {ADMIN_ITEMS.map((item) => {
-                const active = isActive(item.href)
-                const Icon = item.icon
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    title={collapsed ? item.label : undefined}
-                  >
-                    <span className={cn(
-                      'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors cursor-pointer group',
-                      collapsed && 'justify-center',
-                      active
-                        ? 'text-white bg-white/10'
-                        : 'text-white/50 hover:text-white/85 hover:bg-white/6'
-                    )}>
-                      <Icon
-                        size={15}
-                        className={cn(
-                          'shrink-0 transition-colors',
-                          active ? 'text-[#F5C200]' : 'text-white/40 group-hover:text-white/60'
-                        )}
-                      />
-                      {!collapsed && (
-                        <>
-                          <span className="flex-1 truncate">{item.label}</span>
-                          {active && <ChevronRight className="w-3 h-3 text-[#F5C200]/60 shrink-0" />}
-                        </>
-                      )}
-                    </span>
-                  </Link>
-                )
-              })}
-            </div>
-          </div>
-        )}
       </nav>
 
       {/* User footer */}

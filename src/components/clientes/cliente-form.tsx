@@ -237,7 +237,9 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
               <Label htmlFor="regimeTributario">Regime Tributário</Label>
               <Select
                 defaultValue={initialData?.regimeTributario ?? ''}
-                onValueChange={(v) => setValue('regimeTributario', (v as any) || null)}
+                onValueChange={(v) =>
+                  setValue('regimeTributario', v === '' ? null : (v as NonNullable<ClienteFormData['regimeTributario']>))
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione..." />

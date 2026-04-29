@@ -51,7 +51,9 @@ export default function AdminUsuariosPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    queueMicrotask(() => { void load() })
+  }, [load])
 
   if (loading) {
     return (
