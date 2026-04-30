@@ -37,6 +37,10 @@
 - [x] Adicionar validação nas rules de `/tarefas`: 🟠 M
   - `prioridade` deve ser `['baixa', 'normal', 'alta', 'urgente']`
   - `status` deve ser `['pendente', 'em_andamento', 'concluida', 'cancelada']`
+- [~] Testar rules no emulator com cenários de perfil (leitura/operacional/financeiro/fiscal/admin) 🔴 M
+- [ ] Validar explicitamente: perfil `leitura` NÃO escreve em nenhuma coleção 🔴 P
+- [ ] Validar explicitamente: `operacional` NÃO acessa `financeiro` 🔴 P
+- [ ] Validar explicitamente: `financeiro` NÃO acessa operações `fiscal` sensíveis 🔴 P
 
 ### 0.3 Índices Firestore
 - [x] 20 índices compostos já presentes em `firestore.indexes.json` cobrindo todos os padrões de query ✓
@@ -63,6 +67,7 @@
 - [x] `alta` = badge outline âmbar (`border-warning/50 text-warning bg-warning/10`) 🟠 P
 - [x] Aplicado em `tarefas/page.tsx` 🟠 M
 - [x] Replicar distinção `urgente`/`alta` em `tarefas/[id]/page-client.tsx` 🟠 P
+- [ ] `InlineBadge` (componente unificado de badge contextual) adotado em listas críticas 🟡 M
 
 ### 1.3 Padronizar headers de tabela
 - [x] `.section-label` definido em `globals.css` 🟡 P
@@ -87,6 +92,9 @@
 - [x] Refinar design system visual (`globals.css`) com superfícies premium, gradientes sutis e sombras consistentes 🟡 M
 - [x] Redesenhar shell do app (`layout`, `sidebar`, `topbar`) com melhor hierarquia, espaçamento e legibilidade 🟡 M
 - [x] Aplicar nova linguagem visual nas páginas `dashboard`, `hoje` e `financeiro` mantendo 100% da lógica funcional 🟠 M
+- [x] Expandir nova linguagem visual para `clientes`, `tarefas` e `clientes/[id]` mantendo fluxos e integrações existentes 🟠 M
+- [x] Consolidar nova linguagem visual em `competencias`, `fiscal`, `fiscal/historico`, `ir`, `admin`, `admin/usuarios` e `admin/servicos` mantendo fluxos e integrações existentes 🟠 M
+- [x] Publicar redesign visual completo no Firebase Hosting (release incremental) 🟡 P
 
 **✓ Gate 1 CONCLUÍDO:** Zero cores hardcoded · `section-label` em todas as tabelas · skeletons inline · `FilterBtn` · `TableEmptyState`
 
@@ -108,6 +116,13 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 ### 2.2 Pendentes (baixa prioridade — dashboard funcional)
 - [x] Persistir filtro de responsável no `localStorage` (quando cockpit personalizado for necessário) 🟡 P
 - [ ] Avaliar adicionar bulk actions se uso real mostrar necessidade 🟢 G
+- [ ] Separar carregamento de usuários vs dados operacionais (evitar reload completo do cockpit ao trocar filtro) 🟠 M
+- [ ] Garantir no máximo 1 bloco de risco global (`RiskBanner`) sem duplicações de mensagem 🟡 P
+- [ ] Consolidar padrão `PriorityList` + lista detalhada sem redundância visual 🟡 M
+- [ ] Tornar barra de bulk actions sticky durante execução em lote 🟠 M
+- [ ] Exibir claramente o motivo de prioridade por tarefa no cockpit 🟠 M
+- [ ] Exibir progresso do dia (tarefas tratadas vs pendentes) no cockpit 🟡 M
+- [ ] Adicionar CTA “Começar execução” (modo foco) no cockpit 🟡 M
 
 **✓ Gate 2 APROVADO:** Dashboard limpo, sem duplicação, sem componentes desnecessários
 
@@ -132,6 +147,9 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 ### 3.3 Navegação
 - [ ] Avaliar: click na linha → `/clientes/[id]` direto vs. manter modal atual 🟠 M
   - Comportamento atual (modal) mantido até validação com usuário real
+- [ ] Ordenar lista por risco operacional (com toggle), não apenas ordem alfabética 🟠 M
+- [ ] Exibir resumo de problemas diretamente na linha do cliente (atrasos/pendências) 🟠 M
+- [ ] Adicionar ações rápidas por hover na tabela de clientes 🟡 M
 
 ### 3.4 Badge de regime tributário
 - [x] Badge colorido por regime com `REGIME_BADGE` map de classes estáticas: 🟢 P
@@ -154,6 +172,9 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
   - Todos os dados visíveis sem clicar em abas (melhor para uso back-office)
 - [x] Nav sticky lateral com IntersectionObserver (destaque de seção ativa) 🟡 M
   - Implementado como barra sticky de seções no topo da página com estado ativo
+- [ ] Evoluir layout do cliente 360 para composição 70/30 (conteúdo + aside de contexto) 🟠 G
+- [ ] Garantir timeline como primeira seção visual do fluxo 360 🟡 M
+- [ ] Manter aside sticky com saúde + próximos passos durante rolagem 🟡 M
 
 ### 4.2 Corrigir HealthChip / cores
 - [x] `ShieldCheck text-green-600` → `text-success` (3 arquivos) 🟢 P
@@ -163,6 +184,27 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 - [x] Borda esquerda colorida por severidade nos itens de próximos passos 🟡 M
   - Danger: `border-l-2 border-destructive bg-destructive/4`
   - Warning: `border-l-2 border-warning bg-warning/4`
+- [~] Evoluir bloco “O que fazer agora” com ação primária contextual por cliente 🟠 M
+- [ ] Tornar timeline inteligente (peso por criticidade, não só cronologia) 🟠 M
+- [ ] Destacar eventos críticos na timeline com visual e prioridade explícita 🟡 M
+
+---
+
+## ETAPA 5A — FRONTEND ARCHITECTURE (MASTER CHECKLIST) ⏳ PENDENTE
+> Objetivo: consolidar arquitetura frontend por feature para escalar manutenção e velocidade
+
+### 5A.1 Estrutura por camadas/feature
+- [ ] Separar por feature em camadas: `ui`, `hooks`, `services`, `queries` 🔴 G
+- [ ] Adotar estrutura por feature (clientes, tarefas, financeiro, fiscal, etc.) com boundaries claros 🔴 G
+
+### 5A.2 Padrão de dados com TanStack Query
+- [ ] Padronizar leituras em `useQuery` por feature (evitar fetch ad-hoc em página) 🔴 M
+- [ ] Padronizar mutações com `invalidateQueries` por chave de domínio 🔴 M
+- [ ] Definir política única de cache/staleTime por tipo de dado 🟠 M
+
+### 5A.3 Performance de interação
+- [ ] Aplicar optimistic updates nos fluxos críticos (tarefas e financeiro) 🟠 M
+- [ ] Prefetch de dados para telas de detalhe a partir das listas 🟡 M
 
 ### 4.4 Loading state
 - [x] Substituir early-return `<Loader2>` por skeleton de layout no cliente 360° 🟡 M
@@ -196,6 +238,9 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 
 ### 5.4 Financeiro — filtros sem reload
 - [x] Filtros de tipo/status como estado local (sem navegar ao Firestore) 🟡 G
+- [ ] CTA “Cobrar agora” no fluxo financeiro/cobrança 🟠 M
+- [~] Feedback imediato pós-ação (baixa/conclusão) com estado visual de progresso 🟡 M
+- [ ] Indicadores de sensação de progresso operacional (meta diária, concluídos) 🟡 M
 
 **~ Gate 5 PARCIAL:** Distinção urgente/alta ✓ · ações inline ✓ · confirmação financeira ✓ · filtros sem reload ✓ · pendente apenas regra de confirmação para tipo fiscal (schema)
 
@@ -262,6 +307,7 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 - [x] Implementar `detectarInadimplencia` cron (toda segunda) 🟡 G
   - Marcar `riscoInadimplencia: true` no cliente quando valor em atraso > R$ 500
   - Frontend usa esse campo nos dots de saúde da lista de clientes
+- [ ] Sugestão automática de tarefas baseada em eventos de risco/atraso (P2) 🟢 G
 
 **✓ Gate 7:** Competência avança automaticamente · fechamento gerado no dia 1 · campos de risco disponíveis
 
@@ -300,6 +346,7 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 - [ ] Token expirado durante uso → redirect para login sem perder URL 🔴 P
 - [ ] Usuário inativo tenta login → mensagem específica (não genérica) 🔴 P
 - [ ] Gerar fechamento quando todos os clientes já têm registro → zero duplicatas 🔴 P
+- [ ] Zero inconsistência de dados após fluxos críticos (tarefas/financeiro/fechamento) 🔴 P
 
 **✓ Gate 8:** Testes unitários para algoritmos críticos · E2E para 5 fluxos · edge cases manuais OK
 
@@ -363,29 +410,45 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 
 ---
 
+## ETAPA 11 — GO LIVE (ACEITAÇÃO DE PRODUTO) ⏳ PENDENTE
+> Objetivo: confirmar adoção real do produto após deploy técnico
+
+### 11.1 Critérios de adoção
+- [ ] Cockpit é usado naturalmente como tela de entrada diária 🔴 M
+- [ ] Cliente 360° é consultado antes de ações de atendimento/execução 🔴 M
+- [ ] Zero erro crítico de operação por 5 dias após release 🔴 P
+
+### 11.2 Fechamento final
+- [ ] Revalidar deploy completo (`rules`, `indexes`, `functions`, `hosting`) após ajustes finais 🔴 P
+- [ ] Registrar decisão GO/NOGO com evidências (uso real + smoke + métricas) 🔴 P
+
+---
+
 ## RESUMO EXECUTIVO
 
 | Etapa | Descrição | Status | Restante estimado |
 |-------|-----------|--------|-------------------|
 | 0 | Fundação técnica | ✅ Concluída | — |
-| 1 | Design system consistente | ✅ Gate aprovado (pendentes menores) | ~2h |
+| 1 | Design system + redesign visual operacional | ✅ Concluída | — |
 | 2 | Cockpit redesign | ✅ N/A → já limpo | — |
 | 3 | Lista clientes com saúde | 🔶 Parcial (health dots e tooltip concluídos) | ~1h |
 | 4 | Cliente 360° upgrade | ✅ Concluída | — |
+| 5A | Frontend architecture | ⏳ Pendente | ~2–4 dias |
 | 5 | Tarefas e financeiro | ✅ Concluída | — |
-| 6 | Performance | 🔶 Parcial (majoritariamente concluída) | ~2h |
+| 6 | Performance | 🔶 Parcial (majoritariamente concluída) | ~1–2h |
 | 7 | Automações | ✅ Concluída (deploy realizado) | — |
 | 8 | Testes | 🔶 Parcial (unit críticos concluídos + base e2e pronta) | ~1.5 dia |
 | 9 | Validação de uso real | ⏳ Pendente | ~5 dias |
 | 10 | Go-live | ⏳ Pendente | ~0.5 dia |
-| **RESTANTE** | | | **~3.5–4.5 dias úteis** |
+| 11 | Go live (aceitação de produto) | ⏳ Pendente | ~1 dia |
+| **RESTANTE** | | | **~6.5–9 dias úteis** |
 
 ### Próximos itens de maior impacto (por prioridade)
 1. **8.2 Ativar E2E reais** — trocar specs de `skip` por fluxo com credenciais/fixtures
-2. **3.3 Navegação clientes** — decidir click na linha vs modal com validação de uso real
-3. **8.3 Edge cases manuais** — executar checklist de robustez operacional
-4. **10.3 Smoke test pós-deploy** — validar produção após release
-5. **6.3 Batch read de clientes no financeiro** — evitar múltiplos fetches `getCliente(id)`
+2. **5A.2 Padronização TanStack Query + invalidateQueries** — consolidar arquitetura por feature
+3. **3.3 Navegação clientes** — decidir click na linha vs modal com validação de uso real
+4. **8.3 Edge cases manuais** — executar checklist de robustez operacional
+5. **10.3 + 11.x Aceitação pós-deploy** — smoke test + adoção real sem erro crítico
 
 ---
 

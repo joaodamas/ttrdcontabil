@@ -187,9 +187,9 @@ export default function ClienteDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
+      <div className="surface-subtle flex items-center gap-3 border px-4 py-4 sm:px-5">
         <Link href="/clientes">
-          <Button variant="ghost" size="icon" className="h-8 w-8">
+          <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
@@ -203,13 +203,13 @@ export default function ClienteDetailPage() {
           ) : null}
         </div>
         <Link href={`/clientes/${id}/editar`}>
-          <Button size="sm" variant="outline">
+          <Button size="sm" variant="outline" className="h-10 rounded-xl">
             Editar
           </Button>
         </Link>
       </div>
 
-      <div className="sticky top-2 z-20 rounded-xl border border-border/70 bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70 p-2">
+      <div className="surface-subtle sticky top-16 z-20 border p-2">
         <div className="flex flex-wrap items-center gap-1.5">
           {[
             { id: 'servicos', label: 'Serviços' },
@@ -234,7 +234,7 @@ export default function ClienteDetailPage() {
 
       {/* Info geral */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="border-border/65 bg-card/95 card-shadow">
           <CardContent className="pt-4 space-y-1">
             <p className="text-xs text-muted-foreground">CPF / CNPJ</p>
             <p className="font-mono text-sm font-medium">
@@ -242,7 +242,7 @@ export default function ClienteDetailPage() {
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="border-border/65 bg-card/95 card-shadow">
           <CardContent className="pt-4 space-y-1">
             <p className="text-xs text-muted-foreground">Regime Tributário</p>
             <p className="text-sm font-medium">
@@ -253,7 +253,7 @@ export default function ClienteDetailPage() {
           </CardContent>
         </Card>
         {cliente.email ? (
-          <Card>
+          <Card className="border-border/65 bg-card/95 card-shadow">
             <CardContent className="pt-4 space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <Mail className="h-3 w-3" /> E-mail
@@ -263,7 +263,7 @@ export default function ClienteDetailPage() {
           </Card>
         ) : null}
         {(cliente.cidade || cliente.uf) ? (
-          <Card>
+          <Card className="border-border/65 bg-card/95 card-shadow">
             <CardContent className="pt-4 space-y-1">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <MapPin className="h-3 w-3" /> Localização
@@ -276,7 +276,7 @@ export default function ClienteDetailPage() {
         ) : null}
       </div>
 
-      <Card>
+      <Card className="border-border/65 bg-card/95 card-shadow">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm">Próximos passos</CardTitle>
         </CardHeader>
@@ -313,11 +313,11 @@ export default function ClienteDetailPage() {
 
       {/* ── Serviços ─────────────────────────────────────────── */}
       <div id="servicos">
-          <Card>
+          <Card className="border-border/65 bg-card/95 card-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <CardTitle className="text-sm">Serviços Vinculados</CardTitle>
               <Link href={`/clientes/${id}/servicos/novo`}>
-                <Button size="sm">+ Serviço</Button>
+                <Button size="sm" className="h-9 rounded-xl">+ Serviço</Button>
               </Link>
             </CardHeader>
             <CardContent>
@@ -351,11 +351,11 @@ export default function ClienteDetailPage() {
 
       {/* ── Competências ─────────────────────────────────────── */}
       <div id="competencias">
-          <Card>
+          <Card className="border-border/65 bg-card/95 card-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <CardTitle className="text-sm">Competências</CardTitle>
               <Link href={`/competencias?clienteId=${id}`}>
-                <Button size="sm" variant="outline">Ver todas</Button>
+                <Button size="sm" variant="outline" className="h-9 rounded-xl">Ver todas</Button>
               </Link>
             </CardHeader>
             <CardContent>
@@ -388,11 +388,11 @@ export default function ClienteDetailPage() {
 
       {/* ── Financeiro ───────────────────────────────────────── */}
       <div id="financeiro">
-          <Card>
+          <Card className="border-border/65 bg-card/95 card-shadow">
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <CardTitle className="text-sm">Lançamentos</CardTitle>
               <Link href={`/financeiro?clienteId=${id}`}>
-                <Button size="sm" variant="outline">Ver todos</Button>
+                <Button size="sm" variant="outline" className="h-9 rounded-xl">Ver todos</Button>
               </Link>
             </CardHeader>
             <CardContent>
@@ -456,10 +456,10 @@ export default function ClienteDetailPage() {
             return (
               <>
                 {/* Config card */}
-                <Card>
+                <Card className="border-border/65 bg-card/95 card-shadow">
                   <CardHeader className="flex flex-row items-center justify-between pb-3">
                     <CardTitle className="text-sm">Configuração Fiscal — NFS-e</CardTitle>
-                    <Button size="sm" variant="outline" onClick={() => setConfigOpen(true)}>
+                    <Button size="sm" variant="outline" className="h-9 rounded-xl" onClick={() => setConfigOpen(true)}>
                       <Pencil className="w-3.5 h-3.5 mr-1.5" />
                       {fiscal ? 'Editar' : 'Configurar'}
                     </Button>
@@ -470,7 +470,7 @@ export default function ClienteDetailPage() {
                         <p className="text-sm text-muted-foreground">
                           Nenhuma configuração fiscal cadastrada.
                         </p>
-                        <Button size="sm" onClick={() => setConfigOpen(true)}>
+                        <Button size="sm" className="h-9 rounded-xl" onClick={() => setConfigOpen(true)}>
                           Configurar NFS-e
                         </Button>
                       </div>
@@ -523,7 +523,7 @@ export default function ClienteDetailPage() {
 
                 {/* Certificado A1 */}
                 {fiscal && tipo === 'abrasf_a1' && (
-                  <Card>
+                  <Card className="border-border/65 bg-card/95 card-shadow">
                     <CardHeader className="flex flex-row items-center gap-2 pb-3">
                       {certInfo
                         ? certInfo.valido
@@ -546,7 +546,7 @@ export default function ClienteDetailPage() {
                 {fiscal && (
                   <div className="flex justify-end">
                     <Link href={`/fiscal/emitir?clienteId=${id}`}>
-                      <Button size="sm">+ Emitir NFS-e</Button>
+                      <Button size="sm" className="h-9 rounded-xl">+ Emitir NFS-e</Button>
                     </Link>
                   </div>
                 )}

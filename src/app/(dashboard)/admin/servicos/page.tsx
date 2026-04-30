@@ -94,7 +94,7 @@ export default function AdminServicosPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
         <div>
           <h2 className="text-lg font-semibold">Tipos de Serviço</h2>
           <p className="text-sm text-muted-foreground">
@@ -106,7 +106,7 @@ export default function AdminServicosPage() {
             <button
               onClick={gerarTabelaCob}
               disabled={gerando}
-              className="inline-flex items-center gap-1.5 rounded-md border border-dashed px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-dashed px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
             >
               {gerando && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               Gerar Tabela COB01–COB20
@@ -116,7 +116,7 @@ export default function AdminServicosPage() {
         </div>
       </div>
 
-      <Card>
+      <Card className="border-border/65 bg-card/95 card-shadow">
         <div className="overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 border-b">
@@ -159,7 +159,7 @@ export default function AdminServicosPage() {
                 </tr>
               ) : (
                 sorted.map((s) => (
-                  <tr key={s.id as string} className="hover:bg-muted/30 transition-colors">
+                  <tr key={s.id as string} className="transition-colors hover:bg-muted/35">
                     <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                       {(s.codigo as string) ?? '—'}
                     </td>

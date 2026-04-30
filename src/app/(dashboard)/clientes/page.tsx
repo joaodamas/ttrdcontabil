@@ -96,7 +96,7 @@ function ClientesContent() {
         description={loading ? undefined : `${total} cliente${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`}
         action={
           <Link href="/clientes/novo">
-            <Button size="sm">
+            <Button size="sm" className="h-10 rounded-xl">
               <Plus className="w-4 h-4 mr-1.5" />
               Novo Cliente
             </Button>
@@ -104,13 +104,15 @@ function ClientesContent() {
         }
       />
 
-      <Suspense>
-        <ClientesFiltros busca={busca} status={status} />
-      </Suspense>
+      <div className="surface-subtle border px-3 py-2.5">
+        <Suspense>
+          <ClientesFiltros busca={busca} status={status} />
+        </Suspense>
+      </div>
 
-      <div className="rounded-lg border bg-card overflow-hidden mt-4">
+      <div className="mt-4 overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
         <table className="w-full text-sm">
-          <thead className="bg-muted/50 border-b">
+          <thead className="border-b bg-muted/50">
             <tr>
               <th className="text-left px-4 py-3 section-label">Nome / Razão Social</th>
               <th className="text-left px-4 py-3 section-label">CPF / CNPJ</th>
@@ -140,12 +142,12 @@ function ClientesContent() {
                 return (
                 <tr
                   key={c.id as string}
-                  className="hover:bg-muted/30 transition-colors cursor-pointer"
+                  className="cursor-pointer transition-colors hover:bg-muted/35"
                   onClick={() => { setModalClienteId(c.id as string); setModalClienteNome((c.razaoSocial as string) ?? '') }}
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
                         <span className="text-xs font-semibold text-primary">
                           {clienteInitials((c.razaoSocial as string) || '?')}
                         </span>
@@ -218,17 +220,17 @@ function ClientesContent() {
 
       {/* Paginação */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm mt-4">
+        <div className="surface-subtle mt-4 flex items-center justify-between border px-3 py-2.5 text-sm">
           <span className="text-muted-foreground">Página {page} de {totalPages}</span>
           <div className="flex gap-2">
             {page > 1 && (
               <Link href={`/clientes?${new URLSearchParams({ busca, status, page: String(page - 1) })}`}>
-                <Button variant="outline" size="sm">Anterior</Button>
+                <Button variant="outline" size="sm" className="h-9 rounded-xl">Anterior</Button>
               </Link>
             )}
             {page < totalPages && (
               <Link href={`/clientes?${new URLSearchParams({ busca, status, page: String(page + 1) })}`}>
-                <Button variant="outline" size="sm">Próxima</Button>
+                <Button variant="outline" size="sm" className="h-9 rounded-xl">Próxima</Button>
               </Link>
             )}
           </div>

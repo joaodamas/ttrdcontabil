@@ -65,7 +65,7 @@ export default function AdminUsuariosPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
         <div>
           <h2 className="text-lg font-semibold">Usuários</h2>
           <p className="text-sm text-muted-foreground">
@@ -75,7 +75,7 @@ export default function AdminUsuariosPage() {
         <UsuarioForm onSaved={load} />
       </div>
 
-      <Card>
+      <Card className="border-border/65 bg-card/95 card-shadow">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 border-b">
@@ -103,7 +103,7 @@ export default function AdminUsuariosPage() {
                   const totalTelas = TELAS_LIST.length
 
                   return (
-                    <tr key={u.id} className="hover:bg-muted/30 transition-colors">
+                    <tr key={u.id} className="transition-colors hover:bg-muted/35">
                       <td className="px-4 py-3 font-medium">{u.nome}</td>
                       <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
                       <td className="px-4 py-3">

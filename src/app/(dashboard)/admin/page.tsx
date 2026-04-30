@@ -28,7 +28,7 @@ export default function AdminPage() {
 
   return (
     <div className="stack-6">
-      <div>
+      <div className="surface-subtle border px-4 py-4 sm:px-5">
         <h2 className="text-title">Administração</h2>
         <p className="text-subtle">Configurações e gerenciamento do sistema.</p>
       </div>
@@ -36,7 +36,7 @@ export default function AdminPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {links.map(({ href, icon: Icon, title, desc }) => (
           <Link key={href} href={href}>
-            <Card className="surface-card hover:bg-muted/50 transition-colors cursor-pointer h-full">
+            <Card className="h-full cursor-pointer border-border/65 bg-card/95 transition-all duration-200 card-shadow hover:-translate-y-0.5 hover:border-primary/25 hover:card-shadow-hover">
               <CardHeader className="pb-2">
                 <div className="flex items-center gap-2">
                   <Icon className="h-5 w-5 text-primary" />

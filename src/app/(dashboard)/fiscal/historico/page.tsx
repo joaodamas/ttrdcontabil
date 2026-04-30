@@ -84,9 +84,9 @@ function FiscalHistoricoContent() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-3">
+      <div className="surface-subtle flex items-center gap-3 border px-4 py-4 sm:px-5">
         <Link href="/fiscal">
-          <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+          <Button variant="outline" size="sm" className="h-10 w-10 rounded-xl p-0">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
@@ -98,7 +98,7 @@ function FiscalHistoricoContent() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="surface-subtle flex flex-wrap items-center gap-2 border px-3 py-2.5">
         {['', 'emitida', 'pendente_processamento', 'rejeitada', 'cancelada', 'erro_integracao'].map(
           (s) => (
             <Link key={s} href={buildUrl({ status: s, page: 1 })}>
@@ -114,7 +114,7 @@ function FiscalHistoricoContent() {
         )}
       </div>
 
-      <div className="rounded-xl ring-1 ring-foreground/10 overflow-hidden">
+      <div className="overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
         <table className="w-full text-sm">
           <thead className="bg-muted/50 text-muted-foreground">
             <tr>
@@ -141,7 +141,7 @@ function FiscalHistoricoContent() {
                 }
                 const dataEmissao = n.dataEmissao as Timestamp | undefined
                 return (
-                  <tr key={n.id as string} className="hover:bg-muted/30 transition-colors">
+                  <tr key={n.id as string} className="transition-colors hover:bg-muted/35">
                     <td className="px-4 py-3 font-medium">{(n.clienteNome as string) ?? '—'}</td>
                     <td className="px-4 py-3 font-mono text-xs">
                       {(n.numeroNfse as string) ?? '—'}
@@ -167,21 +167,21 @@ function FiscalHistoricoContent() {
       </div>
 
       {totalPages > 1 ? (
-        <div className="flex items-center justify-between text-sm">
+        <div className="surface-subtle flex items-center justify-between border px-3 py-2.5 text-sm">
           <p className="text-muted-foreground">
             Página {page} de {totalPages}
           </p>
           <div className="flex gap-2">
             {page > 1 ? (
               <Link href={buildUrl({ page: page - 1 })}>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="h-9 rounded-xl">
                   Anterior
                 </Button>
               </Link>
             ) : null}
             {page < totalPages ? (
               <Link href={buildUrl({ page: page + 1 })}>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="h-9 rounded-xl">
                   Próxima
                 </Button>
               </Link>

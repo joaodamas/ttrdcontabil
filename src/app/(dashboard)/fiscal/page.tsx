@@ -105,7 +105,7 @@ export default function FiscalPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
         <div>
           <h2 className="text-lg font-semibold">Fiscal — NFS-e</h2>
           <p className="text-sm text-muted-foreground">
@@ -114,14 +114,14 @@ export default function FiscalPage() {
         </div>
         <div className="flex items-center gap-2">
           <Link href="/fiscal/historico">
-            <Button variant="outline" size="sm">Histórico</Button>
+            <Button variant="outline" size="sm" className="h-10 rounded-xl">Histórico</Button>
           </Link>
-          <Button variant="outline" size="sm" onClick={() => setLoteOpen(true)}>
+          <Button variant="outline" size="sm" className="h-10 rounded-xl" onClick={() => setLoteOpen(true)}>
             <Layers className="w-4 h-4 mr-1" />
             Lote
           </Button>
           <Link href="/fiscal/emitir">
-            <Button size="sm">
+            <Button size="sm" className="h-10 rounded-xl">
               <Plus className="w-4 h-4 mr-1" />
               Emitir NFS-e
             </Button>
@@ -131,7 +131,7 @@ export default function FiscalPage() {
 
       {/* Cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Card>
+        <Card className="border-border/65 bg-card/95 card-shadow">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -141,12 +141,12 @@ export default function FiscalPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{emitidaMesCount}</p>
+            <p className="kpi-value">{emitidaMesCount}</p>
             <p className="text-xs text-muted-foreground">{formatCurrency(somaEmitidaMes)}</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-border/65 bg-card/95 card-shadow">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium text-muted-foreground">Pendentes</CardTitle>
@@ -154,11 +154,11 @@ export default function FiscalPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{pendenteCount}</p>
+            <p className="kpi-value">{pendenteCount}</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-border/65 bg-card/95 card-shadow">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium text-muted-foreground">Erros</CardTitle>
@@ -166,11 +166,11 @@ export default function FiscalPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-destructive">{erroCount}</p>
+            <p className="kpi-value text-destructive">{erroCount}</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-border/65 bg-card/95 card-shadow">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -180,13 +180,13 @@ export default function FiscalPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{canceladaCount}</p>
+            <p className="kpi-value">{canceladaCount}</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Notas recentes */}
-      <Card>
+      <Card className="border-border/65 bg-card/95 card-shadow">
         <CardHeader className="border-b">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-semibold">Notas Recentes</CardTitle>
@@ -222,7 +222,7 @@ export default function FiscalPage() {
                   }
                   const dataEmissao = n.dataEmissao as Timestamp | undefined
                   return (
-                    <tr key={n.id as string} className="hover:bg-muted/30 transition-colors">
+                    <tr key={n.id as string} className="transition-colors hover:bg-muted/35">
                       <td className="px-4 py-3 font-medium">{(n.clienteNome as string) ?? '—'}</td>
                       <td className="px-4 py-3 font-mono text-xs">
                         {(n.numeroNfse as string) ?? '—'}

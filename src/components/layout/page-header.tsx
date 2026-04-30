@@ -23,18 +23,18 @@ interface PageHeaderProps {
  */
 export function PageHeader({ title, description, breadcrumbs, action, className }: PageHeaderProps) {
   return (
-    <div className={cn('flex items-start justify-between gap-4 mb-6', className)}>
+    <div className={cn('surface-subtle mb-6 flex items-start justify-between gap-4 border px-4 py-4 sm:px-5', className)}>
       <div className="min-w-0">
         {/* Breadcrumbs */}
         {breadcrumbs && breadcrumbs.length > 0 && (
-          <nav className="flex items-center gap-1 mb-1.5" aria-label="Breadcrumb">
+          <nav className="mb-1.5 flex items-center gap-1" aria-label="Breadcrumb">
             {breadcrumbs.map((crumb, i) => (
               <span key={i} className="flex items-center gap-1">
                 {i > 0 && <ChevronRight className="w-3 h-3 text-muted-foreground/50 shrink-0" />}
                 {crumb.href ? (
                   <Link
                     href={crumb.href}
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    className="text-xs text-muted-foreground transition-colors hover:text-foreground"
                   >
                     {crumb.label}
                   </Link>
@@ -47,17 +47,17 @@ export function PageHeader({ title, description, breadcrumbs, action, className 
         )}
 
         {/* Title */}
-        <h1 className="text-xl font-semibold text-foreground leading-tight truncate">{title}</h1>
+        <h1 className="truncate text-xl font-semibold leading-tight text-foreground">{title}</h1>
 
         {/* Description */}
         {description && (
-          <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
         )}
       </div>
 
       {/* Action slot */}
       {action && (
-        <div className="shrink-0 flex items-center gap-2 mt-0.5">{action}</div>
+        <div className="mt-0.5 flex shrink-0 items-center gap-2">{action}</div>
       )}
     </div>
   )

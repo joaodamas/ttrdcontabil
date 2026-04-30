@@ -73,7 +73,7 @@ function CompetenciasContent() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
         <div>
           <h2 className="text-lg font-semibold">Competências</h2>
           <p className="text-sm text-muted-foreground">
@@ -81,21 +81,21 @@ function CompetenciasContent() {
           </p>
         </div>
         <Link href="/competencias/nova">
-          <Button size="sm">
+          <Button size="sm" className="h-10 rounded-xl">
             <Plus className="w-4 h-4 mr-1" />
             Nova Competência
           </Button>
         </Link>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="surface-subtle flex flex-wrap items-center gap-3 border px-3 py-2.5">
         <div className="flex items-center gap-1">
           <Link
             href={buildUrl(
               mes === 1 ? { mes: 12, ano: ano - 1, page: 1 } : { mes: mes - 1, page: 1 }
             )}
           >
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+            <Button variant="outline" size="sm" className="h-9 w-9 rounded-xl p-0">
               <ChevronLeft className="h-4 w-4" />
             </Button>
           </Link>
@@ -105,7 +105,7 @@ function CompetenciasContent() {
               mes === 12 ? { mes: 1, ano: ano + 1, page: 1 } : { mes: mes + 1, page: 1 }
             )}
           >
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+            <Button variant="outline" size="sm" className="h-9 w-9 rounded-xl p-0">
               <ChevronRight className="h-4 w-4" />
             </Button>
           </Link>
@@ -120,7 +120,7 @@ function CompetenciasContent() {
         </div>
       </div>
 
-      <div className="rounded-xl ring-1 ring-foreground/10 overflow-hidden">
+      <div className="overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
@@ -149,7 +149,7 @@ function CompetenciasContent() {
                   variant: 'outline' as const,
                 }
                 return (
-                  <tr key={c.id as string} className="hover:bg-muted/30 transition-colors">
+                  <tr key={c.id as string} className="transition-colors hover:bg-muted/35">
                     <td className="px-4 py-3">
                       <Link
                         href={`/competencias/${c.id}`}
@@ -179,21 +179,21 @@ function CompetenciasContent() {
       </div>
 
       {totalPages > 1 ? (
-        <div className="flex items-center justify-between text-sm">
+        <div className="surface-subtle flex items-center justify-between border px-3 py-2.5 text-sm">
           <p className="text-muted-foreground">
             Página {page} de {totalPages}
           </p>
           <div className="flex gap-2">
             {page > 1 ? (
               <Link href={buildUrl({ page: page - 1 })}>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="h-9 rounded-xl">
                   Anterior
                 </Button>
               </Link>
             ) : null}
             {page < totalPages ? (
               <Link href={buildUrl({ page: page + 1 })}>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="h-9 rounded-xl">
                   Próxima
                 </Button>
               </Link>
