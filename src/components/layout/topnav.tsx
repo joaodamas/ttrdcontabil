@@ -29,6 +29,8 @@ import {
   CheckSquare,
   DollarSign,
   ChevronRight,
+  History,
+  UserCog,
 } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -73,19 +75,18 @@ const NAV_GROUPS: NavGroup[] = [
     id: 'clientes',
     label: 'Clientes',
     icon: Users,
-    items: [
-      { href: '/clientes',       label: 'Lista de Clientes',  description: 'Gerencie sua carteira',    icon: Users,    telaKey: 'clientes' },
-      { href: '/admin/servicos', label: 'Tipos de Serviço',   description: 'Catálogo de serviços',     icon: Package2, telaKey: 'servicos' },
-    ],
+    directHref: '/clientes',
+    telaKey: 'clientes',
+    items: [],
   },
   {
     id: 'operacao',
     label: 'Operação',
     icon: Layers,
     items: [
-      { href: '/competencias', label: 'Competências',      description: 'Períodos por cliente',   icon: Layers,       telaKey: 'competencias' },
+      { href: '/competencias', label: 'Competências',      description: 'Períodos por cliente',   icon: Layers,        telaKey: 'competencias' },
       { href: '/tarefas',      label: 'Tarefas',           description: 'Fila de trabalho',       icon: ClipboardList, telaKey: 'tarefas' },
-      { href: '/fechamento',   label: 'Fechamento Mensal', description: 'Sign-off do mês',        icon: FolderOpen,   telaKey: 'fechamento' },
+      { href: '/fechamento',   label: 'Fechamento Mensal', description: 'Sign-off do mês',        icon: FolderOpen,    telaKey: 'fechamento' },
     ],
   },
   {
@@ -93,8 +94,9 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Fiscal',
     icon: Receipt,
     items: [
-      { href: '/fiscal', label: 'NFS-e',             description: 'Emissão de notas',    icon: Receipt,  telaKey: 'fiscal' },
-      { href: '/ir',     label: 'Imposto de Renda',  description: 'Declarações anuais',  icon: FileText, telaKey: 'ir' },
+      { href: '/fiscal',           label: 'NFS-e',            description: 'Dashboard operacional', icon: Receipt,  telaKey: 'fiscal' },
+      { href: '/fiscal/historico', label: 'Histórico NFS-e',  description: 'Notas já emitidas',     icon: History,  telaKey: 'fiscal' },
+      { href: '/ir',               label: 'Imposto de Renda', description: 'Declarações anuais',    icon: FileText, telaKey: 'ir' },
     ],
   },
   {
@@ -110,10 +112,12 @@ const NAV_GROUPS: NavGroup[] = [
     id: 'admin',
     label: 'Admin',
     icon: Settings,
-    directHref: '/admin',
-    telaKey: 'admin',
     perfis: ['admin'],
-    items: [],
+    items: [
+      { href: '/admin',           label: 'Painel Admin',     description: 'Visão geral do sistema',     icon: Settings, telaKey: 'admin',    perfis: ['admin'] },
+      { href: '/admin/usuarios',  label: 'Usuários',         description: 'Contas e perfis de acesso',  icon: UserCog,  telaKey: 'admin',    perfis: ['admin'] },
+      { href: '/admin/servicos',  label: 'Tipos de Serviço', description: 'Catálogo de serviços',       icon: Package2, telaKey: 'servicos', perfis: ['admin'] },
+    ],
   },
 ]
 

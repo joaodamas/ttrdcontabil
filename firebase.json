@@ -9,6 +9,7 @@
   "hosting": {
     "site": "ttrdcontabil-jpproject",
     "public": "out",
+    "cleanUrls": true,
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
       { "source": "/clientes/*/servicos/novo", "destination": "/clientes/placeholder/servicos/novo.html" },
