@@ -37,14 +37,17 @@ Comportamento funcional:
 Finalidade:
 
 - Ponto de entrada diario do time.
-- Mostrar tarefas atrasadas, tarefas de hoje, proximos 7 dias e bloqueios de fechamento.
+- Fila unificada SLA com tarefas atrasadas, de hoje e proximos 7 dias, em estrutura de 4 blocos.
 
 Capacidades atuais:
 
-- Filtro por responsavel
-- Persistencia do filtro em `localStorage`
-- Priorizacao por SLA
-- Acoes operacionais de execucao
+- Fila SLA unificada: atrasadas + hoje + proximos 7d ordenados por score (tipoPeso, diasAtraso, urgencia, semResponsavel)
+- KPI strip reativo: 4 pills com cores condicionais (destructive/warning/neutro)
+- Maximo 1 banner de alerta critico por sessao (atrasadas > bloqueios)
+- Bulk actions inline no header da fila
+- Categoria indicator: faixa vertical colorida por urgencia em cada tarefa
+- Filtro por responsavel com persistencia em `localStorage`
+- Skeleton de layout no loading state
 
 ### 3.2 Dashboard executivo - `Dashboard` (`/dashboard`)
 
@@ -183,23 +186,33 @@ Capacidades atuais:
 
 Estrutura de shell:
 
-- Sidebar com secoes por contexto de trabalho
-- Topbar com acoes rapidas contextuais
-- Layout com `ErrorBoundary`
+- Topnav horizontal fixo (56px) com background escuro — substituiu sidebar lateral e topbar
+- Layout `flex-col`: topnav no topo + conteudo centralizado em `max-w-[1320px]`
+- `ErrorBoundary` em todas as paginas do dashboard
 
-Acoes rapidas principais:
+Grupos de navegacao no topnav:
 
-- Novo cliente
-- Nova tarefa
-- Nova declaracao
-- Novo lancamento
-- Emitir NFS-e
+- **Hoje** e **Dashboard** — links diretos
+- **Clientes** — link direto para `/clientes`
+- **Operacao** — dropdown: Competencias, Tarefas, Fechamento Mensal
+- **Fiscal** — dropdown: NFS-e, Historico NFS-e, Imposto de Renda
+- **Financeiro** — link direto (visivel apenas para perfis `admin` e `financeiro`)
+- **Admin** — dropdown: Painel Admin, Usuarios, Tipos de Servico (visivel apenas para `admin`)
+
+Botao "+ Novo" (QuickActions):
+
+- Novo Cliente, Nova Tarefa, Nova Competencia
+- Novo Lancamento (admin/financeiro)
+- Emitir NFS-e (admin/fiscal/financeiro)
+- Acoes contextuais adicionais quando em pagina de cliente especifico
 
 Melhorias recentes ja aplicadas:
 
-- Correcao de loop de redirecionamento por permissao no `AuthGuard`
-- Variação visual da sidebar/topbar
-- CTA operacional no dashboard para iniciar execucao
+- Topnav substituiu sidebar: navegacao mais limpa e acessivel em viewports medios
+- Correcao de bug critico: `cleanUrls: true` no firebase.json — sem isso todas as rotas exibiam a pagina de dashboard
+- Admin virou dropdown com acesso direto a `/admin/usuarios` e `/admin/servicos`
+- Fiscal ganhou link direto para `/fiscal/historico`
+- CTA operacional no dashboard para iniciar execucao no cockpit
 
 ## 5. Entidades funcionais principais
 
@@ -254,14 +267,19 @@ Cobertura de cenarios:
 
 ## 8. Pendencias funcionais abertas (alto nivel)
 
-Blocos em aberto no checklist atual:
+Blocos em aberto no checklist atual (v1.3):
 
-- Validacoes finais de seguranca por perfil no emulator
-- Evolucao de UX operacional (badges unificadas, progressos de execucao, refinamentos do cockpit)
+- Limpeza de arquivos obsoletos: `sidebar.tsx` e `topbar.tsx` (substituidos pelo topnav)
+- Validacao de responsividade do topnav em mobile (320px–768px) no browser
+- Validacoes de seguranca por perfil no emulator (3 cenarios: leitura sem escrita, operacional sem financeiro, financeiro sem fiscal)
+- Layout 70/30 no Cliente 360° — aside sticky com saude + proximos passos + timeline como primeira secao
+- Progresso do dia no cockpit: tarefas tratadas vs total + fetch de usuarios independente do cockpit
+- CTA "Cobrar agora" no financeiro com feedback visual de progresso
 - Conclusao da migracao arquitetural por feature no modulo administrativo (`/admin`)
-- Padronizacao final de cache e invalidação de dados entre modulos
-- Ampliacao e conclusao de cobertura E2E/edge cases
-- Go-live orientado por uso real, metricas e smoke test completo
+- Padronizacao de cache/staleTime e optimistic updates nos fluxos criticos (tarefas e financeiro)
+- Ativacao de E2E com credenciais e fixtures reais + execucao dos 6 edge cases manuais
+- Validacao de uso real por 5 dias uteis antes do go-live
+- Deploy final completo (rules + indexes + functions + hosting) e smoke test pos-deploy
 
 ## 9. Estado de migracao funcional 2.0
 

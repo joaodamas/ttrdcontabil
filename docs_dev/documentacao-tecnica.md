@@ -83,11 +83,20 @@ Rotas de dashboard e dominios:
 
 Pecas principais:
 
-- `src/app/(dashboard)/layout.tsx` - shell principal
-- `src/components/layout/sidebar.tsx` - navegacao lateral
-- `src/components/layout/topbar.tsx` - barra superior com acoes
+- `src/app/(dashboard)/layout.tsx` - shell principal (`flex-col` com topnav fixo)
+- `src/components/layout/topnav.tsx` - barra de navegacao horizontal fixa (56px), substituiu sidebar + topbar
 - `src/components/auth/auth-guard.tsx` - bloqueio e redirecionamento por permissao
 - `src/components/error-boundary.tsx` - tolerancia a falhas de render
+
+Topnav (estrutura funcional):
+
+- Logo + link para `/dashboard`
+- Grupos de navegacao com dropdowns animados: Operacao, Fiscal, Admin
+- Links diretos: Hoje, Dashboard, Clientes, Financeiro
+- `QuickActionsMenu` — botao "+ Novo" com acoes contextuais por pathname
+- `UserMenu` — avatar com iniciais, nome/perfil, logout
+- `MobileNav` — drawer lateral com navegacao completa em telas < 768px
+- Permissoes por item: `canAccessTela()` + `perfis[]`
 
 `AuthGuard`:
 
@@ -249,8 +258,9 @@ Arquivo:
 Configuracao atual:
 
 - Hosting com `public: out`
-- Rewrites para rotas dinamicas em ambiente estatico
-- Fallback geral para `/dashboard.html`
+- `cleanUrls: true` — serve `hoje.html` para `/hoje`, `clientes.html` para `/clientes`, etc. Sem isso, Firebase nao resolvia arquivos `.html` gerados pelo `output: export` do Next.js e servia `dashboard.html` para todas as rotas
+- Rewrites para rotas dinamicas em ambiente estatico (segmentos `[id]` mapeados para arquivos placeholder)
+- Fallback geral para `/dashboard.html` (rotas nao mapeadas)
 - Cache agressivo para assets (`js/css/woff2`) e no-cache para HTML
 - Deploy de rules/indexes do Firestore e rules do Storage
 
@@ -295,6 +305,8 @@ Unitarios:
 - Batch read de clientes para preencher nomes no financeiro.
 - Correcao de loop de redirecionamento por permissao no `AuthGuard`.
 - Propagacao automatica de `clienteNome` em dados denormalizados por trigger.
+- Substituicao de sidebar lateral + topbar por topnav horizontal unico: reduz complexidade do shell, melhora uso em viewports medios e facilita adicao de novos dominios.
+- `cleanUrls: true` no firebase.json: essencial para Next.js `output: export` no Firebase Hosting — sem essa flag, todas as rotas recebiam `dashboard.html` via catch-all, causando reload e conteudo incorreto.
 
 ## 14. Riscos tecnicos e lacunas abertas
 
