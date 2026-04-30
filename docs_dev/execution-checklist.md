@@ -69,7 +69,7 @@
 
 ### 1.4 Padronizar loading states
 - [x] `<TableRowSkeleton>` inline em: tarefas, ir, competencias, financeiro 🟠 M
-- [ ] Suspense fallback com skeleton real (atualmente ainda `<Loader2>` simples) 🟡 P
+- [x] Suspense fallback com skeleton real (atualmente ainda `<Loader2>` simples) 🟡 P
 
 ### 1.5 Padronizar empty states
 - [x] `<TableEmptyState>` com CTA em: clientes, tarefas, ir, competencias, financeiro ✓ 🟡 P
@@ -77,6 +77,10 @@
 ### 1.6 Padronizar filtros
 - [x] `FilterBtn` criado em `src/components/ui/filter-btn.tsx` 🟡 M
 - [x] Aplicado em: tarefas, ir, competencias, financeiro (substituindo `<Button variant>` por `<FilterBtn>`) 🟡 P
+
+### 1.7 Navegação e visibilidade de telas
+- [x] Sidebar/Topbar alinhadas com todas as telas operacionais (Hoje, Dashboard, Clientes, Serviços, Competências, Tarefas, Fechamento, Fiscal, IR, Financeiro, Admin) 🟠 M
+- [x] Permissões de telas sincronizadas entre `usuario-form`, `permissions` e navegação (incluindo `hoje`) 🟠 M
 
 **✓ Gate 1 CONCLUÍDO:** Zero cores hardcoded · `section-label` em todas as tabelas · skeletons inline · `FilterBtn` · `TableEmptyState`
 
@@ -175,8 +179,8 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 ### 5.2 Tarefas — ação inline
 - [x] Ação "Concluir" direto na linha (sem abrir detalhe) 🟠 G
 - [x] Menu `⋮` com: ver detalhe, reatribuir, alterar prazo 🟠 G
-- [~] Confirmation dialog para `urgente`/`fiscal` ao concluir 🟡 M
-  - Implementado para `urgente`; `fiscal` depende de campo de classificação da tarefa ainda não existente no schema atual
+- [x] Confirmation dialog para `urgente`/`fiscal` ao concluir 🟡 M
+  - Regra fiscal implementada por detecção de contexto (`titulo`/`descricao`/`tipo|area`)
 
 ### 5.3 Financeiro — confirmação em baixa
 - [x] Confirmation dialog para baixa com valor > R$ 500 🔴 M
@@ -360,7 +364,7 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 | 2 | Cockpit redesign | ✅ N/A → já limpo | — |
 | 3 | Lista clientes com saúde | 🔶 Parcial (health dots e tooltip concluídos) | ~1h |
 | 4 | Cliente 360° upgrade | ✅ Concluída | — |
-| 5 | Tarefas e financeiro | 🔶 Parcial (quase concluída) | ~2h |
+| 5 | Tarefas e financeiro | ✅ Concluída | — |
 | 6 | Performance | 🔶 Parcial (majoritariamente concluída) | ~2h |
 | 7 | Automações | ✅ Concluída (deploy realizado) | — |
 | 8 | Testes | 🔶 Parcial (unit críticos concluídos + base e2e pronta) | ~1.5 dia |
@@ -370,10 +374,10 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 
 ### Próximos itens de maior impacto (por prioridade)
 1. **8.2 Ativar E2E reais** — trocar specs de `skip` por fluxo com credenciais/fixtures
-2. **5.2 Regra `urgente/fiscal`** — concluir confirmação especial quando existir classificação fiscal na tarefa
-3. **3.3 Navegação clientes** — decidir click na linha vs modal com validação de uso real
-4. **8.3 Edge cases manuais** — executar checklist de robustez operacional
-5. **10.3 Smoke test pós-deploy** — validar produção após release
+2. **3.3 Navegação clientes** — decidir click na linha vs modal com validação de uso real
+3. **8.3 Edge cases manuais** — executar checklist de robustez operacional
+4. **10.3 Smoke test pós-deploy** — validar produção após release
+5. **6.1 sessionStorage para cache de usuários** — sobrevivência a reload de página
 
 ---
 

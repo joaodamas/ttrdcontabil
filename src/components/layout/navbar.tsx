@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
+import { canAccessTela, canAccessAnyTela, type TelaKey } from '@/lib/permissions'
 import {
   LayoutDashboard,
   Receipt,
@@ -27,7 +28,7 @@ import {
 import { getInitials } from '@/lib/utils'
 
 /* ─── Nav data ────────────────────────────────────────────── */
-type NavItem   = { href: string; label: string; icon: React.ComponentType<{ size?: number; className?: string }>; telaKey?: string }
+type NavItem   = { href: string; label: string; icon: React.ComponentType<{ size?: number; className?: string }>; telaKey?: TelaKey }
 type NavGroup  = { label: string; icon: React.ComponentType<{ size?: number; className?: string }>; items: NavItem[]; perfis?: string[] }
 type NavDirect = NavItem & { perfis?: string[] }
 
@@ -108,19 +109,17 @@ export const Navbar = memo(function Navbar() {
     closeTimer.current = setTimeout(() => setOpenDropdown(null), 120)
   }
 
-  function canSee(perfis?: string[], telaKey?: string) {
-    // If user has granular telas defined, use those
-    if (telaKey && usuario?.telas) {
-      return usuario.telas.includes(telaKey)
-    }
+  function canSee(perfis?: string[], telaKey?: TelaKey) {
+    if (telaKey) return canAccessTela(usuario, telaKey)
     // Fall back to profile-level access
     if (!perfis) return true
     return !!usuario && perfis.includes(usuario.perfil)
   }
 
   function canSeeGroup(group: NavGroup) {
-    // Group is visible if at least one item is accessible
-    if (group.items.some((item) => canSee(undefined, item.telaKey))) return true
+    if (canAccessAnyTela(usuario, group.items.map((item) => item.telaKey).filter(Boolean) as TelaKey[])) {
+      return true
+    }
     // Also check group-level perfis as fallback
     return canSee(group.perfis)
   }

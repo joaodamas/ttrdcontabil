@@ -68,10 +68,17 @@ function TarefasContent() {
     }
   }
 
+  function isTarefaFiscal(tarefa: Record<string, unknown>): boolean {
+    const titulo = String(tarefa.titulo ?? '').toLowerCase()
+    const descricao = String(tarefa.descricao ?? '').toLowerCase()
+    const tipo = String(tarefa.tipo ?? tarefa.area ?? '').toLowerCase()
+    return titulo.includes('fiscal') || descricao.includes('fiscal') || tipo === 'fiscal'
+  }
+
   function handleConcluirClick(tarefa: Record<string, unknown>) {
     const id = tarefa.id as string
     const titulo = tarefa.titulo as string
-    if ((tarefa.prioridade as string) === 'urgente') {
+    if ((tarefa.prioridade as string) === 'urgente' || isTarefaFiscal(tarefa)) {
       setConfirmUrgente({ id, titulo })
       return
     }
@@ -309,10 +316,10 @@ function TarefasContent() {
       <ConfirmDialog
         open={!!confirmUrgente}
         onOpenChange={(open) => { if (!open) setConfirmUrgente(null) }}
-        title="Concluir tarefa urgente?"
+        title="Concluir tarefa urgente/fiscal?"
         description={confirmUrgente
           ? `Você está concluindo a tarefa "${confirmUrgente.titulo}". Confirme para finalizar.`
-          : 'Confirme para concluir a tarefa urgente.'}
+          : 'Confirme para concluir a tarefa.'}
         confirmLabel="Confirmar conclusão"
         onConfirm={async () => {
           if (!confirmUrgente) return

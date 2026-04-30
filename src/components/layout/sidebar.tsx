@@ -38,14 +38,39 @@ type NavSection = {
 
 const NAV_SECTIONS: NavSection[] = [
   {
-    label: 'Navegação',
+    label: 'Principal',
     items: [
-      { href: '/hoje',       label: 'Hoje',          icon: Sun },
-      { href: '/clientes',   label: 'Clientes',      icon: Users,             telaKey: 'clientes' },
-      { href: '/tarefas',    label: 'Operação',      icon: BriefcaseBusiness, telaKey: 'tarefas' },
-      { href: '/financeiro', label: 'Financeiro',    icon: Wallet,           telaKey: 'financeiro', perfis: ['admin', 'financeiro'] },
-      { href: '/dashboard',  label: 'Relatórios',    icon: BarChart3,         perfis: ['admin', 'fiscal', 'financeiro'] },
-      { href: '/admin',      label: 'Configurações', icon: Settings,         telaKey: 'admin', perfis: ['admin'] },
+      { href: '/hoje',      label: 'Hoje',     icon: Sun,         telaKey: 'hoje' },
+      { href: '/dashboard', label: 'Dashboard', icon: BarChart3,  telaKey: 'dashboard' },
+    ],
+  },
+  {
+    label: 'Carteira',
+    items: [
+      { href: '/clientes',       label: 'Clientes',         icon: Users,             telaKey: 'clientes' },
+      { href: '/admin/servicos', label: 'Tipos de Serviço', icon: BriefcaseBusiness, telaKey: 'servicos' },
+    ],
+  },
+  {
+    label: 'Operação',
+    items: [
+      { href: '/competencias', label: 'Competências',      icon: BriefcaseBusiness, telaKey: 'competencias' },
+      { href: '/tarefas',      label: 'Tarefas',           icon: BriefcaseBusiness, telaKey: 'tarefas' },
+      { href: '/fechamento',   label: 'Fechamento Mensal', icon: BriefcaseBusiness, telaKey: 'fechamento' },
+    ],
+  },
+  {
+    label: 'Fiscal',
+    items: [
+      { href: '/fiscal', label: 'Painel NFS-e',     icon: Wallet, telaKey: 'fiscal' },
+      { href: '/ir',     label: 'Imposto de Renda', icon: Wallet, telaKey: 'ir' },
+    ],
+  },
+  {
+    label: 'Gestão',
+    items: [
+      { href: '/financeiro', label: 'Financeiro',    icon: Wallet,   telaKey: 'financeiro', perfis: ['admin', 'financeiro'] },
+      { href: '/admin',      label: 'Administração', icon: Settings, telaKey: 'admin', perfis: ['admin'] },
     ],
   },
 ]

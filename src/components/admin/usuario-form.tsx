@@ -50,6 +50,7 @@ const PERFIL_LABELS: Record<Perfil, string> = {
 
 /* ─── Telas disponíveis ───────────────────────────────────── */
 export const TELAS_LIST = [
+  { key: 'hoje',         label: 'Hoje',                 desc: 'Prioridades do dia com ação rápida' },
   { key: 'dashboard',    label: 'Início / Dashboard',   desc: 'Visão geral do sistema' },
   { key: 'clientes',     label: 'Clientes',              desc: 'Cadastro e gestão de clientes' },
   { key: 'servicos',     label: 'Tipos de Serviço',      desc: 'Configuração de serviços (admin)' },
@@ -64,10 +65,10 @@ export const TELAS_LIST = [
 
 const DEFAULT_TELAS: Record<Perfil, string[]> = {
   admin:       TELAS_LIST.map((t) => t.key),
-  operacional: ['dashboard', 'clientes', 'competencias', 'tarefas', 'fechamento'],
-  fiscal:      ['dashboard', 'clientes', 'competencias', 'tarefas', 'fechamento', 'fiscal', 'ir'],
-  financeiro:  ['dashboard', 'clientes', 'financeiro'],
-  leitura:     ['dashboard', 'clientes', 'competencias', 'tarefas'],
+  operacional: ['hoje', 'dashboard', 'clientes', 'competencias', 'tarefas', 'fechamento'],
+  fiscal:      ['hoje', 'dashboard', 'clientes', 'competencias', 'tarefas', 'fechamento', 'fiscal', 'ir'],
+  financeiro:  ['hoje', 'dashboard', 'clientes', 'financeiro', 'fiscal'],
+  leitura:     ['hoje', 'dashboard', 'clientes', 'competencias', 'tarefas'],
 }
 
 /* ─── Schemas ─────────────────────────────────────────────── */
