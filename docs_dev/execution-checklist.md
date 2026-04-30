@@ -83,6 +83,11 @@
 - [x] Sidebar/Topbar alinhadas com todas as telas operacionais (Hoje, Dashboard, Clientes, Serviços, Competências, Tarefas, Fechamento, Fiscal, IR, Financeiro, Admin) 🟠 M
 - [x] Permissões de telas sincronizadas entre `usuario-form`, `permissions` e navegação (incluindo `hoje`) 🟠 M
 
+### 1.8 Redesign visual operacional (UI/UX)
+- [x] Refinar design system visual (`globals.css`) com superfícies premium, gradientes sutis e sombras consistentes 🟡 M
+- [x] Redesenhar shell do app (`layout`, `sidebar`, `topbar`) com melhor hierarquia, espaçamento e legibilidade 🟡 M
+- [x] Aplicar nova linguagem visual nas páginas `dashboard`, `hoje` e `financeiro` mantendo 100% da lógica funcional 🟠 M
+
 **✓ Gate 1 CONCLUÍDO:** Zero cores hardcoded · `section-label` em todas as tabelas · skeletons inline · `FilterBtn` · `TableEmptyState`
 
 ---

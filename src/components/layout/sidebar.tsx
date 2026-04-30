@@ -115,15 +115,15 @@ export const Sidebar = memo(function Sidebar() {
   return (
     <aside
       className={cn(
-        'flex flex-col min-h-screen shrink-0 transition-[width] duration-200 ease-in-out',
+        'flex min-h-screen shrink-0 flex-col transition-[width] duration-200 ease-in-out',
         'border-r border-sidebar-border',
         collapsed ? 'w-[60px]' : 'w-[220px]'
       )}
-      style={{ background: 'oklch(0.11 0 0)' }}
+      style={{ background: 'var(--sidebar)' }}
     >
       {/* Logo row */}
       <div className={cn(
-        'flex items-center h-14 border-b border-sidebar-border',
+        'flex h-14 items-center border-b border-sidebar-border',
         collapsed ? 'justify-center px-0' : 'px-4 gap-2'
       )}>
         {collapsed ? (
@@ -146,7 +146,7 @@ export const Sidebar = memo(function Sidebar() {
               <TooltipTrigger>
                 <button
                   onClick={toggleCollapsed}
-                  className="w-6 h-6 flex items-center justify-center rounded text-white/25 hover:text-white/60 hover:bg-white/8 transition-colors shrink-0"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-white/30 transition-colors hover:bg-white/10 hover:text-white/75"
                 >
                   <PanelLeftClose className="w-3.5 h-3.5" />
                 </button>
@@ -164,7 +164,7 @@ export const Sidebar = memo(function Sidebar() {
             <TooltipTrigger>
               <button
                 onClick={toggleCollapsed}
-                className="w-7 h-7 flex items-center justify-center rounded-md text-white/25 hover:text-white/60 hover:bg-white/8 transition-colors"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-white/30 transition-colors hover:bg-white/10 hover:text-white/75"
               >
                 <PanelLeftOpen className="w-4 h-4" />
               </button>
@@ -175,7 +175,7 @@ export const Sidebar = memo(function Sidebar() {
       )}
 
       {/* Nav */}
-      <nav className="flex-1 px-2 py-3 overflow-y-auto space-y-4">
+      <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-3">
         {NAV_SECTIONS.filter(canSeeSection).map((section) => (
           <div key={section.label}>
             {!collapsed && (
@@ -194,11 +194,11 @@ export const Sidebar = memo(function Sidebar() {
                     title={collapsed ? item.label : undefined}
                   >
                     <span className={cn(
-                      'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors cursor-pointer group',
+                      'group flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors',
                       collapsed && 'justify-center',
                       active
-                        ? 'text-white bg-white/10'
-                        : 'text-white/50 hover:text-white/85 hover:bg-white/6'
+                        ? 'bg-white/12 text-white'
+                        : 'text-white/56 hover:bg-white/8 hover:text-white/88'
                     )}>
                       <Icon
                         size={15}
@@ -233,7 +233,7 @@ export const Sidebar = memo(function Sidebar() {
             <TooltipTrigger>
               <button
                 onClick={logout}
-                className="w-7 h-7 flex items-center justify-center rounded-md text-white/30 hover:text-red-400 hover:bg-red-400/8 transition-colors"
+                className="flex h-10 w-10 items-center justify-center rounded-lg text-white/30 transition-colors hover:bg-red-400/10 hover:text-red-400"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -256,7 +256,7 @@ export const Sidebar = memo(function Sidebar() {
               <TooltipTrigger>
                 <button
                   onClick={logout}
-                  className="w-6 h-6 flex items-center justify-center rounded text-white/30 hover:text-red-400 hover:bg-red-400/8 transition-colors shrink-0"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/30 transition-colors hover:bg-red-400/10 hover:text-red-400"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                 </button>

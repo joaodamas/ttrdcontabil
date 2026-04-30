@@ -126,7 +126,7 @@ function FinanceiroContent() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
         <div>
           <h2 className="text-lg font-semibold">Financeiro</h2>
           <p className="text-sm text-muted-foreground">
@@ -134,7 +134,7 @@ function FinanceiroContent() {
           </p>
         </div>
         <Link href="/financeiro/novo">
-          <Button size="sm">
+          <Button size="sm" className="h-10 rounded-xl">
             <Plus className="w-4 h-4 mr-1" />
             Novo Lançamento
           </Button>
@@ -142,7 +142,7 @@ function FinanceiroContent() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card>
+        <Card className="border-border/65 bg-card/95 card-shadow">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium text-muted-foreground">A Receber</CardTitle>
@@ -150,11 +150,11 @@ function FinanceiroContent() {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(somaAReceber)}</p>
+            <p className="kpi-value">{formatCurrency(somaAReceber)}</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-border/65 bg-card/95 card-shadow">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -164,11 +164,11 @@ function FinanceiroContent() {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-success">{formatCurrency(somaRecebidoMes)}</p>
+            <p className="kpi-value text-success">{formatCurrency(somaRecebidoMes)}</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-border/65 bg-card/95 card-shadow">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium text-muted-foreground">Em Atraso</CardTitle>
@@ -176,12 +176,12 @@ function FinanceiroContent() {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-destructive">{formatCurrency(somaEmAtraso)}</p>
+            <p className="kpi-value text-destructive">{formatCurrency(somaEmAtraso)}</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="surface-subtle flex flex-wrap items-center gap-3 border px-3 py-2.5">
         <div className="flex items-center gap-1">
           {(['', 'receita', 'despesa'] as const).map((t) => (
             <FilterBtn key={t} onClick={() => setTipo(t)} active={tipo === t}>
@@ -198,7 +198,7 @@ function FinanceiroContent() {
         </div>
       </div>
 
-      <div className="rounded-xl ring-1 ring-foreground/10 overflow-hidden">
+      <div className="overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
@@ -238,7 +238,7 @@ function FinanceiroContent() {
                   l.status === 'pendente'
 
                 return (
-                  <tr key={l.id as string} className="hover:bg-muted/30 transition-colors">
+                  <tr key={l.id as string} className="transition-colors hover:bg-muted/35">
                     <td className="px-4 py-3 font-medium">{l.descricao as string}</td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {(l.clienteNome as string) ?? '—'}

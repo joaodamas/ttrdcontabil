@@ -17,8 +17,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Sidebar />
             <div className="flex flex-col flex-1 min-w-0">
               <Topbar />
-              <main className="flex-1 px-6 py-6 overflow-auto">
-                <div className="max-w-[1280px] mx-auto">
+              <main className="flex-1 overflow-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+                <div className="mx-auto max-w-[1320px]">
                   <ErrorBoundary>
                     {children}
                   </ErrorBoundary>

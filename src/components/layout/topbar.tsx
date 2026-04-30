@@ -138,7 +138,7 @@ function QuickActionsButton() {
       <button
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all',
+          'flex min-h-11 items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition-all',
           'hover:opacity-90 active:scale-95',
           open && 'opacity-90'
         )}
@@ -183,7 +183,7 @@ function QuickActionsButton() {
 
 export const Topbar = memo(function Topbar() {
   return (
-    <header className="h-14 shrink-0 flex items-center justify-between gap-4 px-5 border-b border-border bg-background">
+    <header className="surface-subtle sticky top-0 z-30 mx-4 mt-3 mb-1 flex min-h-14 shrink-0 items-center justify-between gap-4 border px-4 sm:mx-6 sm:px-5">
       <div className="flex-1 min-w-0">
         <Breadcrumbs />
       </div>
@@ -191,7 +191,10 @@ export const Topbar = memo(function Topbar() {
       <div className="flex items-center gap-2 shrink-0">
         <QuickActionsButton />
 
-        <button className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+        <button
+          aria-label="Notificações"
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+        >
           <Bell size={16} />
         </button>
       </div>

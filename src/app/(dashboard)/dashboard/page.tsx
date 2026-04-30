@@ -158,17 +158,17 @@ export default function DashboardPage() {
 
   /* ─── Render ────────────────────────────────────────────── */
   return (
-    <div className="space-y-8">
+    <div className="space-y-7">
 
       {/* ── Page header ──────────────────────────────────── */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="surface-subtle flex flex-wrap items-center justify-between gap-3 border px-5 py-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-[1.7rem]">Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Visão geral — {formatMesAno(mesAtual, anoAtual)}
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-card border border-border card-shadow rounded-xl px-3 py-2">
+        <div className="flex items-center gap-2 rounded-xl border border-border/75 bg-card/90 px-3 py-2 text-xs text-muted-foreground card-shadow">
           <span className="w-2 h-2 rounded-full bg-success shadow-[0_0_6px_1px_oklch(0.52_0.15_145/0.4)]" />
           Sistema online
         </div>
@@ -179,14 +179,14 @@ export default function DashboardPage() {
 
         {/* Clientes */}
         <Link href="/clientes?status=ativo" className="group">
-          <div className="bg-card card-shadow hover:card-shadow-hover rounded-2xl p-5 border border-border/60 hover:border-primary/30 transition-all duration-200 h-full cursor-pointer">
+          <div className="h-full cursor-pointer rounded-2xl border border-border/65 bg-card/95 p-5 transition-all duration-200 card-shadow hover:-translate-y-0.5 hover:border-primary/35 hover:card-shadow-hover">
             <div className="flex items-start justify-between mb-4">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Clientes Ativos</span>
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                 <Users className="w-5 h-5 text-primary" />
               </div>
             </div>
-            <p className="text-4xl font-bold tracking-tight">{totalClientesAtivos}</p>
+            <p className="kpi-value">{totalClientesAtivos}</p>
             <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1 group-hover:text-primary transition-colors">
               Ver todos <ArrowRight className="w-3 h-3" />
             </p>
@@ -195,7 +195,7 @@ export default function DashboardPage() {
 
         {/* Competências */}
         <Link href={`/competencias?mes=${mesAtual}&ano=${anoAtual}`} className="group">
-          <div className="bg-card card-shadow hover:card-shadow-hover rounded-2xl p-5 border border-border/60 hover:border-primary/30 transition-all duration-200 h-full cursor-pointer">
+          <div className="h-full cursor-pointer rounded-2xl border border-border/65 bg-card/95 p-5 transition-all duration-200 card-shadow hover:-translate-y-0.5 hover:border-primary/35 hover:card-shadow-hover">
             <div className="flex items-start justify-between mb-4">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Competências</span>
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -218,14 +218,14 @@ export default function DashboardPage() {
 
         {/* Tarefas */}
         <Link href="/tarefas?status=pendente" className="group">
-          <div className="bg-card card-shadow hover:card-shadow-hover rounded-2xl p-5 border border-border/60 hover:border-primary/30 transition-all duration-200 h-full cursor-pointer">
+          <div className="h-full cursor-pointer rounded-2xl border border-border/65 bg-card/95 p-5 transition-all duration-200 card-shadow hover:-translate-y-0.5 hover:border-primary/35 hover:card-shadow-hover">
             <div className="flex items-start justify-between mb-4">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tarefas Abertas</span>
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                 <CheckSquare className="w-5 h-5 text-primary" />
               </div>
             </div>
-            <p className="text-4xl font-bold tracking-tight">{tarefasPendentes}</p>
+            <p className="kpi-value">{tarefasPendentes}</p>
             <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1 group-hover:text-primary transition-colors">
               Ver tarefas <ArrowRight className="w-3 h-3" />
             </p>
@@ -234,14 +234,14 @@ export default function DashboardPage() {
 
         {/* A receber */}
         <Link href="/financeiro?status=pendente" className="group">
-          <div className="bg-card card-shadow hover:card-shadow-hover rounded-2xl p-5 border border-border/60 hover:border-success/30 transition-all duration-200 h-full cursor-pointer">
+          <div className="h-full cursor-pointer rounded-2xl border border-border/65 bg-card/95 p-5 transition-all duration-200 card-shadow hover:-translate-y-0.5 hover:border-success/35 hover:card-shadow-hover">
             <div className="flex items-start justify-between mb-4">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">A Receber (7d)</span>
               <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
                 <TrendingUp className="w-5 h-5 text-success" />
               </div>
             </div>
-            <p className="text-2xl font-bold tracking-tight text-success font-mono">
+            <p className="kpi-value text-success font-mono">
               {formatCurrency(somaVencendo)}
             </p>
             <p className="text-xs text-muted-foreground mt-2">{vencendoCount} lançamento{vencendoCount !== 1 ? 's' : ''}</p>
@@ -251,7 +251,7 @@ export default function DashboardPage() {
         {/* Em atraso */}
         <Link href="/financeiro?status=atrasado" className="group">
           <div className={cn(
-            'bg-card card-shadow hover:card-shadow-hover rounded-2xl p-5 border transition-all duration-200 h-full cursor-pointer',
+            'h-full cursor-pointer rounded-2xl border bg-card/95 p-5 transition-all duration-200 card-shadow hover:-translate-y-0.5 hover:card-shadow-hover',
             atrasadosCount > 0
               ? 'border-destructive/25 bg-destructive/3 hover:border-destructive/35'
               : 'border-border/60 hover:border-destructive/20'
@@ -266,7 +266,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className={cn(
-              'text-2xl font-bold tracking-tight font-mono',
+              'kpi-value font-mono',
               atrasadosCount > 0 ? 'text-destructive' : 'text-foreground'
             )}>
               {formatCurrency(somaAtrasados)}
@@ -280,7 +280,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
 
         {/* Tarefas vencidas */}
-        <div className="bg-card card-shadow rounded-2xl border border-border/60 overflow-hidden">
+        <div className="overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
           <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-destructive" />
@@ -318,7 +318,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Competências abertas mês anterior */}
-        <div className="bg-card card-shadow rounded-2xl border border-border/60 overflow-hidden">
+        <div className="overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
           <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-warning" />
@@ -361,7 +361,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Lançamentos vencidos */}
-        <div className="bg-card card-shadow rounded-2xl border border-border/60 overflow-hidden">
+        <div className="overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
           <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-destructive" />
@@ -407,7 +407,7 @@ export default function DashboardPage() {
           { href: '/financeiro/novo',   label: 'Novo Lançamento',  dot: 'bg-success',     text: 'text-success' },
         ] as const).map((item) => (
           <Link key={item.href} href={item.href}>
-            <div className="bg-card card-shadow hover:card-shadow-hover rounded-xl p-4 border border-border/60 hover:border-border transition-all duration-200 cursor-pointer flex items-center gap-3">
+            <div className="flex cursor-pointer items-center gap-3 rounded-xl border border-border/65 bg-card/95 p-4 transition-all duration-200 card-shadow hover:-translate-y-0.5 hover:border-primary/25 hover:card-shadow-hover">
               <div className={cn('w-2 h-2 rounded-full shrink-0', item.dot)} />
               <span className={cn('text-sm font-medium', item.text)}>{item.label}</span>
               <ArrowRight className="w-3 h-3 ml-auto text-muted-foreground/50" />

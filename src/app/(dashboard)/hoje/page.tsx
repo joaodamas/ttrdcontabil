@@ -165,14 +165,14 @@ export default function HojePage() {
 
   return (
     <div className="stack-6">
-      <div className="flex flex-wrap gap-2 items-center justify-between">
+      <div className="surface-subtle flex flex-wrap items-center justify-between gap-3 border px-4 py-4 sm:px-5">
         <div>
           <h2 className="text-title">Hoje</h2>
           <p className="text-subtle">Prioridade do dia com ação rápida</p>
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex items-center gap-2">
           <select
-            className="h-9 rounded-md border bg-background px-2 text-sm"
+            className="h-10 rounded-xl border bg-background px-3 text-sm"
             value={responsavelId}
             onChange={(e) => setResponsavelId(e.target.value)}
           >
@@ -181,11 +181,11 @@ export default function HojePage() {
               <option key={u.id} value={u.id}>{u.nome ?? 'Usuário'}</option>
             ))}
           </select>
-          <Button variant="outline" onClick={() => void load()}>Atualizar</Button>
+          <Button variant="outline" className="h-10 rounded-xl" onClick={() => void load()}>Atualizar</Button>
         </div>
       </div>
 
-      <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm sm:p-6">
+      <div className="rounded-2xl border border-border/65 bg-card/95 p-4 card-shadow sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <InsightStrip
@@ -245,7 +245,7 @@ export default function HojePage() {
 
       {selectedIds.length > 0 && (
         <div ref={loteRef} id="acoes-lote">
-          <Card>
+          <Card className="border-border/65 bg-card/95 card-shadow">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Ações em lote ({selectedIds.length})</CardTitle>
           </CardHeader>
@@ -263,7 +263,7 @@ export default function HojePage() {
         </div>
       )}
 
-      <div className="flex items-center gap-2">
+      <div className="surface-subtle flex items-center gap-2 border px-3 py-2.5">
         <input
           type="checkbox"
           checked={selectedIds.length > 0 && selectedIds.length === allTaskIds.length}
@@ -313,7 +313,7 @@ export default function HojePage() {
         </div>
       </section>
 
-      <Card>
+      <Card className="border-border/65 bg-card/95 card-shadow">
         <CardHeader className="pb-2 flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-sm">Bloqueios de fechamento ({data.bloqueiosFechamento.length})</CardTitle>
           {bloqueiosCount > 0 ? (
