@@ -343,28 +343,28 @@ function FechamentoContent() {
           </Card>
           <Card>
             <CardContent className="pt-4 pb-3 flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 text-green-600 mt-1 shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-success mt-1 shrink-0" />
               <div>
                 <p className="text-xs text-muted-foreground">Enviados</p>
-                <p className="text-2xl font-bold text-green-700">{enviados}</p>
+                <p className="text-2xl font-bold text-success">{enviados}</p>
               </div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4 pb-3 flex items-start gap-2">
-              <Clock className="w-4 h-4 text-yellow-600 mt-1 shrink-0" />
+              <Clock className="w-4 h-4 text-warning mt-1 shrink-0" />
               <div>
                 <p className="text-xs text-muted-foreground">Pendentes</p>
-                <p className="text-2xl font-bold text-yellow-700">{pendentes}</p>
+                <p className="text-2xl font-bold text-warning">{pendentes}</p>
               </div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4 pb-3 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-orange-600 mt-1 shrink-0" />
+              <AlertCircle className="w-4 h-4 text-info mt-1 shrink-0" />
               <div>
                 <p className="text-xs text-muted-foreground">Parciais</p>
-                <p className="text-2xl font-bold text-orange-700">{parciais}</p>
+                <p className="text-2xl font-bold text-info">{parciais}</p>
               </div>
             </CardContent>
           </Card>
@@ -380,7 +380,7 @@ function FechamentoContent() {
           </div>
           <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
             <div
-              className="h-full bg-green-500 rounded-full transition-all"
+              className="h-full bg-success rounded-full transition-all"
               style={{ width: `${pct}%` }}
             />
           </div>

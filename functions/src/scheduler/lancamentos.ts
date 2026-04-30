@@ -1,7 +1,7 @@
 /**
  * Scheduler: criação automática de lançamentos mensais
  *
- * Executa todo dia 5 às 01:00 BRT (04:00 UTC).
+ * Executa no dia 1 às 06:00 (America/Sao_Paulo).
  * Para cada serviço ativo em clientes_servicos, cria um lançamento a receber
  * no mês corrente caso ainda não exista.
  *
@@ -33,7 +33,7 @@ function buildDataVencimento(ano: number, mes: number, dia: number): Date {
 
 export const criarLancamentosMensais = onSchedule(
   {
-    schedule:   '0 4 5 * *', // 01:00 BRT (= 04:00 UTC), todo dia 5
+    schedule:   '0 6 1 * *', // 06:00 BRT, dia 1
     timeZone:   'America/Sao_Paulo',
     region:     'southamerica-east1',
     memory:     '256MiB',
@@ -57,40 +57,47 @@ export const criarLancamentosMensais = onSchedule(
       return
     }
 
-    // 2. Cache de clientes para evitar leituras repetidas
-    const clienteCache = new Map<string, string>()
-
-    async function getRazaoSocial(clienteId: string): Promise<string | null> {
-      if (clienteCache.has(clienteId)) return clienteCache.get(clienteId)!
-      const doc = await db().collection('clientes').doc(clienteId).get()
-      if (!doc.exists || doc.data()?.status === 'inativo') return null
-      const nome = (doc.data()?.razaoSocial ?? '') as string
-      clienteCache.set(clienteId, nome)
-      return nome
+    // 2. Busca clientes de forma batched para evitar N+1
+    const clienteIds = Array.from(
+      new Set(servicosSnap.docs.map((d) => (d.data().clienteId as string)).filter(Boolean))
+    )
+    const clienteRefs = clienteIds.map((id) => db().collection('clientes').doc(id))
+    const clienteDocs = clienteRefs.length > 0 ? await db().getAll(...clienteRefs) : []
+    const clienteAtivoMap = new Map<string, string>()
+    for (const c of clienteDocs) {
+      if (!c.exists) continue
+      const data = c.data()
+      if (!data || data.status === 'inativo') continue
+      clienteAtivoMap.set(c.id, (data.razaoSocial ?? '') as string)
     }
 
-    let criados   = 0
+    // 3. Busca lançamentos já existentes do mês para evitar duplicatas
+    const existentesSnap = await db()
+      .collection('lancamentos')
+      .where('mes', '==', mes)
+      .where('ano', '==', ano)
+      .get()
+    const servicosComLancamento = new Set(
+      existentesSnap.docs
+        .map((d) => d.data().servicoId as string | undefined)
+        .filter((v): v is string => !!v)
+    )
+
+    let criados = 0
     let ignorados = 0
+    let batch = db().batch()
+    let ops = 0
 
     for (const servicoDoc of servicosSnap.docs) {
       const servico = servicoDoc.data()
       const clienteId = servico.clienteId as string
 
-      // Checa se já existe lançamento para este serviço/mês/ano
-      const jaExiste = await db()
-        .collection('lancamentos')
-        .where('servicoId', '==', servicoDoc.id)
-        .where('mes', '==', mes)
-        .where('ano', '==', ano)
-        .limit(1)
-        .get()
-
-      if (!jaExiste.empty) {
+      if (servicosComLancamento.has(servicoDoc.id)) {
         ignorados++
         continue
       }
 
-      const razaoSocial = await getRazaoSocial(clienteId)
+      const razaoSocial = clienteAtivoMap.get(clienteId)
       if (!razaoSocial) {
         ignorados++
         continue
@@ -100,29 +107,39 @@ export const criarLancamentosMensais = onSchedule(
       const dataVencimento = buildDataVencimento(ano, mes, diaVencimento)
       const descricao = (servico.descricaoServico ?? servico.nomeServico ?? servico.descricao ?? 'Honorários contábeis') as string
 
-      await db().collection('lancamentos').add({
+      const ref = db().collection('lancamentos').doc()
+      batch.set(ref, {
         clienteId,
-        clienteNome:    razaoSocial,
-        servicoId:      servicoDoc.id,
-        tipo:           'receita',
-        natureza:       'servico_contabil',
-        status:         'pendente',
-        valor:          (servico.valor ?? 0) as number,
-        descricao:      `${descricao} — ${String(mes).padStart(2, '0')}/${ano}`,
+        clienteNome: razaoSocial,
+        servicoId: servicoDoc.id,
+        tipo: 'receita',
+        natureza: 'servico_contabil',
+        status: 'pendente',
+        valor: (servico.valor ?? 0) as number,
+        descricao: `${descricao} — ${String(mes).padStart(2, '0')}/${ano}`,
         dataVencimento: Timestamp.fromDate(dataVencimento),
         mes,
         ano,
-        competencia:    `${String(mes).padStart(2, '0')}/${ano}`,
-        criadoEm:       Timestamp.now(),
+        competencia: `${String(mes).padStart(2, '0')}/${ano}`,
+        criadoEm: Timestamp.now(),
         criadoAutomaticamente: true,
-        dataBaixa:      null,
-        contaBancaria:  null,
-        observacoes:    '',
+        dataBaixa: null,
+        contaBancaria: null,
+        observacoes: '',
       })
-
+      ops++
       criados++
+      servicosComLancamento.add(servicoDoc.id)
+
+      if (ops >= 400) {
+        await batch.commit()
+        batch = db().batch()
+        ops = 0
+      }
     }
 
-    console.log(`[lancamentos] Criados: ${criados} | Ignorados (já existiam ou cliente inativo): ${ignorados}`)
+    if (ops > 0) await batch.commit()
+
+    console.log(`[lancamentos] Criados: ${criados} | Ignorados (duplicado/inativo): ${ignorados}`)
   }
 )

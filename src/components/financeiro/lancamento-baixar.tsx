@@ -15,14 +15,25 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, ArrowDownCircle } from 'lucide-react'
+import { Loader2, ArrowDownCircle, AlertTriangle } from 'lucide-react'
 import { updateDocument } from '@/lib/firestore-client'
+import { formatCurrency, formatDate, tsToDate } from '@/lib/utils'
 
 const FORMAS_PAGAMENTO = [
   { value: 'pix',           label: 'PIX' },
@@ -43,10 +54,17 @@ function toDateInputValue(date: Date) {
 interface LancamentoBaixarProps {
   lancamentoId: string
   onBaixado?: () => void
+  /** Contexto exibido no dialog para confirmação */
+  valor?: number
+  clienteNome?: string
+  descricao?: string
+  dataVencimento?: Timestamp
 }
 
-export function LancamentoBaixar({ lancamentoId, onBaixado }: LancamentoBaixarProps) {
+export function LancamentoBaixar({ lancamentoId, onBaixado, valor, clienteNome, descricao, dataVencimento }: LancamentoBaixarProps) {
+  const altaValor = (valor ?? 0) > 500
   const [open, setOpen]                     = useState(false)
+  const [confirmOpen, setConfirmOpen]       = useState(false)
   const [salvando, setSalvando]             = useState(false)
   const [dataPagamento, setDataPagamento]   = useState(toDateInputValue(new Date()))
   const [formaPagamento, setFormaPagamento] = useState('pix')
@@ -68,7 +86,9 @@ export function LancamentoBaixar({ lancamentoId, onBaixado }: LancamentoBaixarPr
         formaPagamento,
       })
 
-      toast.success('Lançamento baixado com sucesso!')
+      const cliente = clienteNome?.trim() || 'Cliente'
+      const valorLabel = valor != null ? formatCurrency(valor) : ''
+      toast.success(`Baixa confirmada: ${cliente}${valorLabel ? ` · ${valorLabel}` : ''}`)
       setOpen(false)
       onBaixado?.()
     } catch {
@@ -76,6 +96,14 @@ export function LancamentoBaixar({ lancamentoId, onBaixado }: LancamentoBaixarPr
     } finally {
       setSalvando(false)
     }
+  }
+
+  function handleConfirmarClick() {
+    if (altaValor) {
+      setConfirmOpen(true)
+      return
+    }
+    void handleBaixar()
   }
 
   return (
@@ -95,6 +123,24 @@ export function LancamentoBaixar({ lancamentoId, onBaixado }: LancamentoBaixarPr
         </DialogHeader>
 
         <div className="space-y-4 pt-2">
+          {/* Resumo do lançamento */}
+          {(descricao || clienteNome || valor != null) && (
+            <div className={`rounded-xl px-4 py-3 space-y-1 ${altaValor ? 'bg-warning/8 border border-warning/25' : 'bg-muted/60'}`}>
+              {altaValor && (
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-warning mb-2">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  Valor alto — confirme antes de baixar
+                </div>
+              )}
+              {descricao && <p className="text-sm font-medium">{descricao}</p>}
+              {clienteNome && <p className="text-xs text-muted-foreground">{clienteNome}</p>}
+              {valor != null && (
+                <p className={`text-base font-bold tabular-nums ${altaValor ? 'text-warning' : 'text-foreground'}`}>
+                  {formatCurrency(valor)}
+                </p>
+              )}
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="dataPagamento">Data de Pagamento</Label>
             <Input
@@ -130,13 +176,42 @@ export function LancamentoBaixar({ lancamentoId, onBaixado }: LancamentoBaixarPr
             <DialogClose render={<Button variant="outline" size="sm" disabled={salvando} />}>
               Cancelar
             </DialogClose>
-            <Button size="sm" onClick={handleBaixar} disabled={salvando}>
+            <Button size="sm" onClick={handleConfirmarClick} disabled={salvando}>
               {salvando && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Confirmar baixa
             </Button>
           </div>
         </div>
       </DialogContent>
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar baixa de valor alto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Revise os dados antes de confirmar a baixa.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="rounded-lg bg-muted/60 px-3 py-2.5 space-y-1.5 text-sm">
+            <p><span className="text-muted-foreground">Cliente:</span> {clienteNome ?? '—'}</p>
+            <p><span className="text-muted-foreground">Descrição:</span> {descricao ?? '—'}</p>
+            <p><span className="text-muted-foreground">Valor:</span> <span className="font-semibold text-warning">{valor != null ? formatCurrency(valor) : '—'}</span></p>
+            <p><span className="text-muted-foreground">Vencimento:</span> {dataVencimento ? formatDate(tsToDate(dataVencimento)) : '—'}</p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={salvando}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                void handleBaixar().then(() => setConfirmOpen(false))
+              }}
+              disabled={salvando}
+            >
+              {salvando && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Confirmar baixa
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   )
 }

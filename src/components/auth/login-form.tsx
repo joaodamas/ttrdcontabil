@@ -287,7 +287,7 @@ export function LoginForm() {
                 {...register('email')}
               />
               {errors.email && (
-                <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                <p className="text-xs text-destructive flex items-center gap-1 mt-1">
                   <AlertCircle className="w-3 h-3 shrink-0" />
                   {errors.email.message}
                 </p>
@@ -319,7 +319,7 @@ export function LoginForm() {
                 </button>
               </div>
               {errors.senha && (
-                <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                <p className="text-xs text-destructive flex items-center gap-1 mt-1">
                   <AlertCircle className="w-3 h-3 shrink-0" />
                   {errors.senha.message}
                 </p>

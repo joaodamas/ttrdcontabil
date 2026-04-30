@@ -150,7 +150,7 @@ export default function FiscalPage() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium text-muted-foreground">Pendentes</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-yellow-500" />
+              <AlertTriangle className="h-4 w-4 text-warning" />
             </div>
           </CardHeader>
           <CardContent>
@@ -199,11 +199,11 @@ export default function FiscalPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/50">
               <tr>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Cliente</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Nº NFS-e</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Emissão</th>
-                <th className="px-4 py-3 text-right font-medium text-muted-foreground">Valor</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
+                <th className="px-4 py-3 text-left section-label">Cliente</th>
+                <th className="px-4 py-3 text-left section-label">Nº NFS-e</th>
+                <th className="px-4 py-3 text-left section-label">Emissão</th>
+                <th className="px-4 py-3 text-right section-label">Valor</th>
+                <th className="px-4 py-3 text-left section-label">Status</th>
                 <th className="px-4 py-3 w-10" />
               </tr>
             </thead>

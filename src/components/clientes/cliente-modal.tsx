@@ -58,7 +58,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
 
     Promise.allSettled([
       getDocument('clientes', clienteId),
-      listDocuments('clientes_servicos', [where('clienteId', '==', clienteId), orderBy('dataInicio', 'desc')]),
+      listDocuments('clientes_servicos', [where('clienteId', '==', clienteId), orderBy('dataInicio', 'desc'), limit(50)]),
       listDocuments('competencias', [where('clienteId', '==', clienteId), orderBy('ano', 'desc'), orderBy('mes', 'desc'), limit(12)]),
       listDocuments('lancamentos', [where('clienteId', '==', clienteId), orderBy('dataVencimento', 'desc'), limit(10)]),
       listDocuments('nfse_emitidas', [where('clienteId', '==', clienteId), orderBy('criadoEm', 'desc'), limit(20)]),
@@ -424,7 +424,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                               <CardHeader className="flex flex-row items-center gap-2 pb-3">
                                 {certInfo
                                   ? certInfo.valido
-                                    ? <ShieldCheck className="w-4 h-4 text-green-600" />
+                                    ? <ShieldCheck className="w-4 h-4 text-success" />
                                     : <ShieldAlert className="w-4 h-4 text-destructive" />
                                   : <ShieldOff className="w-4 h-4 text-muted-foreground" />}
                                 <CardTitle className="text-sm">Certificado Digital A1</CardTitle>

@@ -17,16 +17,8 @@ export { exportarFirestoreSemanal } from './backup'
 // ── Schedulers ────────────────────────────────────────────────────────────────
 export { criarCompetenciasMensais } from './scheduler/competencias'
 export { criarLancamentosMensais  } from './scheduler/lancamentos'
-export { enviarAlertasDiarios     } from './scheduler/alertas'
+export { enviarAlertasDiarios, alertasPrazoCritico, detectarInadimplencia } from './scheduler/alertas'
 
 // ── Triggers ──────────────────────────────────────────────────────────────────
 export { propagarRazaoSocial } from './triggers/cliente-update'
-export {
-  eventoTarefaCriada,
-  eventoTarefaAtualizada,
-  eventoLancamentoCriado,
-  eventoLancamentoAtualizado,
-  eventoCompetenciaCriada,
-  eventoNfseEmitidaCriada,
-  eventoFiscalAtualizado,
-} from './triggers/cliente-events'
+export { onTarefaConcluida } from './triggers/tarefa-concluida'

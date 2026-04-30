@@ -56,8 +56,8 @@ function SkeletonList() {
 /* ─── Status config ─────────────────────────────────────────── */
 const COMP_STATUS: Record<string, { label: string; icon: React.ElementType; color: string; dot: string }> = {
   aberta:       { label: 'Abertas',      icon: Circle,       color: 'text-muted-foreground', dot: 'bg-muted-foreground/40' },
-  em_andamento: { label: 'Em andamento', icon: Clock,        color: 'text-amber-600',         dot: 'bg-amber-500' },
-  concluida:    { label: 'Concluídas',   icon: CheckCircle2, color: 'text-emerald-600',        dot: 'bg-emerald-500' },
+  em_andamento: { label: 'Em andamento', icon: Clock,        color: 'text-warning',  dot: 'bg-warning' },
+  concluida:    { label: 'Concluídas',   icon: CheckCircle2, color: 'text-success',  dot: 'bg-success' },
 }
 
 /* ─── Page ──────────────────────────────────────────────────── */
@@ -89,11 +89,10 @@ export default function DashboardPage() {
     Promise.allSettled([
       listDocuments('clientes',     [where('status', '==', 'ativo')]),
       listDocuments('competencias', [where('mes', '==', mesAtual), where('ano', '==', anoAtual)]),
-      listDocuments('tarefas',      [where('status', 'in', ['pendente', 'em_andamento'])]),
+      // Uma query de tarefas pendentes para alimentar KPI + lista de vencidas
+      listDocuments('tarefas',      [where('status', 'in', ['pendente', 'em_andamento']), orderBy('dataPrazo', 'asc')]),
       listDocuments('lancamentos',  [where('tipo', '==', 'receita'), where('status', '==', 'pendente'), where('dataVencimento', '>=', hojeTs), where('dataVencimento', '<=', em7DiasTs)]),
       listDocuments('lancamentos',  [where('tipo', '==', 'receita'), where('status', '==', 'pendente'), where('dataVencimento', '<', hojeTs)]),
-      // Simplified: filter by status only, filter overdue client-side (avoids composite index requirement)
-      listDocuments('tarefas',      [where('status', 'in', ['pendente', 'em_andamento']), orderBy('dataPrazo', 'asc'), limit(20)]),
       listDocuments('competencias', [where('mes', '==', mesAnterior), where('ano', '==', anoAnterior), where('status', '==', 'aberta'), limit(5)]),
       listDocuments('lancamentos',  [where('tipo', '==', 'receita'), where('status', '==', 'pendente'), where('dataVencimento', '<', hojeTs), orderBy('dataVencimento', 'asc'), limit(5)]),
     ]).then((results) => {
@@ -107,9 +106,8 @@ export default function DashboardPage() {
       const tarefasData        = get<Record<string, unknown>>(2)
       const vencendoData       = get<Record<string, unknown>>(3)
       const atrasadosData      = get<Record<string, unknown>>(4)
-      const tarefasStatusData  = get<Record<string, unknown>>(5)
-      const compAbertasData    = get<Record<string, unknown>>(6)
-      const lancVencidosData   = get<Record<string, unknown>>(7)
+      const compAbertasData    = get<Record<string, unknown>>(5)
+      const lancVencidosData   = get<Record<string, unknown>>(6)
 
       setTotalClientesAtivos(clientesData.length)
 
@@ -125,7 +123,7 @@ export default function DashboardPage() {
       setAtrasadosCount(atrasadosData.length)
 
       // Filter overdue tasks client-side
-      const vencidas = tarefasStatusData.filter((t) => {
+      const vencidas = tarefasData.filter((t) => {
         if (!t.dataPrazo) return false
         const prazo = tsToDate(t.dataPrazo)
         return prazo != null && prazo < hoje
@@ -171,7 +169,7 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground bg-card border border-border card-shadow rounded-xl px-3 py-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_6px_1px_rgb(16_185_129/0.5)]" />
+          <span className="w-2 h-2 rounded-full bg-success shadow-[0_0_6px_1px_oklch(0.52_0.15_145/0.4)]" />
           Sistema online
         </div>
       </div>
@@ -236,14 +234,14 @@ export default function DashboardPage() {
 
         {/* A receber */}
         <Link href="/financeiro?status=pendente" className="group">
-          <div className="bg-card card-shadow hover:card-shadow-hover rounded-2xl p-5 border border-border/60 hover:border-emerald-300/40 transition-all duration-200 h-full cursor-pointer">
+          <div className="bg-card card-shadow hover:card-shadow-hover rounded-2xl p-5 border border-border/60 hover:border-success/30 transition-all duration-200 h-full cursor-pointer">
             <div className="flex items-start justify-between mb-4">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">A Receber (7d)</span>
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
-                <TrendingUp className="w-5 h-5 text-emerald-600" />
+              <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
+                <TrendingUp className="w-5 h-5 text-success" />
               </div>
             </div>
-            <p className="text-2xl font-bold tracking-tight text-emerald-700 font-mono">
+            <p className="text-2xl font-bold tracking-tight text-success font-mono">
               {formatCurrency(somaVencendo)}
             </p>
             <p className="text-xs text-muted-foreground mt-2">{vencendoCount} lançamento{vencendoCount !== 1 ? 's' : ''}</p>
@@ -255,21 +253,21 @@ export default function DashboardPage() {
           <div className={cn(
             'bg-card card-shadow hover:card-shadow-hover rounded-2xl p-5 border transition-all duration-200 h-full cursor-pointer',
             atrasadosCount > 0
-              ? 'border-red-200/60 bg-red-50/30 hover:border-red-300/50'
-              : 'border-border/60 hover:border-red-200/40'
+              ? 'border-destructive/25 bg-destructive/3 hover:border-destructive/35'
+              : 'border-border/60 hover:border-destructive/20'
           )}>
             <div className="flex items-start justify-between mb-4">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Em Atraso</span>
               <div className={cn(
                 'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
-                atrasadosCount > 0 ? 'bg-red-100' : 'bg-red-50'
+                atrasadosCount > 0 ? 'bg-destructive/15' : 'bg-destructive/8'
               )}>
-                <AlertTriangle className={cn('w-5 h-5', atrasadosCount > 0 ? 'text-red-600' : 'text-red-400')} />
+                <AlertTriangle className={cn('w-5 h-5', atrasadosCount > 0 ? 'text-destructive' : 'text-destructive/50')} />
               </div>
             </div>
             <p className={cn(
               'text-2xl font-bold tracking-tight font-mono',
-              atrasadosCount > 0 ? 'text-red-700' : 'text-foreground'
+              atrasadosCount > 0 ? 'text-destructive' : 'text-foreground'
             )}>
               {formatCurrency(somaAtrasados)}
             </p>
@@ -285,7 +283,7 @@ export default function DashboardPage() {
         <div className="bg-card card-shadow rounded-2xl border border-border/60 overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-red-500" />
+              <div className="w-2 h-2 rounded-full bg-destructive" />
               <h2 className="text-sm font-semibold">Tarefas Vencidas</h2>
             </div>
             <Link href="/tarefas" className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
@@ -304,12 +302,12 @@ export default function DashboardPage() {
               {tarefasVencidas.map((t) => (
                 <li key={t.id} className="border-b border-border/40 last:border-0">
                   <Link href={`/tarefas/${t.id}`} className="flex items-start gap-3 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer">
-                    <div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-[7px] shrink-0" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-destructive mt-[7px] shrink-0" />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">{t.titulo}</p>
                       <p className="text-xs text-muted-foreground truncate">{t.clienteNome ?? '—'}</p>
                       {t.dataPrazo && (
-                        <p className="text-xs text-red-600 mt-0.5 font-medium">Prazo: {formatDate(tsToDate(t.dataPrazo))}</p>
+                        <p className="text-xs text-destructive mt-0.5 font-medium">Prazo: {formatDate(tsToDate(t.dataPrazo))}</p>
                       )}
                     </div>
                   </Link>
@@ -323,7 +321,7 @@ export default function DashboardPage() {
         <div className="bg-card card-shadow rounded-2xl border border-border/60 overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-amber-500" />
+              <div className="w-2 h-2 rounded-full bg-warning" />
               <h2 className="text-sm font-semibold">
                 Abertas — {formatMesAno(mesAnterior, anoAnterior)}
               </h2>
@@ -347,12 +345,12 @@ export default function DashboardPage() {
               {competenciasAbertas.map((c) => (
                 <li key={c.id} className="border-b border-border/40 last:border-0">
                   <Link href={`/competencias/${c.id}`} className="flex items-center gap-3 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer">
-                    <div className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-warning shrink-0" />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">{c.clienteNome ?? '—'}</p>
                       <p className="text-xs text-muted-foreground">{formatMesAno(c.mes, c.ano)}</p>
                     </div>
-                    <Badge variant="outline" className="text-xs shrink-0 text-amber-600 border-amber-200 bg-amber-50">
+                    <Badge variant="outline" className="text-xs shrink-0 text-warning border-warning/30 bg-warning/8">
                       aberta
                     </Badge>
                   </Link>
@@ -366,7 +364,7 @@ export default function DashboardPage() {
         <div className="bg-card card-shadow rounded-2xl border border-border/60 overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-border/60">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-red-500" />
+              <div className="w-2 h-2 rounded-full bg-destructive" />
               <h2 className="text-sm font-semibold">Lançamentos Vencidos</h2>
             </div>
             <Link href="/financeiro?status=pendente" className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
@@ -385,11 +383,11 @@ export default function DashboardPage() {
               {lancamentosVencidos.map((l) => (
                 <li key={l.id} className="border-b border-border/40 last:border-0">
                   <Link href="/financeiro" className="flex items-start gap-3 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer">
-                    <div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-[7px] shrink-0" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-destructive mt-[7px] shrink-0" />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">{l.descricao}</p>
                       <p className="text-xs text-muted-foreground truncate">{l.clienteNome ?? '—'}</p>
-                      <p className="text-xs text-red-600 mt-0.5 font-medium">Venc.: {formatDate(tsToDate(l.dataVencimento))}</p>
+                      <p className="text-xs text-destructive mt-0.5 font-medium">Venc.: {formatDate(tsToDate(l.dataVencimento))}</p>
                     </div>
                     <span className="text-sm font-bold shrink-0 tabular-nums">{formatCurrency(l.valor)}</span>
                   </Link>
@@ -402,16 +400,16 @@ export default function DashboardPage() {
 
       {/* ── Quick access ─────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { href: '/clientes/novo',       label: 'Novo Cliente',    color: 'text-primary',     bg: 'bg-primary/8'    },
-          { href: '/competencias/nova',   label: 'Nova Competência',color: 'text-blue-600',    bg: 'bg-blue-50'      },
-          { href: '/tarefas/nova',        label: 'Nova Tarefa',     color: 'text-purple-600',  bg: 'bg-purple-50'    },
-          { href: '/financeiro/novo',     label: 'Novo Lançamento', color: 'text-emerald-600', bg: 'bg-emerald-50'   },
-        ].map((item) => (
+        {([
+          { href: '/clientes/novo',     label: 'Novo Cliente',     dot: 'bg-primary',     text: 'text-primary' },
+          { href: '/competencias/nova', label: 'Nova Competência', dot: 'bg-info',        text: 'text-info' },
+          { href: '/tarefas/nova',      label: 'Nova Tarefa',      dot: 'bg-muted-foreground', text: 'text-foreground' },
+          { href: '/financeiro/novo',   label: 'Novo Lançamento',  dot: 'bg-success',     text: 'text-success' },
+        ] as const).map((item) => (
           <Link key={item.href} href={item.href}>
             <div className="bg-card card-shadow hover:card-shadow-hover rounded-xl p-4 border border-border/60 hover:border-border transition-all duration-200 cursor-pointer flex items-center gap-3">
-              <div className={cn('w-2 h-2 rounded-full shrink-0', item.bg.replace('bg-', 'bg-').replace('/8', ''), item.color.replace('text-', 'bg-').replace('-600', '-500').replace('-700', '-500'))} />
-              <span className={cn('text-sm font-medium', item.color)}>{item.label}</span>
+              <div className={cn('w-2 h-2 rounded-full shrink-0', item.dot)} />
+              <span className={cn('text-sm font-medium', item.text)}>{item.label}</span>
               <ArrowRight className="w-3 h-3 ml-auto text-muted-foreground/50" />
             </div>
           </Link>

@@ -35,12 +35,12 @@ const STATUS_CYCLE: Record<string, StatusObrigacao[]> = {
 }
 
 const STATUS_STYLE: Record<StatusObrigacao, string> = {
-  pendente: 'bg-yellow-100 text-yellow-800 border-yellow-300 hover:bg-yellow-200',
-  enviado:  'bg-green-100 text-green-800 border-green-300 hover:bg-green-200',
-  parcial:  'bg-orange-100 text-orange-800 border-orange-300 hover:bg-orange-200',
-  ok:       'bg-green-100 text-green-800 border-green-300 hover:bg-green-200',
-  sm:       'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200',
-  guia:     'bg-red-100 text-red-800 border-red-300 hover:bg-red-200',
+  pendente: 'bg-warning/10 text-warning border-warning/30 hover:bg-warning/20',
+  enviado:  'bg-success/10 text-success border-success/30 hover:bg-success/20',
+  parcial:  'bg-info/10 text-info border-info/30 hover:bg-info/20',
+  ok:       'bg-success/15 text-success border-success/35 hover:bg-success/25',
+  sm:       'bg-success/10 text-success border-success/30 hover:bg-success/20',
+  guia:     'bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20',
   na:       'bg-muted text-muted-foreground border-border hover:bg-muted/80',
 }
 
@@ -104,11 +104,11 @@ const REGIME_LABEL: Record<string, string> = {
 }
 
 const REGIME_COLOR: Record<string, string> = {
-  simples_nacional: 'bg-blue-100 text-blue-700',
-  lucro_presumido:  'bg-purple-100 text-purple-700',
-  lucro_real:       'bg-indigo-100 text-indigo-700',
-  mei:              'bg-cyan-100 text-cyan-700',
-  isento:           'bg-gray-100 text-gray-600',
+  simples_nacional: 'bg-primary/10 text-foreground/70 border border-primary/20',
+  lucro_presumido:  'bg-info/10 text-info border border-info/20',
+  lucro_real:       'bg-muted text-foreground/70 border border-border',
+  mei:              'bg-success/10 text-success border border-success/20',
+  isento:           'bg-muted text-muted-foreground border border-border',
 }
 
 export function FechamentoTable({ fechamentos, onUpdate }: FechamentoTableProps) {
@@ -142,7 +142,7 @@ export function FechamentoTable({ fechamentos, onUpdate }: FechamentoTableProps)
               <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{f.clienteCodigo}</td>
               <td className="px-3 py-2 font-medium">{f.clienteNome}</td>
               <td className="px-3 py-2">
-                <span className={cn('rounded px-1.5 py-0.5 text-xs font-semibold', REGIME_COLOR[f.regime] ?? 'bg-gray-100 text-gray-600')}>
+                <span className={cn('rounded px-1.5 py-0.5 text-xs font-semibold', REGIME_COLOR[f.regime] ?? 'bg-muted text-muted-foreground')}>
                   {REGIME_LABEL[f.regime] ?? f.regime}
                 </span>
               </td>

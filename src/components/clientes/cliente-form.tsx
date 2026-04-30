@@ -227,7 +227,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
                 />
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
                   {buscandoCnpj && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-                  {cnpjOk && !buscandoCnpj && <CheckCircle2 className="w-4 h-4 text-green-600" />}
+                  {cnpjOk && !buscandoCnpj && <CheckCircle2 className="w-4 h-4 text-success" />}
                 </div>
               </div>
               {errors.cpfCnpj && <p className="text-xs text-destructive">{errors.cpfCnpj.message}</p>}

@@ -148,3 +148,142 @@ export const enviarAlertasDiarios = onSchedule(
     console.log(`[alertas] Email enviado. Tarefas: ${tarefasAlerta.length}, Lançamentos: ${lancamentosSnap.size}, Certs: ${certAlertas.length}`)
   }
 )
+
+/**
+ * Marca tarefas com prazo crítico em 48h.
+ * Campo usado pelo frontend para destaque visual no cockpit.
+ */
+export const alertasPrazoCritico = onSchedule(
+  {
+    schedule: '0 7 * * *', // 07:00 BRT, diário
+    timeZone: 'America/Sao_Paulo',
+    region: 'southamerica-east1',
+    memory: '256MiB',
+    timeoutSeconds: 120,
+  },
+  async () => {
+    const agora = new Date()
+    const em48h = new Date(agora)
+    em48h.setHours(em48h.getHours() + 48)
+    const tsAgora = Timestamp.fromDate(agora)
+    const tsEm48h = Timestamp.fromDate(em48h)
+
+    const criticasSnap = await db()
+      .collection('tarefas')
+      .where('status', 'in', ['pendente', 'em_andamento'])
+      .where('dataVencimento', '>=', tsAgora)
+      .where('dataVencimento', '<=', tsEm48h)
+      .get()
+
+    const flaggedSnap = await db()
+      .collection('tarefas')
+      .where('alertaPrazo48h', '==', true)
+      .get()
+
+    const criticasIds = new Set(criticasSnap.docs.map((d) => d.id))
+    const updates: Array<{ ref: FirebaseFirestore.DocumentReference; alertaPrazo48h: boolean }> = []
+
+    for (const doc of criticasSnap.docs) {
+      updates.push({ ref: doc.ref, alertaPrazo48h: true })
+    }
+    for (const doc of flaggedSnap.docs) {
+      if (!criticasIds.has(doc.id)) {
+        updates.push({ ref: doc.ref, alertaPrazo48h: false })
+      }
+    }
+
+    let batch = db().batch()
+    let ops = 0
+    for (const u of updates) {
+      batch.update(u.ref, {
+        alertaPrazo48h: u.alertaPrazo48h,
+        atualizadoEm: Timestamp.now(),
+      })
+      ops++
+      if (ops >= 400) {
+        await batch.commit()
+        batch = db().batch()
+        ops = 0
+      }
+    }
+    if (ops > 0) await batch.commit()
+
+    console.log(`[alertas-prazo-48h] tarefas críticas=${criticasSnap.size}, atualizadas=${updates.length}`)
+  }
+)
+
+/**
+ * Marca clientes com risco de inadimplência crescente.
+ * Regra: soma em atraso (receita pendente vencida) > R$ 500.
+ */
+export const detectarInadimplencia = onSchedule(
+  {
+    schedule: '0 8 * * 1', // segunda-feira, 08:00 BRT
+    timeZone: 'America/Sao_Paulo',
+    region: 'southamerica-east1',
+    memory: '256MiB',
+    timeoutSeconds: 120,
+  },
+  async () => {
+    const hoje = Timestamp.fromDate(new Date())
+
+    const atrasadosSnap = await db()
+      .collection('lancamentos')
+      .where('tipo', '==', 'receita')
+      .where('status', '==', 'pendente')
+      .where('dataVencimento', '<', hoje)
+      .get()
+
+    const somaPorCliente = new Map<string, number>()
+    for (const doc of atrasadosSnap.docs) {
+      const data = doc.data()
+      const clienteId = data.clienteId as string | undefined
+      if (!clienteId) continue
+      const valor = (data.valor ?? 0) as number
+      somaPorCliente.set(clienteId, (somaPorCliente.get(clienteId) ?? 0) + valor)
+    }
+
+    const riscoIds = new Set(
+      Array.from(somaPorCliente.entries())
+        .filter(([, soma]) => soma > 500)
+        .map(([clienteId]) => clienteId)
+    )
+
+    const clientesFlaggedSnap = await db()
+      .collection('clientes')
+      .where('riscoInadimplencia', '==', true)
+      .get()
+
+    const updates: Array<{ ref: FirebaseFirestore.DocumentReference; riscoInadimplencia: boolean }> = []
+    for (const clienteId of riscoIds) {
+      updates.push({
+        ref: db().collection('clientes').doc(clienteId),
+        riscoInadimplencia: true,
+      })
+    }
+    for (const doc of clientesFlaggedSnap.docs) {
+      if (!riscoIds.has(doc.id)) {
+        updates.push({ ref: doc.ref, riscoInadimplencia: false })
+      }
+    }
+
+    let batch = db().batch()
+    let ops = 0
+    for (const u of updates) {
+      batch.set(
+        u.ref,
+        { riscoInadimplencia: u.riscoInadimplencia, atualizadoEm: Timestamp.now() },
+        { merge: true }
+      )
+      ops++
+      if (ops >= 400) {
+        await batch.commit()
+        batch = db().batch()
+        ops = 0
+      }
+    }
+    if (ops > 0) await batch.commit()
+
+    console.log(`[inadimplencia] clientes em risco=${riscoIds.size}, atualizados=${updates.length}`)
+  }
+)

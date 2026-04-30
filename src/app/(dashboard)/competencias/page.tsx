@@ -9,7 +9,10 @@ import { listDocuments } from '@/lib/firestore-client'
 import { formatMesAno } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Plus, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { Plus, ChevronLeft, ChevronRight, Loader2, Layers } from 'lucide-react'
+import { TableRowSkeleton } from '@/components/ui/skeleton'
+import { TableEmptyState } from '@/components/ui/empty-state'
+import { FilterBtn } from '@/components/ui/filter-btn'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   aberta: { label: 'Aberta', variant: 'outline' },
@@ -64,14 +67,6 @@ function CompetenciasContent() {
     return `/competencias?${params.toString()}`
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="w-5 h-5 animate-spin" />
-      </div>
-    )
-  }
-
   const total = allCompetencias.length
   const totalPages = Math.ceil(total / PAGE_SIZE)
   const competencias = allCompetencias.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -117,38 +112,36 @@ function CompetenciasContent() {
         </div>
 
         <div className="flex items-center gap-1">
-          {['', 'aberta', 'em_andamento', 'concluida', 'cancelada'].map((s) => (
-            <Link key={s} href={buildUrl({ status: s, page: 1 })}>
-              <Button
-                variant={status === s ? 'default' : 'outline'}
-                size="sm"
-                className="h-8 text-xs"
-              >
-                {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
-              </Button>
-            </Link>
+          {(['', 'aberta', 'em_andamento', 'concluida', 'cancelada'] as const).map((s) => (
+            <FilterBtn key={s} href={buildUrl({ status: s, page: 1 })} active={status === s}>
+              {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+            </FilterBtn>
           ))}
         </div>
       </div>
 
       <div className="rounded-xl ring-1 ring-foreground/10 overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-muted-foreground">
+          <thead className="bg-muted/50">
             <tr>
-              <th className="px-4 py-3 text-left font-medium">Cliente</th>
-              <th className="px-4 py-3 text-left font-medium">Serviço</th>
-              <th className="px-4 py-3 text-left font-medium">Mês/Ano</th>
-              <th className="px-4 py-3 text-left font-medium">Status</th>
-              <th className="px-4 py-3 text-left font-medium">Responsável</th>
+              <th className="px-4 py-3 text-left section-label">Cliente</th>
+              <th className="px-4 py-3 text-left section-label">Serviço</th>
+              <th className="px-4 py-3 text-left section-label">Mês/Ano</th>
+              <th className="px-4 py-3 text-left section-label">Status</th>
+              <th className="px-4 py-3 text-left section-label">Responsável</th>
             </tr>
           </thead>
           <tbody className="divide-y">
-            {competencias.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
-                  Nenhuma competência encontrada.
-                </td>
-              </tr>
+            {loading ? (
+              <TableRowSkeleton cols={5} rows={8} />
+            ) : competencias.length === 0 ? (
+              <TableEmptyState
+                colSpan={5}
+                icon={Layers}
+                title="Nenhuma competência encontrada"
+                description={status ? 'Tente ajustar os filtros.' : `Nenhuma competência para ${formatMesAno(mes, ano)}.`}
+                action={!status ? { label: 'Nova Competência', href: '/competencias/nova' } : undefined}
+              />
             ) : (
               competencias.map((c) => {
                 const s = STATUS_MAP[c.status as string] ?? {

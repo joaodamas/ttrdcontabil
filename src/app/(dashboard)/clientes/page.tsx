@@ -23,7 +23,38 @@ const REGIME_LABELS: Record<string, string> = {
   isento: 'Isento',
 }
 
+const REGIME_BADGE: Record<string, string> = {
+  simples_nacional: 'bg-success/10 text-success border-success/25',
+  lucro_presumido:  'bg-info/10 text-info border-info/25',
+  lucro_real:       'bg-primary/10 text-foreground/70 border-primary/20',
+  mei:              'bg-warning/10 text-warning border-warning/25',
+  isento:           'bg-muted text-muted-foreground border-border',
+}
+
+function clienteInitials(razaoSocial: string): string {
+  const words = razaoSocial.trim().split(/\s+/)
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
+  return (words[0][0] + words[1][0]).toUpperCase()
+}
+
 const PAGE_SIZE = 20
+
+function saudeCliente(c: Record<string, unknown>): {
+  score: 0 | 1 | 2 | 3
+  label: 'crítica' | 'atenção' | 'estável'
+  reason: string
+} {
+  if ((c.status as string) === 'suspenso') {
+    return { score: 0, label: 'crítica', reason: 'Cliente suspenso' }
+  }
+  if ((c.riscoInadimplencia as boolean) === true) {
+    return { score: 1, label: 'atenção', reason: 'Risco de inadimplência acima de R$ 500' }
+  }
+  if ((c.status as string) === 'inativo') {
+    return { score: 2, label: 'atenção', reason: 'Cliente inativo' }
+  }
+  return { score: 3, label: 'estável', reason: 'Sem alertas ativos' }
+}
 
 function ClientesContent() {
   const searchParams = useSearchParams()
@@ -31,18 +62,16 @@ function ClientesContent() {
   const status = searchParams.get('status') ?? ''
   const page   = parseInt(searchParams.get('page') ?? '1')
 
-  const [allClientes, setAllClientes] = useState<Array<Record<string, string>>>([])
+  const [allClientes, setAllClientes] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(true)
   const [modalClienteId,   setModalClienteId]   = useState<string | null>(null)
   const [modalClienteNome, setModalClienteNome] = useState('')
 
   useEffect(() => {
-    queueMicrotask(() => {
-      setLoading(true)
-      getClientes(status ? { status } : {})
-        .then((data) => setAllClientes(data as Array<Record<string, string>>))
-        .finally(() => setLoading(false))
-    })
+    setLoading(true)
+    getClientes(status ? { status } : {})
+      .then((data) => setAllClientes(data as Array<Record<string, unknown>>))
+      .finally(() => setLoading(false))
   }, [status])
 
   let clientes = allClientes
@@ -83,20 +112,21 @@ function ClientesContent() {
         <table className="w-full text-sm">
           <thead className="bg-muted/50 border-b">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nome / Razão Social</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">CPF / CNPJ</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Regime</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Cidade / UF</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
+              <th className="text-left px-4 py-3 section-label">Nome / Razão Social</th>
+              <th className="text-left px-4 py-3 section-label">CPF / CNPJ</th>
+              <th className="text-left px-4 py-3 section-label hidden md:table-cell">Regime</th>
+              <th className="text-left px-4 py-3 section-label hidden lg:table-cell">Cidade / UF</th>
+              <th className="text-left px-4 py-3 section-label">Status</th>
+              <th className="text-left px-4 py-3 section-label">Saúde</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {loading ? (
-              <TableRowSkeleton cols={6} rows={8} />
+              <TableRowSkeleton cols={7} rows={8} />
             ) : paginados.length === 0 ? (
               <TableEmptyState
-                colSpan={6}
+                colSpan={7}
                 icon={Users}
                 title={busca || status ? 'Nenhum cliente encontrado' : 'Ainda não há clientes'}
                 description={busca || status
@@ -105,31 +135,65 @@ function ClientesContent() {
                 action={!busca && !status ? { label: 'Novo Cliente', href: '/clientes/novo' } : undefined}
               />
             ) : (
-              paginados.map((c) => (
+              paginados.map((c) => {
+                const saude = saudeCliente(c)
+                return (
                 <tr
-                  key={c.id}
+                  key={c.id as string}
                   className="hover:bg-muted/30 transition-colors cursor-pointer"
-                  onClick={() => { setModalClienteId(c.id); setModalClienteNome(c.razaoSocial) }}
+                  onClick={() => { setModalClienteId(c.id as string); setModalClienteNome((c.razaoSocial as string) ?? '') }}
                 >
                   <td className="px-4 py-3">
-                    <div>
-                      <p className="font-medium">{c.razaoSocial}</p>
-                      {c.nomeFantasia ? (
-                        <p className="text-xs text-muted-foreground">{c.nomeFantasia}</p>
-                      ) : null}
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <span className="text-xs font-semibold text-primary">
+                          {clienteInitials((c.razaoSocial as string) || '?')}
+                        </span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{c.razaoSocial as string}</p>
+                        {c.nomeFantasia ? (
+                          <p className="text-xs text-muted-foreground truncate">{c.nomeFantasia as string}</p>
+                        ) : null}
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground font-mono text-xs">
-                    {formatCpfCnpj(c.cpfCnpj)}
+                    {formatCpfCnpj(c.cpfCnpj as string)}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
-                    {c.regimeTributario ? REGIME_LABELS[c.regimeTributario] ?? c.regimeTributario : '—'}
+                  <td className="px-4 py-3 hidden md:table-cell">
+                    {c.regimeTributario ? (
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${REGIME_BADGE[c.regimeTributario as string] ?? REGIME_BADGE.isento}`}>
+                        {REGIME_LABELS[c.regimeTributario as string] ?? (c.regimeTributario as string)}
+                      </span>
+                    ) : <span className="text-muted-foreground">—</span>}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">
-                    {c.cidade && c.uf ? `${c.cidade} / ${c.uf}` : '—'}
+                    {c.cidade && c.uf ? `${c.cidade as string} / ${c.uf as string}` : '—'}
                   </td>
                   <td className="px-4 py-3">
-                    <ClienteStatusBadge status={c.status} />
+                    <ClienteStatusBadge status={c.status as string} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <div
+                      className="inline-flex items-center gap-1.5"
+                      title={`Saúde ${saude.label}: ${saude.reason}`}
+                    >
+                      {[1, 2, 3].map((dot) => (
+                        <span
+                          key={dot}
+                          className={`h-2 w-2 rounded-full ${
+                            dot <= saude.score
+                              ? saude.score === 3
+                                ? 'bg-success'
+                                : saude.score === 2
+                                  ? 'bg-warning'
+                                  : 'bg-destructive'
+                              : 'bg-muted'
+                          }`}
+                        />
+                      ))}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <Button
@@ -137,15 +201,16 @@ function ClientesContent() {
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation()
-                        setModalClienteId(c.id)
-                        setModalClienteNome(c.razaoSocial)
+                        setModalClienteId(c.id as string)
+                        setModalClienteNome((c.razaoSocial as string) ?? '')
                       }}
                     >
                       Ver
                     </Button>
                   </td>
                 </tr>
-              ))
+                )
+              })
             )}
           </tbody>
         </table>

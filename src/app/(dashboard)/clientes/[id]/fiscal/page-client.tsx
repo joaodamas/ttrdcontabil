@@ -206,7 +206,7 @@ export default function ClienteFiscalPage() {
           <CardHeader className="flex flex-row items-center gap-2">
             {certInfo
               ? certInfo.valido
-                ? <ShieldCheck className="w-4 h-4 text-green-600" />
+                ? <ShieldCheck className="w-4 h-4 text-success" />
                 : <ShieldAlert className="w-4 h-4 text-destructive" />
               : <ShieldOff className="w-4 h-4 text-muted-foreground" />
             }
@@ -236,11 +236,11 @@ export default function ClienteFiscalPage() {
             <table className="w-full text-sm">
               <thead className="bg-muted/50 border-b">
                 <tr>
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Tomador</th>
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Nº NFS-e</th>
-                  <th className="px-4 py-2 text-right font-medium text-muted-foreground">Valor</th>
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Data</th>
-                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Status</th>
+                  <th className="px-4 py-2 text-left section-label">Tomador</th>
+                  <th className="px-4 py-2 text-left section-label">Nº NFS-e</th>
+                  <th className="px-4 py-2 text-right section-label">Valor</th>
+                  <th className="px-4 py-2 text-left section-label">Data</th>
+                  <th className="px-4 py-2 text-left section-label">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y">

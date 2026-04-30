@@ -1,17 +1,26 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { where, orderBy, Timestamp } from 'firebase/firestore'
 
-import { listDocuments } from '@/lib/firestore-client'
+import { listDocuments, updateDocument } from '@/lib/firestore-client'
 import { formatDate , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { InlineAlert } from '@/components/ui/inline-alert'
+import { toast } from 'sonner'
+import { Plus, Loader2, ClipboardList, CheckCheck, UserX, ClockAlert, MoreHorizontal, Eye, UserCog, CalendarClock } from 'lucide-react'
+import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
-import { Plus, Loader2 } from 'lucide-react'
+import { FilterBtn } from '@/components/ui/filter-btn'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   pendente: { label: 'Pendente', variant: 'outline' },
@@ -20,16 +29,17 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
   cancelada: { label: 'Cancelada', variant: 'destructive' },
 }
 
-const PRIORIDADE_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  baixa: { label: 'Baixa', variant: 'outline' },
-  normal: { label: 'Normal', variant: 'secondary' },
-  alta: { label: 'Alta', variant: 'destructive' },
-  urgente: { label: 'Urgente', variant: 'destructive' },
+const PRIORIDADE_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive'; className?: string; pulse?: boolean }> = {
+  baixa:   { label: 'Baixa',   variant: 'outline' },
+  normal:  { label: 'Normal',  variant: 'secondary' },
+  alta:    { label: 'Alta',    variant: 'outline', className: 'border-warning/50 text-warning bg-warning/10' },
+  urgente: { label: 'Urgente', variant: 'destructive', pulse: true },
 }
 
 const PAGE_SIZE = 20
 
 function TarefasContent() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const status = searchParams.get('status') ?? ''
   const prioridade = searchParams.get('prioridade') ?? ''
@@ -40,27 +50,47 @@ function TarefasContent() {
 
   const [allTarefas, setAllTarefas] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(true)
-  const [erro, setErro] = useState<string | null>(null)
+  const [concluding, setConcluding] = useState<string | null>(null)
+  const [confirmUrgente, setConfirmUrgente] = useState<{ id: string; titulo: string } | null>(null)
 
   const hoje = new Date()
 
+  async function handleConcluir(id: string, titulo: string) {
+    setConcluding(id)
+    try {
+      await updateDocument('tarefas', id, { status: 'concluida', concluidaEm: new Date() })
+      setAllTarefas((prev) => prev.map((t) => t.id === id ? { ...t, status: 'concluida' } : t))
+      toast.success(`"${titulo}" concluída`)
+    } catch {
+      toast.error('Erro ao concluir tarefa.')
+    } finally {
+      setConcluding(null)
+    }
+  }
+
+  function handleConcluirClick(tarefa: Record<string, unknown>) {
+    const id = tarefa.id as string
+    const titulo = tarefa.titulo as string
+    if ((tarefa.prioridade as string) === 'urgente') {
+      setConfirmUrgente({ id, titulo })
+      return
+    }
+    void handleConcluir(id, titulo)
+  }
+
   useEffect(() => {
-    queueMicrotask(() => {
-      setLoading(true)
-      setErro(null)
-      const constraints = [
-        ...(status ? [where('status', '==', status)] : []),
-        ...(prioridade ? [where('prioridade', '==', prioridade)] : []),
-        ...(responsavelId ? [where('responsavelId', '==', responsavelId)] : []),
-        ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
-        ...(competenciaId ? [where('competenciaId', '==', competenciaId)] : []),
-        orderBy('dataVencimento', 'asc'),
-      ]
-      listDocuments('tarefas', constraints)
-        .then((data) => setAllTarefas(data as Array<Record<string, unknown>>))
-        .catch(() => setErro('Não foi possível carregar as tarefas.'))
-        .finally(() => setLoading(false))
-    })
+    setLoading(true)
+    const constraints = [
+      ...(status ? [where('status', '==', status)] : []),
+      ...(prioridade ? [where('prioridade', '==', prioridade)] : []),
+      ...(responsavelId ? [where('responsavelId', '==', responsavelId)] : []),
+      ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
+      ...(competenciaId ? [where('competenciaId', '==', competenciaId)] : []),
+      orderBy('dataVencimento', 'asc'),
+    ]
+    listDocuments('tarefas', constraints)
+      .then((data) => setAllTarefas(data as Array<Record<string, unknown>>))
+      .finally(() => setLoading(false))
   }, [status, prioridade, responsavelId, clienteId, competenciaId])
 
   function buildUrl(overrides: Record<string, string | number>) {
@@ -76,41 +106,16 @@ function TarefasContent() {
     return `/tarefas?${params.toString()}`
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="w-5 h-5 animate-spin" />
-      </div>
-    )
-  }
-
-  if (erro) {
-    return (
-      <div className="stack-6">
-        <InlineAlert tone="danger" title="Erro ao carregar tarefas" description={erro} />
-        <div>
-          <Button onClick={() => window.location.reload()}>Tentar novamente</Button>
-        </div>
-      </div>
-    )
-  }
-
   const total = allTarefas.length
   const totalPages = Math.ceil(total / PAGE_SIZE)
   const tarefas = allTarefas.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-  const atrasadas = allTarefas.filter((t) => {
-    const dataPrazo = t.dataPrazo as Timestamp | undefined
-    if (!dataPrazo) return false
-    const dt = tsToDate(dataPrazo)
-    return !!dt && dt < hoje && !['concluida', 'cancelada'].includes(t.status as string)
-  }).length
 
   return (
-    <div className="stack-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-title">Tarefas</h2>
-          <p className="text-subtle">
+          <h2 className="text-lg font-semibold">Tarefas</h2>
+          <p className="text-sm text-muted-foreground">
             {total} tarefa{total !== 1 ? 's' : ''} encontrada{total !== 1 ? 's' : ''}
           </p>
         </div>
@@ -122,63 +127,46 @@ function TarefasContent() {
         </Link>
       </div>
 
-      {atrasadas > 0 && (
-        <InlineAlert
-          tone="danger"
-          title={`${atrasadas} tarefa(s) em atraso`}
-          description="Use os filtros para priorizar pendências críticas da operação."
-        />
-      )}
-
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-1">
-          {['', 'pendente', 'em_andamento', 'concluida', 'cancelada'].map((s) => (
-            <Link key={s} href={buildUrl({ status: s, page: 1 })}>
-              <Button
-                variant={status === s ? 'default' : 'outline'}
-                size="sm"
-                className="h-8 text-xs"
-              >
-                {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
-              </Button>
-            </Link>
+          {(['', 'pendente', 'em_andamento', 'concluida', 'cancelada'] as const).map((s) => (
+            <FilterBtn key={s} href={buildUrl({ status: s, page: 1 })} active={status === s}>
+              {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+            </FilterBtn>
           ))}
         </div>
-
         <div className="flex items-center gap-1">
-          {['', 'baixa', 'normal', 'alta', 'urgente'].map((p) => (
-            <Link key={p} href={buildUrl({ prioridade: p, page: 1 })}>
-              <Button
-                variant={prioridade === p ? 'default' : 'outline'}
-                size="sm"
-                className="h-8 text-xs"
-              >
-                {p === '' ? 'Qualquer' : PRIORIDADE_MAP[p]?.label ?? p}
-              </Button>
-            </Link>
+          {(['', 'baixa', 'normal', 'alta', 'urgente'] as const).map((p) => (
+            <FilterBtn key={p} href={buildUrl({ prioridade: p, page: 1 })} active={prioridade === p}>
+              {p === '' ? 'Qualquer' : PRIORIDADE_MAP[p]?.label ?? p}
+            </FilterBtn>
           ))}
         </div>
       </div>
 
       <div className="rounded-xl ring-1 ring-foreground/10 overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-muted-foreground">
+          <thead className="bg-muted/50">
             <tr>
-              <th className="px-4 py-3 text-left font-medium">Título</th>
-              <th className="px-4 py-3 text-left font-medium">Cliente</th>
-              <th className="px-4 py-3 text-left font-medium">Prioridade</th>
-              <th className="px-4 py-3 text-left font-medium">Responsável</th>
-              <th className="px-4 py-3 text-left font-medium">Prazo</th>
-              <th className="px-4 py-3 text-left font-medium">Status</th>
+              <th className="px-4 py-3 text-left section-label">Título</th>
+              <th className="px-4 py-3 text-left section-label">Cliente</th>
+              <th className="px-4 py-3 text-left section-label">Prioridade</th>
+              <th className="px-4 py-3 text-left section-label">Responsável</th>
+              <th className="px-4 py-3 text-left section-label">Prazo</th>
+              <th className="px-4 py-3 text-left section-label">Status</th>
+              <th className="px-4 py-3 w-10" />
             </tr>
           </thead>
           <tbody className="divide-y">
-            {tarefas.length === 0 ? (
+            {loading ? (
+              <TableRowSkeleton cols={7} rows={8} />
+            ) : tarefas.length === 0 ? (
               <TableEmptyState
-                colSpan={6}
+                colSpan={7}
+                icon={ClipboardList}
                 title="Nenhuma tarefa encontrada"
-                description="Ajuste os filtros ou crie uma nova tarefa para iniciar o fluxo."
-                action={{ label: 'Nova Tarefa', href: '/tarefas/nova' }}
+                description={status || prioridade ? 'Tente ajustar os filtros.' : 'Clique em "Nova Tarefa" para começar.'}
+                action={!status && !prioridade ? { label: 'Nova Tarefa', href: '/tarefas/nova' } : undefined}
               />
             ) : tarefas.map((t) => {
                 const st = STATUS_MAP[t.status as string] ?? {
@@ -210,13 +198,25 @@ function TarefasContent() {
                     </td>
                     <td className="px-4 py-3">
                       {t.prioridade ? (
-                        <Badge variant={pr.variant}>{pr.label}</Badge>
+                        <Badge variant={pr.variant} className={pr.className}>
+                          {pr.pulse && (
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-current mr-1 animate-pulse" />
+                          )}
+                          {pr.label}
+                        </Badge>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
-                      {(t.responsavelNome as string) ?? '—'}
+                      {t.responsavelNome ? (
+                        t.responsavelNome as string
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-warning font-medium" title="Tarefa sem responsável">
+                          <UserX className="w-3.5 h-3.5" />
+                          Sem responsável
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {dataPrazo ? (
@@ -224,11 +224,57 @@ function TarefasContent() {
                           {formatDate(tsToDate(dataPrazo))}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="inline-flex items-center gap-1 text-warning font-medium" title="Tarefa sem prazo definido">
+                          <ClockAlert className="w-3.5 h-3.5" />
+                          Sem prazo
+                        </span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       <Badge variant={st.variant}>{st.label}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      {!['concluida', 'cancelada'].includes(t.status as string) && (
+                        <button
+                          onClick={() => handleConcluirClick(t)}
+                          disabled={concluding === (t.id as string)}
+                          className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-xs font-medium text-success hover:bg-success/10 transition-colors disabled:opacity-50 cursor-pointer"
+                          title="Concluir tarefa"
+                        >
+                          {concluding === (t.id as string)
+                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                            : <CheckCheck className="w-3.5 h-3.5" />}
+                        </button>
+                      )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 ml-1"
+                              title="Mais ações"
+                            />
+                          }
+                        >
+                          <MoreHorizontal className="w-3.5 h-3.5" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44">
+                          <DropdownMenuItem onClick={() => router.push(`/tarefas/${t.id as string}`)}>
+                            <Eye className="w-4 h-4" />
+                            Ver detalhe
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => router.push(`/tarefas/${t.id as string}/editar?focus=responsavel`)}>
+                            <UserCog className="w-4 h-4" />
+                            Reatribuir
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => router.push(`/tarefas/${t.id as string}/editar?focus=prazo`)}>
+                            <CalendarClock className="w-4 h-4" />
+                            Alterar prazo
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                   </tr>
                 )
@@ -260,6 +306,20 @@ function TarefasContent() {
           </div>
         </div>
       ) : null}
+      <ConfirmDialog
+        open={!!confirmUrgente}
+        onOpenChange={(open) => { if (!open) setConfirmUrgente(null) }}
+        title="Concluir tarefa urgente?"
+        description={confirmUrgente
+          ? `Você está concluindo a tarefa "${confirmUrgente.titulo}". Confirme para finalizar.`
+          : 'Confirme para concluir a tarefa urgente.'}
+        confirmLabel="Confirmar conclusão"
+        onConfirm={async () => {
+          if (!confirmUrgente) return
+          await handleConcluir(confirmUrgente.id, confirmUrgente.titulo)
+          setConfirmUrgente(null)
+        }}
+      />
     </div>
   )
 }

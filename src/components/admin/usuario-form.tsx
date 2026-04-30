@@ -5,15 +5,15 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { initializeApp, deleteApp } from 'firebase/app'
+import { initializeApp, deleteApp, getApps } from 'firebase/app'
 import {
   getAuth,
   createUserWithEmailAndPassword,
   signOut as fbSignOut,
 } from 'firebase/auth'
 import { doc, setDoc } from 'firebase/firestore'
-import { getClientDb, firebaseConfig } from '@/lib/firebase'
-import { updateDocument } from '@/lib/firestore-client'
+import { db, firebaseConfig } from '@/lib/firebase'
+import { updateDocument, invalidateUsuariosCache } from '@/lib/firestore-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -179,7 +179,7 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
           await fbSignOut(secondaryAuth)
 
           // Save Firestore profile
-          await setDoc(doc(getClientDb(), 'usuarios', cred.user.uid), {
+          await setDoc(doc(db, 'usuarios', cred.user.uid), {
             nome:           data.nome,
             email:          (data as CreateData).email,
             perfil:         data.perfil,
@@ -196,6 +196,7 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
         }
       }
 
+      invalidateUsuariosCache()
       setOpen(false)
       reset()
       onSaved?.()

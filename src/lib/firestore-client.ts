@@ -138,8 +138,23 @@ export async function getFechamentos(mes: number, ano: number, regime?: string) 
   return results.sort((a, b) => (a.clienteCodigo ?? 0) - (b.clienteCodigo ?? 0))
 }
 
+let _usuariosCache: Array<Record<string, unknown>> | null = null
+let _usuariosCacheTs = 0
+const USUARIOS_CACHE_TTL = 5 * 60 * 1000 // 5 min
+
 export async function getUsuarios() {
-  return listDocuments('usuarios', [orderBy('nome'), limit(100)])
+  const now = Date.now()
+  if (_usuariosCache && now - _usuariosCacheTs < USUARIOS_CACHE_TTL) {
+    return _usuariosCache
+  }
+  const data = await listDocuments('usuarios', [orderBy('nome'), limit(100)])
+  _usuariosCache = data as Array<Record<string, unknown>>
+  _usuariosCacheTs = now
+  return _usuariosCache
+}
+
+export function invalidateUsuariosCache() {
+  _usuariosCache = null
 }
 
 export async function getNfseRascunhos(clienteId?: string) {

@@ -23,11 +23,11 @@ const PERFIL_LABELS: Record<string, string> = {
 }
 
 const PERFIL_COLORS: Record<string, string> = {
-  admin:       'bg-amber-100 text-amber-800 border-amber-200',
-  operacional: 'bg-blue-100 text-blue-800 border-blue-200',
-  fiscal:      'bg-purple-100 text-purple-800 border-purple-200',
-  financeiro:  'bg-green-100 text-green-800 border-green-200',
-  leitura:     'bg-gray-100 text-gray-700 border-gray-200',
+  admin:       'bg-warning/10 text-warning border-warning/25',
+  operacional: 'bg-info/10 text-info border-info/20',
+  fiscal:      'bg-primary/10 text-foreground/70 border-primary/20',
+  financeiro:  'bg-success/10 text-success border-success/20',
+  leitura:     'bg-muted text-muted-foreground border-border',
 }
 
 type UsuarioRow = {
@@ -80,12 +80,12 @@ export default function AdminUsuariosPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/50 border-b">
               <tr>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Nome</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">E-mail</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Perfil</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Acesso</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Último Acesso</th>
+                <th className="px-4 py-3 text-left section-label">Nome</th>
+                <th className="px-4 py-3 text-left section-label">E-mail</th>
+                <th className="px-4 py-3 text-left section-label">Perfil</th>
+                <th className="px-4 py-3 text-left section-label">Acesso</th>
+                <th className="px-4 py-3 text-left section-label">Status</th>
+                <th className="px-4 py-3 text-left section-label">Último Acesso</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>

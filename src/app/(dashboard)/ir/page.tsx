@@ -9,9 +9,10 @@ import { listDocuments } from '@/lib/firestore-client'
 import { formatDate , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { InlineAlert } from '@/components/ui/inline-alert'
+import { Plus, Loader2, FileText } from 'lucide-react'
+import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
-import { Plus, Loader2 } from 'lucide-react'
+import { FilterBtn } from '@/components/ui/filter-btn'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   pendente: { label: 'Pendente', variant: 'outline' },
@@ -32,24 +33,19 @@ function IrContent() {
 
   const [allDeclaracoes, setAllDeclaracoes] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(true)
-  const [erro, setErro] = useState<string | null>(null)
 
   const anosDisponiveis = [anoBaseAtual, anoBaseAtual - 1, anoBaseAtual - 2, anoBaseAtual - 3]
 
   useEffect(() => {
-    queueMicrotask(() => {
-      setLoading(true)
-      setErro(null)
-      const constraints = [
-        where('anoBase', '==', anoBase),
-        ...(status ? [where('status', '==', status)] : []),
-        orderBy('clienteNome', 'asc'),
-      ]
-      listDocuments('ir_declaracoes', constraints)
-        .then((data) => setAllDeclaracoes(data as Array<Record<string, unknown>>))
-        .catch(() => setErro('Não foi possível carregar as declarações de IR.'))
-        .finally(() => setLoading(false))
-    })
+    setLoading(true)
+    const constraints = [
+      where('anoBase', '==', anoBase),
+      ...(status ? [where('status', '==', status)] : []),
+      orderBy('clienteNome', 'asc'),
+    ]
+    listDocuments('ir_declaracoes', constraints)
+      .then((data) => setAllDeclaracoes(data as Array<Record<string, unknown>>))
+      .finally(() => setLoading(false))
   }, [anoBase, status])
 
   function buildUrl(overrides: Record<string, string | number>) {
@@ -62,36 +58,16 @@ function IrContent() {
     return `/ir?${params.toString()}`
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="w-5 h-5 animate-spin" />
-      </div>
-    )
-  }
-
-  if (erro) {
-    return (
-      <div className="stack-6">
-        <InlineAlert tone="danger" title="Erro ao carregar IR" description={erro} />
-        <div>
-          <Button onClick={() => window.location.reload()}>Tentar novamente</Button>
-        </div>
-      </div>
-    )
-  }
-
   const total = allDeclaracoes.length
   const totalPages = Math.ceil(total / PAGE_SIZE)
   const declaracoes = allDeclaracoes.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-  const pendentes = allDeclaracoes.filter((d) => ['pendente', 'em_andamento'].includes((d.status as string) ?? '')).length
 
   return (
-    <div className="stack-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-title">Declarações de IR</h2>
-          <p className="text-subtle">
+          <h2 className="text-lg font-semibold">Declarações de IR</h2>
+          <p className="text-sm text-muted-foreground">
             {total} declaraç{total !== 1 ? 'ões' : 'ão'} — Ano-base {anoBase}
           </p>
         </div>
@@ -103,62 +79,44 @@ function IrContent() {
         </Link>
       </div>
 
-      {pendentes > 0 && (
-        <InlineAlert
-          tone="warning"
-          title={`${pendentes} declaração(ões) pendente(s) ou em andamento`}
-          description="Priorize pendências para reduzir risco de prazo fiscal."
-        />
-      )}
-
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-1">
           {anosDisponiveis.map((a) => (
-            <Link key={a} href={buildUrl({ anoBase: a, page: 1 })}>
-              <Button
-                variant={anoBase === a ? 'default' : 'outline'}
-                size="sm"
-                className="h-8 text-xs"
-              >
-                {a}
-              </Button>
-            </Link>
+            <FilterBtn key={a} href={buildUrl({ anoBase: a, page: 1 })} active={anoBase === a}>
+              {a}
+            </FilterBtn>
           ))}
         </div>
-
         <div className="flex items-center gap-1">
-          {['', 'pendente', 'em_andamento', 'entregue', 'retificado', 'cancelado'].map((s) => (
-            <Link key={s} href={buildUrl({ status: s, page: 1 })}>
-              <Button
-                variant={status === s ? 'default' : 'outline'}
-                size="sm"
-                className="h-8 text-xs"
-              >
-                {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
-              </Button>
-            </Link>
+          {(['', 'pendente', 'em_andamento', 'entregue', 'retificado', 'cancelado'] as const).map((s) => (
+            <FilterBtn key={s} href={buildUrl({ status: s, page: 1 })} active={status === s}>
+              {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+            </FilterBtn>
           ))}
         </div>
       </div>
 
       <div className="rounded-xl ring-1 ring-foreground/10 overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-muted-foreground">
+          <thead className="bg-muted/50">
             <tr>
-              <th className="px-4 py-3 text-left font-medium">Cliente</th>
-              <th className="px-4 py-3 text-left font-medium">Ano-base</th>
-              <th className="px-4 py-3 text-left font-medium">Status</th>
-              <th className="px-4 py-3 text-left font-medium">Responsável</th>
-              <th className="px-4 py-3 text-left font-medium">Data Entrega</th>
+              <th className="px-4 py-3 text-left section-label">Cliente</th>
+              <th className="px-4 py-3 text-left section-label">Ano-base</th>
+              <th className="px-4 py-3 text-left section-label">Status</th>
+              <th className="px-4 py-3 text-left section-label">Responsável</th>
+              <th className="px-4 py-3 text-left section-label">Data Entrega</th>
             </tr>
           </thead>
           <tbody className="divide-y">
-            {declaracoes.length === 0 ? (
+            {loading ? (
+              <TableRowSkeleton cols={5} rows={6} />
+            ) : declaracoes.length === 0 ? (
               <TableEmptyState
                 colSpan={5}
+                icon={FileText}
                 title="Nenhuma declaração encontrada"
-                description="Ajuste os filtros ou crie uma nova declaração."
-                action={{ label: 'Nova Declaração', href: '/ir/nova' }}
+                description={status ? 'Tente ajustar os filtros.' : `Nenhuma declaração para ${anoBase}.`}
+                action={!status ? { label: 'Nova Declaração', href: '/ir/nova' } : undefined}
               />
             ) : (
               declaracoes.map((d) => {

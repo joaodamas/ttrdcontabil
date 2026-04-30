@@ -27,6 +27,34 @@ service cloud.firestore {
     function isFinanceiro()  { return isAtivo() && userDoc().perfil in ['admin', 'financeiro']; }
     function canRead()       { return isAtivo(); }
 
+    function clienteStatusValido(status) {
+      return status in ['ativo', 'inativo', 'suspenso'];
+    }
+
+    function prioridadeTarefaValida(prioridade) {
+      return prioridade in ['baixa', 'normal', 'alta', 'urgente'];
+    }
+
+    function statusTarefaValido(status) {
+      return status in ['pendente', 'em_andamento', 'concluida', 'cancelada'];
+    }
+
+    function clientePayloadValido() {
+      return ('status' in request.resource.data)
+        && clienteStatusValido(request.resource.data.status)
+        && ('razaoSocial' in request.resource.data)
+        && (request.resource.data.razaoSocial is string)
+        && (request.resource.data.razaoSocial.size() > 0)
+        && (request.resource.data.razaoSocial.size() <= 200);
+    }
+
+    function tarefaPayloadValido() {
+      return ('prioridade' in request.resource.data)
+        && prioridadeTarefaValida(request.resource.data.prioridade)
+        && ('status' in request.resource.data)
+        && statusTarefaValido(request.resource.data.status);
+    }
+
     // ─── Usuários ─────────────────────────────────────────────────────────────
 
     match /usuarios/{uid} {
@@ -45,7 +73,7 @@ service cloud.firestore {
 
     match /clientes/{id} {
       allow read: if canRead();
-      allow write: if isOperacional();
+      allow write: if isOperacional() && clientePayloadValido();
     }
 
     match /clientes_servicos/{id} {
@@ -71,7 +99,7 @@ service cloud.firestore {
 
     match /tarefas/{id} {
       allow read: if canRead();
-      allow write: if isAtivo(); // todos os ativos podem criar e editar tarefas
+      allow write: if isAtivo() && tarefaPayloadValido(); // todos os ativos podem criar e editar tarefas com payload validado
     }
 
     match /tarefas_comentarios/{id} {

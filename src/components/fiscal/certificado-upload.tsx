@@ -68,7 +68,7 @@ export function CertificadoUpload({ clienteId, certInfo, onUploaded }: Props) {
       {certInfo ? (
         <div className="flex items-start gap-3 p-3 rounded-md border bg-muted/30">
           {certInfo.valido
-            ? <ShieldCheck className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
+            ? <ShieldCheck className="w-5 h-5 text-success mt-0.5 shrink-0" />
             : <ShieldAlert className="w-5 h-5 text-destructive mt-0.5 shrink-0" />
           }
           <div className="text-sm min-w-0">

@@ -379,7 +379,7 @@ export const Navbar = memo(function Navbar() {
               )
             })}
             <div className="pt-2 mt-1 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-              <button onClick={logout} className="flex items-center gap-2 px-3 py-2 text-sm text-red-400 w-full rounded-lg cursor-pointer">
+              <button onClick={logout} className="flex items-center gap-2 px-3 py-2 text-sm text-destructive w-full rounded-lg cursor-pointer">
                 <LogOut size={15} /> Sair
               </button>
             </div>

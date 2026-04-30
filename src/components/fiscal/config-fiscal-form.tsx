@@ -324,8 +324,8 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
 
           {/* Aviso certificado A1 */}
           {tipo === 'abrasf_a1' && (
-            <div className="border rounded-md p-3 bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
-              <p className="text-xs text-amber-800 dark:text-amber-200">
+            <div className="border rounded-md p-3 bg-warning/8 border-warning/25">
+              <p className="text-xs text-warning">
                 <strong>Certificado A1 necessário.</strong> Após salvar, faça o upload do arquivo .pfx na seção de credenciais da página fiscal.
               </p>
             </div>

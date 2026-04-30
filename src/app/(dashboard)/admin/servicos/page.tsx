@@ -132,7 +132,7 @@ export default function AdminServicosPage() {
                 ).map(({ key, label }) => (
                   <th
                     key={key}
-                    className="px-4 py-3 text-left font-medium text-muted-foreground select-none cursor-pointer hover:text-foreground transition-colors"
+                    className="px-4 py-3 text-left section-label select-none cursor-pointer hover:text-foreground transition-colors"
                     onClick={() => handleSort(key)}
                   >
                     <span className="inline-flex items-center gap-1">
@@ -147,7 +147,7 @@ export default function AdminServicosPage() {
                     </span>
                   </th>
                 ))}
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Ações</th>
+                <th className="px-4 py-3 text-left section-label">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y">

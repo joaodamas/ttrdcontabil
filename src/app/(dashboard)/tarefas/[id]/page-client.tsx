@@ -20,11 +20,11 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
   cancelada: { label: 'Cancelada', variant: 'destructive' },
 }
 
-const PRIORIDADE_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
+const PRIORIDADE_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive'; className?: string; pulse?: boolean }> = {
   baixa: { label: 'Baixa', variant: 'outline' },
   normal: { label: 'Normal', variant: 'secondary' },
-  alta: { label: 'Alta', variant: 'destructive' },
-  urgente: { label: 'Urgente', variant: 'destructive' },
+  alta: { label: 'Alta', variant: 'outline', className: 'border-warning/50 text-warning bg-warning/10' },
+  urgente: { label: 'Urgente', variant: 'destructive', pulse: true },
 }
 
 export default function TarefaDetalhePage() {
@@ -100,7 +100,14 @@ export default function TarefaDetalhePage() {
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-lg font-semibold">{tarefa.titulo as string}</h2>
               <Badge variant={st.variant}>{st.label}</Badge>
-              {pr ? <Badge variant={pr.variant}>{pr.label}</Badge> : null}
+              {pr ? (
+                <Badge variant={pr.variant} className={pr.className}>
+                  {pr.pulse && (
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-current mr-1 animate-pulse" />
+                  )}
+                  {pr.label}
+                </Badge>
+              ) : null}
             </div>
             <p className="text-sm text-muted-foreground">
               {(tarefa.clienteNome as string) ?? 'Sem cliente'}
@@ -177,7 +184,12 @@ export default function TarefaDetalhePage() {
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Prioridade</p>
                 {pr ? (
-                  <Badge variant={pr.variant}>{pr.label}</Badge>
+                  <Badge variant={pr.variant} className={pr.className}>
+                    {pr.pulse && (
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-current mr-1 animate-pulse" />
+                    )}
+                    {pr.label}
+                  </Badge>
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )}
