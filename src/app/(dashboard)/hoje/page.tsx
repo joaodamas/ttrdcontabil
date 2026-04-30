@@ -25,6 +25,7 @@ type TaskLike = {
 }
 
 type Usuario = { id: string; nome?: string; perfil?: string }
+const HOJE_RESPONSAVEL_STORAGE_KEY = 'hoje:responsavelId'
 
 function slaScoreHoje(task: TaskLike) {
   const now = new Date()
@@ -64,7 +65,10 @@ export default function HojePage() {
   const loteRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
-  const [responsavelId, setResponsavelId] = useState('')
+  const [responsavelId, setResponsavelId] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    return window.localStorage.getItem(HOJE_RESPONSAVEL_STORAGE_KEY) ?? ''
+  })
   const [data, setData] = useState<{
     atrasadas: TaskLike[]
     hoje: TaskLike[]
@@ -93,6 +97,11 @@ export default function HojePage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(HOJE_RESPONSAVEL_STORAGE_KEY, responsavelId)
+  }, [responsavelId])
 
   const allTaskIds = useMemo(
     () => [...data.atrasadas, ...data.hoje, ...data.proximos7Dias].map((t) => t.id),

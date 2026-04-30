@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { where, orderBy, Timestamp } from 'firebase/firestore'
 
-import { listDocuments } from '@/lib/firestore-client'
+import { getClientesByIds, listDocuments } from '@/lib/firestore-client'
 import { formatDate, formatCurrency, tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -72,8 +72,36 @@ function FinanceiroContent() {
         where('status', '==', 'pendente'),
         where('dataVencimento', '<', hojeTs),
       ]),
-    ]).then(([mainData, aReceberData, recebidoMesData, emAtrasoData]) => {
-      setAllLancamentos(mainData as Array<Record<string, unknown>>)
+    ]).then(async ([mainData, aReceberData, recebidoMesData, emAtrasoData]) => {
+      const lancamentosRaw = mainData as Array<Record<string, unknown>>
+      const clientesSemNome = [...new Set(
+        lancamentosRaw
+          .filter((l) => !l.clienteNome && typeof l.clienteId === 'string')
+          .map((l) => l.clienteId as string)
+      )]
+
+      if (clientesSemNome.length > 0) {
+        const clientes = await getClientesByIds(clientesSemNome)
+        const clientePorId = new Map(
+          clientes.map((c) => [
+            c.id,
+            {
+              razaoSocial: c.razaoSocial as string | undefined,
+              nomeFantasia: c.nomeFantasia as string | undefined,
+            },
+          ])
+        )
+        setAllLancamentos(
+          lancamentosRaw.map((l) => {
+            if (l.clienteNome || typeof l.clienteId !== 'string') return l
+            const cliente = clientePorId.get(l.clienteId)
+            const nome = cliente?.razaoSocial ?? cliente?.nomeFantasia
+            return nome ? { ...l, clienteNome: nome } : l
+          })
+        )
+      } else {
+        setAllLancamentos(lancamentosRaw)
+      }
       setSomaAReceber(aReceberData.reduce((acc, d) => acc + (((d as Record<string, unknown>).valor as number) ?? 0), 0))
       setSomaRecebidoMes(recebidoMesData.reduce((acc, d) => acc + (((d as Record<string, unknown>).valor as number) ?? 0), 0))
       setSomaEmAtraso(emAtrasoData.reduce((acc, d) => acc + (((d as Record<string, unknown>).valor as number) ?? 0), 0))

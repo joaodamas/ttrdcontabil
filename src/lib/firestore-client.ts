@@ -4,7 +4,7 @@
  */
 import {
   collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, limit, serverTimestamp, Timestamp,
+  query, where, orderBy, limit, serverTimestamp, Timestamp, documentId,
   type QueryConstraint,
 } from 'firebase/firestore'
 import { getClientDb, getClientAuth } from './firebase'
@@ -76,6 +76,22 @@ export async function getCliente(id: string) {
   return getDocument('clientes', id)
 }
 
+export async function getClientesByIds(ids: string[]) {
+  const uniqueIds = [...new Set(ids.filter(Boolean))]
+  if (uniqueIds.length === 0) return [] as Array<Record<string, unknown> & { id: string }>
+
+  const chunks: string[][] = []
+  for (let i = 0; i < uniqueIds.length; i += 10) chunks.push(uniqueIds.slice(i, i + 10))
+
+  const batches = await Promise.all(
+    chunks.map((chunk) =>
+      listDocuments<Record<string, unknown>>('clientes', [where(documentId(), 'in', chunk), limit(500)])
+    )
+  )
+
+  return batches.flat()
+}
+
 export async function getNextClienteCodigo(): Promise<number> {
   const rows = await listDocuments<{ codigo?: number }>('clientes', [orderBy('codigo', 'desc'), limit(1)])
   if (rows.length === 0) return 1
@@ -141,20 +157,60 @@ export async function getFechamentos(mes: number, ano: number, regime?: string) 
 let _usuariosCache: Array<Record<string, unknown>> | null = null
 let _usuariosCacheTs = 0
 const USUARIOS_CACHE_TTL = 5 * 60 * 1000 // 5 min
+const USUARIOS_CACHE_SESSION_KEY = 'ttrd:usuarios-cache-v1'
+
+function readUsuariosSessionCache(now: number): Array<Record<string, unknown>> | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.sessionStorage.getItem(USUARIOS_CACHE_SESSION_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { ts?: number; data?: Array<Record<string, unknown>> }
+    if (!parsed.ts || !Array.isArray(parsed.data)) return null
+    if (now - parsed.ts >= USUARIOS_CACHE_TTL) return null
+    _usuariosCacheTs = parsed.ts
+    _usuariosCache = parsed.data
+    return parsed.data
+  } catch {
+    return null
+  }
+}
+
+function writeUsuariosSessionCache(now: number, data: Array<Record<string, unknown>>) {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.setItem(
+      USUARIOS_CACHE_SESSION_KEY,
+      JSON.stringify({ ts: now, data })
+    )
+  } catch {
+    // ignore storage failures (quota/privacy mode)
+  }
+}
 
 export async function getUsuarios() {
   const now = Date.now()
   if (_usuariosCache && now - _usuariosCacheTs < USUARIOS_CACHE_TTL) {
     return _usuariosCache
   }
+  const fromSession = readUsuariosSessionCache(now)
+  if (fromSession) return fromSession
   const data = await listDocuments('usuarios', [orderBy('nome'), limit(100)])
   _usuariosCache = data as Array<Record<string, unknown>>
   _usuariosCacheTs = now
+  writeUsuariosSessionCache(now, _usuariosCache)
   return _usuariosCache
 }
 
 export function invalidateUsuariosCache() {
   _usuariosCache = null
+  _usuariosCacheTs = 0
+  if (typeof window !== 'undefined') {
+    try {
+      window.sessionStorage.removeItem(USUARIOS_CACHE_SESSION_KEY)
+    } catch {
+      // ignore
+    }
+  }
 }
 
 export async function getNfseRascunhos(clienteId?: string) {

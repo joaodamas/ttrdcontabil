@@ -55,7 +55,8 @@
 - [x] `bg-red-` / `text-red-` → `bg-destructive/` / `text-destructive` (incluindo navbar + dashboard) 🔴 P
 - [x] `bg-blue-` / `text-blue-` / `bg-purple-` → `bg-info/` / `text-info` / `bg-primary/` 🟡 P
 - [x] `hover:border-emerald-300/40` → `hover:border-success/30` (dashboard KPI card) 🟢 P
-- [ ] Verificar residuais em `saas-blocks.tsx` (intencionais, baixo risco) 🟢 P
+- [x] Verificar residuais em `saas-blocks.tsx` (intencionais, baixo risco) 🟢 P
+  - Mantidos tons `amber-*` apenas no showcase `/premium` (não impacta fluxos operacionais)
 
 ### 1.2 Padronizar badges de status
 - [x] `urgente` = badge `destructive` + dot pulsante animado (visualmente distinto de `alta`) 🔴 P
@@ -100,7 +101,7 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 - [x] Dashboard já usa `Promise.allSettled` — uma query falha não bloqueia o resto ✓
 
 ### 2.2 Pendentes (baixa prioridade — dashboard funcional)
-- [ ] Persistir filtro de responsável no `localStorage` (quando cockpit personalizado for necessário) 🟡 P
+- [x] Persistir filtro de responsável no `localStorage` (quando cockpit personalizado for necessário) 🟡 P
 - [ ] Avaliar adicionar bulk actions se uso real mostrar necessidade 🟢 G
 
 **✓ Gate 2 APROVADO:** Dashboard limpo, sem duplicação, sem componentes desnecessários
@@ -206,7 +207,7 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
   const USUARIOS_CACHE_TTL = 5 * 60 * 1000
   ```
 - [x] `invalidateUsuariosCache()` exportada e chamada pelo `UsuarioForm` após salvar 🟡 P
-- [ ] Considerar migrar para `sessionStorage` para sobreviver reload de página 🟢 P
+- [x] Migrar para `sessionStorage` para sobreviver reload de página 🟢 P
 
 ### 6.2 Dashboard
 - [x] Consolidar queries 3 e 5 do `Promise.allSettled` (ambas tarefas pendentes) 🟡 M
@@ -214,7 +215,9 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 - [ ] Cloud Function de snapshot para dashboard (longo prazo) 🟢 G
 
 ### 6.3 Financeiro
-- [ ] Batch read para `getCliente(id)` quando necessário em múltiplos clientes 🟠 M
+- [x] Batch read para `getCliente(id)` quando necessário em múltiplos clientes 🟠 M
+  - Implementado `getClientesByIds(ids)` em `firestore-client` com chunks `in` (10 por query)
+  - Integrado em `financeiro/page.tsx` para hidratar `clienteNome` ausente sem N+1
 
 ### 6.4 Queries sem limit
 - [x] Dashboard: `limit(20)` em tarefas e `limit(5)` em competências e lançamentos ✓
@@ -222,7 +225,7 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 - [x] Revisar restantes: `listDocuments(` sem `limit(` nos formulários 🔴 M
   - Ajustado `clientes_servicos` em Cliente 360° e modal de cliente para `limit(50)`
 
-**~ Gate 6 PARCIAL:** Cache de usuários ✓ · limits nas queries principais ✓ · consolidação dashboard ✓ · pendente batch read de clientes + snapshot CF
+**~ Gate 6 PARCIAL:** Cache de usuários (memória + sessionStorage) ✓ · limits nas queries principais ✓ · consolidação dashboard ✓ · batch read de clientes ✓ · pendente snapshot CF
 
 ---
 
@@ -377,7 +380,7 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 2. **3.3 Navegação clientes** — decidir click na linha vs modal com validação de uso real
 3. **8.3 Edge cases manuais** — executar checklist de robustez operacional
 4. **10.3 Smoke test pós-deploy** — validar produção após release
-5. **6.1 sessionStorage para cache de usuários** — sobrevivência a reload de página
+5. **6.3 Batch read de clientes no financeiro** — evitar múltiplos fetches `getCliente(id)`
 
 ---
 
