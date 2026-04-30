@@ -12,7 +12,7 @@ import {
   signOut as fbSignOut,
 } from 'firebase/auth'
 import { doc, setDoc } from 'firebase/firestore'
-import { db, firebaseConfig } from '@/lib/firebase'
+import { getClientDb, firebaseConfig } from '@/lib/firebase'
 import { updateDocument, invalidateUsuariosCache } from '@/lib/firestore-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -105,6 +105,7 @@ interface UsuarioFormProps {
 
 /* ─── Component ───────────────────────────────────────────── */
 export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
+  const db = getClientDb()
   const isEditing = !!usuario?.id
   const [open, setOpen] = useState(false)
 

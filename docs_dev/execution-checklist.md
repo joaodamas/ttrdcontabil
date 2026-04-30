@@ -230,8 +230,8 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
   - Quando: `tarefas/{id}` `status` muda para `'concluida'`
   - Lógica: se todas as tarefas da `competenciaId` estão concluídas/canceladas → atualizar competência para `'concluida'`
 - [x] Testar edge case: tarefa sem `competenciaId` não dispara lógica 🟡 P
-- [!] Deploy: `firebase deploy --only functions` 🔴 P
-  - Bloqueado por funções legadas remotas ausentes no source local (CLI aborta em modo não interativo exigindo delete manual)
+- [x] Deploy: `firebase deploy --only functions` 🔴 P
+  - Funções legadas remotas removidas e deploy realizado com sucesso
 
 ### 7.2 Gerar fechamento mensal automático
 - [x] Implementar `gerarFechamentoMensal` cron (dia 1 de cada mês, 06:00 BRT) 🟠 G
@@ -260,11 +260,11 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 
 ### 8.1 Testes unitários
 - [x] Instalar `vitest` ou `jest` + `@testing-library/react` 🟡 M
-- [ ] `__tests__/lib/sla-score.test.ts` — score correto para todos os cenários 🟠 M
+- [x] `__tests__/lib/sla-score.test.ts` — score correto para todos os cenários 🟠 M
   - Tarefa fiscal urgente atrasada 5 dias = score máximo
   - Tarefa sem prazo = score base
   - Ordenação: fiscal urgente > financeiro alta > normal
-- [ ] `__tests__/lib/financeiro-prioridade.test.ts` 🟠 M
+- [x] `__tests__/lib/financeiro-prioridade.test.ts` 🟠 M
   - Score de cobrança para atrasado 35 dias ≥ 50 pontos
   - Lançamento vencendo hoje > lançamento vencendo em 7 dias
 - [x] `__tests__/lib/utils.test.ts` 🟡 M
@@ -324,7 +324,7 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 - [x] `npm run build` → zero erros de prerender 🔴 P
 - [x] `firebase deploy --only firestore:rules` 🔴 P
 - [x] `firebase deploy --only firestore:indexes` 🔴 P
-- [!] `firebase deploy --only functions` 🔴 P
+- [x] `firebase deploy --only functions` 🔴 P
 - [x] `firebase deploy --only hosting` 🔴 P
 
 ### 10.2 Critérios GO / NO-GO
@@ -362,18 +362,18 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 | 4 | Cliente 360° upgrade | ✅ Concluída | — |
 | 5 | Tarefas e financeiro | 🔶 Parcial (quase concluída) | ~2h |
 | 6 | Performance | 🔶 Parcial (majoritariamente concluída) | ~2h |
-| 7 | Automações | 🔶 Parcial (implementação concluída, pendente deploy/teste) | ~0.5 dia |
-| 8 | Testes | 🔶 Parcial (unit + base e2e iniciados) | ~2 dias |
+| 7 | Automações | ✅ Concluída (deploy realizado) | — |
+| 8 | Testes | 🔶 Parcial (unit críticos concluídos + base e2e pronta) | ~1.5 dia |
 | 9 | Validação de uso real | ⏳ Pendente | ~5 dias |
 | 10 | Go-live | ⏳ Pendente | ~0.5 dia |
-| **RESTANTE** | | | **~4.5–5.5 dias úteis** |
+| **RESTANTE** | | | **~3.5–4.5 dias úteis** |
 
 ### Próximos itens de maior impacto (por prioridade)
-1. **Resolver bloqueio de deploy das functions** — limpar funções legadas remotas e redeploy
-2. **8.1 Testes de score (`sla-score` e `financeiro-prioridade`)** — cobertura dos algoritmos críticos
-3. **8.2 Ativar E2E reais** — trocar specs de `skip` por fluxo com credenciais/fixtures
-4. **5.2 Regra `urgente/fiscal`** — concluir confirmação especial quando existir classificação fiscal na tarefa
-5. **3.3 Navegação clientes** — decidir click na linha vs modal com validação de uso real
+1. **8.2 Ativar E2E reais** — trocar specs de `skip` por fluxo com credenciais/fixtures
+2. **5.2 Regra `urgente/fiscal`** — concluir confirmação especial quando existir classificação fiscal na tarefa
+3. **3.3 Navegação clientes** — decidir click na linha vs modal com validação de uso real
+4. **8.3 Edge cases manuais** — executar checklist de robustez operacional
+5. **10.3 Smoke test pós-deploy** — validar produção após release
 
 ---
 
