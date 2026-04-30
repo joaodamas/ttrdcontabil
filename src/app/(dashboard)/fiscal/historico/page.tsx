@@ -195,7 +195,7 @@ function FiscalHistoricoContent() {
 
 export default function FiscalHistoricoPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin" /></div>}>
+    <Suspense fallback={<div className="space-y-3 py-6"><div className="h-9 w-56 bg-muted rounded-lg animate-pulse" /><div className="h-64 w-full bg-muted/80 rounded-xl animate-pulse" /></div>}>
       <FiscalHistoricoContent />
     </Suspense>
   )
