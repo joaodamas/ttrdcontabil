@@ -7,6 +7,7 @@ import { formatDate, tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
 
 type Usuario = { id: string; nome?: string }
 
@@ -106,9 +107,20 @@ export function TaskCard({ task, usuarios, selected, onToggleSelected, onUpdated
             <Tooltip>
               <TooltipTrigger>
                 <span className="inline-flex cursor-help">
-                  <Badge variant="outline" className="capitalize">
-                    {task.prioridade ?? 'normal'}
-                  </Badge>
+                  {task.prioridade === 'urgente' ? (
+                    <Badge variant="destructive" className="gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                      Urgente
+                    </Badge>
+                  ) : task.prioridade === 'alta' ? (
+                    <Badge variant="outline" className="border-warning/50 text-warning bg-warning/10">
+                      Alta
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className={cn('capitalize', task.prioridade === 'baixa' && 'text-muted-foreground')}>
+                      {task.prioridade ?? 'normal'}
+                    </Badge>
+                  )}
                 </span>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-[min(20rem,calc(100vw-2rem))] text-left leading-snug">

@@ -2,8 +2,7 @@
 
 import { AuthProvider } from '@/contexts/auth-context'
 import { AuthGuard } from '@/components/auth/auth-guard'
-import { Sidebar } from '@/components/layout/sidebar'
-import { Topbar } from '@/components/layout/topbar'
+import { Topnav } from '@/components/layout/topnav'
 import { Toaster } from '@/components/ui/sonner'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { QueryProvider } from '@/components/providers/query-provider'
@@ -13,18 +12,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <QueryProvider>
       <AuthProvider>
         <AuthGuard>
-          <div className="flex min-h-screen bg-background">
-            <Sidebar />
-            <div className="flex flex-col flex-1 min-w-0">
-              <Topbar />
-              <main className="flex-1 overflow-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
-                <div className="mx-auto max-w-[1320px]">
-                  <ErrorBoundary>
-                    {children}
-                  </ErrorBoundary>
-                </div>
-              </main>
-            </div>
+          <div className="flex flex-col min-h-screen bg-background">
+            <Topnav />
+            <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+              <div className="mx-auto max-w-[1320px]">
+                <ErrorBoundary>
+                  {children}
+                </ErrorBoundary>
+              </div>
+            </main>
           </div>
           <Toaster richColors position="top-right" />
         </AuthGuard>

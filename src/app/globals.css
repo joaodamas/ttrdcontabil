@@ -170,13 +170,18 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    /* Subtle warm gradient — feels premium without being distracting */
     background-image:
-      radial-gradient(circle at 18% -10%, var(--app-gradient-1), transparent 45%),
-      radial-gradient(circle at 96% 8%, var(--app-gradient-2), transparent 35%);
+      radial-gradient(ellipse 80% 50% at 60% -20%, oklch(0.82 0.18 88 / 0.06), transparent),
+      radial-gradient(ellipse 60% 40% at -10% 60%, oklch(0.55 0.14 240 / 0.04), transparent);
     background-attachment: fixed;
   }
   html {
     @apply font-sans;
+  }
+  /* Smooth scrolling for anchor links */
+  html {
+    scroll-behavior: smooth;
   }
 }
 
@@ -237,5 +242,10 @@
   }
   .section-label {
     @apply text-xs font-semibold uppercase tracking-wider text-muted-foreground;
+  }
+
+  /* Hover background on white/8 equivalent for dark surfaces */
+  .hover-dark:hover {
+    background: oklch(1 0 0 / 0.08);
   }
 }

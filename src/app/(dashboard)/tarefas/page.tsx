@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { where, orderBy, Timestamp } from 'firebase/firestore'
+import { Timestamp } from 'firebase/firestore'
+import { useQueryClient } from '@tanstack/react-query'
 
-import { listDocuments, updateDocument } from '@/lib/firestore-client'
 import { formatDate , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { concluirTarefa } from '@/features/tarefas/services'
+import { tarefasFiltroSchema } from '@/features/tarefas/schemas'
+import { useTarefasList } from '@/features/tarefas/hooks'
+import { tarefasKeys } from '@/features/tarefas/queries'
+import type { TarefaRecord, TarefasFilters } from '@/features/tarefas/types'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   pendente: { label: 'Pendente', variant: 'outline' },
@@ -36,20 +41,21 @@ const PRIORIDADE_MAP: Record<string, { label: string; variant: 'default' | 'seco
   urgente: { label: 'Urgente', variant: 'destructive', pulse: true },
 }
 
-const PAGE_SIZE = 20
-
 function TarefasContent() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const searchParams = useSearchParams()
-  const status = searchParams.get('status') ?? ''
-  const prioridade = searchParams.get('prioridade') ?? ''
-  const responsavelId = searchParams.get('responsavelId') ?? ''
-  const clienteId = searchParams.get('clienteId') ?? ''
-  const competenciaId = searchParams.get('competenciaId') ?? ''
-  const page = parseInt(searchParams.get('page') ?? '1')
+  const filters: TarefasFilters = tarefasFiltroSchema.parse({
+    status: searchParams.get('status') ?? '',
+    prioridade: searchParams.get('prioridade') ?? '',
+    responsavelId: searchParams.get('responsavelId') ?? '',
+    clienteId: searchParams.get('clienteId') ?? '',
+    competenciaId: searchParams.get('competenciaId') ?? '',
+    page: parseInt(searchParams.get('page') ?? '1'),
+  })
+  const { status, prioridade, responsavelId, clienteId, competenciaId, page } = filters
+  const { tarefas, total, totalPages, isLoading } = useTarefasList(filters)
 
-  const [allTarefas, setAllTarefas] = useState<Array<Record<string, unknown>>>([])
-  const [loading, setLoading] = useState(true)
   const [concluding, setConcluding] = useState<string | null>(null)
   const [confirmUrgente, setConfirmUrgente] = useState<{ id: string; titulo: string } | null>(null)
 
@@ -58,8 +64,8 @@ function TarefasContent() {
   async function handleConcluir(id: string, titulo: string) {
     setConcluding(id)
     try {
-      await updateDocument('tarefas', id, { status: 'concluida', concluidaEm: new Date() })
-      setAllTarefas((prev) => prev.map((t) => t.id === id ? { ...t, status: 'concluida' } : t))
+      await concluirTarefa(id)
+      await queryClient.invalidateQueries({ queryKey: tarefasKeys.list(filters) })
       toast.success(`"${titulo}" concluída`)
     } catch {
       toast.error('Erro ao concluir tarefa.')
@@ -68,14 +74,14 @@ function TarefasContent() {
     }
   }
 
-  function isTarefaFiscal(tarefa: Record<string, unknown>): boolean {
+  function isTarefaFiscal(tarefa: TarefaRecord): boolean {
     const titulo = String(tarefa.titulo ?? '').toLowerCase()
     const descricao = String(tarefa.descricao ?? '').toLowerCase()
     const tipo = String(tarefa.tipo ?? tarefa.area ?? '').toLowerCase()
     return titulo.includes('fiscal') || descricao.includes('fiscal') || tipo === 'fiscal'
   }
 
-  function handleConcluirClick(tarefa: Record<string, unknown>) {
+  function handleConcluirClick(tarefa: TarefaRecord) {
     const id = tarefa.id as string
     const titulo = tarefa.titulo as string
     if ((tarefa.prioridade as string) === 'urgente' || isTarefaFiscal(tarefa)) {
@@ -84,21 +90,6 @@ function TarefasContent() {
     }
     void handleConcluir(id, titulo)
   }
-
-  useEffect(() => {
-    setLoading(true)
-    const constraints = [
-      ...(status ? [where('status', '==', status)] : []),
-      ...(prioridade ? [where('prioridade', '==', prioridade)] : []),
-      ...(responsavelId ? [where('responsavelId', '==', responsavelId)] : []),
-      ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
-      ...(competenciaId ? [where('competenciaId', '==', competenciaId)] : []),
-      orderBy('dataVencimento', 'asc'),
-    ]
-    listDocuments('tarefas', constraints)
-      .then((data) => setAllTarefas(data as Array<Record<string, unknown>>))
-      .finally(() => setLoading(false))
-  }, [status, prioridade, responsavelId, clienteId, competenciaId])
 
   function buildUrl(overrides: Record<string, string | number>) {
     const params = new URLSearchParams({
@@ -112,10 +103,6 @@ function TarefasContent() {
     })
     return `/tarefas?${params.toString()}`
   }
-
-  const total = allTarefas.length
-  const totalPages = Math.ceil(total / PAGE_SIZE)
-  const tarefas = allTarefas.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
     <div className="space-y-5">
@@ -165,7 +152,7 @@ function TarefasContent() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {loading ? (
+            {isLoading ? (
               <TableRowSkeleton cols={7} rows={8} />
             ) : tarefas.length === 0 ? (
               <TableEmptyState

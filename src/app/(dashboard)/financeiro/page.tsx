@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect, Suspense, useMemo } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { where, orderBy, Timestamp } from 'firebase/firestore'
+import { Timestamp } from 'firebase/firestore'
+import { useQueryClient } from '@tanstack/react-query'
 
-import { getClientesByIds, listDocuments } from '@/lib/firestore-client'
 import { formatDate, formatCurrency, tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,9 @@ import { Plus, TrendingUp, CheckCircle, AlertTriangle, Loader2, Receipt } from '
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { FilterBtn } from '@/components/ui/filter-btn'
+import { financeiroBaseFiltroSchema } from '@/features/financeiro/schemas'
+import { useFinanceiroList } from '@/features/financeiro/hooks'
+import { financeiroKeys } from '@/features/financeiro/queries'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   pendente: { label: 'Pendente', variant: 'outline' },
@@ -29,100 +32,23 @@ const TIPO_MAP: Record<string, { label: string; variant: 'default' | 'secondary'
   despesa: { label: 'Despesa', variant: 'secondary' },
 }
 
-const PAGE_SIZE = 20
-
 function FinanceiroContent() {
+  const queryClient = useQueryClient()
   const searchParams = useSearchParams()
-  const clienteId = searchParams.get('clienteId') ?? ''
-  const competenciaId = searchParams.get('competenciaId') ?? ''
+  const parsed = financeiroBaseFiltroSchema.parse({
+    clienteId: searchParams.get('clienteId') ?? '',
+    competenciaId: searchParams.get('competenciaId') ?? '',
+  })
+  const { clienteId, competenciaId } = parsed
   const [tipo, setTipo] = useState('')
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(1)
-
-  const [allLancamentos, setAllLancamentos] = useState<Array<Record<string, unknown>>>([])
-  const [somaAReceber, setSomaAReceber] = useState(0)
-  const [somaRecebidoMes, setSomaRecebidoMes] = useState(0)
-  const [somaEmAtraso, setSomaEmAtraso] = useState(0)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    setLoading(true)
-    const hoje = new Date()
-    const hojeTs = Timestamp.fromDate(hoje)
-    const inicioMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
-    const fimMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0, 23, 59, 59))
-
-    const constraints = [
-      ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
-      ...(competenciaId ? [where('competenciaId', '==', competenciaId)] : []),
-      orderBy('dataVencimento', 'asc'),
-    ]
-
-    Promise.all([
-      listDocuments('lancamentos', constraints),
-      listDocuments('lancamentos', [where('tipo', '==', 'receita'), where('status', '==', 'pendente')]),
-      listDocuments('lancamentos', [
-        where('tipo', '==', 'receita'),
-        where('status', '==', 'pago'),
-        where('dataPagamento', '>=', inicioMes),
-        where('dataPagamento', '<=', fimMes),
-      ]),
-      listDocuments('lancamentos', [
-        where('tipo', '==', 'receita'),
-        where('status', '==', 'pendente'),
-        where('dataVencimento', '<', hojeTs),
-      ]),
-    ]).then(async ([mainData, aReceberData, recebidoMesData, emAtrasoData]) => {
-      const lancamentosRaw = mainData as Array<Record<string, unknown>>
-      const clientesSemNome = [...new Set(
-        lancamentosRaw
-          .filter((l) => !l.clienteNome && typeof l.clienteId === 'string')
-          .map((l) => l.clienteId as string)
-      )]
-
-      if (clientesSemNome.length > 0) {
-        const clientes = await getClientesByIds(clientesSemNome)
-        const clientePorId = new Map(
-          clientes.map((c) => [
-            c.id,
-            {
-              razaoSocial: c.razaoSocial as string | undefined,
-              nomeFantasia: c.nomeFantasia as string | undefined,
-            },
-          ])
-        )
-        setAllLancamentos(
-          lancamentosRaw.map((l) => {
-            if (l.clienteNome || typeof l.clienteId !== 'string') return l
-            const cliente = clientePorId.get(l.clienteId)
-            const nome = cliente?.razaoSocial ?? cliente?.nomeFantasia
-            return nome ? { ...l, clienteNome: nome } : l
-          })
-        )
-      } else {
-        setAllLancamentos(lancamentosRaw)
-      }
-      setSomaAReceber(aReceberData.reduce((acc, d) => acc + (((d as Record<string, unknown>).valor as number) ?? 0), 0))
-      setSomaRecebidoMes(recebidoMesData.reduce((acc, d) => acc + (((d as Record<string, unknown>).valor as number) ?? 0), 0))
-      setSomaEmAtraso(emAtrasoData.reduce((acc, d) => acc + (((d as Record<string, unknown>).valor as number) ?? 0), 0))
-    }).finally(() => setLoading(false))
-  }, [clienteId, competenciaId])
+  const { lancamentos, total, totalPages, somaAReceber, somaRecebidoMes, somaEmAtraso, isLoading } =
+    useFinanceiroList({ clienteId, competenciaId, tipo, status, page })
 
   useEffect(() => {
     setPage(1)
   }, [tipo, status])
-
-  const filteredLancamentos = useMemo(() => {
-    return allLancamentos.filter((l) => {
-      if (tipo && l.tipo !== tipo) return false
-      if (status && l.status !== status) return false
-      return true
-    })
-  }, [allLancamentos, tipo, status])
-
-  const total = filteredLancamentos.length
-  const totalPages = Math.ceil(total / PAGE_SIZE)
-  const lancamentos = filteredLancamentos.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
     <div className="space-y-5">
@@ -212,7 +138,7 @@ function FinanceiroContent() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {loading ? (
+            {isLoading ? (
               <TableRowSkeleton cols={7} rows={8} />
             ) : lancamentos.length === 0 ? (
               <TableEmptyState
@@ -266,11 +192,9 @@ function FinanceiroContent() {
                           descricao={l.descricao as string | undefined}
                           dataVencimento={l.dataVencimento as Timestamp | undefined}
                           onBaixado={() =>
-                            setAllLancamentos((prev) =>
-                              prev.map((x) =>
-                                x.id === l.id ? { ...x, status: 'pago' } : x
-                              )
-                            )
+                            void queryClient.invalidateQueries({
+                              queryKey: financeiroKeys.snapshot({ clienteId, competenciaId }),
+                            })
                           }
                         />
                       ) : null}

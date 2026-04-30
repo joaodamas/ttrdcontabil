@@ -1,18 +1,20 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { where, orderBy, Timestamp } from 'firebase/firestore'
+import { Timestamp } from 'firebase/firestore'
 
-import { listDocuments } from '@/lib/firestore-client'
 import { formatDate , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Plus, Loader2, FileText } from 'lucide-react'
+import { Plus, FileText } from 'lucide-react'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { FilterBtn } from '@/components/ui/filter-btn'
+import { irFiltroSchema } from '@/features/ir/schemas'
+import type { IrDeclaracaoRecord, IrFilters } from '@/features/ir/types'
+import { useIrList } from '@/features/ir/hooks'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   pendente: { label: 'Pendente', variant: 'outline' },
@@ -22,31 +24,18 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
   cancelado: { label: 'Cancelado', variant: 'destructive' },
 }
 
-const PAGE_SIZE = 20
-
 function IrContent() {
   const searchParams = useSearchParams()
   const anoBaseAtual = new Date().getFullYear() - 1
-  const anoBase = searchParams.get('anoBase') ? parseInt(searchParams.get('anoBase')!) : anoBaseAtual
-  const status = searchParams.get('status') ?? ''
-  const page = parseInt(searchParams.get('page') ?? '1')
-
-  const [allDeclaracoes, setAllDeclaracoes] = useState<Array<Record<string, unknown>>>([])
-  const [loading, setLoading] = useState(true)
+  const filters: IrFilters = irFiltroSchema.parse({
+    anoBase: searchParams.get('anoBase') ? parseInt(searchParams.get('anoBase')!) : anoBaseAtual,
+    status: searchParams.get('status') ?? '',
+    page: parseInt(searchParams.get('page') ?? '1'),
+  })
+  const { anoBase, status, page } = filters
+  const { declaracoes, total, totalPages, isLoading: loading } = useIrList(filters)
 
   const anosDisponiveis = [anoBaseAtual, anoBaseAtual - 1, anoBaseAtual - 2, anoBaseAtual - 3]
-
-  useEffect(() => {
-    setLoading(true)
-    const constraints = [
-      where('anoBase', '==', anoBase),
-      ...(status ? [where('status', '==', status)] : []),
-      orderBy('clienteNome', 'asc'),
-    ]
-    listDocuments('ir_declaracoes', constraints)
-      .then((data) => setAllDeclaracoes(data as Array<Record<string, unknown>>))
-      .finally(() => setLoading(false))
-  }, [anoBase, status])
 
   function buildUrl(overrides: Record<string, string | number>) {
     const params = new URLSearchParams({
@@ -57,10 +46,6 @@ function IrContent() {
     })
     return `/ir?${params.toString()}`
   }
-
-  const total = allDeclaracoes.length
-  const totalPages = Math.ceil(total / PAGE_SIZE)
-  const declaracoes = allDeclaracoes.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
     <div className="space-y-5">
@@ -119,7 +104,7 @@ function IrContent() {
                 action={!status ? { label: 'Nova Declaração', href: '/ir/nova' } : undefined}
               />
             ) : (
-              declaracoes.map((d) => {
+              declaracoes.map((d: IrDeclaracaoRecord) => {
                 const s = STATUS_MAP[d.status as string] ?? {
                   label: d.status as string,
                   variant: 'outline' as const,

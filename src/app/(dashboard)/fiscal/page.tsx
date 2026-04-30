@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
-import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
+import { Timestamp } from 'firebase/firestore'
+import { useQueryClient } from '@tanstack/react-query'
 
-import { listDocuments, deleteDocument } from '@/lib/firestore-client'
 import { formatDate, formatCurrency, tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { FileText, CheckCircle, XCircle, AlertTriangle, Plus, Loader2, Trash2, Layers } from 'lucide-react'
 import { toast } from 'sonner'
 import { EmitirLoteModal } from '@/components/fiscal/emitir-lote-modal'
+import { removeRascunho } from '@/features/fiscal/services'
+import { useFiscalDashboard } from '@/features/fiscal/hooks'
+import { fiscalKeys } from '@/features/fiscal/queries'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   emitida: { label: 'Emitida', variant: 'default' },
@@ -23,77 +26,19 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
 }
 
 export default function FiscalPage() {
+  const queryClient = useQueryClient()
   const [loteOpen, setLoteOpen] = useState(false)
-  const [reloadKey, setReloadKey] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [emitidaMesCount, setEmitidaMesCount] = useState(0)
-  const [somaEmitidaMes, setSomaEmitidaMes] = useState(0)
-  const [pendenteCount, setPendenteCount] = useState(0)
-  const [erroCount, setErroCount] = useState(0)
-  const [canceladaCount, setCanceladaCount] = useState(0)
-  const [notas, setNotas] = useState<Array<Record<string, unknown>>>([])
+  const { isLoading: loading, emitidaMesCount, somaEmitidaMes, pendenteCount, erroCount, canceladaCount, notas } = useFiscalDashboard()
 
   async function deleteRascunho(id: string) {
     try {
-      await deleteDocument('nfse_rascunhos', id)
-      setNotas(prev => prev.filter(n => n.id !== id))
-      setPendenteCount(prev => Math.max(0, prev - 1))
+      await removeRascunho(id)
+      await queryClient.invalidateQueries({ queryKey: fiscalKeys.snapshot() })
       toast.success('Rascunho removido.')
     } catch {
       toast.error('Erro ao remover rascunho.')
     }
   }
-
-  useEffect(() => {
-    const hoje = new Date()
-    const inicioMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
-    const fimMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0, 23, 59, 59))
-
-    Promise.allSettled([
-      listDocuments('nfse_emitidas', [
-        where('status', '==', 'emitida'),
-        where('dataEmissao', '>=', inicioMes),
-        where('dataEmissao', '<=', fimMes),
-      ]),
-      listDocuments('nfse_emitidas', [where('status', '==', 'pendente_processamento')]),
-      listDocuments('nfse_emitidas', [where('status', 'in', ['erro_integracao', 'rejeitada'])]),
-      listDocuments('nfse_emitidas', [
-        where('status', '==', 'cancelada'),
-        where('dataEmissao', '>=', inicioMes),
-        where('dataEmissao', '<=', fimMes),
-      ]),
-      listDocuments('nfse_emitidas', [orderBy('criadoEm', 'desc'), limit(5)]),
-      // rascunhos aguardando emissão manual (no orderBy to avoid composite index)
-      listDocuments('nfse_rascunhos', [where('status', '==', 'aguardando_emissao'), limit(10)]),
-    ]).then(([emitidaMesR, pendenteR, erroR, canceladaR, recentesR, rascunhosR]) => {
-      const emitidaMesData  = emitidaMesR.status  === 'fulfilled' ? emitidaMesR.value  : []
-      const pendenteData    = pendenteR.status    === 'fulfilled' ? pendenteR.value    : []
-      const erroData        = erroR.status        === 'fulfilled' ? erroR.value        : []
-      const canceladaData   = canceladaR.status   === 'fulfilled' ? canceladaR.value   : []
-      const recentesData    = recentesR.status    === 'fulfilled' ? recentesR.value    : []
-      const rascunhosData   = rascunhosR.status   === 'fulfilled' ? rascunhosR.value   : []
-
-      setEmitidaMesCount(emitidaMesData.length)
-      setSomaEmitidaMes(emitidaMesData.reduce((acc, d) => acc + (((d as Record<string, unknown>).valorServico as number) ?? 0), 0))
-      // pendentes = nfse_emitidas pendentes + rascunhos aguardando emissão
-      setPendenteCount(pendenteData.length + rascunhosData.length)
-      setErroCount(erroData.length)
-      setCanceladaCount(canceladaData.length)
-      // merge: rascunhos appear first, then emitidas
-      const rascunhosNormalizados = rascunhosData.map((r) => {
-        const rr = r as Record<string, unknown>
-        const dados = (rr.dados ?? {}) as Record<string, unknown>
-        return {
-          ...rr,
-          clienteNome:   rr.clienteNome ?? rr.titulo,
-          valorServico:  dados.valorServico ?? rr.valorServico ?? 0,
-          status:        'aguardando_emissao',
-          _origem:       'rascunho',
-        }
-      })
-      setNotas([...rascunhosNormalizados, ...(recentesData as Array<Record<string, unknown>>)].slice(0, 10))
-    }).finally(() => setLoading(false))
-  }, [reloadKey])
 
   if (loading) {
     return (
@@ -260,7 +205,7 @@ export default function FiscalPage() {
         onOpenChange={setLoteOpen}
         onSuccess={() => {
           setLoteOpen(false)
-          setReloadKey((k) => k + 1)
+          void queryClient.invalidateQueries({ queryKey: fiscalKeys.snapshot() })
         }}
       />
     </div>

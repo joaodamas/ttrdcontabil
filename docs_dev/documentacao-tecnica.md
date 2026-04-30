@@ -43,6 +43,23 @@ Status de evolucao 2.0:
 - Rota `src/app/(dashboard)/hoje/page.tsx` ja migrada para consumir a camada de feature via TanStack Query.
 - Feature-Layer expandido para `src/features/clientes` com separacao equivalente.
 - Rota `src/app/(dashboard)/clientes/page.tsx` migrada para leitura via `useClientesList` (TanStack Query) com filtros e paginacao.
+- Feature-Layer expandido para `src/features/tarefas` com separacao equivalente.
+- Rota `src/app/(dashboard)/tarefas/page.tsx` migrada para leitura via `useTarefasList` e mutacao com invalidacao via `tarefasKeys`.
+- Feature-Layer expandido para `src/features/financeiro` com separacao equivalente.
+- Rota `src/app/(dashboard)/financeiro/page.tsx` migrada para leitura via `useFinanceiroList` e baixa com invalidacao via `financeiroKeys`.
+- Feature-Layer expandido para `src/features/competencias` com separacao equivalente.
+- Rota `src/app/(dashboard)/competencias/page.tsx` migrada para leitura via `useCompetenciasList`.
+- Feature-Layer expandido para `src/features/fechamento` com separacao equivalente.
+- Rota `src/app/(dashboard)/fechamento/client.tsx` migrada para leitura via `useFechamentoList` e mutacoes com invalidacao via `fechamentoKeys`.
+- Feature-Layer expandido para `src/features/fiscal` com separacao equivalente.
+- Rota `src/app/(dashboard)/fiscal/page.tsx` migrada para leitura via `useFiscalDashboard` e mutacoes com invalidacao via `fiscalKeys`.
+- Feature-Layer expandido para `src/features/ir` com separacao equivalente.
+- Rota `src/app/(dashboard)/ir/page.tsx` migrada para leitura via `useIrList`.
+
+Resumo de cobertura da migracao:
+
+- Cobertura concluida no core operacional: `hoje`, `clientes`, `tarefas`, `financeiro`, `competencias`, `fechamento`, `fiscal`, `ir`.
+- Cobertura pendente para concluir o ciclo 5A.1/5A.2: `admin`.
 
 ### 3.1 Roteamento
 
@@ -284,7 +301,9 @@ Unitarios:
 Itens ainda pendentes (segundo checklist atual):
 
 - Validacao formal de regras no emulator por perfil (matriz completa)
-- Padronizacao por feature-layer (`ui/hooks/services/queries`)
-- Consolidacao de estrategia de dados com `useQuery`/invalidation por dominio
+- Concluir padronizacao por feature-layer no modulo `admin`
+- Definir politica unica de cache/staleTime por tipo de dado
+- Consolidar estrategia de invalidacao por dominio (cobertura total de mutacoes)
+- Aplicar optimistic updates e prefetch nos fluxos criticos
 - Evolucao de cobertura E2E para cenarios de permissao e edge cases criticos
 - Smoke test pos-deploy completo em todos os modulos

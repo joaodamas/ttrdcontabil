@@ -3,6 +3,7 @@
 import { useState, useEffect, useTransition, useCallback, Suspense, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
+import { useQueryClient } from '@tanstack/react-query'
 import { FechamentoTable } from '@/components/fechamento/fechamento-table'
 import { FechamentoPendenciasCards } from '@/components/fechamento/fechamento-pendencias-cards'
 import { Button } from '@/components/ui/button'
@@ -21,11 +22,13 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { RefreshCw, Plus, CheckCircle2, Clock, AlertCircle, ClipboardList } from 'lucide-react'
 import {
-  getFechamentos,
-  getClientes,
-  createDocument,
-  updateDocument,
-} from '@/lib/firestore-client'
+  updateFechamentoField,
+  gerarFechamentoMensal,
+} from '@/features/fechamento/services'
+import { fechamentoFiltroSchema } from '@/features/fechamento/schemas'
+import { useFechamentoList } from '@/features/fechamento/hooks'
+import { fechamentoKeys } from '@/features/fechamento/queries'
+import type { FechamentoFilters, FechamentoRecord } from '@/features/fechamento/types'
 
 const MESES = [
   { value: 1,  label: 'Janeiro'   },
@@ -52,35 +55,24 @@ const REGIMES = [
   { value: 'mei',               label: 'MEI'              },
 ]
 
-type FechamentoRecord = {
-  id: string
-  clienteId: string
-  clienteCodigo: number
-  clienteNome: string
-  regime: string
-  responsavel: string
-  portalUrl?: string
-  formaEntrega?: string
-  dasStatus: 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
-  esocialStatus: 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
-  reinfStatus: 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
-  fgtsStatus: 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
-}
-
 function FechamentoContent() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
   const tabelaRef = useRef<HTMLDivElement>(null)
 
   const now = new Date()
-  const mes = parseInt(searchParams.get('mes') ?? String(now.getMonth() + 1))
-  const ano = parseInt(searchParams.get('ano') ?? String(now.getFullYear()))
-  const regime = searchParams.get('regime') ?? ''
+  const parsed: FechamentoFilters = fechamentoFiltroSchema.parse({
+    mes: parseInt(searchParams.get('mes') ?? String(now.getMonth() + 1)),
+    ano: parseInt(searchParams.get('ano') ?? String(now.getFullYear())),
+    regime: searchParams.get('regime') ?? '',
+  })
+  const { mes, ano, regime } = parsed
   const mesLabel = MESES.find((m) => m.value === mes)?.label ?? ''
 
   const [fechamentos, setFechamentos] = useState<FechamentoRecord[]>([])
-  const [loading, setLoading] = useState(true)
+  const { fechamentos: fechamentosData, isLoading: loading, refetch } = useFechamentoList(parsed)
   const [gerando, setGerando] = useState(false)
   const [revisaoDialogOpen, setRevisaoDialogOpen] = useState(false)
   const [revisaoNota, setRevisaoNota] = useState('')
@@ -99,24 +91,14 @@ function FechamentoContent() {
   }, [revisaoStorageKey])
 
   useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    getFechamentos(mes, ano, regime || undefined)
-      .then((data) => { if (!cancelled) setFechamentos(data as FechamentoRecord[]) })
-      .catch(() => { if (!cancelled) toast.error('Erro ao carregar fechamentos') })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [mes, ano, regime])
+    setFechamentos(fechamentosData as FechamentoRecord[])
+  }, [fechamentosData])
 
   async function load() {
-    setLoading(true)
     try {
-      const data = await getFechamentos(mes, ano, regime || undefined)
-      setFechamentos(data as FechamentoRecord[])
+      await refetch()
     } catch {
       toast.error('Erro ao carregar fechamentos')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -136,36 +118,10 @@ function FechamentoContent() {
   async function gerarFechamento() {
     setGerando(true)
     try {
-      const clientes = await getClientes({ status: 'ativo' })
-      let criados = 0
-
-      // Existing fechamentos for this month
-      const existentes = await getFechamentos(mes, ano)
-      const existentesIds = new Set(existentes.map((f) => (f as Record<string, unknown>).clienteId as string))
-
-      for (const cliente of clientes) {
-        const c = cliente as Record<string, unknown>
-        if (existentesIds.has(c.id as string)) continue
-
-        await createDocument('fechamentos', {
-          clienteId: c.id,
-          clienteNome: c.razaoSocial ?? '',
-          clienteCodigo: c.codigo ?? 0,
-          mes,
-          ano,
-          regime: c.regimeTributario ?? 'simples_nacional',
-          responsavel: c.responsavelNome ?? '',
-          portalUrl: c.portalUrl ?? null,
-          formaEntrega: c.formaEntrega ?? null,
-          dasStatus: 'pendente',
-          esocialStatus: 'na',
-          reinfStatus: 'na',
-          fgtsStatus: 'na',
-        })
-        criados++
-      }
+      const criados = await gerarFechamentoMensal(parsed)
 
       toast.success(`${criados} registros gerados para ${mesLabel}/${ano}`)
+      await queryClient.invalidateQueries({ queryKey: fechamentoKeys.list(parsed) })
       await load()
     } catch {
       toast.error('Erro ao gerar fechamento')
@@ -176,14 +132,15 @@ function FechamentoContent() {
 
   const handleUpdate = useCallback(async (id: string, field: string, value: string) => {
     try {
-      await updateDocument('fechamentos', id, { [field]: value })
+      await updateFechamentoField(id, field, value)
       setFechamentos((prev) =>
         prev.map((f) => (f.id === id ? { ...f, [field]: value } : f))
       )
+      await queryClient.invalidateQueries({ queryKey: fechamentoKeys.list(parsed) })
     } catch {
       toast.error('Erro ao salvar')
     }
-  }, [])
+  }, [parsed, queryClient])
 
   function registrarRevisaoMes() {
     const payload = { nota: revisaoNota.trim(), at: new Date().toISOString() }

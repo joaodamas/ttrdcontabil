@@ -258,6 +258,24 @@ Blocos em aberto no checklist atual:
 
 - Validacoes finais de seguranca por perfil no emulator
 - Evolucao de UX operacional (badges unificadas, progressos de execucao, refinamentos do cockpit)
-- Evolucao arquitetural por feature e padronizacao de dados por dominio
+- Conclusao da migracao arquitetural por feature no modulo administrativo (`/admin`)
+- Padronizacao final de cache e invalidação de dados entre modulos
 - Ampliacao e conclusao de cobertura E2E/edge cases
 - Go-live orientado por uso real, metricas e smoke test completo
+
+## 9. Estado de migracao funcional 2.0
+
+Modulos ja operando no padrao 2.0:
+
+- `Hoje`
+- `Clientes`
+- `Tarefas`
+- `Competencias`
+- `Fechamento`
+- `Financeiro`
+- `Fiscal / NFS-e`
+- `IR`
+
+Modulo ainda em transicao para 2.0:
+
+- `Administracao`

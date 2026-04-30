@@ -4,7 +4,7 @@
 > ux-strategy-design-system.md, frontend-backend-architecture.md,
 > engineering-quality.md
 >
-> Versão 1.2 — 2026-04-30 (atualizado após execução completa das etapas 1–5 parciais)
+> Versão 1.3 — 2026-04-30 (topnav redesign documentado; etapas corrigidas para estado real do código)
 
 ---
 
@@ -98,35 +98,62 @@
 - [x] Ajustar variação alternativa de estilo para shell (sidebar clara + topbar cartão) e CTA de execução no dashboard 🟡 M
 - [x] Corrigir fallback de navegação/permissão no `AuthGuard` para evitar loop/reload em rota não permitida 🟠 M
 
-**✓ Gate 1 CONCLUÍDO:** Zero cores hardcoded · `section-label` em todas as tabelas · skeletons inline · `FilterBtn` · `TableEmptyState`
+### 1.9 Navegação — Topnav horizontal (substituição do sidebar)
+- [x] Criar `src/components/layout/topnav.tsx` — barra horizontal fixa 56px com background escuro 🟠 G
+  - Logo TTRD + grupos de navegação com dropdowns (Clientes▾, Operação▾, Fiscal▾)
+  - QuickActionsMenu contextual por pathname atual
+  - UserMenu com avatar de iniciais, nome/perfil e logout
+  - MobileNav com drawer lateral para telas pequenas
+  - Permissões preservadas: `canAccessTela()` + `perfis[]` para todos os itens
+- [x] Atualizar `src/app/(dashboard)/layout.tsx` — migrar de `flex-row` (sidebar) para `flex-col` (topnav) 🟠 P
+  - Removido `<Sidebar>` e `<Topbar>`; adicionado `<Topnav>`
+  - Layout: `flex flex-col min-h-screen` com `<main>` centralizado em `max-w-[1320px]`
+- [ ] Remover ou arquivar `sidebar.tsx` e `topbar.tsx` (agora não utilizados) 🟢 P
+- [ ] Validar responsividade do topnav em mobile (320px–768px) no browser 🟠 P
+- [ ] Considerar breadcrumb abaixo do topnav para navegação em rotas profundas 🟡 P
+
+**✓ Gate 1 CONCLUÍDO:** Zero cores hardcoded · `section-label` em todas as tabelas · skeletons inline · `FilterBtn` · `TableEmptyState` · topnav horizontal com dropdowns e permissões
 
 ---
 
-## ETAPA 2 — COCKPIT REDESIGN ✅ CONCLUÍDA (N/A → dashboard já está limpo)
+## ETAPA 2 — COCKPIT REDESIGN ✅ CONCLUÍDA
 > Objetivo: reduzir de 11 blocos para 4, eliminar informação duplicada
 
-### Resultado da análise
-Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no showcase `/premium` — **nunca foram adicionados ao dashboard real**. O dashboard (`/dashboard/page.tsx`) já tem estrutura limpa de 3 blocos:
-- Bloco 1: Header + 5 KPI cards
-- Bloco 2: 3 quick lists (tarefas vencidas / competências abertas / lançamentos vencidos)
-- Bloco 3: Quick access (4 links)
+### Resultado da análise (corrigido em 2026-04-30)
+> ⚠️ Versão anterior marcava esta etapa como “N/A” confundindo `/dashboard` com `/hoje`.
+> O `/dashboard/page.tsx` já estava limpo. O **problema real dos 11 blocos** estava em `/hoje/page.tsx`
+> (a tela principal de execução diária) — que foi redesenhada e resolvida nesta sessão.
 
-### 2.1 Melhorias aplicadas
-- [x] Corrigir `hover:border-emerald-300/40` → `hover:border-success/30` no card "A Receber" 🟢 P
-- [x] Dashboard já usa `Promise.allSettled` — uma query falha não bloqueia o resto ✓
+### Estrutura anterior de `/hoje` (11 blocos)
+Header · InsightStrip card · Ações em lote (condicional) · “Selecionar todas” (seção separada) ·
+InlineAlert atrasadas · Seção atrasadas · InlineAlert hoje · Seção hoje · Seção próximos 7 dias ·
+Card bloqueios de fechamento = **10–11 blocos com info duplicada**
 
-### 2.2 Pendentes (baixa prioridade — dashboard funcional)
-- [x] Persistir filtro de responsável no `localStorage` (quando cockpit personalizado for necessário) 🟡 P
-- [ ] Avaliar adicionar bulk actions se uso real mostrar necessidade 🟢 G
-- [ ] Separar carregamento de usuários vs dados operacionais (evitar reload completo do cockpit ao trocar filtro) 🟠 M
-- [ ] Garantir no máximo 1 bloco de risco global (`RiskBanner`) sem duplicações de mensagem 🟡 P
-- [ ] Consolidar padrão `PriorityList` + lista detalhada sem redundância visual 🟡 M
-- [ ] Tornar barra de bulk actions sticky durante execução em lote 🟠 M
-- [ ] Exibir claramente o motivo de prioridade por tarefa no cockpit 🟠 M
-- [ ] Exibir progresso do dia (tarefas tratadas vs pendentes) no cockpit 🟡 M
-- [ ] Adicionar CTA “Começar execução” (modo foco) no cockpit 🟡 M
+### Estrutura nova de `/hoje` (4 blocos) ✓
+- **Bloco 1:** Header + seletor de equipe
+- **Bloco 2:** KPI strip reativo (4 pills: Atrasadas / Vencem hoje / Próximos 7d / Bloqueios)
+- **Bloco 3:** 1 alerta crítico máximo (atrasadas > bloqueios > nada)
+- **Bloco 4:** Fila unificada SLA com bulk actions inline + categoria indicator por cor
+- **Bloco 5:** Bloqueios de fechamento no rodapé (condicional, fundo destructive/3)
 
-**✓ Gate 2 APROVADO:** Dashboard limpo, sem duplicação, sem componentes desnecessários
+### 2.1 Implementado
+- [x] Corrigir `hover:border-emerald-300/40` → `hover:border-success/30` (dashboard) 🟢 P
+- [x] Dashboard usa `Promise.allSettled` — query falha não bloqueia 🟢 P
+- [x] Persistir filtro de responsável no `localStorage` 🟡 P
+- [x] `/hoje/page.tsx` redesenhado: 11 blocos → 4 blocos hierárquicos 🔴 G
+- [x] Fila unificada: atrasadas + hoje + próximos 7d em queue SLA ordenada 🔴 M
+- [x] Bulk actions consolidados no header da fila (não seção separada) 🟠 M
+- [x] Máximo 1 banner de alerta por tela (prioridade: atrasadas > bloqueios) 🟡 P
+- [x] KPI strip reativo — cor muda por estado (destructive/warning/neutro) 🟡 P
+- [x] Categoria indicator — faixa vertical colorida por urgência em cada tarefa 🟡 P
+- [x] Skeleton de layout (não Loader2 nu) no loading state 🟡 P
+- [x] `task-card.tsx` — badge urgente com dot pulsante, alta com âmbar 🟠 P
+
+### 2.2 Ainda pendente
+- [ ] Exibir progresso do dia (tarefas tratadas vs total) no KPI strip 🟡 M
+- [ ] Separar fetch de usuários vs cockpit para não recarregar tudo ao trocar filtro 🟠 M
+
+**✓ Gate 2 CONCLUÍDO:** `/hoje` com 4 blocos · fila SLA unificada · bulk inline · KPI reativo · skeleton
 
 ---
 
@@ -190,6 +217,11 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 - [ ] Tornar timeline inteligente (peso por criticidade, não só cronologia) 🟠 M
 - [ ] Destacar eventos críticos na timeline com visual e prioridade explícita 🟡 M
 
+### 4.4 Loading state
+- [x] Substituir early-return `<Loader2>` por skeleton de layout no cliente 360° 🟡 M
+
+**~ Gate 4 PARCIAL:** Scroll layout ✓ · CSS vars ✓ · skeletons ✓ · nav sticky ✓ · próximos passos com severidade ✓ · pendente 70/30 layout, timeline inteligente e aside sticky
+
 ---
 
 ## ETAPA 5A — FRONTEND ARCHITECTURE (MASTER CHECKLIST) ⏳ PENDENTE
@@ -199,25 +231,36 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 - [~] Separar por feature em camadas: `ui`, `hooks`, `services`, `queries` 🔴 G
   - Iniciado em `features/hoje` com `types`, `schemas`, `services`, `queries`, `hooks`
   - Expandido para `features/clientes` com `types`, `schemas`, `services`, `queries`, `hooks`
+  - Expandido para `features/tarefas` com `types`, `schemas`, `services`, `queries`, `hooks`
+  - Expandido para `features/financeiro` com `types`, `schemas`, `services`, `queries`, `hooks`
+  - Expandido para `features/competencias` com `types`, `schemas`, `services`, `queries`, `hooks`
+  - Expandido para `features/fechamento` com `types`, `schemas`, `services`, `queries`, `hooks`
+  - Expandido para `features/fiscal` com `types`, `services`, `queries`, `hooks`
+  - Expandido para `features/ir` com `types`, `schemas`, `services`, `queries`, `hooks`
 - [~] Adotar estrutura por feature (clientes, tarefas, financeiro, fiscal, etc.) com boundaries claros 🔴 G
-  - Cockpit (`/hoje`) e lista de clientes (`/clientes`) já consumindo camada de feature; pendente migrar demais domínios
+  - Cockpit (`/hoje`), clientes (`/clientes`), tarefas (`/tarefas`), financeiro (`/financeiro`), competências (`/competencias`), fechamento (`/fechamento`), fiscal (`/fiscal`) e IR (`/ir`) já consumindo camada de feature; pendente migrar demais domínios
 
 ### 5A.2 Padrão de dados com TanStack Query
 - [~] Padronizar leituras em `useQuery` por feature (evitar fetch ad-hoc em página) 🔴 M
   - `HojePage` migrada para `useHojeData` (queries de cockpit e usuários)
   - `ClientesPage` migrada para `useClientesList` (query de listagem + filtros/paginação)
+  - `TarefasPage` migrada para `useTarefasList` (query de listagem + filtros/paginação)
+  - `FinanceiroPage` migrada para `useFinanceiroList` (snapshot + filtros/paginação)
+  - `CompetenciasPage` migrada para `useCompetenciasList` (query de listagem + filtros/paginação)
+  - `FechamentoClientPage` migrada para `useFechamentoList` (query por competência/regime)
+  - `FiscalPage` migrada para `useFiscalDashboard` (snapshot operacional)
+  - `IrPage` migrada para `useIrList` (query de listagem + filtros/paginação)
 - [~] Padronizar mutações com `invalidateQueries` por chave de domínio 🔴 M
   - Ações em lote do cockpit já invalidam `hojeKeys.cockpit(...)` após mutação
+  - Ação de concluir em tarefas já invalida `tarefasKeys.list(...)` após mutação
+  - Baixa de lançamento já invalida `financeiroKeys.snapshot(...)` após mutação
+  - Atualizações e geração de fechamento já invalidam `fechamentoKeys.list(...)` após mutação
+  - Ações em fiscal (remoção de rascunho/lote) já invalidam `fiscalKeys.snapshot(...)`
 - [ ] Definir política única de cache/staleTime por tipo de dado 🟠 M
 
 ### 5A.3 Performance de interação
 - [ ] Aplicar optimistic updates nos fluxos críticos (tarefas e financeiro) 🟠 M
 - [ ] Prefetch de dados para telas de detalhe a partir das listas 🟡 M
-
-### 4.4 Loading state
-- [x] Substituir early-return `<Loader2>` por skeleton de layout no cliente 360° 🟡 M
-
-**✓ Gate 4 CONCLUÍDO:** Scroll layout ✓ · CSS vars ✓ · skeletons ✓ · nav sticky ✓ · próximos passos com severidade ✓
 
 ---
 
@@ -317,7 +360,8 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
   - Frontend usa esse campo nos dots de saúde da lista de clientes
 - [ ] Sugestão automática de tarefas baseada em eventos de risco/atraso (P2) 🟢 G
 
-**✓ Gate 7:** Competência avança automaticamente · fechamento gerado no dia 1 · campos de risco disponíveis
+**✓ Gate 7:** Competência avança automaticamente · campos de risco disponíveis
+> ⚠️ `gerarFechamentoMensal` — confirmar nome exato da função em `functions/src/scheduler/`; os demais três triggers verificados e presentes.
 
 ---
 
@@ -347,6 +391,7 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 - [~] `e2e/financeiro.spec.ts` — Criar lançamento + aparece na fila 🟡 M
 - [~] `e2e/permissoes.spec.ts` — Perfil `leitura` não acessa financeiro 🔴 M
   - Specs criadas e suíte executa (skipped) aguardando credenciais/fixtures reais para validação end-to-end
+  - Cobertura expandida com cenário: perfil `fiscal` bloqueado em `/admin` (também pendente seed/credenciais)
 
 ### 8.3 Edge cases a testar manualmente
 - [ ] Cockpit com zero tarefas → mostra EmptyState, não quebra 🟠 P
@@ -387,12 +432,13 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 > Objetivo: deploy de produção com critérios objetivos de aprovação
 
 ### 10.1 Checklist técnico pré-deploy
-- [x] `npx tsc --noEmit` → zero erros 🔴 P
-- [x] `npm run build` → zero erros de prerender 🔴 P
-- [x] `firebase deploy --only firestore:rules` 🔴 P
-- [x] `firebase deploy --only firestore:indexes` 🔴 P
-- [x] `firebase deploy --only functions` 🔴 P
-- [x] `firebase deploy --only hosting` 🔴 P
+> ⚠️ Itens abaixo devem ser reexecutados na sequência exata no momento do go-live final — não marcar antecipadamente.
+- [ ] `npx tsc --noEmit` → zero erros 🔴 P
+- [ ] `npm run build` → zero erros de prerender 🔴 P
+- [ ] `firebase deploy --only firestore:rules` 🔴 P
+- [ ] `firebase deploy --only firestore:indexes` 🔴 P
+- [ ] `firebase deploy --only functions` 🔴 P
+- [ ] `firebase deploy --only hosting` 🔴 P
 
 ### 10.2 Critérios GO / NO-GO
 
@@ -437,26 +483,29 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 | Etapa | Descrição | Status | Restante estimado |
 |-------|-----------|--------|-------------------|
 | 0 | Fundação técnica | ✅ Concluída | — |
-| 1 | Design system + redesign visual operacional | ✅ Concluída | — |
-| 2 | Cockpit redesign | ✅ N/A → já limpo | — |
-| 3 | Lista clientes com saúde | 🔶 Parcial (health dots e tooltip concluídos) | ~1h |
-| 4 | Cliente 360° upgrade | ✅ Concluída | — |
+| 1 | Design system + redesign visual (inclui topnav) | ✅ Concluída (limpeza sidebar pendente) | ~1h |
+| 2 | Cockpit redesign `/hoje` | ✅ Concluída | — |
+| 3 | Lista clientes com saúde | 🔶 Parcial | ~1h |
+| 4 | Cliente 360° upgrade | 🔶 Parcial (70/30 layout + timeline pendentes) | ~1 dia |
 | 5A | Frontend architecture | ⏳ Pendente | ~2–4 dias |
 | 5 | Tarefas e financeiro | ✅ Concluída | — |
-| 6 | Performance | 🔶 Parcial (majoritariamente concluída) | ~1–2h |
+| 6 | Performance | 🔶 Parcial | ~1–2h |
 | 7 | Automações | ✅ Concluída (deploy realizado) | — |
-| 8 | Testes | 🔶 Parcial (unit críticos concluídos + base e2e pronta) | ~1.5 dia |
+| 8 | Testes | 🔶 Parcial (unit críticos ✓ + base e2e pronta) | ~1.5 dia |
 | 9 | Validação de uso real | ⏳ Pendente | ~5 dias |
 | 10 | Go-live | ⏳ Pendente | ~0.5 dia |
 | 11 | Go live (aceitação de produto) | ⏳ Pendente | ~1 dia |
-| **RESTANTE** | | | **~6.5–9 dias úteis** |
+| **RESTANTE** | | | **~7–10 dias úteis** |
 
 ### Próximos itens de maior impacto (por prioridade)
-1. **8.2 Ativar E2E reais** — trocar specs de `skip` por fluxo com credenciais/fixtures
-2. **5A.2 Padronização TanStack Query + invalidateQueries** — consolidar arquitetura por feature
-3. **3.3 Navegação clientes** — decidir click na linha vs modal com validação de uso real
-4. **8.3 Edge cases manuais** — executar checklist de robustez operacional
-5. **10.3 + 11.x Aceitação pós-deploy** — smoke test + adoção real sem erro crítico
+1. **1.9 Limpeza topnav** — remover `sidebar.tsx` e `topbar.tsx` (não utilizados); validar mobile no browser
+2. **4.1 Layout 70/30 no Cliente 360°** — aside sticky com saúde + timeline como primeira seção
+3. **0.2 Validar rules no emulator** — 3 cenários de perfil explícitos (leitura/operacional/financeiro)
+4. **2.2 Progresso do dia + fetch separado** — KPI strip com meta diária; query de usuários independente
+5. **8.2 Ativar E2E reais** — trocar specs de `skip` por fluxo com credenciais/fixtures reais
+6. **8.3 Edge cases manuais** — executar checklist de robustez (6 cenários) antes do go-live
+7. **9 Uso real por 5 dias** — contador usa como ferramenta principal; registrar fricções
+8. **10.1 Sequência de deploy final** — executar checklist completo no momento certo
 
 ---
 

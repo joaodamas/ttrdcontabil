@@ -1,18 +1,18 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { where, orderBy } from 'firebase/firestore'
-
-import { listDocuments } from '@/lib/firestore-client'
 import { formatMesAno } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Plus, ChevronLeft, ChevronRight, Loader2, Layers } from 'lucide-react'
+import { Plus, ChevronLeft, ChevronRight, Layers } from 'lucide-react'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { FilterBtn } from '@/components/ui/filter-btn'
+import { competenciasFiltroSchema } from '@/features/competencias/schemas'
+import { useCompetenciasList } from '@/features/competencias/hooks'
+import type { CompetenciaRecord, CompetenciasFilters } from '@/features/competencias/types'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   aberta: { label: 'Aberta', variant: 'outline' },
@@ -21,8 +21,6 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
   cancelada: { label: 'Cancelada', variant: 'destructive' },
 }
 
-const PAGE_SIZE = 20
-
 function CompetenciasContent() {
   const searchParams = useSearchParams()
 
@@ -30,30 +28,15 @@ function CompetenciasContent() {
   const mesAtual = hoje.getMonth() + 1
   const anoAtual = hoje.getFullYear()
 
-  const mes = searchParams.get('mes') ? parseInt(searchParams.get('mes')!) : mesAtual
-  const ano = searchParams.get('ano') ? parseInt(searchParams.get('ano')!) : anoAtual
-  const status = searchParams.get('status') ?? ''
-  const clienteId = searchParams.get('clienteId') ?? ''
-  const page = parseInt(searchParams.get('page') ?? '1')
-
-  const [allCompetencias, setAllCompetencias] = useState<Array<Record<string, unknown>>>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    queueMicrotask(() => {
-      setLoading(true)
-      const constraints = [
-        where('mes', '==', mes),
-        where('ano', '==', ano),
-        ...(status ? [where('status', '==', status)] : []),
-        ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
-        orderBy('clienteNome', 'asc'),
-      ]
-      listDocuments('competencias', constraints)
-        .then((data) => setAllCompetencias(data as Array<Record<string, unknown>>))
-        .finally(() => setLoading(false))
-    })
-  }, [mes, ano, status, clienteId])
+  const parsed: CompetenciasFilters = competenciasFiltroSchema.parse({
+    mes: searchParams.get('mes') ? parseInt(searchParams.get('mes')!) : mesAtual,
+    ano: searchParams.get('ano') ? parseInt(searchParams.get('ano')!) : anoAtual,
+    status: searchParams.get('status') ?? '',
+    clienteId: searchParams.get('clienteId') ?? '',
+    page: parseInt(searchParams.get('page') ?? '1'),
+  })
+  const { mes, ano, status, clienteId, page } = parsed
+  const { competencias, total, totalPages, isLoading } = useCompetenciasList(parsed)
 
   function buildUrl(overrides: Record<string, string | number>) {
     const params = new URLSearchParams({
@@ -66,10 +49,6 @@ function CompetenciasContent() {
     })
     return `/competencias?${params.toString()}`
   }
-
-  const total = allCompetencias.length
-  const totalPages = Math.ceil(total / PAGE_SIZE)
-  const competencias = allCompetencias.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
     <div className="space-y-5">
@@ -132,7 +111,7 @@ function CompetenciasContent() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {loading ? (
+            {isLoading ? (
               <TableRowSkeleton cols={5} rows={8} />
             ) : competencias.length === 0 ? (
               <TableEmptyState
@@ -143,7 +122,7 @@ function CompetenciasContent() {
                 action={!status ? { label: 'Nova Competência', href: '/competencias/nova' } : undefined}
               />
             ) : (
-              competencias.map((c) => {
+              competencias.map((c: CompetenciaRecord) => {
                 const s = STATUS_MAP[c.status as string] ?? {
                   label: c.status as string,
                   variant: 'outline' as const,

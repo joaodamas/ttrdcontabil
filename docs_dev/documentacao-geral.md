@@ -21,6 +21,17 @@ Esta documentacao consolida o estado atual da ferramenta em dois eixos:
 - Qualidade de engenharia (testes unitarios e E2E existentes)
 - Processo de build e deploy em Firebase Hosting
 
+## Status atual do redesign 2.0
+
+- Módulos já migrados para Feature-Layer + Query:
+  - `hoje`, `clientes`, `tarefas`, `financeiro`, `competencias`, `fechamento`, `fiscal`, `ir`
+- Módulo ainda pendente de migração:
+  - `admin`
+- Itens técnicos em aberto no núcleo 2.0:
+  - política única de cache/staleTime por tipo de dado
+  - optimistic updates/prefetch em fluxos críticos
+  - validação formal de rules no emulator por perfil
+
 ## Como manter atualizado
 
 Atualizar estes arquivos sempre que houver:
