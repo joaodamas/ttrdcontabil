@@ -115,11 +115,9 @@ export const Sidebar = memo(function Sidebar() {
   return (
     <aside
       className={cn(
-        'flex min-h-screen shrink-0 flex-col transition-[width] duration-200 ease-in-out',
-        'border-r border-sidebar-border',
-        collapsed ? 'w-[60px]' : 'w-[220px]'
+        'flex min-h-screen shrink-0 flex-col border-r border-border/70 bg-card/90 backdrop-blur-sm transition-[width] duration-200 ease-in-out',
+        collapsed ? 'w-[68px]' : 'w-[250px]'
       )}
-      style={{ background: 'var(--sidebar)' }}
     >
       {/* Logo row */}
       <div className={cn(
@@ -138,7 +136,7 @@ export const Sidebar = memo(function Sidebar() {
               <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: '#F5C200' }}>
                 <Building2 className="w-4 h-4" style={{ color: '#0a0a0a' }} />
               </div>
-              <p className="text-sm font-bold text-white truncate">
+              <p className="truncate text-sm font-bold text-foreground">
                 TTRD <span style={{ color: '#F5C200' }}>Contábil</span>
               </p>
             </Link>
@@ -146,7 +144,7 @@ export const Sidebar = memo(function Sidebar() {
               <TooltipTrigger>
                 <button
                   onClick={toggleCollapsed}
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-white/30 transition-colors hover:bg-white/10 hover:text-white/75"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
                   <PanelLeftClose className="w-3.5 h-3.5" />
                 </button>
@@ -164,7 +162,7 @@ export const Sidebar = memo(function Sidebar() {
             <TooltipTrigger>
               <button
                 onClick={toggleCollapsed}
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-white/30 transition-colors hover:bg-white/10 hover:text-white/75"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <PanelLeftOpen className="w-4 h-4" />
               </button>
@@ -179,7 +177,7 @@ export const Sidebar = memo(function Sidebar() {
         {NAV_SECTIONS.filter(canSeeSection).map((section) => (
           <div key={section.label}>
             {!collapsed && (
-              <p className="px-2 mb-1 text-[10px] font-semibold tracking-widest uppercase text-white/25 select-none">
+              <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/80 select-none">
                 {section.label}
               </p>
             )}
@@ -197,20 +195,20 @@ export const Sidebar = memo(function Sidebar() {
                       'group flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors',
                       collapsed && 'justify-center',
                       active
-                        ? 'bg-white/12 text-white'
-                        : 'text-white/56 hover:bg-white/8 hover:text-white/88'
+                        ? 'bg-primary/10 text-foreground ring-1 ring-primary/25'
+                        : 'text-muted-foreground hover:bg-muted/80 hover:text-foreground'
                     )}>
                       <Icon
                         size={15}
                         className={cn(
                           'shrink-0 transition-colors',
-                          active ? 'text-[#F5C200]' : 'text-white/40 group-hover:text-white/60'
+                          active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'
                         )}
                       />
                       {!collapsed && (
                         <>
                           <span className="flex-1 truncate">{item.label}</span>
-                          {active && <ChevronRight className="w-3 h-3 text-[#F5C200]/60 shrink-0" />}
+                          {active && <ChevronRight className="w-3 h-3 text-primary/70 shrink-0" />}
                         </>
                       )}
                     </span>
@@ -233,7 +231,7 @@ export const Sidebar = memo(function Sidebar() {
             <TooltipTrigger>
               <button
                 onClick={logout}
-                className="flex h-10 w-10 items-center justify-center rounded-lg text-white/30 transition-colors hover:bg-red-400/10 hover:text-red-400"
+                className="flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -249,14 +247,14 @@ export const Sidebar = memo(function Sidebar() {
               {usuario ? getInitials(usuario.nome) : '—'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-white truncate leading-tight">{usuario?.nome ?? '—'}</p>
-              <p className="text-[10px] text-white/40 capitalize truncate leading-tight">{usuario?.perfil ?? ''}</p>
+              <p className="truncate text-xs font-semibold leading-tight text-foreground">{usuario?.nome ?? '—'}</p>
+              <p className="truncate text-[10px] capitalize leading-tight text-muted-foreground">{usuario?.perfil ?? ''}</p>
             </div>
             <Tooltip>
               <TooltipTrigger>
                 <button
                   onClick={logout}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/30 transition-colors hover:bg-red-400/10 hover:text-red-400"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                 </button>

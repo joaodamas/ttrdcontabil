@@ -95,6 +95,8 @@
 - [x] Expandir nova linguagem visual para `clientes`, `tarefas` e `clientes/[id]` mantendo fluxos e integrações existentes 🟠 M
 - [x] Consolidar nova linguagem visual em `competencias`, `fiscal`, `fiscal/historico`, `ir`, `admin`, `admin/usuarios` e `admin/servicos` mantendo fluxos e integrações existentes 🟠 M
 - [x] Publicar redesign visual completo no Firebase Hosting (release incremental) 🟡 P
+- [x] Ajustar variação alternativa de estilo para shell (sidebar clara + topbar cartão) e CTA de execução no dashboard 🟡 M
+- [x] Corrigir fallback de navegação/permissão no `AuthGuard` para evitar loop/reload em rota não permitida 🟠 M
 
 **✓ Gate 1 CONCLUÍDO:** Zero cores hardcoded · `section-label` em todas as tabelas · skeletons inline · `FilterBtn` · `TableEmptyState`
 

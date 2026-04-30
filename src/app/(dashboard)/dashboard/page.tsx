@@ -6,6 +6,7 @@ import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
 import { listDocuments } from '@/lib/firestore-client'
 import { formatCurrency, formatDate, formatMesAno , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
   Users,
@@ -17,6 +18,7 @@ import {
   Clock,
   CheckCircle2,
   Circle,
+  PlayCircle,
 } from 'lucide-react'
 
 /* ─── Skeleton ─────────────────────────────────────────────── */
@@ -168,9 +170,17 @@ export default function DashboardPage() {
             Visão geral — {formatMesAno(mesAtual, anoAtual)}
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-xl border border-border/75 bg-card/90 px-3 py-2 text-xs text-muted-foreground card-shadow">
-          <span className="w-2 h-2 rounded-full bg-success shadow-[0_0_6px_1px_oklch(0.52_0.15_145/0.4)]" />
-          Sistema online
+        <div className="flex items-center gap-2">
+          <Link href="/hoje" className="inline-flex">
+            <Button className="h-10 rounded-xl">
+              <PlayCircle className="mr-1.5 h-4 w-4" />
+              Começar execução
+            </Button>
+          </Link>
+          <div className="flex items-center gap-2 rounded-xl border border-border/75 bg-card/90 px-3 py-2 text-xs text-muted-foreground card-shadow">
+            <span className="w-2 h-2 rounded-full bg-success shadow-[0_0_6px_1px_oklch(0.52_0.15_145/0.4)]" />
+            Sistema online
+          </div>
         </div>
       </div>
 

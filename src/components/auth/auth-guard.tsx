@@ -20,6 +20,24 @@ function getTelaFromPath(pathname: string): TelaKey | null {
   return null
 }
 
+function getFirstAllowedRoute(usuario: NonNullable<ReturnType<typeof useAuth>['usuario']>): string {
+  const priority: Array<{ tela: TelaKey; href: string }> = [
+    { tela: 'hoje', href: '/hoje' },
+    { tela: 'dashboard', href: '/dashboard' },
+    { tela: 'clientes', href: '/clientes' },
+    { tela: 'tarefas', href: '/tarefas' },
+    { tela: 'competencias', href: '/competencias' },
+    { tela: 'fechamento', href: '/fechamento' },
+    { tela: 'financeiro', href: '/financeiro' },
+    { tela: 'fiscal', href: '/fiscal' },
+    { tela: 'ir', href: '/ir' },
+    { tela: 'servicos', href: '/admin/servicos' },
+    { tela: 'admin', href: '/admin' },
+  ]
+  const firstAllowed = priority.find(({ tela }) => canAccessTela(usuario, tela))
+  return firstAllowed?.href ?? '/dashboard'
+}
+
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { usuario, loading } = useAuth()
   const router = useRouter()
@@ -34,7 +52,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!loading && usuario) {
       const tela = getTelaFromPath(pathname)
       if (tela && !canAccessTela(usuario, tela)) {
-        router.replace('/hoje')
+        const fallback = getFirstAllowedRoute(usuario)
+        if (pathname !== fallback) router.replace(fallback)
       }
     }
   }, [usuario, loading, router, pathname])

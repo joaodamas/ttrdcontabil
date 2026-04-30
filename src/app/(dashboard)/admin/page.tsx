@@ -19,7 +19,7 @@ export default function AdminPage() {
       desc: 'Gerenciar tipos de serviços contábeis',
     },
     {
-      href: '/admin/conectores',
+      href: '/fiscal',
       icon: Plug,
       title: 'Conectores Fiscais',
       desc: 'Configurar integrações de NFS-e',

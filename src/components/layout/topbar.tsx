@@ -183,7 +183,7 @@ function QuickActionsButton() {
 
 export const Topbar = memo(function Topbar() {
   return (
-    <header className="surface-subtle sticky top-0 z-30 mx-4 mt-3 mb-1 flex min-h-14 shrink-0 items-center justify-between gap-4 border px-4 sm:mx-6 sm:px-5">
+    <header className="sticky top-0 z-30 mx-4 mt-3 mb-1 flex min-h-14 shrink-0 items-center justify-between gap-4 rounded-2xl border border-border/70 bg-card/90 px-4 shadow-sm backdrop-blur-sm sm:mx-6 sm:px-5">
       <div className="flex-1 min-w-0">
         <Breadcrumbs />
       </div>
@@ -193,7 +193,7 @@ export const Topbar = memo(function Topbar() {
 
         <button
           aria-label="Notificações"
-          className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 bg-background/60 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
         >
           <Bell size={16} />
         </button>
