@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
-import { getClientes } from '@/lib/firestore-client'
 import { formatCpfCnpj } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ClienteStatusBadge } from '@/components/ui/status-badge'
@@ -14,6 +13,9 @@ import { PageHeader } from '@/components/layout/page-header'
 import { ClientesFiltros } from '@/components/clientes/clientes-filtros'
 import { ClienteModal } from '@/components/clientes/cliente-modal'
 import { Plus, Users } from 'lucide-react'
+import { useClientesList } from '@/features/clientes/hooks'
+import { clientesFiltroSchema } from '@/features/clientes/schemas'
+import type { ClienteRecord } from '@/features/clientes/types'
 
 const REGIME_LABELS: Record<string, string> = {
   simples_nacional: 'Simples',
@@ -37,9 +39,7 @@ function clienteInitials(razaoSocial: string): string {
   return (words[0][0] + words[1][0]).toUpperCase()
 }
 
-const PAGE_SIZE = 20
-
-function saudeCliente(c: Record<string, unknown>): {
+function saudeCliente(c: ClienteRecord): {
   score: 0 | 1 | 2 | 3
   label: 'crítica' | 'atenção' | 'estável'
   reason: string
@@ -58,42 +58,21 @@ function saudeCliente(c: Record<string, unknown>): {
 
 function ClientesContent() {
   const searchParams = useSearchParams()
-  const busca  = searchParams.get('busca') ?? ''
-  const status = searchParams.get('status') ?? ''
-  const page   = parseInt(searchParams.get('page') ?? '1')
-
-  const [allClientes, setAllClientes] = useState<Array<Record<string, unknown>>>([])
-  const [loading, setLoading] = useState(true)
+  const parsed = clientesFiltroSchema.parse({
+    busca: searchParams.get('busca') ?? '',
+    status: searchParams.get('status') ?? '',
+    page: parseInt(searchParams.get('page') ?? '1'),
+  })
+  const { busca, status, page } = parsed
+  const { paginados, total, totalPages, isLoading } = useClientesList({ busca, status, page })
   const [modalClienteId,   setModalClienteId]   = useState<string | null>(null)
   const [modalClienteNome, setModalClienteNome] = useState('')
-
-  useEffect(() => {
-    setLoading(true)
-    getClientes(status ? { status } : {})
-      .then((data) => setAllClientes(data as Array<Record<string, unknown>>))
-      .finally(() => setLoading(false))
-  }, [status])
-
-  let clientes = allClientes
-  if (busca) {
-    const buscaLower = busca.toLowerCase()
-    clientes = clientes.filter(
-      (c) =>
-        String(c.razaoSocial ?? '').toLowerCase().includes(buscaLower) ||
-        String(c.nomeFantasia ?? '').toLowerCase().includes(buscaLower) ||
-        String(c.cpfCnpj ?? '').includes(busca.replace(/\D/g, ''))
-    )
-  }
-
-  const total      = clientes.length
-  const totalPages = Math.ceil(total / PAGE_SIZE)
-  const paginados  = clientes.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
     <div>
       <PageHeader
         title="Clientes"
-        description={loading ? undefined : `${total} cliente${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`}
+        description={isLoading ? undefined : `${total} cliente${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`}
         action={
           <Link href="/clientes/novo">
             <Button size="sm" className="h-10 rounded-xl">
@@ -124,7 +103,7 @@ function ClientesContent() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {loading ? (
+            {isLoading ? (
               <TableRowSkeleton cols={7} rows={8} />
             ) : paginados.length === 0 ? (
               <TableEmptyState

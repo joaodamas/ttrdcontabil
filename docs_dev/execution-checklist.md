@@ -196,12 +196,18 @@ Os componentes `InsightStrip`, `ActionBar` e `RiskBanner` existem apenas no show
 > Objetivo: consolidar arquitetura frontend por feature para escalar manutenção e velocidade
 
 ### 5A.1 Estrutura por camadas/feature
-- [ ] Separar por feature em camadas: `ui`, `hooks`, `services`, `queries` 🔴 G
-- [ ] Adotar estrutura por feature (clientes, tarefas, financeiro, fiscal, etc.) com boundaries claros 🔴 G
+- [~] Separar por feature em camadas: `ui`, `hooks`, `services`, `queries` 🔴 G
+  - Iniciado em `features/hoje` com `types`, `schemas`, `services`, `queries`, `hooks`
+  - Expandido para `features/clientes` com `types`, `schemas`, `services`, `queries`, `hooks`
+- [~] Adotar estrutura por feature (clientes, tarefas, financeiro, fiscal, etc.) com boundaries claros 🔴 G
+  - Cockpit (`/hoje`) e lista de clientes (`/clientes`) já consumindo camada de feature; pendente migrar demais domínios
 
 ### 5A.2 Padrão de dados com TanStack Query
-- [ ] Padronizar leituras em `useQuery` por feature (evitar fetch ad-hoc em página) 🔴 M
-- [ ] Padronizar mutações com `invalidateQueries` por chave de domínio 🔴 M
+- [~] Padronizar leituras em `useQuery` por feature (evitar fetch ad-hoc em página) 🔴 M
+  - `HojePage` migrada para `useHojeData` (queries de cockpit e usuários)
+  - `ClientesPage` migrada para `useClientesList` (query de listagem + filtros/paginação)
+- [~] Padronizar mutações com `invalidateQueries` por chave de domínio 🔴 M
+  - Ações em lote do cockpit já invalidam `hojeKeys.cockpit(...)` após mutação
 - [ ] Definir política única de cache/staleTime por tipo de dado 🟠 M
 
 ### 5A.3 Performance de interação

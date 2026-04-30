@@ -2,8 +2,7 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Timestamp } from 'firebase/firestore'
-import { getHojeCockpit, getUsuarios, updateDocument } from '@/lib/firestore-client'
+import { useQueryClient } from '@tanstack/react-query'
 import { TaskCard, prioridadePeso } from '@/components/tarefas/task-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -11,23 +10,15 @@ import { InlineAlert } from '@/components/ui/inline-alert'
 import { InsightStrip } from '@/components/ui/insight-strip'
 import { cn } from '@/lib/utils'
 import { Loader2 } from 'lucide-react'
+import { useHojeData } from '@/features/hoje/hooks'
+import { bulkAlterarPrazo, bulkConcluirTarefas, bulkReatribuirTarefas } from '@/features/hoje/services'
+import { hojeKeys } from '@/features/hoje/queries'
+import { bulkDateSchema, bulkReassignSchema } from '@/features/hoje/schemas'
+import type { HojeCockpitData, HojeTask, HojeUsuario } from '@/features/hoje/types'
 
-type TaskLike = {
-  id: string
-  titulo?: string
-  clienteNome?: string
-  competenciaId?: string
-  prioridade?: string
-  responsavelId?: string
-  responsavelNome?: string
-  dataPrazo?: Timestamp
-  status?: string
-}
-
-type Usuario = { id: string; nome?: string; perfil?: string }
 const HOJE_RESPONSAVEL_STORAGE_KEY = 'hoje:responsavelId'
 
-function slaScoreHoje(task: TaskLike) {
+function slaScoreHoje(task: HojeTask) {
   const now = new Date()
   const prazo = task.dataPrazo?.toDate?.()
   const titulo = (task.titulo ?? '').toLowerCase()
@@ -49,7 +40,7 @@ function slaScoreHoje(task: TaskLike) {
   return (tipoPeso * 2) + atrasoEscalonado + urgencia + semResponsavelPenalty
 }
 
-function sortTasksBySla(items: TaskLike[]) {
+function sortTasksBySla(items: HojeTask[]) {
   return [...items].sort((a, b) => {
     const score = slaScoreHoje(b) - slaScoreHoje(a)
     if (score !== 0) return score
@@ -63,44 +54,25 @@ function sortTasksBySla(items: TaskLike[]) {
 
 export default function HojePage() {
   const loteRef = useRef<HTMLDivElement>(null)
-  const [loading, setLoading] = useState(true)
-  const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const queryClient = useQueryClient()
   const [responsavelId, setResponsavelId] = useState(() => {
     if (typeof window === 'undefined') return ''
     return window.localStorage.getItem(HOJE_RESPONSAVEL_STORAGE_KEY) ?? ''
   })
-  const [data, setData] = useState<{
-    atrasadas: TaskLike[]
-    hoje: TaskLike[]
-    proximos7Dias: TaskLike[]
-    bloqueiosFechamento: Array<{ id: string; clienteNome?: string }>
-  }>({ atrasadas: [], hoje: [], proximos7Dias: [], bloqueiosFechamento: [] })
+  const { cockpit, usuarios, isLoading } = useHojeData(responsavelId || undefined)
+  const data: HojeCockpitData = cockpit.data ?? { atrasadas: [], hoje: [], proximos7Dias: [], bloqueiosFechamento: [] }
+  const usuariosData: HojeUsuario[] = usuarios.data ?? []
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [bulkAssignee, setBulkAssignee] = useState('')
   const [bulkDate, setBulkDate] = useState('')
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [users, cockpit] = await Promise.all([
-        getUsuarios(),
-        getHojeCockpit({ responsavelId: responsavelId || undefined }),
-      ])
-      setUsuarios(users as Usuario[])
-      setData(cockpit)
-      setSelectedIds([])
-    } finally {
-      setLoading(false)
-    }
-  }, [responsavelId])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
   useEffect(() => {
     if (typeof window === 'undefined') return
     window.localStorage.setItem(HOJE_RESPONSAVEL_STORAGE_KEY, responsavelId)
+  }, [responsavelId])
+
+  useEffect(() => {
+    setSelectedIds([])
   }, [responsavelId])
 
   const allTaskIds = useMemo(
@@ -129,33 +101,29 @@ export default function HojePage() {
   }
 
   async function concluirEmLote() {
-    await Promise.all(
-      selectedIds.map((id) =>
-        updateDocument('tarefas', id, { status: 'concluida', dataConclusao: Timestamp.now() })
-      )
-    )
-    await load()
+    await bulkConcluirTarefas(selectedIds)
+    await queryClient.invalidateQueries({ queryKey: hojeKeys.cockpit(responsavelId || undefined) })
+    setSelectedIds([])
   }
 
   async function reatribuirEmLote() {
-    if (!bulkAssignee) return
-    const user = usuarios.find((u) => u.id === bulkAssignee)
-    await Promise.all(
-      selectedIds.map((id) =>
-        updateDocument('tarefas', id, { responsavelId: bulkAssignee, responsavelNome: user?.nome ?? 'Responsável' })
-      )
-    )
-    await load()
+    const parsed = bulkReassignSchema.safeParse({ responsavelId: bulkAssignee })
+    if (!parsed.success) return
+    const user = usuariosData.find((u) => u.id === bulkAssignee)
+    await bulkReatribuirTarefas(selectedIds, bulkAssignee, user?.nome ?? 'Responsavel')
+    await queryClient.invalidateQueries({ queryKey: hojeKeys.cockpit(responsavelId || undefined) })
+    setSelectedIds([])
   }
 
   async function alterarPrazoEmLote() {
-    if (!bulkDate) return
-    const dt = Timestamp.fromDate(new Date(`${bulkDate}T12:00:00`))
-    await Promise.all(selectedIds.map((id) => updateDocument('tarefas', id, { dataPrazo: dt })))
-    await load()
+    const parsed = bulkDateSchema.safeParse({ date: bulkDate })
+    if (!parsed.success) return
+    await bulkAlterarPrazo(selectedIds, bulkDate)
+    await queryClient.invalidateQueries({ queryKey: hojeKeys.cockpit(responsavelId || undefined) })
+    setSelectedIds([])
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="w-5 h-5 animate-spin" />
@@ -177,11 +145,17 @@ export default function HojePage() {
             onChange={(e) => setResponsavelId(e.target.value)}
           >
             <option value="">Equipe inteira</option>
-            {usuarios.map((u) => (
+            {usuariosData.map((u) => (
               <option key={u.id} value={u.id}>{u.nome ?? 'Usuário'}</option>
             ))}
           </select>
-          <Button variant="outline" className="h-10 rounded-xl" onClick={() => void load()}>Atualizar</Button>
+          <Button
+            variant="outline"
+            className="h-10 rounded-xl"
+            onClick={() => void Promise.all([cockpit.refetch(), usuarios.refetch()])}
+          >
+            Atualizar
+          </Button>
         </div>
       </div>
 
@@ -253,7 +227,7 @@ export default function HojePage() {
             <Button size="sm" onClick={() => void concluirEmLote()}>Concluir selecionadas</Button>
             <select className="h-8 rounded-md border bg-background px-2 text-xs" value={bulkAssignee} onChange={(e) => setBulkAssignee(e.target.value)}>
               <option value="">Reatribuir para...</option>
-              {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nome ?? 'Usuário'}</option>)}
+              {usuariosData.map((u) => <option key={u.id} value={u.id}>{u.nome ?? 'Usuário'}</option>)}
             </select>
             <Button size="sm" variant="outline" onClick={() => void reatribuirEmLote()}>Aplicar responsável</Button>
             <input type="date" className="h-8 rounded-md border bg-background px-2 text-xs" value={bulkDate} onChange={(e) => setBulkDate(e.target.value)} />
@@ -283,7 +257,7 @@ export default function HojePage() {
         )}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {sortedAtrasadas.map((task) => (
-            <TaskCard key={task.id} task={task} usuarios={usuarios} selected={selectedIds.includes(task.id)} onToggleSelected={toggleSelected} onUpdated={() => void load()} />
+            <TaskCard key={task.id} task={task} usuarios={usuariosData} selected={selectedIds.includes(task.id)} onToggleSelected={toggleSelected} onUpdated={() => void cockpit.refetch()} />
           ))}
         </div>
       </section>
@@ -299,7 +273,7 @@ export default function HojePage() {
         )}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {sortTasksBySla(data.hoje).map((task) => (
-            <TaskCard key={task.id} task={task} usuarios={usuarios} selected={selectedIds.includes(task.id)} onToggleSelected={toggleSelected} onUpdated={() => void load()} />
+            <TaskCard key={task.id} task={task} usuarios={usuariosData} selected={selectedIds.includes(task.id)} onToggleSelected={toggleSelected} onUpdated={() => void cockpit.refetch()} />
           ))}
         </div>
       </section>
@@ -308,7 +282,7 @@ export default function HojePage() {
         <h3 className="text-sm font-semibold">Próximos 7 dias ({data.proximos7Dias.length})</h3>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {sortTasksBySla(data.proximos7Dias).map((task) => (
-            <TaskCard key={task.id} task={task} usuarios={usuarios} selected={selectedIds.includes(task.id)} onToggleSelected={toggleSelected} onUpdated={() => void load()} />
+            <TaskCard key={task.id} task={task} usuarios={usuariosData} selected={selectedIds.includes(task.id)} onToggleSelected={toggleSelected} onUpdated={() => void cockpit.refetch()} />
           ))}
         </div>
       </section>
