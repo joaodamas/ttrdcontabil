@@ -5,24 +5,37 @@ import Link from 'next/link'
 import { Timestamp } from 'firebase/firestore'
 import { useQueryClient } from '@tanstack/react-query'
 
-import { formatDate, formatCurrency, tsToDate } from '@/lib/utils'
+import { formatDate, formatCurrency, tsToDate, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { FileText, CheckCircle, XCircle, AlertTriangle, Plus, Loader2, Trash2, Layers } from 'lucide-react'
+import { buttonVariants } from '@/components/ui/button'
+import {
+  FileText, CheckCircle2, XCircle, AlertTriangle,
+  Plus, Loader2, Trash2, Layers, History, Receipt,
+  TrendingUp, Download,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { EmitirLoteModal } from '@/components/fiscal/emitir-lote-modal'
 import { removeRascunho } from '@/features/fiscal/services'
 import { useFiscalDashboard } from '@/features/fiscal/hooks'
 import { fiscalKeys } from '@/features/fiscal/queries'
 
-const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  emitida: { label: 'Emitida', variant: 'default' },
-  pendente_processamento: { label: 'Pendente', variant: 'outline' },
-  aguardando_emissao: { label: 'Aguardando', variant: 'secondary' },
-  rejeitada: { label: 'Rejeitada', variant: 'destructive' },
-  cancelada: { label: 'Cancelada', variant: 'secondary' },
-  erro_integracao: { label: 'Erro', variant: 'destructive' },
+// ── Status map — soft colors inspired by QIVE ────────────────
+const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+  emitida:                 { label: 'Emitida',    className: 'bg-success/10 text-success border-success/20' },
+  pendente_processamento:  { label: 'Pendente',   className: 'bg-warning/10 text-amber-800 dark:text-warning border-warning/20' },
+  aguardando_emissao:      { label: 'Aguardando', className: 'bg-info/10 text-info border-info/20' },
+  rejeitada:               { label: 'Rejeitada',  className: 'bg-destructive/10 text-destructive border-destructive/20' },
+  cancelada:               { label: 'Cancelada',  className: 'bg-muted text-muted-foreground border-border' },
+  erro_integracao:         { label: 'Erro',       className: 'bg-destructive/10 text-destructive border-destructive/20' },
+}
+
+function StatusPill({ status }: { status: string }) {
+  const cfg = STATUS_CONFIG[status] ?? { label: status, className: 'bg-muted text-muted-foreground border-border' }
+  return (
+    <span className={cn('inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium', cfg.className)}>
+      {cfg.label}
+    </span>
+  )
 }
 
 export default function FiscalPage() {
@@ -42,153 +55,164 @@ export default function FiscalPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="w-5 h-5 animate-spin" />
+      <div className="space-y-4">
+        <div className="h-7 w-48 bg-muted rounded-lg animate-pulse" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[1, 2, 3, 4].map(i => <div key={i} className="h-20 rounded-xl bg-muted animate-pulse" />)}
+        </div>
+        <div className="h-64 rounded-xl bg-muted animate-pulse" />
       </div>
     )
   }
 
+  const totalNotas = notas.length
+
   return (
-    <div className="space-y-6">
-      <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
+    <div className="space-y-5">
+
+      {/* Page header */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Fiscal — NFS-e</h2>
-          <p className="text-sm text-muted-foreground">
-            {emitidaMesCount} nota{emitidaMesCount !== 1 ? 's' : ''} emitida{emitidaMesCount !== 1 ? 's' : ''} este mês
+          <h1 className="text-lg font-semibold tracking-tight">NFS-e — Emissão de Notas</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {emitidaMesCount} nota{emitidaMesCount !== 1 ? 's' : ''} emitida{emitidaMesCount !== 1 ? 's' : ''} este mês · {formatCurrency(somaEmitidaMes)}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Link href="/fiscal/historico">
-            <Button variant="outline" size="sm" className="h-10 rounded-xl">Histórico</Button>
+
+        {/* Action toolbar — estilo QIVE */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/fiscal/historico"
+            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')}
+          >
+            <History size={13} />
+            Histórico
           </Link>
-          <Button variant="outline" size="sm" className="h-10 rounded-xl" onClick={() => setLoteOpen(true)}>
-            <Layers className="w-4 h-4 mr-1" />
-            Lote
-          </Button>
-          <Link href="/fiscal/emitir">
-            <Button size="sm" className="h-10 rounded-xl">
-              <Plus className="w-4 h-4 mr-1" />
-              Emitir NFS-e
-            </Button>
+          <button
+            type="button"
+            onClick={() => setLoteOpen(true)}
+            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')}
+          >
+            <Layers size={13} />
+            Emitir em Lote
+          </button>
+          <Link
+            href="/fiscal/emitir"
+            className={cn(buttonVariants({ size: 'sm' }), 'gap-1.5')}
+          >
+            <Plus size={13} />
+            Nova NFS-e
           </Link>
         </div>
       </div>
 
-      {/* Cards */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Card className="border-border/65 bg-card/95 card-shadow">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Emitidas no Mês
-              </CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
+      {/* KPI strip — horizontal, compacto */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Emitidas no mês', value: emitidaMesCount, sub: formatCurrency(somaEmitidaMes), icon: Receipt, color: 'text-success', bg: 'bg-success/8' },
+          { label: 'Pendentes',       value: pendenteCount,   sub: 'aguardando envio',              icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/8' },
+          { label: 'Com erro',        value: erroCount,       sub: 'requer atenção',                icon: XCircle, color: 'text-destructive', bg: 'bg-destructive/8' },
+          { label: 'Canceladas',      value: canceladaCount,  sub: 'neste mês',                     icon: CheckCircle2, color: 'text-muted-foreground', bg: 'bg-muted/50' },
+        ].map(({ label, value, sub, icon: Icon, color, bg }) => (
+          <div key={label} className="rounded-xl border border-border bg-card p-4 card-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-muted-foreground">{label}</span>
+              <div className={cn('h-7 w-7 rounded-lg flex items-center justify-center', bg)}>
+                <Icon size={13} className={color} />
+              </div>
             </div>
-          </CardHeader>
-          <CardContent>
-            <p className="kpi-value">{emitidaMesCount}</p>
-            <p className="text-xs text-muted-foreground">{formatCurrency(somaEmitidaMes)}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/65 bg-card/95 card-shadow">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Pendentes</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-warning" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="kpi-value">{pendenteCount}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/65 bg-card/95 card-shadow">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Erros</CardTitle>
-              <XCircle className="h-4 w-4 text-destructive" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="kpi-value text-destructive">{erroCount}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/65 bg-card/95 card-shadow">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Canceladas no Mês
-              </CardTitle>
-              <CheckCircle className="h-4 w-4 text-muted-foreground" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="kpi-value">{canceladaCount}</p>
-          </CardContent>
-        </Card>
+            <p className={cn('text-2xl font-bold tabular-nums tracking-tight', color === 'text-destructive' && value > 0 ? 'text-destructive' : 'text-foreground')}>
+              {value}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
+          </div>
+        ))}
       </div>
 
-      {/* Notas recentes */}
-      <Card className="border-border/65 bg-card/95 card-shadow">
-        <CardHeader className="border-b">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-semibold">Notas Recentes</CardTitle>
-            <Link href="/fiscal/historico" className="text-xs text-primary hover:underline">
-              Ver todas
+      {/* Notas table — estilo QIVE */}
+      <div className="rounded-xl border border-border bg-card card-shadow overflow-hidden">
+
+        {/* Table toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <div className="flex items-center gap-2">
+            <FileText size={14} className="text-muted-foreground" />
+            <h2 className="text-sm font-semibold">Notas Recentes</h2>
+            <span className="text-xs tabular-nums bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-medium">
+              {totalNotas}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/fiscal/historico"
+              className="text-xs font-medium text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
+            >
+              Ver todas <TrendingUp size={11} />
             </Link>
           </div>
-        </CardHeader>
-        <div className="overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="px-4 py-3 text-left section-label">Cliente</th>
-                <th className="px-4 py-3 text-left section-label">Nº NFS-e</th>
-                <th className="px-4 py-3 text-left section-label">Emissão</th>
-                <th className="px-4 py-3 text-right section-label">Valor</th>
-                <th className="px-4 py-3 text-left section-label">Status</th>
-                <th className="px-4 py-3 w-10" />
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cliente</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Nº NFS-e</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Emissão</th>
+                <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Valor</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
+                <th className="w-10 px-4 py-2.5" />
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y divide-border">
               {notas.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                    Nenhuma NFS-e emitida.
+                  <td colSpan={6} className="px-4 py-12 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <Receipt size={28} className="text-muted-foreground/30" />
+                      <p className="text-sm text-muted-foreground">Nenhuma NFS-e emitida ainda</p>
+                      <Link href="/fiscal/emitir" className={cn(buttonVariants({ size: 'sm' }), 'mt-1 gap-1.5')}>
+                        <Plus size={13} /> Emitir primeira nota
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ) : (
                 notas.map((n) => {
-                  const st = STATUS_MAP[n.status as string] ?? {
-                    label: n.status as string,
-                    variant: 'outline' as const,
-                  }
                   const dataEmissao = n.dataEmissao as Timestamp | undefined
+                  const isRascunho = n._origem === 'rascunho'
                   return (
-                    <tr key={n.id as string} className="transition-colors hover:bg-muted/35">
-                      <td className="px-4 py-3 font-medium">{(n.clienteNome as string) ?? '—'}</td>
-                      <td className="px-4 py-3 font-mono text-xs">
-                        {(n.numeroNfse as string) ?? '—'}
+                    <tr
+                      key={n.id as string}
+                      className={cn(
+                        'transition-colors hover:bg-muted/30',
+                        isRascunho && 'opacity-75'
+                      )}
+                    >
+                      <td className="px-4 py-3 font-medium max-w-[200px]">
+                        <span className="truncate block">{(n.clienteNome as string) ?? '—'}</span>
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">
+                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                        {(n.numeroNfse as string) ?? (isRascunho ? '(rascunho)' : '—')}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">
                         {dataEmissao ? formatDate(tsToDate(dataEmissao)) : '—'}
                       </td>
-                      <td className="px-4 py-3 text-right font-medium">
+                      <td className="px-4 py-3 text-right font-semibold tabular-nums">
                         {formatCurrency((n.valorServico as number) ?? 0)}
                       </td>
                       <td className="px-4 py-3">
-                        <Badge variant={st.variant}>{st.label}</Badge>
+                        <StatusPill status={n.status as string} />
                       </td>
-                      <td className="px-4 py-3">
-                        {n._origem === 'rascunho' && (
+                      <td className="px-4 py-3 text-right">
+                        {isRascunho && (
                           <button
+                            type="button"
                             onClick={() => deleteRascunho(n.id as string)}
-                            className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
+                            className="text-muted-foreground hover:text-destructive transition-colors"
                             title="Remover rascunho"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 size={13} />
                           </button>
                         )}
                       </td>
@@ -199,7 +223,8 @@ export default function FiscalPage() {
             </tbody>
           </table>
         </div>
-      </Card>
+      </div>
+
       <EmitirLoteModal
         open={loteOpen}
         onOpenChange={setLoteOpen}
