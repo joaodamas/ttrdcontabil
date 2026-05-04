@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCpfCnpj, formatPhone, formatCep, UFS } from '@/lib/utils'
-import { Loader2, CheckCircle2 } from 'lucide-react'
+import { Loader2, CheckCircle2, Bell } from 'lucide-react'
 import { createDocument, updateDocument, getNextClienteCodigo } from '@/lib/firestore-client'
 import { useViaCep } from '@/hooks/use-viacep'
 
@@ -38,6 +38,7 @@ const clienteSchema = z.object({
   responsavelTelefone: z.string().optional(),
   observacoes: z.string().optional(),
   status: z.enum(['ativo', 'inativo', 'suspenso']).default('ativo'),
+  diaEmissaoNFSe: z.coerce.number().int().min(1).max(31).optional().nullable(),
 })
 
 type ClienteFormData = z.input<typeof clienteSchema>
@@ -405,6 +406,41 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
           <div className="space-y-2">
             <Label htmlFor="responsavelEmail">E-mail do responsável</Label>
             <Input id="responsavelEmail" type="email" {...register('responsavelEmail')} className="max-w-80" />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Emissão de NFS-e */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Bell className="h-4 w-4 text-primary" />
+            <CardTitle className="text-base">Alerta de Emissão de NFS-e</CardTitle>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Configure o dia do mês para receber alertas de emissão. O sistema avisará quando o prazo estiver chegando.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="diaEmissaoNFSe">Dia de emissão mensal</Label>
+              <Input
+                id="diaEmissaoNFSe"
+                type="number"
+                min={1}
+                max={31}
+                placeholder="Ex: 5"
+                {...register('diaEmissaoNFSe')}
+                className="max-w-32"
+              />
+              {errors.diaEmissaoNFSe && (
+                <p className="text-xs text-destructive">{errors.diaEmissaoNFSe.message as string}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Deixe em branco se não houver emissão recorrente.
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -10,6 +10,7 @@ import { buttonVariants } from '@/components/ui/button'
 import {
   Users, ClipboardList, CheckSquare, TrendingUp,
   AlertTriangle, ArrowRight, CheckCircle2, DollarSign,
+  Receipt, Bell,
 } from 'lucide-react'
 
 /* ─── Skeleton ──────────────────────────────────────────────────────────── */
@@ -72,6 +73,9 @@ export default function DashboardPage() {
   const [tarefasVencidas,      setTarefasVencidas]      = useState<Array<{ id: string; titulo: string; clienteNome?: string; dataPrazo?: Timestamp }>>([])
   const [competenciasAbertas,  setCompetenciasAbertas]  = useState<Array<{ id: string; clienteNome?: string; mes: number; ano: number }>>([])
   const [lancamentosVencidos,  setLancamentosVencidos]  = useState<Array<{ id: string; descricao: string; clienteNome?: string; valor: number; dataVencimento: Timestamp }>>([])
+  const [alertasNFSe,          setAlertasNFSe]          = useState<Array<{ id: string; razaoSocial: string; diaEmissaoNFSe: number; diasRestantes: number }>>([])
+
+  const AVISO_DIAS = 5 // janela de alerta em dias
 
   useEffect(() => {
     const em7Dias   = new Date(hoje); em7Dias.setDate(hoje.getDate() + 7)
@@ -116,6 +120,25 @@ export default function DashboardPage() {
       setTarefasVencidas(vencidas as Array<{ id: string; titulo: string; clienteNome?: string; dataPrazo?: Timestamp }>)
       setCompetenciasAbertas(compAbertasData as Array<{ id: string; clienteNome?: string; mes: number; ano: number }>)
       setLancamentosVencidos(lancVencidosData as Array<{ id: string; descricao: string; clienteNome?: string; valor: number; dataVencimento: Timestamp }>)
+
+      // Alertas de NFS-e: clientes com diaEmissaoNFSe próximo
+      const diaAtual = hoje.getDate()
+      const alertas = clientesData
+        .filter(c => typeof c.diaEmissaoNFSe === 'number' && c.status === 'ativo')
+        .map(c => {
+          const dia = c.diaEmissaoNFSe as number
+          // Dias restantes (pode ser negativo = já passou este mês)
+          const diasRestantes = dia - diaAtual
+          return {
+            id: c.id as string,
+            razaoSocial: (c.razaoSocial as string) ?? '—',
+            diaEmissaoNFSe: dia,
+            diasRestantes,
+          }
+        })
+        .filter(a => a.diasRestantes >= -2 && a.diasRestantes <= AVISO_DIAS) // -2 = 2 dias de carência
+        .sort((a, b) => a.diasRestantes - b.diasRestantes)
+      setAlertasNFSe(alertas)
     }).finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -167,6 +190,45 @@ export default function DashboardPage() {
             ].filter(Boolean).join(' · ')}
           </p>
           <span className="ml-auto text-xs text-destructive/70 whitespace-nowrap">Requer atenção</span>
+        </div>
+      )}
+
+      {/* Alertas de emissão NFS-e */}
+      {alertasNFSe.length > 0 && (
+        <div className="rounded-xl border border-warning/30 bg-warning/5 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-warning/20">
+            <Bell className="h-3.5 w-3.5 text-warning shrink-0" />
+            <p className="text-xs font-semibold text-warning">
+              {alertasNFSe.length} cliente{alertasNFSe.length !== 1 ? 's' : ''} com NFS-e a emitir
+            </p>
+            <Link href="/clientes" className="ml-auto text-xs text-warning hover:text-warning/80 transition-colors flex items-center gap-1">
+              Ver clientes <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+          <div className="divide-y divide-warning/10">
+            {alertasNFSe.map(a => (
+              <div key={a.id} className="flex items-center gap-3 px-4 py-2.5">
+                <Receipt className="h-3.5 w-3.5 text-warning/70 shrink-0" />
+                <Link href={`/clientes/${a.id}`} className="text-sm font-medium hover:underline truncate">
+                  {a.razaoSocial}
+                </Link>
+                <span className="ml-auto shrink-0 text-xs tabular-nums font-medium">
+                  {a.diasRestantes < 0
+                    ? <span className="text-destructive">Dia {a.diaEmissaoNFSe} — atrasada</span>
+                    : a.diasRestantes === 0
+                      ? <span className="text-warning font-semibold">Hoje (dia {a.diaEmissaoNFSe})</span>
+                      : <span className="text-muted-foreground">em {a.diasRestantes} dia{a.diasRestantes !== 1 ? 's' : ''} (dia {a.diaEmissaoNFSe})</span>
+                  }
+                </span>
+                <Link
+                  href={`/fiscal/emitir?clienteId=${a.id}`}
+                  className="shrink-0 rounded-md border border-warning/30 bg-warning/10 px-2 py-1 text-[11px] font-semibold text-amber-800 dark:text-warning hover:bg-warning/20 transition-colors"
+                >
+                  Emitir
+                </Link>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

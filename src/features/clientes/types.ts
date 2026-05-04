@@ -10,6 +10,8 @@ export type ClienteRecord = Record<string, unknown> & {
   uf?: string
   status?: string
   riscoInadimplencia?: boolean
+  /** Dia do mês (1–31) para emissão mensal da NFS-e */
+  diaEmissaoNFSe?: number
 }
 
 export type ClienteServicoRecord = Record<string, unknown> & {

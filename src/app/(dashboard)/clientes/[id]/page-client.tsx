@@ -17,7 +17,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Timeline, type TimelineEvent } from '@/components/clientes/timeline'
 import {
   ArrowLeft, Mail, MapPin, Pencil, ShieldCheck, ShieldAlert, ShieldOff,
-  AlertTriangle, Plus, Receipt, Wallet, CheckCircle2, AlertCircle,
+  AlertTriangle, Plus, Receipt, Wallet, CheckCircle2, AlertCircle, Bell,
 } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
@@ -138,6 +138,18 @@ export default function ClienteDetailPage() {
   const lancamentoAtrasado  = lancamentos.find(l => { const v = tsToDate(l.dataVencimento); return (l.status as string) === 'pendente' && !!v && v < new Date() })
 
   const healthScore = (fiscal ? 1 : 0) + (!competenciaAberta ? 1 : 0) + (!lancamentoAtrasado ? 1 : 0)
+
+  // Alerta de emissão NFS-e
+  const diaEmissaoNFSe = cliente ? (cliente.diaEmissaoNFSe as number | undefined) : undefined
+  const nfseAlerta = diaEmissaoNFSe != null ? (() => {
+    const hoje = new Date()
+    const diasRestantes = diaEmissaoNFSe - hoje.getDate()
+    if (diasRestantes < -2) return null  // já passou e excedeu carência
+    if (diasRestantes < 0) return { texto: `Dia ${diaEmissaoNFSe} — atrasada`, urgente: true }
+    if (diasRestantes === 0) return { texto: `Hoje (dia ${diaEmissaoNFSe})`, urgente: true }
+    if (diasRestantes <= 5) return { texto: `em ${diasRestantes} dia${diasRestantes !== 1 ? 's' : ''} (dia ${diaEmissaoNFSe})`, urgente: false }
+    return null
+  })() : null
 
   /* ── loading skeleton ─────────────────────────────────── */
   if (loading) return (
@@ -344,6 +356,23 @@ export default function ClienteDetailPage() {
                 <span className="flex items-center gap-1.5 text-sm"><Wallet className="h-3.5 w-3.5 text-muted-foreground" />Financeiro</span>
                 <Badge variant={lancamentoAtrasado ? 'destructive' : 'success'}>{lancamentoAtrasado ? 'Inadimplente' : 'Em dia'}</Badge>
               </div>
+              {/* Alerta emissão NFS-e */}
+              {nfseAlerta && (
+                <div className={cn(
+                  'flex items-center justify-between rounded-md px-2.5 py-2 border',
+                  nfseAlerta.urgente
+                    ? 'bg-destructive/6 border-destructive/20'
+                    : 'bg-warning/6 border-warning/20'
+                )}>
+                  <span className="flex items-center gap-1.5 text-xs font-medium">
+                    <Bell className={cn('h-3 w-3 shrink-0', nfseAlerta.urgente ? 'text-destructive' : 'text-warning')} />
+                    NFS-e
+                  </span>
+                  <span className={cn('text-xs font-semibold', nfseAlerta.urgente ? 'text-destructive' : 'text-amber-800 dark:text-warning')}>
+                    {nfseAlerta.texto}
+                  </span>
+                </div>
+              )}
               <div className="pt-2 border-t border-border/50">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs text-muted-foreground">Saúde geral</span>
