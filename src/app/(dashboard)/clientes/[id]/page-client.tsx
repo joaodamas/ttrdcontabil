@@ -11,6 +11,7 @@ import { formatCpfCnpj, formatDate, formatCurrency, formatMesAno, tsToDate, cn }
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Timeline, type TimelineEvent } from '@/components/clientes/timeline'
@@ -135,6 +136,8 @@ export default function ClienteDetailPage() {
 
   const competenciaAberta   = competencias.find(c => (c.status as string) === 'aberta')
   const lancamentoAtrasado  = lancamentos.find(l => { const v = tsToDate(l.dataVencimento); return (l.status as string) === 'pendente' && !!v && v < new Date() })
+
+  const healthScore = (fiscal ? 1 : 0) + (!competenciaAberta ? 1 : 0) + (!lancamentoAtrasado ? 1 : 0)
 
   /* ── loading skeleton ─────────────────────────────────── */
   if (loading) return (
@@ -341,6 +344,13 @@ export default function ClienteDetailPage() {
                 <span className="flex items-center gap-1.5 text-sm"><Wallet className="h-3.5 w-3.5 text-muted-foreground" />Financeiro</span>
                 <Badge variant={lancamentoAtrasado ? 'destructive' : 'success'}>{lancamentoAtrasado ? 'Inadimplente' : 'Em dia'}</Badge>
               </div>
+              <div className="pt-2 border-t border-border/50">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs text-muted-foreground">Saúde geral</span>
+                  <span className="text-xs font-semibold tabular-nums">{healthScore}/3</span>
+                </div>
+                <Progress value={(healthScore / 3) * 100} className="h-1.5" />
+              </div>
             </CardContent>
           </Card>
 
@@ -370,21 +380,35 @@ export default function ClienteDetailPage() {
           {/* Ações rápidas */}
           <Card>
             <CardHeader className="py-3 px-4"><CardTitle className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Ações Rápidas</CardTitle></CardHeader>
-            <CardContent className="px-4 pb-4 space-y-2">
-              <Link href={`/competencias/nova?clienteId=${id}`} className="block">
-                <Button size="sm" className="w-full justify-start"><Plus className="h-3.5 w-3.5" />Nova Competência</Button>
-              </Link>
-              {fiscal && podeAcessarFiscal && (
-                <Link href={`/fiscal/emitir?clienteId=${id}`} className="block">
-                  <Button size="sm" variant="outline" className="w-full justify-start"><Receipt className="h-3.5 w-3.5" />Emitir NFS-e</Button>
+            <CardContent className="px-4 pb-4">
+              <div className="grid grid-cols-2 gap-2">
+                <Link href={`/competencias/nova?clienteId=${id}`}>
+                  <button className="w-full aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background hover:bg-muted/60 transition-colors p-3 text-center">
+                    <Plus className="h-5 w-5 text-primary" />
+                    <span className="text-xs font-medium leading-tight">Nova Competência</span>
+                  </button>
                 </Link>
-              )}
-              <Link href={`/financeiro?clienteId=${id}`} className="block">
-                <Button size="sm" variant="outline" className="w-full justify-start"><Wallet className="h-3.5 w-3.5" />Ver Financeiro</Button>
-              </Link>
-              <Link href={`/clientes/${id}/editar`} className="block">
-                <Button size="sm" variant="ghost" className="w-full justify-start"><Pencil className="h-3.5 w-3.5" />Editar Cliente</Button>
-              </Link>
+                {fiscal && podeAcessarFiscal && (
+                  <Link href={`/fiscal/emitir?clienteId=${id}`}>
+                    <button className="w-full aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background hover:bg-muted/60 transition-colors p-3 text-center">
+                      <Receipt className="h-5 w-5 text-primary" />
+                      <span className="text-xs font-medium leading-tight">Emitir NFS-e</span>
+                    </button>
+                  </Link>
+                )}
+                <Link href={`/financeiro?clienteId=${id}`}>
+                  <button className="w-full aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background hover:bg-muted/60 transition-colors p-3 text-center">
+                    <Wallet className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-xs font-medium leading-tight">Financeiro</span>
+                  </button>
+                </Link>
+                <Link href={`/clientes/${id}/editar`}>
+                  <button className="w-full aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background hover:bg-muted/60 transition-colors p-3 text-center">
+                    <Pencil className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-xs font-medium leading-tight">Editar</span>
+                  </button>
+                </Link>
+              </div>
             </CardContent>
           </Card>
         </div>

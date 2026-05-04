@@ -28,21 +28,21 @@ type TimelineProps = {
   events: TimelineEvent[]
 }
 
-const DOT_COLOR: Record<NonNullable<TimelineEvent['variant']>, string> = {
-  success: 'bg-success',
-  warning: 'bg-warning',
-  destructive: 'bg-destructive',
-  neutral: 'bg-neutral',
-  default: 'bg-primary',
+const ICON_CIRCLE_COLOR: Record<NonNullable<TimelineEvent['variant']>, string> = {
+  success:     'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-400',
+  warning:     'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',
+  destructive: 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-500',
+  neutral:     'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+  default:     'bg-primary/10 text-primary',
 }
 
 const TYPE_ICON: Record<TimelineEventType, React.ReactNode> = {
-  tarefa: <CheckSquare className="h-3.5 w-3.5" />,
-  nfse: <Receipt className="h-3.5 w-3.5" />,
-  competencia: <Layers className="h-3.5 w-3.5" />,
-  lancamento: <DollarSign className="h-3.5 w-3.5" />,
-  comentario: <MessageCircle className="h-3.5 w-3.5" />,
-  sistema: <Info className="h-3.5 w-3.5" />,
+  tarefa:      <CheckSquare className="h-4 w-4" />,
+  nfse:        <Receipt className="h-4 w-4" />,
+  competencia: <Layers className="h-4 w-4" />,
+  lancamento:  <DollarSign className="h-4 w-4" />,
+  comentario:  <MessageCircle className="h-4 w-4" />,
+  sistema:     <Info className="h-4 w-4" />,
 }
 
 function relativeOrAbsolute(date: Date): string {
@@ -74,31 +74,30 @@ export function Timeline({ events }: TimelineProps) {
   }
 
   return (
-    <ol className="relative space-y-0 pl-6">
+    <ol className="relative space-y-0 pl-12">
       {/* Vertical line */}
-      <div className="absolute left-[9px] top-2 bottom-2 w-0.5 bg-border" aria-hidden="true" />
+      <div className="absolute left-[15px] top-2 bottom-2 w-0.5 bg-border" aria-hidden="true" />
 
       {events.map((event) => {
-        const dotColor = DOT_COLOR[event.variant ?? 'default']
+        const iconCircleColor = ICON_CIRCLE_COLOR[event.variant ?? 'default']
         const icon = TYPE_ICON[event.type]
 
         return (
           <li key={event.id} className="relative flex gap-4 pb-6 last:pb-0">
-            {/* Dot on the vertical line */}
+            {/* Icon circle on the vertical line */}
             <span
               className={cn(
-                'absolute -left-[3px] top-1 h-3 w-3 shrink-0 rounded-full border-2 border-background',
-                dotColor
+                'absolute -left-[15px] top-0 h-8 w-8 shrink-0 rounded-full flex items-center justify-center',
+                iconCircleColor
               )}
               aria-hidden="true"
-            />
+            >
+              {icon}
+            </span>
 
             {/* Content */}
-            <div className="min-w-0 flex-1 space-y-0.5 pt-0.5">
+            <div className="min-w-0 flex-1 space-y-0.5 pt-1">
               <div className="flex flex-wrap items-center gap-1.5">
-                {/* Type icon */}
-                <span className="text-muted-foreground">{icon}</span>
-
                 {/* Title */}
                 {event.href ? (
                   <Link

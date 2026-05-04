@@ -129,6 +129,7 @@ export function FechamentoTable({ fechamentos, onUpdate }: FechamentoTableProps)
             <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground">CLIENTE</th>
             <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground w-20">REGIME</th>
             <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground w-32">RESPONSÁVEL</th>
+            <th className="text-center px-3 py-2 font-medium text-xs text-muted-foreground w-24">PROG</th>
             <th className="text-center px-2 py-2 font-medium text-xs text-muted-foreground w-16">DAS/SN</th>
             <th className="text-center px-2 py-2 font-medium text-xs text-muted-foreground w-16">eSOCIAL</th>
             <th className="text-center px-2 py-2 font-medium text-xs text-muted-foreground w-16">REINF</th>
@@ -138,7 +139,13 @@ export function FechamentoTable({ fechamentos, onUpdate }: FechamentoTableProps)
         </thead>
         <tbody className="divide-y">
           {fechamentos.map((f) => (
-            <tr key={f.id} className="hover:bg-muted/20 transition-colors">
+            <tr key={f.id} className={cn(
+              'hover:bg-muted/30 transition-colors',
+              (f.dasStatus === 'guia' || f.esocialStatus === 'guia' || f.reinfStatus === 'guia' || f.fgtsStatus === 'guia' ||
+               f.dasStatus === 'pendente' || f.esocialStatus === 'pendente' || f.reinfStatus === 'pendente' || f.fgtsStatus === 'pendente')
+                ? 'bg-destructive/[0.03] hover:bg-destructive/[0.06]'
+                : ''
+            )}>
               <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{f.clienteCodigo}</td>
               <td className="px-3 py-2 font-medium">{f.clienteNome}</td>
               <td className="px-3 py-2">
@@ -147,6 +154,25 @@ export function FechamentoTable({ fechamentos, onUpdate }: FechamentoTableProps)
                 </span>
               </td>
               <td className="px-3 py-2 text-xs text-muted-foreground truncate max-w-[120px]">{f.responsavel || '—'}</td>
+              <td className="px-3 py-2">
+                {(() => {
+                  const slots = [f.dasStatus, f.esocialStatus, f.reinfStatus, f.fgtsStatus]
+                  const done = slots.filter(s => !['pendente', 'guia'].includes(s) && s !== 'na').length
+                  const total = slots.filter(s => s !== 'na').length || 4
+                  const pct = Math.round((done / total) * 100)
+                  return (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={cn('h-full rounded-full transition-all', pct === 100 ? 'bg-success' : pct >= 50 ? 'bg-warning' : 'bg-destructive')}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] tabular-nums text-muted-foreground w-6 text-right">{pct}%</span>
+                    </div>
+                  )
+                })()}
+              </td>
               <td className="px-2 py-2 text-center">
                 <StatusCell status={f.dasStatus} campo="das" id={f.id} onUpdate={onUpdate} />
               </td>

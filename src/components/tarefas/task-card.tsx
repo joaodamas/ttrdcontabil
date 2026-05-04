@@ -128,7 +128,7 @@ export function TaskCard({ task, usuarios, selected, onToggleSelected, onUpdated
   return (
     <div
       className={cn(
-        'group relative rounded-xl border border-border border-l-4 bg-card px-4 py-3 transition-shadow hover:shadow-sm',
+        'group relative rounded-xl border border-border border-l-4 bg-background shadow-sm hover:shadow-md px-4 py-3 transition-shadow',
         borderColor
       )}
     >
@@ -209,7 +209,7 @@ export function TaskCard({ task, usuarios, selected, onToggleSelected, onUpdated
 
       {/* Actions — hidden on desktop until hover */}
       <div className="mt-3 flex flex-wrap items-center gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-150">
-        <Button size="sm" variant="default" onClick={marcarConcluida} disabled={saving} className="h-7 gap-1 text-xs">
+        <Button size="sm" variant="ghost" onClick={marcarConcluida} disabled={saving} className="h-7 gap-1 text-xs">
           <CheckCheck className="h-3.5 w-3.5" />
           Concluir
         </Button>
