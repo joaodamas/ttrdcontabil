@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
 import { formatCpfCnpj } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { ClienteStatusBadge } from '@/components/ui/status-badge'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
@@ -76,11 +76,9 @@ function ClientesContent() {
         title="Clientes"
         description={isLoading ? undefined : `${total} cliente${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`}
         action={
-          <Link href="/clientes/novo">
-            <Button size="sm" className="h-10 rounded-xl">
-              <Plus className="w-4 h-4 mr-1.5" />
-              Novo Cliente
-            </Button>
+          <Link href="/clientes/novo" className={buttonVariants({ size: 'sm', className: 'h-10 rounded-xl' })}>
+            <Plus className="w-4 h-4" />
+            Novo Cliente
           </Link>
         }
       />
@@ -205,13 +203,13 @@ function ClientesContent() {
           <span className="text-muted-foreground">Página {page} de {totalPages}</span>
           <div className="flex gap-2">
             {page > 1 && (
-              <Link href={`/clientes?${new URLSearchParams({ busca, status, page: String(page - 1) })}`}>
-                <Button variant="outline" size="sm" className="h-9 rounded-xl">Anterior</Button>
+              <Link href={`/clientes?${new URLSearchParams({ busca, status, page: String(page - 1) })}`} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
+                Anterior
               </Link>
             )}
             {page < totalPages && (
-              <Link href={`/clientes?${new URLSearchParams({ busca, status, page: String(page + 1) })}`}>
-                <Button variant="outline" size="sm" className="h-9 rounded-xl">Próxima</Button>
+              <Link href={`/clientes?${new URLSearchParams({ busca, status, page: String(page + 1) })}`} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
+                Próxima
               </Link>
             )}
           </div>
