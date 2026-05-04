@@ -28,6 +28,8 @@ const badgeVariants = cva(
           "bg-warning/15 text-amber-800 dark:text-warning dark:bg-warning/20 border-warning/20",
         info:
           "bg-info/12 text-info dark:bg-info/20 border-info/20",
+        neutral:
+          "bg-neutral/10 text-neutral dark:bg-neutral/20 border-neutral/20",
       },
     },
     defaultVariants: {

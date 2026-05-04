@@ -3,11 +3,11 @@
 import { useState } from 'react'
 import { Timestamp } from 'firebase/firestore'
 import { updateDocument } from '@/lib/firestore-client'
-import { formatDate, tsToDate } from '@/lib/utils'
+import { formatDate, tsToDate, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
+import { CheckCheck, AlertTriangle, Clock, User, Calendar } from 'lucide-react'
 
 type Usuario = { id: string; nome?: string }
 
@@ -55,6 +55,30 @@ export function prioridadeHint(prioridade?: string): string {
   return map[p] ?? map.normal
 }
 
+function initials(nome?: string): string {
+  if (!nome) return '?'
+  return nome
+    .split(' ')
+    .slice(0, 2)
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+}
+
+const BORDER_LEFT: Record<string, string> = {
+  urgente: 'border-l-destructive',
+  alta: 'border-l-warning',
+  normal: 'border-l-border',
+  baixa: 'border-l-transparent',
+}
+
+const PRIORITY_BADGE: Record<string, string> = {
+  urgente: 'bg-red-100 text-red-800 border-transparent',
+  alta: 'bg-amber-100 text-amber-800 border-transparent',
+  normal: 'bg-slate-100 text-slate-600 border-transparent',
+  baixa: 'bg-slate-50 text-slate-400 border-transparent',
+}
+
 export function TaskCard({ task, usuarios, selected, onToggleSelected, onUpdated }: TaskCardProps) {
   const [saving, setSaving] = useState(false)
 
@@ -92,73 +116,128 @@ export function TaskCard({ task, usuarios, selected, onToggleSelected, onUpdated
   }
 
   const dt = tsToDate(task.dataPrazo)
+  const now = new Date()
+  const h48 = new Date(now.getTime() + 48 * 60 * 60 * 1000)
+  const isOverdue = dt !== null && dt < now
+  const isSLACritical = dt !== null && !isOverdue && dt <= h48
+
+  const prioridade = task.prioridade ?? 'normal'
+  const borderColor = BORDER_LEFT[prioridade] ?? 'border-l-border'
+  const badgeClass = PRIORITY_BADGE[prioridade] ?? PRIORITY_BADGE.normal
+
   return (
-    <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+    <div
+      className={cn(
+        'group relative rounded-xl border border-border border-l-4 bg-card px-4 py-3 transition-shadow hover:shadow-sm',
+        borderColor
+      )}
+    >
       <div className="flex items-start gap-3">
         <input
           type="checkbox"
           checked={!!selected}
           onChange={(e) => onToggleSelected?.(task.id, e.target.checked)}
-          className="mt-1"
+          className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-primary"
         />
-        <div className="flex-1 min-w-0">
+
+        <div className="flex-1 min-w-0 space-y-1.5">
+          {/* Title row */}
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-sm font-semibold truncate">{task.titulo ?? 'Tarefa sem título'}</p>
+            <p className="text-sm font-semibold truncate leading-tight">
+              {task.titulo ?? 'Tarefa sem título'}
+            </p>
+
+            {/* Priority badge */}
             <Tooltip>
               <TooltipTrigger>
-                <span className="inline-flex cursor-help">
-                  {task.prioridade === 'urgente' ? (
-                    <Badge variant="destructive" className="gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                      Urgente
-                    </Badge>
-                  ) : task.prioridade === 'alta' ? (
-                    <Badge variant="outline" className="border-warning/50 text-warning bg-warning/10">
-                      Alta
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className={cn('capitalize', task.prioridade === 'baixa' && 'text-muted-foreground')}>
-                      {task.prioridade ?? 'normal'}
-                    </Badge>
+                <span
+                  className={cn(
+                    'inline-flex cursor-help items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold leading-none border',
+                    badgeClass
                   )}
+                >
+                  {prioridade === 'urgente' && (
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-600 animate-pulse" />
+                  )}
+                  <span className="capitalize">{prioridade}</span>
                 </span>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-[min(20rem,calc(100vw-2rem))] text-left leading-snug">
                 {prioridadeHint(task.prioridade)}
               </TooltipContent>
             </Tooltip>
+
+            {/* SLA critical badge */}
+            {isSLACritical && (
+              <span className="sla-critical inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                <AlertTriangle className="h-3 w-3" />
+                48h
+              </span>
+            )}
+
+            {/* Overdue badge */}
+            {isOverdue && (
+              <Badge className="inline-flex items-center gap-1 rounded-full bg-destructive/10 text-destructive text-[10px] px-2 py-0.5 border-transparent">
+                <Clock className="h-3 w-3" />
+                Atrasada
+              </Badge>
+            )}
           </div>
+
+          {/* Meta row */}
           <p className="text-xs text-muted-foreground truncate">
-            {task.clienteNome ?? 'Sem cliente'} • {task.responsavelNome ?? 'Sem responsável'}
+            {task.clienteNome ?? 'Sem cliente'}
+            {task.responsavelNome ? (
+              <>
+                {' '}
+                <span className="text-border">•</span>{' '}
+                <span className="inline-flex items-center gap-0.5">
+                  <User className="h-3 w-3 opacity-60" />
+                  {task.responsavelNome}
+                </span>
+              </>
+            ) : null}
           </p>
-          <p className="text-xs text-muted-foreground">
-            Prazo: {dt ? formatDate(dt) : 'Sem prazo'}
+
+          {/* Deadline row */}
+          <p className={cn('text-xs flex items-center gap-1', isOverdue ? 'text-destructive font-medium' : 'text-muted-foreground')}>
+            <Calendar className="h-3 w-3 opacity-60" />
+            {dt ? formatDate(dt) : 'Sem prazo'}
           </p>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={marcarConcluida} disabled={saving}>
+      {/* Actions — hidden on desktop until hover */}
+      <div className="mt-3 flex flex-wrap items-center gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-150">
+        <Button size="sm" variant="default" onClick={marcarConcluida} disabled={saving} className="h-7 gap-1 text-xs">
+          <CheckCheck className="h-3.5 w-3.5" />
           Concluir
         </Button>
+
         <select
-          className="h-8 rounded-md border bg-background px-2 text-xs"
+          className="h-7 rounded-md border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
           defaultValue=""
           onChange={(e) => void reatribuir(e.target.value)}
           disabled={saving}
         >
-          <option value="" disabled>Reatribuir</option>
+          <option value="" disabled>
+            {task.responsavelNome
+              ? `Reatribuir (${initials(task.responsavelNome)})`
+              : 'Reatribuir'}
+          </option>
           {usuarios.map((u) => (
             <option key={u.id} value={u.id}>
               {u.nome ?? 'Usuário'}
             </option>
           ))}
         </select>
+
         <input
           type="date"
-          className="h-8 rounded-md border bg-background px-2 text-xs"
+          className="h-7 rounded-md border bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
           onChange={(e) => void alterarPrazo(e.target.value)}
           disabled={saving}
+          title="Alterar prazo"
         />
       </div>
     </div>

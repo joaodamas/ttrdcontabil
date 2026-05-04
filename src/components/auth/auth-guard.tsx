@@ -7,7 +7,6 @@ import { Loader2 } from 'lucide-react'
 import { canAccessTela, type TelaKey } from '@/lib/permissions'
 
 function getTelaFromPath(pathname: string): TelaKey | null {
-  if (pathname.startsWith('/hoje')) return 'hoje'
   if (pathname.startsWith('/clientes')) return 'clientes'
   if (pathname.startsWith('/tarefas')) return 'tarefas'
   if (pathname.startsWith('/competencias')) return 'competencias'
@@ -15,6 +14,7 @@ function getTelaFromPath(pathname: string): TelaKey | null {
   if (pathname.startsWith('/financeiro')) return 'financeiro'
   if (pathname.startsWith('/fiscal')) return 'fiscal'
   if (pathname.startsWith('/ir')) return 'ir'
+  if (pathname.startsWith('/admin/servicos')) return 'servicos'
   if (pathname.startsWith('/admin')) return 'admin'
   if (pathname.startsWith('/dashboard')) return 'dashboard'
   return null
@@ -22,7 +22,6 @@ function getTelaFromPath(pathname: string): TelaKey | null {
 
 function getFirstAllowedRoute(usuario: NonNullable<ReturnType<typeof useAuth>['usuario']>): string {
   const priority: Array<{ tela: TelaKey; href: string }> = [
-    { tela: 'hoje', href: '/hoje' },
     { tela: 'dashboard', href: '/dashboard' },
     { tela: 'clientes', href: '/clientes' },
     { tela: 'tarefas', href: '/tarefas' },

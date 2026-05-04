@@ -24,6 +24,8 @@
   --color-warning-foreground: var(--warning-foreground);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+  --color-neutral: var(--neutral);
+  --color-neutral-foreground: var(--neutral-foreground);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -55,23 +57,23 @@
 }
 
 :root {
-  /* Premium neutral canvas with warm brand tint */
-  --background: oklch(0.965 0.004 90);
-  --foreground: oklch(0.12 0 0);
-  /* Cards — pure white with contrast against background */
-  --card: oklch(0.995 0.002 90);
-  --card-foreground: oklch(0.12 0 0);
+  /* Tool-grade light canvas — slate-50 equivalent */
+  --background: oklch(0.982 0.002 250);
+  --foreground: oklch(0.13 0.008 260);
+  /* Cards — pure white */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.13 0.008 260);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.12 0 0);
+  --popover-foreground: oklch(0.13 0.008 260);
   /* Brand: TTRD yellow */
   --primary: oklch(0.82 0.18 88);
   --primary-foreground: oklch(0.10 0 0);
   --secondary: oklch(0.94 0 0);
   --secondary-foreground: oklch(0.22 0 0);
-  --muted: oklch(0.94 0.003 90);
-  --muted-foreground: oklch(0.44 0.01 255);
-  --accent: oklch(0.94 0.003 90);
-  --accent-foreground: oklch(0.22 0 0);
+  --muted: oklch(0.958 0.003 250);
+  --muted-foreground: oklch(0.48 0.012 250);
+  --accent: oklch(0.958 0.003 250);
+  --accent-foreground: oklch(0.18 0.008 260);
   --destructive: oklch(0.577 0.245 27.325);
   --success: oklch(0.52 0.15 145);
   --success-foreground: oklch(1 0 0);
@@ -79,8 +81,11 @@
   --warning-foreground: oklch(0.10 0 0);
   --info: oklch(0.55 0.14 240);
   --info-foreground: oklch(1 0 0);
-  --border: oklch(0.88 0.008 95);
-  --input: oklch(0.88 0.008 95);
+  /* Neutral: Aguardando, Rascunho, Em andamento sem urgência */
+  --neutral: oklch(0.56 0.012 250);
+  --neutral-foreground: oklch(1 0 0);
+  --border: oklch(0.916 0.004 250);
+  --input: oklch(0.916 0.004 250);
   --ring: oklch(0.82 0.18 88);
   --chart-1: oklch(0.82 0.18 88);
   --chart-2: oklch(0.52 0.15 145);
@@ -111,11 +116,11 @@
   /* Hero métrica (dashboards / cockpits) */
   --text-metric: clamp(2rem, 4vw, 3rem);
   --text-metric-leading: 1.05;
-  --surface-1: oklch(0.995 0.002 90);
-  --surface-2: oklch(0.975 0.004 90);
-  --surface-3: oklch(0.955 0.005 90);
-  --app-gradient-1: oklch(0.99 0.015 88 / 0.55);
-  --app-gradient-2: oklch(0.97 0.012 230 / 0.45);
+  --surface-1: oklch(1 0 0);
+  --surface-2: oklch(0.975 0.003 250);
+  --surface-3: oklch(0.958 0.003 250);
+  --app-gradient-1: transparent;
+  --app-gradient-2: transparent;
 }
 
 .dark {
@@ -140,6 +145,8 @@
   --warning-foreground: oklch(0.10 0 0);
   --info: oklch(0.65 0.14 240);
   --info-foreground: oklch(1 0 0);
+  --neutral: oklch(0.62 0.014 250);
+  --neutral-foreground: oklch(1 0 0);
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 16%);
   --ring: oklch(0.82 0.18 88);
@@ -170,11 +177,6 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
-    /* Subtle warm gradient — feels premium without being distracting */
-    background-image:
-      radial-gradient(ellipse 80% 50% at 60% -20%, oklch(0.82 0.18 88 / 0.06), transparent),
-      radial-gradient(ellipse 60% 40% at -10% 60%, oklch(0.55 0.14 240 / 0.04), transparent);
-    background-attachment: fixed;
   }
   html {
     @apply font-sans;
@@ -228,10 +230,10 @@
     font-variant-numeric: tabular-nums;
   }
   .card-shadow {
-    box-shadow: 0 1px 2px 0 rgb(12 15 24 / 0.05), 0 8px 20px -12px rgb(12 15 24 / 0.14);
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
   }
   .card-shadow-hover {
-    box-shadow: 0 6px 24px -8px rgb(12 15 24 / 0.18), 0 2px 4px -1px rgb(12 15 24 / 0.08);
+    box-shadow: 0 2px 8px -2px rgb(0 0 0 / 0.08);
   }
   .kpi-value {
     font-size: clamp(1.6rem, 2.2vw, 2.35rem);
@@ -248,4 +250,37 @@
   .hover-dark:hover {
     background: oklch(1 0 0 / 0.08);
   }
+
+  /* Financial data typography — monospace, tabular nums */
+  .tabular-currency {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    letter-spacing: -0.01em;
+  }
+  .table-row-hover {
+    @apply transition-colors hover:bg-muted/60 cursor-default;
+  }
+  .table-row-critical {
+    @apply bg-destructive/4 hover:bg-destructive/8;
+  }
+  .table-row-warning {
+    @apply bg-warning/4 hover:bg-warning/8;
+  }
+
+  /* SLA urgency pulse for critical deadlines */
+  @keyframes sla-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  .sla-critical {
+    animation: sla-pulse 2s ease-in-out infinite;
+    color: var(--destructive);
+  }
+
+  /* Left-border priority indicator (task rows) */
+  .priority-urgente { border-left: 3px solid var(--destructive); }
+  .priority-alta    { border-left: 3px solid var(--warning); }
+  .priority-normal  { border-left: 3px solid var(--border); }
+  .priority-baixa   { border-left: 3px solid transparent; }
 }

@@ -40,8 +40,8 @@ function FinanceiroContent() {
     competenciaId: searchParams.get('competenciaId') ?? '',
   })
   const { clienteId, competenciaId } = parsed
-  const [tipo, setTipo] = useState('')
-  const [status, setStatus] = useState('')
+  const [tipo, setTipo] = useState(() => searchParams.get('tipo') ?? '')
+  const [status, setStatus] = useState(() => searchParams.get('status') ?? '')
   const [page, setPage] = useState(1)
   const { lancamentos, total, totalPages, somaAReceber, somaRecebidoMes, somaEmAtraso, isLoading } =
     useFinanceiroList({ clienteId, competenciaId, tipo, status, page })

@@ -155,7 +155,7 @@ export default function FiscalPage() {
             <tbody className="divide-y">
               {notas.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                     Nenhuma NFS-e emitida.
                   </td>
                 </tr>

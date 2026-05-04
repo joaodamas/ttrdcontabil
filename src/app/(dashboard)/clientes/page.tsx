@@ -58,12 +58,14 @@ function saudeCliente(c: ClienteRecord): {
 
 function ClientesContent() {
   const searchParams = useSearchParams()
-  const parsed = clientesFiltroSchema.parse({
+  const result = clientesFiltroSchema.safeParse({
     busca: searchParams.get('busca') ?? '',
     status: searchParams.get('status') ?? '',
     page: parseInt(searchParams.get('page') ?? '1'),
   })
-  const { busca, status, page } = parsed
+  const { busca, status, page } = result.success
+    ? result.data
+    : { busca: '', status: '', page: 1 }
   const { paginados, total, totalPages, isLoading } = useClientesList({ busca, status, page })
   const [modalClienteId,   setModalClienteId]   = useState<string | null>(null)
   const [modalClienteNome, setModalClienteNome] = useState('')

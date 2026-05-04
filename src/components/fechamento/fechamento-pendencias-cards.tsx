@@ -1,11 +1,23 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  Receipt,
+  Users,
+  FileText,
+  Wallet,
+  Clock,
+  CheckCheck,
+  AlertCircle,
+  AlertTriangle,
+  Minus,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { StatusCell } from '@/components/fechamento/fechamento-table'
 
 type StatusObrigacao = 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
 
@@ -49,6 +61,118 @@ const REGIME_COLOR: Record<string, string> = {
   isento:           'bg-gray-100 text-gray-600',
 }
 
+// Ciclo de status ao clicar
+const STATUS_CYCLE: Record<string, StatusObrigacao[]> = {
+  das:     ['pendente', 'guia', 'sm', 'enviado', 'parcial', 'na'],
+  esocial: ['na', 'pendente', 'ok', 'sm', 'guia'],
+  reinf:   ['na', 'pendente', 'ok', 'sm', 'guia'],
+  fgts:    ['na', 'pendente', 'ok', 'sm', 'guia'],
+}
+
+const STATUS_STYLE: Record<StatusObrigacao, string> = {
+  pendente: 'bg-warning/10 text-warning border-warning/30 hover:bg-warning/20',
+  enviado:  'bg-success/10 text-success border-success/30 hover:bg-success/20',
+  parcial:  'bg-info/10 text-info border-info/30 hover:bg-info/20',
+  ok:       'bg-success/15 text-success border-success/35 hover:bg-success/25',
+  sm:       'bg-success/10 text-success border-success/30 hover:bg-success/20',
+  guia:     'bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20',
+  na:       'bg-muted text-muted-foreground border-border hover:bg-muted/80',
+}
+
+const STATUS_LABEL: Record<StatusObrigacao, string> = {
+  pendente: 'PEND',
+  enviado:  'ENV',
+  parcial:  'PAR/',
+  ok:       'OK',
+  sm:       'SM',
+  guia:     'GUIA',
+  na:       '—',
+}
+
+// Semantic icons per status
+const STATUS_ICON: Record<StatusObrigacao, React.ReactNode> = {
+  pendente: <Clock className="h-3 w-3 shrink-0" />,
+  enviado:  <CheckCheck className="h-3 w-3 shrink-0" />,
+  ok:       <CheckCheck className="h-3 w-3 shrink-0" />,
+  sm:       <CheckCheck className="h-3 w-3 shrink-0" />,
+  parcial:  <AlertCircle className="h-3 w-3 shrink-0" />,
+  guia:     <AlertTriangle className="h-3 w-3 shrink-0" />,
+  na:       <Minus className="h-3 w-3 shrink-0" />,
+}
+
+// Segment bar color per status
+const SLOT_BAR_COLOR: Record<StatusObrigacao, string> = {
+  pendente: 'bg-amber-500',
+  ok:       'bg-emerald-500',
+  sm:       'bg-emerald-500',
+  enviado:  'bg-emerald-500',
+  parcial:  'bg-blue-500',
+  guia:     'bg-red-500',
+  na:       'bg-muted-foreground/30',
+}
+
+// StatusCell defined locally to include icon enhancements
+function StatusCell({
+  status,
+  campo,
+  id,
+  onUpdate,
+}: {
+  status: StatusObrigacao
+  campo: string
+  id: string
+  onUpdate: (id: string, field: string, value: string) => Promise<void>
+}) {
+  const [loading, setLoading] = useState(false)
+
+  async function handleClick() {
+    const cycle = STATUS_CYCLE[campo] ?? ['pendente', 'ok', 'na']
+    const currentIdx = cycle.indexOf(status)
+    const nextStatus = cycle[(currentIdx + 1) % cycle.length]
+    setLoading(true)
+    try {
+      await onUpdate(id, `${campo}Status`, nextStatus)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={loading}
+      className={cn(
+        'inline-flex items-center justify-center gap-1 rounded border px-2 py-0.5 text-xs font-semibold transition-colors min-w-[52px]',
+        STATUS_STYLE[status],
+        loading && 'opacity-50 cursor-wait'
+      )}
+      title="Clique para alterar status"
+    >
+      {loading ? (
+        '...'
+      ) : (
+        <>
+          {STATUS_ICON[status]}
+          {STATUS_LABEL[status]}
+        </>
+      )}
+    </button>
+  )
+}
+
+// Obligation label + icon pairs
+const OBLIGATION_META: Array<{
+  label: string
+  icon: React.ReactNode
+  statusKey: keyof Pick<FechamentoCardRow, 'dasStatus' | 'esocialStatus' | 'reinfStatus' | 'fgtsStatus'>
+  campo: string
+}> = [
+  { label: 'DAS/SN',  icon: <Receipt   className="h-3.5 w-3.5" />, statusKey: 'dasStatus',     campo: 'das'     },
+  { label: 'eSocial', icon: <Users      className="h-3.5 w-3.5" />, statusKey: 'esocialStatus', campo: 'esocial' },
+  { label: 'Reinf',   icon: <FileText   className="h-3.5 w-3.5" />, statusKey: 'reinfStatus',   campo: 'reinf'   },
+  { label: 'FGTS',    icon: <Wallet     className="h-3.5 w-3.5" />, statusKey: 'fgtsStatus',    campo: 'fgts'    },
+]
+
 type Props = {
   fechamentos: FechamentoCardRow[]
   onUpdate: (id: string, field: string, value: string) => Promise<void>
@@ -83,10 +207,15 @@ export function FechamentoPendenciasCards({ fechamentos, onUpdate, onIrParaTabel
           const expanded = openId === f.id
           const done = slotsLiberados(f)
           const slotStatuses = [f.dasStatus, f.esocialStatus, f.reinfStatus, f.fgtsStatus] as StatusObrigacao[]
+          const critico = isCritico(f)
           return (
             <Card
               key={f.id}
-              className={cn('overflow-hidden transition-shadow', expanded && 'ring-1 ring-primary/25')}
+              className={cn(
+                'overflow-hidden transition-shadow',
+                expanded && 'ring-1 ring-primary/25',
+                critico && 'border-l-2 border-l-warning'
+              )}
             >
               <button
                 type="button"
@@ -111,15 +240,13 @@ export function FechamentoPendenciasCards({ fechamentos, onUpdate, onIrParaTabel
                       {REGIME_LABEL[f.regime] ?? f.regime}
                     </span>
                   </div>
+                  {/* Segmented progress bar */}
                   <div className="mt-2 flex items-center gap-2">
                     <div className="flex h-1.5 flex-1 max-w-[200px] gap-0.5 overflow-hidden rounded-full bg-muted">
                       {slotStatuses.map((s, i) => (
                         <div
                           key={i}
-                          className={cn(
-                            'h-full flex-1 rounded-sm',
-                            s === 'pendente' || s === 'parcial' ? 'bg-amber-500' : 'bg-emerald-500'
-                          )}
+                          className={cn('h-full flex-1 rounded-sm', SLOT_BAR_COLOR[s])}
                         />
                       ))}
                     </div>
@@ -130,30 +257,20 @@ export function FechamentoPendenciasCards({ fechamentos, onUpdate, onIrParaTabel
               {expanded ? (
                 <CardContent className="border-t border-border/80 pt-4 pb-4">
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <div className="flex flex-col items-center gap-1.5">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        DAS/SN
-                      </span>
-                      <StatusCell status={f.dasStatus} campo="das" id={f.id} onUpdate={onUpdate} />
-                    </div>
-                    <div className="flex flex-col items-center gap-1.5">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        eSocial
-                      </span>
-                      <StatusCell status={f.esocialStatus} campo="esocial" id={f.id} onUpdate={onUpdate} />
-                    </div>
-                    <div className="flex flex-col items-center gap-1.5">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        Reinf
-                      </span>
-                      <StatusCell status={f.reinfStatus} campo="reinf" id={f.id} onUpdate={onUpdate} />
-                    </div>
-                    <div className="flex flex-col items-center gap-1.5">
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        FGTS
-                      </span>
-                      <StatusCell status={f.fgtsStatus} campo="fgts" id={f.id} onUpdate={onUpdate} />
-                    </div>
+                    {OBLIGATION_META.map(({ label, icon, statusKey, campo }) => (
+                      <div key={campo} className="flex flex-col items-center gap-1.5">
+                        <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {icon}
+                          {label}
+                        </span>
+                        <StatusCell
+                          status={f[statusKey]}
+                          campo={campo}
+                          id={f.id}
+                          onUpdate={onUpdate}
+                        />
+                      </div>
+                    ))}
                   </div>
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
                     <p className="text-xs text-muted-foreground truncate max-w-[70%]">

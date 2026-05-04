@@ -9,7 +9,6 @@ import { canAccessTela, type TelaKey } from '@/lib/permissions'
 import { getInitials } from '@/lib/utils'
 import type { UserSession } from '@/lib/auth-client'
 import {
-  Sun,
   BarChart3,
   Users,
   Package2,
@@ -31,6 +30,7 @@ import {
   ChevronRight,
   History,
   UserCog,
+  Search,
 } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -55,14 +55,6 @@ type NavGroup = {
 
 // ── Navigation structure ──────────────────────────────────────────────
 const NAV_GROUPS: NavGroup[] = [
-  {
-    id: 'hoje',
-    label: 'Hoje',
-    icon: Sun,
-    directHref: '/hoje',
-    telaKey: 'hoje',
-    items: [],
-  },
   {
     id: 'dashboard',
     label: 'Dashboard',
@@ -130,52 +122,27 @@ const QUICK_ACTIONS: NavItem[] = [
 ]
 
 // ── Dropdown menu ─────────────────────────────────────────────────────
-function NavDropdown({
-  items,
-  isOpen,
-}: {
-  items: NavItem[]
-  isOpen: boolean
-}) {
+function NavDropdown({ items, isOpen }: { items: NavItem[]; isOpen: boolean }) {
   return (
     <div
       className={cn(
-        'absolute top-full left-1/2 -translate-x-1/2 mt-1.5 w-64 rounded-2xl overflow-hidden z-50',
+        'absolute top-full left-1/2 -translate-x-1/2 mt-1.5 w-56 rounded-xl overflow-hidden z-50',
+        'bg-white border border-border shadow-md',
         'transition-all duration-150 origin-top',
         isOpen ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-95 pointer-events-none'
       )}
-      style={{
-        background: 'oklch(0.17 0.014 260)',
-        border: '1px solid oklch(1 0 0 / 0.1)',
-        boxShadow: '0 20px 60px -12px rgba(0,0,0,0.55), 0 4px 16px -4px rgba(0,0,0,0.35)',
-      }}
     >
-      <div className="p-1.5">
+      <div className="p-1">
         {items.map((item) => {
           const Icon = item.icon
           return (
             <Link
               key={item.href}
               href={item.href}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl group transition-colors hover:bg-white/8"
+              className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors group"
             >
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors group-hover:bg-white/10"
-                style={{ background: 'oklch(1 0 0 / 0.06)' }}
-              >
-                <Icon size={14} className="text-white/60 group-hover:text-white/90 transition-colors" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-white/85 group-hover:text-white transition-colors leading-tight">
-                  {item.label}
-                </p>
-                {item.description && (
-                  <p className="text-xs text-white/40 group-hover:text-white/60 transition-colors leading-tight mt-0.5">
-                    {item.description}
-                  </p>
-                )}
-              </div>
-              <ChevronRight size={12} className="ml-auto text-white/20 group-hover:text-white/50 transition-colors shrink-0" />
+              <Icon size={14} className="text-muted-foreground group-hover:text-foreground shrink-0 transition-colors" />
+              <span className="font-medium">{item.label}</span>
             </Link>
           )
         })}
@@ -204,7 +171,6 @@ function QuickActionsMenu({ usuario }: { usuario: UserSession | null }) {
     return true
   }
 
-  // Add contextual actions
   const pathParts = pathname.split('/').filter(Boolean)
   const clienteId = pathParts[0] === 'clientes' && pathParts[1] && pathParts[1] !== 'novo' ? pathParts[1] : null
   const contextual: NavItem[] = []
@@ -223,34 +189,28 @@ function QuickActionsMenu({ usuario }: { usuario: UserSession | null }) {
       <button
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'flex items-center gap-1.5 h-9 px-3.5 rounded-xl text-sm font-semibold transition-all active:scale-95',
-          'hover:brightness-105',
-          open && 'brightness-105'
+          'flex items-center gap-1.5 h-8 px-3 rounded-lg text-sm font-semibold transition-all active:scale-95 bg-foreground text-background hover:bg-foreground/90',
+          open && 'bg-foreground/90'
         )}
-        style={{ background: '#F5C200', color: '#0a0a0a' }}
       >
-        <Plus size={14} strokeWidth={2.5} />
+        <Plus size={13} strokeWidth={2.5} />
         <span className="hidden sm:inline">Novo</span>
       </button>
 
       <div
         className={cn(
-          'absolute top-full right-0 mt-1.5 w-60 rounded-2xl overflow-hidden z-50',
+          'absolute top-full right-0 mt-1.5 w-52 rounded-xl overflow-hidden z-50',
+          'bg-white border border-border shadow-md',
           'transition-all duration-150 origin-top-right',
           open ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-95 pointer-events-none'
         )}
-        style={{
-          background: 'oklch(0.17 0.014 260)',
-          border: '1px solid oklch(1 0 0 / 0.1)',
-          boxShadow: '0 20px 60px -12px rgba(0,0,0,0.55)',
-        }}
       >
         {contextual.length > 0 && (
-          <div className="px-3 pt-2.5 pb-1">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30">Contextual</p>
+          <div className="px-3 pt-2 pb-0.5">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Contextual</p>
           </div>
         )}
-        <div className="p-1.5">
+        <div className="p-1">
           {visible.map((a) => {
             const Icon = a.icon
             return (
@@ -258,14 +218,10 @@ function QuickActionsMenu({ usuario }: { usuario: UserSession | null }) {
                 key={a.href}
                 href={a.href}
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl group transition-colors hover:bg-white/8"
+                className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors group"
               >
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'oklch(1 0 0 / 0.06)' }}>
-                  <Icon size={13} className="text-white/60 group-hover:text-white/90 transition-colors" />
-                </div>
-                <span className="text-sm font-medium text-white/80 group-hover:text-white transition-colors">
-                  {a.label}
-                </span>
+                <Icon size={13} className="text-muted-foreground group-hover:text-foreground shrink-0" />
+                <span className="font-medium">{a.label}</span>
               </Link>
             )
           })}
@@ -293,52 +249,34 @@ function UserMenu({ usuario, logout }: { usuario: UserSession | null; logout: ()
       <button
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'flex items-center gap-2 h-9 pl-1 pr-2.5 rounded-xl transition-colors',
-          'hover:bg-white/8',
-          open && 'bg-white/8'
+          'flex items-center gap-1.5 h-8 pl-1 pr-2 rounded-lg transition-colors hover:bg-muted',
+          open && 'bg-muted'
         )}
       >
-        <div
-          className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0"
-          style={{ background: '#F5C200', color: '#0a0a0a' }}
-        >
+        <div className="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0 bg-primary text-primary-foreground">
           {usuario ? getInitials(usuario.nome) : '—'}
         </div>
-        <div className="hidden lg:block text-left min-w-0">
-          <p className="text-xs font-semibold text-white/85 leading-tight truncate max-w-[100px]">
-            {usuario?.nome ?? '—'}
-          </p>
-          <p className="text-[10px] capitalize text-white/40 leading-tight">
-            {usuario?.perfil ?? ''}
-          </p>
-        </div>
-        <ChevronDown size={12} className={cn('text-white/40 transition-transform', open && 'rotate-180')} />
+        <ChevronDown size={11} className={cn('text-muted-foreground transition-transform', open && 'rotate-180')} />
       </button>
 
       <div
         className={cn(
-          'absolute top-full right-0 mt-1.5 w-56 rounded-2xl overflow-hidden z-50',
+          'absolute top-full right-0 mt-1.5 w-52 rounded-xl overflow-hidden z-50',
+          'bg-white border border-border shadow-md',
           'transition-all duration-150 origin-top-right',
           open ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-95 pointer-events-none'
         )}
-        style={{
-          background: 'oklch(0.17 0.014 260)',
-          border: '1px solid oklch(1 0 0 / 0.1)',
-          boxShadow: '0 20px 60px -12px rgba(0,0,0,0.55)',
-        }}
       >
-        <div className="px-4 py-3 border-b border-white/8">
-          <p className="text-sm font-semibold text-white/90 truncate">{usuario?.nome ?? '—'}</p>
-          <p className="text-xs capitalize text-white/40 mt-0.5">{usuario?.perfil ?? ''}</p>
+        <div className="px-3 py-2.5 border-b border-border">
+          <p className="text-sm font-semibold truncate">{usuario?.nome ?? '—'}</p>
+          <p className="text-xs capitalize text-muted-foreground mt-0.5">{usuario?.perfil ?? ''}</p>
         </div>
-        <div className="p-1.5">
+        <div className="p-1">
           <button
             onClick={() => { setOpen(false); logout() }}
-            className="flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-white/70 hover:text-white hover:bg-white/8 transition-colors group"
+            className="flex w-full items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-foreground hover:bg-muted transition-colors group"
           >
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-destructive/20 transition-colors" style={{ background: 'oklch(1 0 0 / 0.06)' }}>
-              <LogOut size={13} className="text-white/60 group-hover:text-destructive transition-colors" />
-            </div>
+            <LogOut size={13} className="text-muted-foreground group-hover:text-destructive shrink-0 transition-colors" />
             Sair
           </button>
         </div>
@@ -378,26 +316,25 @@ function MobileNav({
       {/* Drawer */}
       <div
         className={cn(
-          'absolute top-0 left-0 bottom-0 w-72 flex flex-col transition-transform duration-200',
+          'absolute top-0 left-0 bottom-0 w-64 flex flex-col bg-white border-r border-border transition-transform duration-200',
           open ? 'translate-x-0' : '-translate-x-full'
         )}
-        style={{ background: 'oklch(0.13 0.012 260)' }}
       >
-        <div className="flex items-center justify-between px-4 h-14 border-b border-white/8 shrink-0">
+        <div className="flex items-center justify-between px-4 h-12 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: '#F5C200' }}>
-              <Building2 size={14} style={{ color: '#0a0a0a' }} />
+            <div className="w-6 h-6 rounded-md flex items-center justify-center bg-primary">
+              <Building2 size={12} className="text-primary-foreground" />
             </div>
-            <span className="text-sm font-bold text-white">
-              TTRD <span style={{ color: '#F5C200' }}>Contábil</span>
+            <span className="text-sm font-bold tracking-tight">
+              TTRD <span className="text-primary">Contábil</span>
             </span>
           </div>
-          <button onClick={onClose} className="h-8 w-8 flex items-center justify-center rounded-lg text-white/40 hover:text-white hover:bg-white/8 transition-colors">
-            <X size={16} />
+          <button onClick={onClose} className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+            <X size={14} />
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
+        <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
           {groups.filter(canSeeGroup).map((group) => {
             if (group.directHref) {
               const active = isActive(group.directHref)
@@ -408,22 +345,20 @@ function MobileNav({
                   href={group.directHref}
                   onClick={onClose}
                   className={cn(
-                    'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors',
-                    active ? 'text-white' : 'text-white/60 hover:text-white hover:bg-white/6'
+                    'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors',
+                    active ? 'bg-muted text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                   )}
-                  style={active ? { background: 'oklch(0.82 0.18 88 / 0.15)', color: '#F5C200' } : {}}
                 >
-                  <Icon size={15} />
+                  <Icon size={14} />
                   {group.label}
                 </Link>
               )
             }
-            const Icon = group.icon
             const visibleItems = group.items.filter(canSeeItem)
             if (visibleItems.length === 0) return null
             return (
               <div key={group.id}>
-                <p className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-white/25">
+                <p className="px-2.5 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
                   {group.label}
                 </p>
                 {visibleItems.map((item) => {
@@ -435,12 +370,11 @@ function MobileNav({
                       href={item.href}
                       onClick={onClose}
                       className={cn(
-                        'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors',
-                        active ? 'text-white' : 'text-white/60 hover:text-white hover:bg-white/6'
+                        'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors',
+                        active ? 'bg-muted text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                       )}
-                      style={active ? { background: 'oklch(0.82 0.18 88 / 0.15)', color: '#F5C200' } : {}}
                     >
-                      <ItemIcon size={15} />
+                      <ItemIcon size={14} />
                       {item.label}
                     </Link>
                   )
@@ -501,27 +435,19 @@ export const Topnav = memo(function Topnav() {
     <>
       <nav
         ref={navRef}
-        className="sticky top-0 z-40 flex h-14 items-center gap-1 border-b px-3 sm:px-4 lg:px-6"
-        style={{
-          background: 'oklch(0.13 0.012 260)',
-          borderBottomColor: 'oklch(1 0 0 / 0.08)',
-        }}
+        className="sticky top-0 z-40 flex h-12 items-center gap-1 border-b border-border bg-white px-3 sm:px-4 lg:px-6"
       >
         {/* Logo */}
-        <Link href="/dashboard" className="flex items-center gap-2 mr-3 shrink-0">
-          <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center"
-            style={{ background: '#F5C200' }}
-          >
-            <Building2 size={14} style={{ color: '#0a0a0a' }} />
+        <Link href="/dashboard" className="flex items-center gap-2 mr-2 shrink-0">
+          <div className="w-6 h-6 rounded-md flex items-center justify-center bg-primary">
+            <Building2 size={13} className="text-primary-foreground" />
           </div>
-          <span className="hidden sm:block text-sm font-bold" style={{ color: 'white' }}>
-            TTRD <span style={{ color: '#F5C200' }}>Contábil</span>
+          <span className="hidden sm:block text-sm font-bold tracking-tight text-foreground">
+            TTRD <span className="text-primary">Contábil</span>
           </span>
         </Link>
 
-        {/* Separator */}
-        <div className="hidden md:block w-px h-5 mx-1" style={{ background: 'oklch(1 0 0 / 0.1)' }} />
+        <div className="hidden md:block w-px h-4 mx-1 bg-border" />
 
         {/* Desktop nav items */}
         <div className="hidden md:flex items-center gap-0.5 flex-1">
@@ -529,7 +455,6 @@ export const Topnav = memo(function Topnav() {
             const Icon = group.icon
             const active = isGroupActive(group)
             const isOpen = openGroup === group.id
-            const hasDropdown = group.items.length > 0
 
             if (group.directHref) {
               return (
@@ -537,14 +462,13 @@ export const Topnav = memo(function Topnav() {
                   key={group.id}
                   href={group.directHref}
                   className={cn(
-                    'flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-medium transition-colors',
+                    'flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-sm transition-colors',
                     active
-                      ? 'text-white/95'
-                      : 'text-white/50 hover:text-white/80 hover:bg-white/6'
+                      ? 'font-semibold text-foreground bg-muted'
+                      : 'font-medium text-muted-foreground hover:text-foreground hover:bg-muted'
                   )}
-                  style={active ? { color: '#F5C200' } : {}}
                 >
-                  <Icon size={14} />
+                  <Icon size={13} />
                   {group.label}
                 </Link>
               )
@@ -558,19 +482,15 @@ export const Topnav = memo(function Topnav() {
                 <button
                   onClick={() => setOpenGroup(isOpen ? null : group.id)}
                   className={cn(
-                    'flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-medium transition-colors',
+                    'flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-sm transition-colors',
                     active || isOpen
-                      ? 'text-white/95'
-                      : 'text-white/50 hover:text-white/80 hover:bg-white/6'
+                      ? 'font-semibold text-foreground bg-muted'
+                      : 'font-medium text-muted-foreground hover:text-foreground hover:bg-muted'
                   )}
-                  style={active ? { color: '#F5C200' } : {}}
                 >
-                  <Icon size={14} />
+                  <Icon size={13} />
                   {group.label}
-                  <ChevronDown
-                    size={12}
-                    className={cn('transition-transform duration-150 opacity-60', isOpen && 'rotate-180')}
-                  />
+                  <ChevronDown size={11} className={cn('transition-transform duration-150', isOpen && 'rotate-180')} />
                 </button>
                 <NavDropdown items={visibleItems} isOpen={isOpen} />
               </div>
@@ -579,16 +499,30 @@ export const Topnav = memo(function Topnav() {
         </div>
 
         {/* Right side actions */}
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1.5">
+          {/* Command palette trigger */}
+          <button
+            onClick={() => {
+              const event = new CustomEvent('open-command-palette')
+              window.dispatchEvent(event)
+            }}
+            className="hidden md:flex items-center gap-2 h-8 px-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <Search size={13} />
+            <span className="text-xs">Buscar</span>
+            <kbd className="ml-1 hidden lg:inline-flex h-5 items-center gap-0.5 rounded border border-border bg-muted px-1.5 font-mono text-[10px] text-muted-foreground">
+              ⌘K
+            </kbd>
+          </button>
           <QuickActionsMenu usuario={usuario} />
           <UserMenu usuario={usuario} logout={logout} />
 
           {/* Mobile hamburger */}
           <button
             onClick={() => setMobileOpen(true)}
-            className="md:hidden flex h-9 w-9 items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/8 transition-colors"
+            className="md:hidden flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
-            <Menu size={18} />
+            <Menu size={16} />
           </button>
         </div>
       </nav>

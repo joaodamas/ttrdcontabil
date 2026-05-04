@@ -15,10 +15,7 @@ import {
   TrendingUp,
   AlertTriangle,
   ArrowRight,
-  Clock,
   CheckCircle2,
-  Circle,
-  PlayCircle,
 } from 'lucide-react'
 
 /* ─── Skeleton ─────────────────────────────────────────────── */
@@ -56,10 +53,10 @@ function SkeletonList() {
 }
 
 /* ─── Status config ─────────────────────────────────────────── */
-const COMP_STATUS: Record<string, { label: string; icon: React.ElementType; color: string; dot: string }> = {
-  aberta:       { label: 'Abertas',      icon: Circle,       color: 'text-muted-foreground', dot: 'bg-muted-foreground/40' },
-  em_andamento: { label: 'Em andamento', icon: Clock,        color: 'text-warning',  dot: 'bg-warning' },
-  concluida:    { label: 'Concluídas',   icon: CheckCircle2, color: 'text-success',  dot: 'bg-success' },
+const COMP_STATUS: Record<string, { label: string }> = {
+  aberta:       { label: 'Abertas' },
+  em_andamento: { label: 'Em andamento' },
+  concluida:    { label: 'Concluídas' },
 }
 
 /* ─── Page ──────────────────────────────────────────────────── */
@@ -163,25 +160,9 @@ export default function DashboardPage() {
     <div className="space-y-7">
 
       {/* ── Page header ──────────────────────────────────── */}
-      <div className="surface-subtle flex flex-wrap items-center justify-between gap-3 border px-5 py-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-[1.7rem]">Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Visão geral — {formatMesAno(mesAtual, anoAtual)}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link href="/hoje" className="inline-flex">
-            <Button className="h-10 rounded-xl">
-              <PlayCircle className="mr-1.5 h-4 w-4" />
-              Começar execução
-            </Button>
-          </Link>
-          <div className="flex items-center gap-2 rounded-xl border border-border/75 bg-card/90 px-3 py-2 text-xs text-muted-foreground card-shadow">
-            <span className="w-2 h-2 rounded-full bg-success shadow-[0_0_6px_1px_oklch(0.52_0.15_145/0.4)]" />
-            Sistema online
-          </div>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
+        <p className="text-sm text-muted-foreground">{new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
       </div>
 
       {/* ── KPI cards ──────────────────────────────────────── */}
@@ -213,12 +194,11 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="space-y-2">
-              {Object.entries(COMP_STATUS).map(([key, { label, color, dot }]) => (
+              {Object.entries(COMP_STATUS).map(([key, { label }]) => (
                 <div key={key} className="flex items-center justify-between text-xs">
-                  <span className={cn('flex items-center gap-1.5 font-medium', color)}>
-                    <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', dot)} />
+                  <Badge variant={key === 'aberta' ? 'neutral' : key === 'em_andamento' ? 'warning' : 'success'} className="text-xs">
                     {label}
-                  </span>
+                  </Badge>
                   <span className="font-bold tabular-nums">{compCounts[key] ?? 0}</span>
                 </div>
               ))}
@@ -312,7 +292,6 @@ export default function DashboardPage() {
               {tarefasVencidas.map((t) => (
                 <li key={t.id} className="border-b border-border/40 last:border-0">
                   <Link href={`/tarefas/${t.id}`} className="flex items-start gap-3 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer">
-                    <div className="w-1.5 h-1.5 rounded-full bg-destructive mt-[7px] shrink-0" />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">{t.titulo}</p>
                       <p className="text-xs text-muted-foreground truncate">{t.clienteNome ?? '—'}</p>
@@ -320,6 +299,7 @@ export default function DashboardPage() {
                         <p className="text-xs text-destructive mt-0.5 font-medium">Prazo: {formatDate(tsToDate(t.dataPrazo))}</p>
                       )}
                     </div>
+                    <Badge variant="destructive" className="shrink-0">atrasada</Badge>
                   </Link>
                 </li>
               ))}
@@ -355,12 +335,11 @@ export default function DashboardPage() {
               {competenciasAbertas.map((c) => (
                 <li key={c.id} className="border-b border-border/40 last:border-0">
                   <Link href={`/competencias/${c.id}`} className="flex items-center gap-3 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer">
-                    <div className="w-1.5 h-1.5 rounded-full bg-warning shrink-0" />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">{c.clienteNome ?? '—'}</p>
                       <p className="text-xs text-muted-foreground">{formatMesAno(c.mes, c.ano)}</p>
                     </div>
-                    <Badge variant="outline" className="text-xs shrink-0 text-warning border-warning/30 bg-warning/8">
+                    <Badge variant="warning" className="text-xs shrink-0">
                       aberta
                     </Badge>
                   </Link>
@@ -393,13 +372,15 @@ export default function DashboardPage() {
               {lancamentosVencidos.map((l) => (
                 <li key={l.id} className="border-b border-border/40 last:border-0">
                   <Link href="/financeiro" className="flex items-start gap-3 px-5 py-3.5 hover:bg-muted/40 transition-colors cursor-pointer">
-                    <div className="w-1.5 h-1.5 rounded-full bg-destructive mt-[7px] shrink-0" />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate">{l.descricao}</p>
                       <p className="text-xs text-muted-foreground truncate">{l.clienteNome ?? '—'}</p>
                       <p className="text-xs text-destructive mt-0.5 font-medium">Venc.: {formatDate(tsToDate(l.dataVencimento))}</p>
                     </div>
-                    <span className="text-sm font-bold shrink-0 tabular-nums">{formatCurrency(l.valor)}</span>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className="text-sm font-bold tabular-nums">{formatCurrency(l.valor)}</span>
+                      <Badge variant="destructive">vencido</Badge>
+                    </div>
                   </Link>
                 </li>
               ))}
@@ -411,17 +392,16 @@ export default function DashboardPage() {
       {/* ── Quick access ─────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {([
-          { href: '/clientes/novo',     label: 'Novo Cliente',     dot: 'bg-primary',     text: 'text-primary' },
-          { href: '/competencias/nova', label: 'Nova Competência', dot: 'bg-info',        text: 'text-info' },
-          { href: '/tarefas/nova',      label: 'Nova Tarefa',      dot: 'bg-muted-foreground', text: 'text-foreground' },
-          { href: '/financeiro/novo',   label: 'Novo Lançamento',  dot: 'bg-success',     text: 'text-success' },
+          { href: '/clientes/novo',     label: 'Novo Cliente' },
+          { href: '/competencias/nova', label: 'Nova Competência' },
+          { href: '/tarefas/nova',      label: 'Nova Tarefa' },
+          { href: '/financeiro/novo',   label: 'Novo Lançamento' },
         ] as const).map((item) => (
           <Link key={item.href} href={item.href}>
-            <div className="flex cursor-pointer items-center gap-3 rounded-xl border border-border/65 bg-card/95 p-4 transition-all duration-200 card-shadow hover:-translate-y-0.5 hover:border-primary/25 hover:card-shadow-hover">
-              <div className={cn('w-2 h-2 rounded-full shrink-0', item.dot)} />
-              <span className={cn('text-sm font-medium', item.text)}>{item.label}</span>
-              <ArrowRight className="w-3 h-3 ml-auto text-muted-foreground/50" />
-            </div>
+            <Button size="sm" variant="outline" className="w-full justify-start gap-2">
+              <ArrowRight className="w-3 h-3 text-muted-foreground" />
+              {item.label}
+            </Button>
           </Link>
         ))}
       </div>

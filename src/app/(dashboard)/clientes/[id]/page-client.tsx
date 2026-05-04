@@ -1,47 +1,63 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Timestamp } from 'firebase/firestore'
 import { where, orderBy, limit } from 'firebase/firestore'
+import { Timestamp } from 'firebase/firestore'
 
 import { getDocument, listDocuments } from '@/lib/firestore-client'
-import { formatCpfCnpj, formatDate, formatCurrency, formatMesAno , tsToDate } from '@/lib/utils'
+import { formatCpfCnpj, formatDate, formatCurrency, formatMesAno, tsToDate, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ArrowLeft, Mail, MapPin, Pencil, ShieldCheck, ShieldAlert, ShieldOff, AlertTriangle } from 'lucide-react'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Timeline, type TimelineEvent } from '@/components/clientes/timeline'
+import {
+  ArrowLeft, Mail, MapPin, Pencil, ShieldCheck, ShieldAlert, ShieldOff,
+  AlertTriangle, Plus, Receipt, Wallet, CheckCircle2, AlertCircle,
+} from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
+import { useAuth } from '@/contexts/auth-context'
+import { canAccessTela } from '@/lib/permissions'
 
 const STATUS_LABELS: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  ativo: { label: 'Ativo', variant: 'default' },
-  inativo: { label: 'Inativo', variant: 'secondary' },
-  suspenso: { label: 'Suspenso', variant: 'destructive' },
+  ativo:     { label: 'Ativo',     variant: 'default' },
+  inativo:   { label: 'Inativo',   variant: 'secondary' },
+  suspenso:  { label: 'Suspenso',  variant: 'destructive' },
 }
 
 const REGIME_LABELS: Record<string, string> = {
   simples_nacional: 'Simples Nacional',
-  lucro_presumido: 'Lucro Presumido',
-  lucro_real: 'Lucro Real',
-  mei: 'MEI',
-  isento: 'Isento',
+  lucro_presumido:  'Lucro Presumido',
+  lucro_real:       'Lucro Real',
+  mei:              'MEI',
+  isento:           'Isento',
+}
+
+const REGIME_MAP: Record<string, string> = {
+  simples_nacional: 'Simples Nacional',
+  lucro_presumido:  'Lucro Presumido',
+  lucro_real:       'Lucro Real',
+  mei:              'MEI',
+  isento:           'Isento / Imune',
 }
 
 export default function ClienteDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const router = useRouter()
+  const router  = useRouter()
+  const { usuario } = useAuth()
+  const podeAcessarFiscal = canAccessTela(usuario, 'fiscal')
 
-  const [cliente,     setCliente]     = useState<Record<string, unknown> | null>(null)
-  const [servicos,    setServicos]    = useState<Array<Record<string, unknown>>>([])
-  const [competencias,setCompetencias]= useState<Array<Record<string, unknown>>>([])
-  const [lancamentos, setLancamentos] = useState<Array<Record<string, unknown>>>([])
-  const [fiscal,      setFiscal]      = useState<Record<string, unknown> | null>(null)
-  const [loading,     setLoading]     = useState(true)
-  const [configOpen,  setConfigOpen]  = useState(false)
-  const [activeSection, setActiveSection] = useState('servicos')
+  const [cliente,      setCliente]      = useState<Record<string, unknown> | null>(null)
+  const [servicos,     setServicos]     = useState<Array<Record<string, unknown>>>([])
+  const [competencias, setCompetencias] = useState<Array<Record<string, unknown>>>([])
+  const [lancamentos,  setLancamentos]  = useState<Array<Record<string, unknown>>>([])
+  const [fiscal,       setFiscal]       = useState<Record<string, unknown> | null>(null)
+  const [loading,      setLoading]      = useState(true)
+  const [configOpen,   setConfigOpen]   = useState(false)
 
   function loadFiscal() {
     if (!id) return
@@ -53,22 +69,15 @@ export default function ClienteDetailPage() {
   useEffect(() => {
     if (!id) return
     setLoading(true)
-
-    function get<T>(p: Promise<T>): Promise<T | null> {
-      return p.catch(() => null)
-    }
-
+    function get<T>(p: Promise<T>): Promise<T | null> { return p.catch(() => null) }
     Promise.all([
       get(getDocument('clientes', id)),
       get(listDocuments('clientes_servicos', [where('clienteId', '==', id), orderBy('dataInicio', 'desc'), limit(50)])),
-      get(listDocuments('competencias', [where('clienteId', '==', id), orderBy('ano', 'desc'), orderBy('mes', 'desc'), limit(20)])),
-      get(listDocuments('lancamentos', [where('clienteId', '==', id), orderBy('dataVencimento', 'desc'), limit(20)])),
-      get(listDocuments('clientes_fiscal', [where('clienteId', '==', id), limit(1)])),
+      get(listDocuments('competencias',      [where('clienteId', '==', id), orderBy('ano', 'desc'), orderBy('mes', 'desc'), limit(20)])),
+      get(listDocuments('lancamentos',       [where('clienteId', '==', id), orderBy('dataVencimento', 'desc'), limit(20)])),
+      get(listDocuments('clientes_fiscal',   [where('clienteId', '==', id), limit(1)])),
     ]).then(([clienteData, servicosData, competenciasData, lancamentosData, fiscalData]) => {
-      if (!clienteData) {
-        router.push('/clientes')
-        return
-      }
+      if (!clienteData) { router.push('/clientes'); return }
       setCliente(clienteData as Record<string, unknown>)
       setServicos((servicosData ?? []) as Array<Record<string, unknown>>)
       setCompetencias((competenciasData ?? []) as Array<Record<string, unknown>>)
@@ -77,505 +86,332 @@ export default function ClienteDetailPage() {
     }).finally(() => setLoading(false))
   }, [id, router])
 
-  useEffect(() => {
-    if (loading || !cliente) return
-    const ids = ['servicos', 'competencias', 'financeiro', 'fiscal']
-    const els = ids
-      .map((sectionId) => document.getElementById(sectionId))
-      .filter((el): el is HTMLElement => !!el)
-    if (els.length === 0) return
+  /* ── timeline events ──────────────────────────────────── */
+  const timelineEvents = useMemo((): TimelineEvent[] => {
+    const hoje = new Date()
+    const events: TimelineEvent[] = []
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
-        if (visible[0]?.target?.id) {
-          setActiveSection(visible[0].target.id)
-        }
-      },
-      { rootMargin: '-20% 0px -65% 0px', threshold: [0.15, 0.3, 0.6] }
-    )
+    for (const c of competencias) {
+      const ts = tsToDate((c.updatedAt ?? c.createdAt) as Timestamp | undefined) ?? new Date()
+      const status = c.status as string
+      events.push({
+        id:          `comp-${c.id as string}`,
+        type:        'competencia',
+        title:       `Competência ${formatMesAno(c.mes as number, c.ano as number)}`,
+        description: c.servicoNome as string | undefined,
+        timestamp:   ts,
+        variant:     status === 'concluida' ? 'success' : status === 'aberta' ? 'warning' : 'neutral',
+        href:        `/competencias/${c.id as string}`,
+        metadata:    status,
+      })
+    }
+    for (const l of lancamentos) {
+      const ts = tsToDate(l.dataVencimento as Timestamp | undefined) ?? new Date()
+      const status = l.status as string
+      const vencido = ts < hoje && status === 'pendente'
+      events.push({
+        id:        `lanc-${l.id as string}`,
+        type:      'lancamento',
+        title:     (l.descricao as string) ?? 'Lançamento',
+        timestamp: ts,
+        variant:   status === 'pago' ? 'success' : vencido ? 'destructive' : status === 'pendente' ? 'warning' : 'neutral',
+        metadata:  formatCurrency(l.valor as number),
+      })
+    }
+    return events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, 15)
+  }, [competencias, lancamentos])
 
-    els.forEach((el) => observer.observe(el))
-    return () => observer.disconnect()
-  }, [loading, cliente])
+  /* ── proximosPassos ───────────────────────────────────── */
+  const proximosPassos = useMemo(() => {
+    const hoje = new Date()
+    const list: Array<{ id: string; titulo: string; descricao: string; severidade: 'danger' | 'warning'; href?: string }> = []
+    const competenciaAberta = competencias.find(c => (c.status as string) === 'aberta')
+    if (competenciaAberta) list.push({ id: 'comp-aberta', titulo: 'Competência em aberto', descricao: `Pendente em ${formatMesAno(competenciaAberta.mes as number, competenciaAberta.ano as number)}.`, severidade: 'warning', href: `/competencias/${competenciaAberta.id as string}` })
+    const lancAtrasado = lancamentos.find(l => { if ((l.status as string) !== 'pendente') return false; const v = tsToDate(l.dataVencimento); return !!v && v < hoje })
+    if (lancAtrasado) list.push({ id: 'lanc-atrasado', titulo: 'Cobrança em atraso', descricao: `Lançamento vencido: ${(lancAtrasado.descricao as string) ?? 'sem descrição'}.`, severidade: 'danger', href: '/financeiro' })
+    if (!fiscal) list.push({ id: 'fiscal-config', titulo: 'Configuração fiscal pendente', descricao: 'Cliente sem configuração NFS-e.', severidade: 'warning' })
+    return list
+  }, [competencias, lancamentos, fiscal])
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-8 w-8 rounded-md" />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-6 w-64" />
-            <Skeleton className="h-4 w-40" />
-          </div>
-          <Skeleton className="h-8 w-24 rounded-md" />
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i}>
-              <CardContent className="pt-4 space-y-2">
-                <Skeleton className="h-3 w-24" />
-                <Skeleton className="h-5 w-32" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        <div className="space-y-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i}>
-              <CardHeader className="pb-3">
-                <Skeleton className="h-4 w-40" />
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {Array.from({ length: 3 }).map((__, j) => (
-                  <div key={j} className="flex items-center justify-between">
-                    <Skeleton className="h-4 w-52" />
-                    <Skeleton className="h-5 w-20 rounded-full" />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+  const competenciaAberta   = competencias.find(c => (c.status as string) === 'aberta')
+  const lancamentoAtrasado  = lancamentos.find(l => { const v = tsToDate(l.dataVencimento); return (l.status as string) === 'pendente' && !!v && v < new Date() })
+
+  /* ── loading skeleton ─────────────────────────────────── */
+  if (loading) return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <Skeleton className="h-8 w-8 rounded-lg" />
+        <div className="flex-1 space-y-2"><Skeleton className="h-5 w-56" /><Skeleton className="h-3 w-36" /></div>
+        <Skeleton className="h-8 w-20 rounded-lg" />
       </div>
-    )
-  }
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_320px]">
+        <Skeleton className="h-64 rounded-xl" />
+        <Skeleton className="h-48 rounded-xl" />
+      </div>
+    </div>
+  )
 
   if (!cliente) return null
 
   const statusInfo = STATUS_LABELS[cliente.status as string] ?? { label: String(cliente.status), variant: 'outline' as const }
-  const hoje = new Date()
-  const proximosPassos: Array<{ id: string; titulo: string; descricao: string; severidade: 'danger' | 'warning'; href?: string }> = []
-
-  const competenciaAberta = competencias.find((c) => (c.status as string) === 'aberta')
-  if (competenciaAberta) {
-    proximosPassos.push({
-      id: 'comp-aberta',
-      titulo: 'Competência em aberto',
-      descricao: `Existe competência pendente em ${formatMesAno(competenciaAberta.mes as number, competenciaAberta.ano as number)}.`,
-      severidade: 'warning',
-      href: `/competencias/${competenciaAberta.id as string}`,
-    })
-  }
-
-  const lancamentoAtrasado = lancamentos.find((l) => {
-    if ((l.status as string) !== 'pendente') return false
-    const venc = tsToDate(l.dataVencimento)
-    return !!venc && venc < hoje
-  })
-  if (lancamentoAtrasado) {
-    proximosPassos.push({
-      id: 'lanc-atrasado',
-      titulo: 'Cobrança em atraso',
-      descricao: `Há lançamento pendente vencido: ${(lancamentoAtrasado.descricao as string) ?? 'sem descrição'}.`,
-      severidade: 'danger',
-      href: '/financeiro',
-    })
-  }
-
-  if (!fiscal) {
-    proximosPassos.push({
-      id: 'fiscal-config',
-      titulo: 'Configuração fiscal pendente',
-      descricao: 'Cliente sem configuração NFS-e. Configure para evitar bloqueio de emissão.',
-      severidade: 'warning',
-      href: '#fiscal',
-    })
-  }
+  const creds      = (fiscal?.credenciais ?? {}) as Record<string, unknown>
+  const ibge       = fiscal?.municipioIbge as string | undefined
+  const tipo       = ibge ? MUNICIPIO_TIPO[ibge] : undefined
+  const municipioNome = MUNICIPIOS.find(m => m.ibge === ibge)?.nome ?? ibge ?? '—'
+  const certInfo: CertInfo | null = creds.certTitular
+    ? { titular: creds.certTitular as string, vencimento: creds.certVencimento as string, valido: creds.certValido as boolean, storagePath: creds.certificadoStoragePath as string }
+    : null
 
   return (
-    <div className="space-y-6">
-      <div className="surface-subtle flex items-center gap-3 border px-4 py-4 sm:px-5">
+    <div className="space-y-5">
+
+      {/* ── Header ──────────────────────────────────────────── */}
+      <div className="flex items-start gap-3">
         <Link href="/clientes">
-          <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
+          <Button variant="ghost" size="icon" className="h-9 w-9 mt-0.5"><ArrowLeft className="h-4 w-4" /></Button>
         </Link>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">{cliente.razaoSocial as string}</h2>
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-lg font-semibold truncate">{cliente.razaoSocial as string}</h1>
             <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
           </div>
-          {cliente.nomeFantasia ? (
-            <p className="text-sm text-muted-foreground">{cliente.nomeFantasia as string}</p>
-          ) : null}
+          {(cliente.nomeFantasia as string | undefined) && <p className="text-sm text-muted-foreground truncate">{cliente.nomeFantasia as string}</p>}
+          <div className="flex flex-wrap items-center gap-3 mt-1.5">
+            <span className="font-mono text-xs text-muted-foreground">{formatCpfCnpj(cliente.cpfCnpj as string)}</span>
+            {(cliente.regimeTributario as string | undefined) && <span className="text-xs text-muted-foreground">{REGIME_LABELS[cliente.regimeTributario as string] ?? String(cliente.regimeTributario)}</span>}
+            {(cliente.email as string | undefined) && <span className="flex items-center gap-1 text-xs text-muted-foreground"><Mail className="h-3 w-3" />{cliente.email as string}</span>}
+            {((cliente.cidade as string | undefined) || (cliente.uf as string | undefined)) && <span className="flex items-center gap-1 text-xs text-muted-foreground"><MapPin className="h-3 w-3" />{[cliente.cidade, cliente.uf].filter(Boolean).join(' / ')}</span>}
+          </div>
         </div>
         <Link href={`/clientes/${id}/editar`}>
-          <Button size="sm" variant="outline" className="h-10 rounded-xl">
-            Editar
-          </Button>
+          <Button size="sm" variant="outline">Editar</Button>
         </Link>
       </div>
 
-      <div className="surface-subtle sticky top-16 z-20 border p-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {[
-            { id: 'servicos', label: 'Serviços' },
-            { id: 'competencias', label: 'Competências' },
-            { id: 'financeiro', label: 'Financeiro' },
-            { id: 'fiscal', label: 'Fiscal' },
-          ].map((section) => (
-            <a
-              key={section.id}
-              href={`#${section.id}`}
-              className={`h-8 px-3 inline-flex items-center rounded-lg text-xs font-medium transition-colors border ${
-                activeSection === section.id
-                  ? 'bg-foreground text-background border-foreground'
-                  : 'bg-background text-muted-foreground border-border hover:text-foreground hover:border-foreground/30'
-              }`}
-            >
-              {section.label}
-            </a>
-          ))}
+      {/* ── 70/30 grid ──────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_300px] items-start">
+
+        {/* ── Left: Tabs ──────────────────────────────────── */}
+        <Tabs defaultValue="atividade">
+          <TabsList className="w-full justify-start border-b rounded-none bg-transparent h-auto p-0 mb-4 gap-1">
+            {(['atividade','competencias','servicos'] as const).map(tab => (
+              <TabsTrigger
+                key={tab}
+                value={tab}
+                className="rounded-md px-3 py-1.5 text-sm data-[state=active]:bg-muted data-[state=active]:font-semibold"
+              >
+                {tab === 'atividade' ? 'Atividade' : tab === 'competencias' ? 'Competências' : 'Serviços'}
+              </TabsTrigger>
+            ))}
+            {podeAcessarFiscal && (
+              <TabsTrigger value="fiscal" className="rounded-md px-3 py-1.5 text-sm data-[state=active]:bg-muted data-[state=active]:font-semibold">
+                Fiscal
+              </TabsTrigger>
+            )}
+          </TabsList>
+
+          {/* Atividade */}
+          <TabsContent value="atividade">
+            <Timeline events={timelineEvents} />
+          </TabsContent>
+
+          {/* Competências */}
+          <TabsContent value="competencias">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
+                <CardTitle className="text-sm">Competências</CardTitle>
+                <div className="flex gap-2">
+                  <Link href={`/competencias?clienteId=${id}`}><Button size="xs" variant="ghost">Ver todas</Button></Link>
+                  <Link href={`/competencias/nova?clienteId=${id}`}><Button size="xs"><Plus className="h-3 w-3" />Nova</Button></Link>
+                </div>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                {competencias.length === 0
+                  ? <p className="text-sm text-muted-foreground">Nenhuma competência.</p>
+                  : <div className="divide-y">
+                      {competencias.map(c => (
+                        <Link key={c.id as string} href={`/competencias/${c.id as string}`}
+                          className="flex items-center justify-between py-2.5 hover:bg-muted/30 px-2 -mx-2 rounded transition-colors">
+                          <div>
+                            <p className="text-sm font-medium">{formatMesAno(c.mes as number, c.ano as number)}</p>
+                            {(c.servicoNome as string | undefined) && <p className="text-xs text-muted-foreground">{c.servicoNome as string}</p>}
+                          </div>
+                          <Badge variant={(c.status as string) === 'concluida' ? 'success' : (c.status as string) === 'aberta' ? 'warning' : 'neutral'}>
+                            {c.status as string}
+                          </Badge>
+                        </Link>
+                      ))}
+                    </div>
+                }
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Serviços */}
+          <TabsContent value="servicos">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
+                <CardTitle className="text-sm">Serviços Vinculados</CardTitle>
+                <Link href={`/clientes/${id}/servicos/novo`}><Button size="xs"><Plus className="h-3 w-3" />Serviço</Button></Link>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                {servicos.length === 0
+                  ? <p className="text-sm text-muted-foreground">Nenhum serviço vinculado.</p>
+                  : <div className="divide-y">
+                      {servicos.map(s => (
+                        <div key={s.id as string} className="flex items-center justify-between py-2.5">
+                          <div>
+                            <p className="text-sm font-medium">{s.servicoNome as string}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatCurrency(s.valor as number)} • {s.dataInicio ? formatDate(tsToDate(s.dataInicio)) : '—'}
+                            </p>
+                          </div>
+                          <Badge variant={s.status === 'ativo' ? 'default' : 'secondary'}>{s.status as string}</Badge>
+                        </div>
+                      ))}
+                    </div>
+                }
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Fiscal */}
+          <TabsContent value="fiscal" className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
+                <CardTitle className="text-sm">Configuração NFS-e</CardTitle>
+                <Button size="sm" variant="outline" onClick={() => setConfigOpen(true)}>
+                  <Pencil className="h-3.5 w-3.5" />{fiscal ? 'Editar' : 'Configurar'}
+                </Button>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                {!fiscal
+                  ? <div className="text-center py-6 space-y-3">
+                      <p className="text-sm text-muted-foreground">Nenhuma configuração fiscal cadastrada.</p>
+                      <Button size="sm" onClick={() => setConfigOpen(true)}>Configurar NFS-e</Button>
+                    </div>
+                  : <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
+                      <div><dt className="text-xs text-muted-foreground">Município</dt><dd className="font-medium">{municipioNome}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">Ambiente</dt><dd><Badge variant={fiscal.ambienteEmissao === 'producao' ? 'default' : 'secondary'}>{fiscal.ambienteEmissao === 'producao' ? 'Produção' : 'Homologação'}</Badge></dd></div>
+                      <div><dt className="text-xs text-muted-foreground">Insc. Municipal</dt><dd className="font-medium">{(fiscal.inscricaoMunicipal as string) ?? '—'}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">Regime</dt><dd className="font-medium">{REGIME_MAP[fiscal.regimeTributario as string] ?? '—'}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">Optante Simples</dt><dd className="font-medium">{fiscal.optanteSimples ? 'Sim' : 'Não'}</dd></div>
+                      <div><dt className="text-xs text-muted-foreground">Alíquota ISS</dt><dd className="font-medium">{fiscal.aliquotaPadrao != null ? `${fiscal.aliquotaPadrao}%` : '—'}</dd></div>
+                    </dl>
+                }
+              </CardContent>
+            </Card>
+
+            {fiscal && tipo === 'abrasf_a1' && (
+              <Card>
+                <CardHeader className="flex flex-row items-center gap-2 py-3 px-4">
+                  {certInfo ? certInfo.valido ? <ShieldCheck className="h-4 w-4 text-success" /> : <ShieldAlert className="h-4 w-4 text-destructive" /> : <ShieldOff className="h-4 w-4 text-muted-foreground" />}
+                  <CardTitle className="text-sm">Certificado Digital A1</CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <CertificadoUpload clienteId={id} certInfo={certInfo} onUploaded={() => loadFiscal()} />
+                </CardContent>
+              </Card>
+            )}
+
+            {fiscal && podeAcessarFiscal && (
+              <div className="flex justify-end">
+                <Link href={`/fiscal/emitir?clienteId=${id}`}><Button size="sm"><Receipt className="h-3.5 w-3.5" />Emitir NFS-e</Button></Link>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+
+        {/* ── Right: sticky aside ─────────────────────────── */}
+        <div className="sticky top-20 space-y-4">
+
+          {/* Saúde do cliente */}
+          <Card>
+            <CardHeader className="py-3 px-4"><CardTitle className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Saúde do Cliente</CardTitle></CardHeader>
+            <CardContent className="px-4 pb-4 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-sm"><Receipt className="h-3.5 w-3.5 text-muted-foreground" />Fiscal NFS-e</span>
+                <Badge variant={fiscal ? 'success' : 'destructive'}>{fiscal ? 'Configurado' : 'Pendente'}</Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-sm"><AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />Competências</span>
+                <Badge variant={competenciaAberta ? 'warning' : 'success'}>{competenciaAberta ? 'Em aberto' : 'Em dia'}</Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-sm"><Wallet className="h-3.5 w-3.5 text-muted-foreground" />Financeiro</span>
+                <Badge variant={lancamentoAtrasado ? 'destructive' : 'success'}>{lancamentoAtrasado ? 'Inadimplente' : 'Em dia'}</Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Próximos passos */}
+          {proximosPassos.length > 0 && (
+            <Card>
+              <CardHeader className="py-3 px-4"><CardTitle className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Alertas</CardTitle></CardHeader>
+              <CardContent className="px-4 pb-4 space-y-2">
+                {proximosPassos.map(item => {
+                  const row = (
+                    <div className={cn('flex items-start gap-2 rounded-md border-l-2 px-3 py-2', item.severidade === 'danger' ? 'border-destructive bg-destructive/4' : 'border-warning bg-warning/4')}>
+                      <AlertTriangle className={cn('h-3.5 w-3.5 mt-0.5 shrink-0', item.severidade === 'danger' ? 'text-destructive' : 'text-warning')} />
+                      <div>
+                        <p className="text-xs font-medium">{item.titulo}</p>
+                        <p className="text-xs text-muted-foreground">{item.descricao}</p>
+                      </div>
+                    </div>
+                  )
+                  return item.href
+                    ? <Link key={item.id} href={item.href} className="block hover:opacity-90 transition-opacity">{row}</Link>
+                    : <div key={item.id}>{row}</div>
+                })}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Ações rápidas */}
+          <Card>
+            <CardHeader className="py-3 px-4"><CardTitle className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Ações Rápidas</CardTitle></CardHeader>
+            <CardContent className="px-4 pb-4 space-y-2">
+              <Link href={`/competencias/nova?clienteId=${id}`} className="block">
+                <Button size="sm" className="w-full justify-start"><Plus className="h-3.5 w-3.5" />Nova Competência</Button>
+              </Link>
+              {fiscal && podeAcessarFiscal && (
+                <Link href={`/fiscal/emitir?clienteId=${id}`} className="block">
+                  <Button size="sm" variant="outline" className="w-full justify-start"><Receipt className="h-3.5 w-3.5" />Emitir NFS-e</Button>
+                </Link>
+              )}
+              <Link href={`/financeiro?clienteId=${id}`} className="block">
+                <Button size="sm" variant="outline" className="w-full justify-start"><Wallet className="h-3.5 w-3.5" />Ver Financeiro</Button>
+              </Link>
+              <Link href={`/clientes/${id}/editar`} className="block">
+                <Button size="sm" variant="ghost" className="w-full justify-start"><Pencil className="h-3.5 w-3.5" />Editar Cliente</Button>
+              </Link>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
-      {/* Info geral */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-border/65 bg-card/95 card-shadow">
-          <CardContent className="pt-4 space-y-1">
-            <p className="text-xs text-muted-foreground">CPF / CNPJ</p>
-            <p className="font-mono text-sm font-medium">
-              {formatCpfCnpj(cliente.cpfCnpj as string)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="border-border/65 bg-card/95 card-shadow">
-          <CardContent className="pt-4 space-y-1">
-            <p className="text-xs text-muted-foreground">Regime Tributário</p>
-            <p className="text-sm font-medium">
-              {cliente.regimeTributario
-                ? REGIME_LABELS[cliente.regimeTributario as string] ?? String(cliente.regimeTributario)
-                : '—'}
-            </p>
-          </CardContent>
-        </Card>
-        {cliente.email ? (
-          <Card className="border-border/65 bg-card/95 card-shadow">
-            <CardContent className="pt-4 space-y-1">
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <Mail className="h-3 w-3" /> E-mail
-              </p>
-              <p className="text-sm font-medium truncate">{cliente.email as string}</p>
-            </CardContent>
-          </Card>
-        ) : null}
-        {(cliente.cidade || cliente.uf) ? (
-          <Card className="border-border/65 bg-card/95 card-shadow">
-            <CardContent className="pt-4 space-y-1">
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <MapPin className="h-3 w-3" /> Localização
-              </p>
-              <p className="text-sm font-medium">
-                {[cliente.cidade, cliente.uf].filter(Boolean).join(' / ')}
-              </p>
-            </CardContent>
-          </Card>
-        ) : null}
-      </div>
-
-      <Card className="border-border/65 bg-card/95 card-shadow">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Próximos passos</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {proximosPassos.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sem pendências críticas no momento.</p>
-          ) : (
-            proximosPassos.map((item) => {
-              const classes = item.severidade === 'danger'
-                ? 'border-l-2 border-destructive bg-destructive/4'
-                : 'border-l-2 border-warning bg-warning/4'
-              const content = (
-                <div className={`rounded-md px-3 py-2.5 ${classes}`}>
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className={`w-4 h-4 mt-0.5 shrink-0 ${item.severidade === 'danger' ? 'text-destructive' : 'text-warning'}`} />
-                    <div>
-                      <p className="text-sm font-medium">{item.titulo}</p>
-                      <p className="text-xs text-muted-foreground">{item.descricao}</p>
-                    </div>
-                  </div>
-                </div>
-              )
-              return item.href ? (
-                <Link key={item.id} href={item.href} className="block hover:opacity-90 transition-opacity">
-                  {content}
-                </Link>
-              ) : (
-                <div key={item.id}>{content}</div>
-              )
-            })
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ── Serviços ─────────────────────────────────────────── */}
-      <div id="servicos">
-          <Card className="border-border/65 bg-card/95 card-shadow">
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="text-sm">Serviços Vinculados</CardTitle>
-              <Link href={`/clientes/${id}/servicos/novo`}>
-                <Button size="sm" className="h-9 rounded-xl">+ Serviço</Button>
-              </Link>
-            </CardHeader>
-            <CardContent>
-              {servicos.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum serviço vinculado.</p>
-              ) : (
-                <div className="divide-y">
-                  {servicos.map((s) => (
-                    <div key={s.id as string} className="py-3 flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium">{s.servicoNome as string}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatCurrency(s.valor as number)} •{' '}
-                          {s.dataInicio
-                            ? formatDate(tsToDate(s.dataInicio))
-                            : '—'}
-                        </p>
-                      </div>
-                      <Badge
-                        variant={s.status === 'ativo' ? 'default' : 'secondary'}
-                      >
-                        {s.status as string}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-      </div>
-
-      {/* ── Competências ─────────────────────────────────────── */}
-      <div id="competencias">
-          <Card className="border-border/65 bg-card/95 card-shadow">
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="text-sm">Competências</CardTitle>
-              <Link href={`/competencias?clienteId=${id}`}>
-                <Button size="sm" variant="outline" className="h-9 rounded-xl">Ver todas</Button>
-              </Link>
-            </CardHeader>
-            <CardContent>
-              {competencias.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma competência.</p>
-              ) : (
-                <div className="divide-y">
-                  {competencias.map((c) => (
-                    <Link
-                      key={c.id as string}
-                      href={`/competencias/${c.id}`}
-                      className="py-3 flex items-center justify-between hover:bg-muted/30 px-2 -mx-2 rounded transition-colors"
-                    >
-                      <div>
-                        <p className="text-sm font-medium">
-                          {formatMesAno(c.mes as number, c.ano as number)}
-                        </p>
-                        {c.servicoNome ? (
-                          <p className="text-xs text-muted-foreground">{c.servicoNome as string}</p>
-                        ) : null}
-                      </div>
-                      <Badge variant="outline">{c.status as string}</Badge>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-      </div>
-
-      {/* ── Financeiro ───────────────────────────────────────── */}
-      <div id="financeiro">
-          <Card className="border-border/65 bg-card/95 card-shadow">
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="text-sm">Lançamentos</CardTitle>
-              <Link href={`/financeiro?clienteId=${id}`}>
-                <Button size="sm" variant="outline" className="h-9 rounded-xl">Ver todos</Button>
-              </Link>
-            </CardHeader>
-            <CardContent>
-              {lancamentos.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum lançamento.</p>
-              ) : (
-                <div className="divide-y">
-                  {lancamentos.map((l) => (
-                    <div key={l.id as string} className="py-3 flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium">{l.descricao as string}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Venc.:{' '}
-                          {l.dataVencimento
-                            ? formatDate(tsToDate(l.dataVencimento))
-                            : '—'}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold">
-                          {formatCurrency(l.valor as number)}
-                        </p>
-                        <Badge
-                          variant={
-                            l.status === 'pago'
-                              ? 'default'
-                              : l.status === 'cancelado'
-                              ? 'secondary'
-                              : 'outline'
-                          }
-                        >
-                          {l.status as string}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-      </div>
-
-      {/* ── Fiscal ───────────────────────────────────────────── */}
-      <div id="fiscal" className="space-y-4">
-          {(() => {
-            const creds      = (fiscal?.credenciais ?? {}) as Record<string, unknown>
-            const ibge       = fiscal?.municipioIbge as string | undefined
-            const tipo       = ibge ? MUNICIPIO_TIPO[ibge] : undefined
-            const municipioNome = MUNICIPIOS.find(m => m.ibge === ibge)?.nome ?? ibge ?? '—'
-            const REGIME_MAP: Record<string, string> = {
-              simples_nacional: 'Simples Nacional',
-              lucro_presumido:  'Lucro Presumido',
-              lucro_real:       'Lucro Real',
-              mei:              'MEI',
-              isento:           'Isento / Imune',
-            }
-            const certInfo: CertInfo | null = creds.certTitular
-              ? { titular: creds.certTitular as string, vencimento: creds.certVencimento as string, valido: creds.certValido as boolean, storagePath: creds.certificadoStoragePath as string }
-              : null
-
-            return (
-              <>
-                {/* Config card */}
-                <Card className="border-border/65 bg-card/95 card-shadow">
-                  <CardHeader className="flex flex-row items-center justify-between pb-3">
-                    <CardTitle className="text-sm">Configuração Fiscal — NFS-e</CardTitle>
-                    <Button size="sm" variant="outline" className="h-9 rounded-xl" onClick={() => setConfigOpen(true)}>
-                      <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                      {fiscal ? 'Editar' : 'Configurar'}
-                    </Button>
-                  </CardHeader>
-                  <CardContent>
-                    {!fiscal ? (
-                      <div className="text-center py-4 space-y-3">
-                        <p className="text-sm text-muted-foreground">
-                          Nenhuma configuração fiscal cadastrada.
-                        </p>
-                        <Button size="sm" className="h-9 rounded-xl" onClick={() => setConfigOpen(true)}>
-                          Configurar NFS-e
-                        </Button>
-                      </div>
-                    ) : (
-                      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
-                        <div>
-                          <dt className="text-muted-foreground text-xs">Município</dt>
-                          <dd className="font-medium">{municipioNome}</dd>
-                        </div>
-                        <div>
-                          <dt className="text-muted-foreground text-xs">Ambiente</dt>
-                          <dd>
-                            {fiscal.ambienteEmissao === 'producao'
-                              ? <Badge variant="default" className="text-xs">Produção</Badge>
-                              : <Badge variant="secondary" className="text-xs">Homologação</Badge>}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-muted-foreground text-xs">Inscrição Municipal</dt>
-                          <dd className="font-medium">{(fiscal.inscricaoMunicipal as string) ?? '—'}</dd>
-                        </div>
-                        <div>
-                          <dt className="text-muted-foreground text-xs">Regime</dt>
-                          <dd className="font-medium">{REGIME_MAP[fiscal.regimeTributario as string] ?? (fiscal.regimeTributario as string) ?? '—'}</dd>
-                        </div>
-                        <div>
-                          <dt className="text-muted-foreground text-xs">Optante Simples</dt>
-                          <dd className="font-medium">{fiscal.optanteSimples ? 'Sim' : 'Não'}</dd>
-                        </div>
-                        <div>
-                          <dt className="text-muted-foreground text-xs">Alíquota ISS</dt>
-                          <dd className="font-medium">{fiscal.aliquotaPadrao != null ? `${fiscal.aliquotaPadrao}%` : '—'}</dd>
-                        </div>
-                        {fiscal.itemListaServico ? (
-                          <div>
-                            <dt className="text-muted-foreground text-xs">Item Lista Serviço</dt>
-                            <dd className="font-medium">{fiscal.itemListaServico as string}</dd>
-                          </div>
-                        ) : null}
-                        {fiscal.cnae ? (
-                          <div>
-                            <dt className="text-muted-foreground text-xs">CNAE</dt>
-                            <dd className="font-medium">{fiscal.cnae as string}</dd>
-                          </div>
-                        ) : null}
-                      </dl>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Certificado A1 */}
-                {fiscal && tipo === 'abrasf_a1' && (
-                  <Card className="border-border/65 bg-card/95 card-shadow">
-                    <CardHeader className="flex flex-row items-center gap-2 pb-3">
-                      {certInfo
-                        ? certInfo.valido
-                          ? <ShieldCheck className="w-4 h-4 text-success" />
-                          : <ShieldAlert className="w-4 h-4 text-destructive" />
-                        : <ShieldOff className="w-4 h-4 text-muted-foreground" />}
-                      <CardTitle className="text-sm">Certificado Digital A1</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <CertificadoUpload
-                        clienteId={id}
-                        certInfo={certInfo}
-                        onUploaded={() => loadFiscal()}
-                      />
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Emitir NFS-e */}
-                {fiscal && (
-                  <div className="flex justify-end">
-                    <Link href={`/fiscal/emitir?clienteId=${id}`}>
-                      <Button size="sm" className="h-9 rounded-xl">+ Emitir NFS-e</Button>
-                    </Link>
-                  </div>
-                )}
-              </>
-            )
-          })()}
-
-          <ConfigFiscalForm
-            open={configOpen}
-            onOpenChange={setConfigOpen}
-            clienteId={id}
-            docId={fiscal?.id as string | undefined}
-            defaultValues={fiscal ? {
-              municipioIbge:       fiscal.municipioIbge      as string,
-              inscricaoMunicipal:  fiscal.inscricaoMunicipal as string,
-              inscricaoEstadual:   fiscal.inscricaoEstadual  as string,
-              ambienteEmissao:     (fiscal.ambienteEmissao   as 'homologacao' | 'producao') ?? 'homologacao',
-              regimeTributario:    fiscal.regimeTributario   as string,
-              optanteSimples:      (fiscal.optanteSimples    as boolean) ?? true,
-              incentivadorCultural:(fiscal.incentivadorCultural as boolean) ?? false,
-              naturezaOperacao:    (fiscal.naturezaOperacao  as string) ?? '1',
-              itemListaServico:    fiscal.itemListaServico   as string,
-              cnae:                fiscal.cnae               as string,
-              aliquotaPadrao:      fiscal.aliquotaPadrao     as number,
-              credenciais:         (fiscal.credenciais       as Record<string, unknown>) ?? {},
-            } : undefined}
-            onSaved={loadFiscal}
-          />
-      </div>
+      {/* ── ConfigFiscalForm modal ───────────────────────── */}
+      <ConfigFiscalForm
+        open={configOpen}
+        onOpenChange={setConfigOpen}
+        clienteId={id}
+        docId={fiscal?.id as string | undefined}
+        defaultValues={fiscal ? {
+          municipioIbge:        fiscal.municipioIbge       as string,
+          inscricaoMunicipal:   fiscal.inscricaoMunicipal  as string,
+          inscricaoEstadual:    fiscal.inscricaoEstadual   as string,
+          ambienteEmissao:      (fiscal.ambienteEmissao    as 'homologacao' | 'producao') ?? 'homologacao',
+          regimeTributario:     fiscal.regimeTributario    as string,
+          optanteSimples:       (fiscal.optanteSimples     as boolean) ?? true,
+          incentivadorCultural: (fiscal.incentivadorCultural as boolean) ?? false,
+          naturezaOperacao:     (fiscal.naturezaOperacao   as string) ?? '1',
+          itemListaServico:     fiscal.itemListaServico    as string,
+          cnae:                 fiscal.cnae                as string,
+          aliquotaPadrao:       fiscal.aliquotaPadrao      as number,
+          credenciais:          (fiscal.credenciais        as Record<string, unknown>) ?? {},
+        } : undefined}
+        onSaved={loadFiscal}
+      />
     </div>
   )
 }
