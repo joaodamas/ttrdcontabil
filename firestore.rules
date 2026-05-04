@@ -27,6 +27,8 @@ service cloud.firestore {
     function isFinanceiro()  { return isAtivo() && userDoc().perfil in ['admin', 'financeiro']; }
     function canRead()       { return isAtivo(); }
 
+    // ─── Validadores de payload ───────────────────────────────────────────────
+
     function clienteStatusValido(status) {
       return status in ['ativo', 'inativo', 'suspenso'];
     }
@@ -48,8 +50,14 @@ service cloud.firestore {
         && (request.resource.data.razaoSocial.size() <= 200);
     }
 
+    // [MELHORIA 1] Payload de tarefas agora exige campo 'titulo' — bloqueia
+    // criação de tarefas sem título diretamente via API/SDK.
     function tarefaPayloadValido() {
-      return ('prioridade' in request.resource.data)
+      return ('titulo' in request.resource.data)
+        && (request.resource.data.titulo is string)
+        && (request.resource.data.titulo.size() > 0)
+        && (request.resource.data.titulo.size() <= 500)
+        && ('prioridade' in request.resource.data)
         && prioridadeTarefaValida(request.resource.data.prioridade)
         && ('status' in request.resource.data)
         && statusTarefaValido(request.resource.data.status);
@@ -58,14 +66,11 @@ service cloud.firestore {
     // ─── Usuários ─────────────────────────────────────────────────────────────
 
     match /usuarios/{uid} {
-      // Qualquer usuário ativo pode ler a lista (selects de responsável nos formulários)
       allow read: if canRead();
-      // Usuário pode atualizar apenas campos não-sensíveis do próprio documento
       allow update: if (isAuth() && request.auth.uid == uid
           && !request.resource.data.diff(resource.data).affectedKeys()
               .hasAny(['perfil', 'ativo', 'criadoEm']))
         || isAdmin();
-      // Criar e deletar usuários: apenas admin
       allow create, delete: if isAdmin();
     }
 
@@ -73,12 +78,17 @@ service cloud.firestore {
 
     match /clientes/{id} {
       allow read: if canRead();
-      allow write: if isOperacional() && clientePayloadValido();
+      allow create, update: if isOperacional() && clientePayloadValido();
+      // [MELHORIA 2] Delete separado: apenas admin pode remover clientes.
+      // isOperacional inclui admin, mas tornar explícito evita que um
+      // 'operacional' delete por acidente ou ataque direto à API.
+      allow delete: if isAdmin();
     }
 
     match /clientes_servicos/{id} {
       allow read: if canRead();
-      allow write: if isOperacional();
+      allow create, update: if isOperacional();
+      allow delete: if isAdmin();
     }
 
     // ─── Serviços (tipos cadastrais do escritório) ────────────────────────────
@@ -92,14 +102,18 @@ service cloud.firestore {
 
     match /competencias/{id} {
       allow read: if canRead();
-      allow write: if isOperacional();
+      allow create, update: if isOperacional();
+      allow delete: if isAdmin();
     }
 
     // ─── Tarefas ──────────────────────────────────────────────────────────────
 
     match /tarefas/{id} {
       allow read: if canRead();
-      allow write: if isAtivo() && tarefaPayloadValido(); // todos os ativos podem criar e editar tarefas com payload validado
+      // Todos os ativos podem criar e atualizar tarefas (payload validado).
+      allow create, update: if isAtivo() && tarefaPayloadValido();
+      // [MELHORIA 2] Delete separado: apenas operacional+ pode deletar tarefas.
+      allow delete: if isOperacional();
     }
 
     match /tarefas_comentarios/{id} {
@@ -112,33 +126,41 @@ service cloud.firestore {
 
     match /ir_declaracoes/{id} {
       allow read: if canRead();
-      allow write: if isOperacional();
+      allow create, update: if isOperacional();
+      allow delete: if isAdmin();
     }
 
     match /ir_checklist/{id} {
       allow read: if canRead();
-      allow write: if isOperacional();
+      allow create, update: if isOperacional();
+      allow delete: if isAdmin();
     }
 
     // ─── Financeiro ───────────────────────────────────────────────────────────
 
     match /lancamentos/{id} {
       allow read: if canRead();
-      allow write: if isFinanceiro();
+      allow create, update: if isFinanceiro();
+      // [MELHORIA 2] Lançamentos financeiros só podem ser deletados por admin —
+      // garante rastreabilidade e evita fraude por deleção direta.
+      allow delete: if isAdmin();
     }
 
     // ─── Fechamento mensal ────────────────────────────────────────────────────
 
     match /fechamentos/{id} {
       allow read: if canRead();
-      allow write: if isOperacional();
+      allow create, update: if isOperacional();
+      allow delete: if isAdmin();
     }
 
     // ─── Fiscal — configuração ────────────────────────────────────────────────
 
     match /clientes_fiscal/{id} {
       allow read: if canRead();
-      allow write: if isFiscal();
+      allow create, update: if isFiscal();
+      // Configuração fiscal nunca deve ser deletada sem supervisão admin.
+      allow delete: if isAdmin();
     }
 
     match /fiscal_conectores/{id} {
@@ -148,17 +170,20 @@ service cloud.firestore {
 
     match /clientes_fiscal_integracao/{id} {
       allow read: if canRead();
-      allow write: if isFiscal();
+      allow create, update: if isFiscal();
+      allow delete: if isAdmin();
     }
 
     // ─── NFS-e ────────────────────────────────────────────────────────────────
 
     match /nfse_rascunhos/{id} {
       allow read: if canRead();
-      allow write: if isFiscal();
+      allow create, update: if isFiscal();
+      // Rascunhos podem ser deletados pelo fiscal (limpeza de rascunhos antigos).
+      allow delete: if isFiscal();
     }
 
-    // nfse_emitidas: NUNCA escrita direta do browser — apenas Admin SDK via Cloud Functions
+    // nfse_emitidas: NUNCA escrita direta do browser — apenas Admin SDK via Cloud Functions.
     match /nfse_emitidas/{id} {
       allow read: if canRead();
       allow write: if false;
@@ -170,7 +195,7 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // nfse_fila_processamento: somente Cloud Functions
+    // nfse_fila_processamento: somente Cloud Functions.
     match /nfse_fila_processamento/{id} {
       allow read: if isFiscal();
       allow write: if false;
@@ -195,7 +220,8 @@ service cloud.firestore {
 
     match /documentos/{id} {
       allow read: if canRead();
-      allow write: if isAtivo();
+      allow create, update: if isAtivo();
+      allow delete: if isAdmin();
     }
   }
 }

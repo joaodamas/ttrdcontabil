@@ -122,7 +122,7 @@ export function FechamentoTable({ fechamentos, onUpdate }: FechamentoTableProps)
 
   return (
     <div className="overflow-x-auto rounded-md border">
-      <table className="w-full text-sm">
+      <table className="w-full min-w-[860px] text-sm">
         <thead className="bg-muted/50 border-b">
           <tr>
             <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground w-12">COD</th>
@@ -143,7 +143,7 @@ export function FechamentoTable({ fechamentos, onUpdate }: FechamentoTableProps)
               'hover:bg-muted/30 transition-colors',
               (f.dasStatus === 'guia' || f.esocialStatus === 'guia' || f.reinfStatus === 'guia' || f.fgtsStatus === 'guia' ||
                f.dasStatus === 'pendente' || f.esocialStatus === 'pendente' || f.reinfStatus === 'pendente' || f.fgtsStatus === 'pendente')
-                ? 'bg-destructive/[0.03] hover:bg-destructive/[0.06]'
+                ? 'bg-destructive/[0.03] hover:bg-destructive/[0.06] dark:bg-destructive/[0.08] dark:hover:bg-destructive/[0.14]'
                 : ''
             )}>
               <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{f.clienteCodigo}</td>

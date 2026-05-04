@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import type { ClienteRecord } from './types'
-import { useClientesListQuery } from './queries'
+import { useClientesListQuery, useClienteDetailQuery, clientesKeys } from './queries'
 
 const PAGE_SIZE = 20
 
@@ -37,4 +38,17 @@ export function useClientesList(params: { busca: string; status: string; page: n
     totalPages,
     pageSize: PAGE_SIZE,
   }
+}
+
+/** Hook TanStack Query para dados completos do cliente 360°.
+ *  Encapsula o Promise.all de clientes + servicos + competencias + lancamentos + fiscal.
+ *  Pronto para uso — a página /clientes/[id] pode migrar para este hook gradualmente. */
+export function useClienteDetail(id: string) {
+  return useClienteDetailQuery(id)
+}
+
+/** Invalida todos os dados do cliente (após salvar fiscal, por exemplo). */
+export function useInvalidateClienteDetail() {
+  const qc = useQueryClient()
+  return (id: string) => qc.invalidateQueries({ queryKey: clientesKeys.detail(id) })
 }
