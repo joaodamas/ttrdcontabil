@@ -6,7 +6,7 @@ import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
 import { listDocuments } from '@/lib/firestore-client'
 import { formatCurrency, formatDate, formatMesAno , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
   Users,
@@ -397,11 +397,13 @@ export default function DashboardPage() {
           { href: '/tarefas/nova',      label: 'Nova Tarefa' },
           { href: '/financeiro/novo',   label: 'Novo Lançamento' },
         ] as const).map((item) => (
-          <Link key={item.href} href={item.href}>
-            <Button size="sm" variant="outline" className="w-full justify-start gap-2">
-              <ArrowRight className="w-3 h-3 text-muted-foreground" />
-              {item.label}
-            </Button>
+          <Link
+            key={item.href}
+            href={item.href}
+            className={buttonVariants({ variant: 'outline', size: 'sm', className: 'w-full justify-start gap-2' })}
+          >
+            <ArrowRight className="w-3 h-3 text-muted-foreground" />
+            {item.label}
           </Link>
         ))}
       </div>

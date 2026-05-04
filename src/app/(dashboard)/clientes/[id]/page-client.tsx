@@ -382,31 +382,23 @@ export default function ClienteDetailPage() {
             <CardHeader className="py-3 px-4"><CardTitle className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Ações Rápidas</CardTitle></CardHeader>
             <CardContent className="px-4 pb-4">
               <div className="grid grid-cols-1 min-[280px]:grid-cols-2 gap-2">
-                <Link href={`/competencias/nova?clienteId=${id}`}>
-                  <button className="w-full aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
-                    <Plus className="h-5 w-5 text-primary" />
-                    <span className="text-xs font-medium leading-tight">Nova Competência</span>
-                  </button>
+                <Link href={`/competencias/nova?clienteId=${id}`} className="aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
+                  <Plus className="h-5 w-5 text-primary" />
+                  <span className="text-xs font-medium leading-tight">Nova Competência</span>
                 </Link>
                 {fiscal && podeAcessarFiscal && (
-                  <Link href={`/fiscal/emitir?clienteId=${id}`}>
-                    <button className="w-full aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
-                      <Receipt className="h-5 w-5 text-primary" />
-                      <span className="text-xs font-medium leading-tight">Emitir NFS-e</span>
-                    </button>
+                  <Link href={`/fiscal/emitir?clienteId=${id}`} className="aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
+                    <Receipt className="h-5 w-5 text-primary" />
+                    <span className="text-xs font-medium leading-tight">Emitir NFS-e</span>
                   </Link>
                 )}
-                <Link href={`/financeiro?clienteId=${id}`}>
-                  <button className="w-full aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
-                    <Wallet className="h-5 w-5 text-muted-foreground" />
-                    <span className="text-xs font-medium leading-tight">Financeiro</span>
-                  </button>
+                <Link href={`/financeiro?clienteId=${id}`} className="aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
+                  <Wallet className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-xs font-medium leading-tight">Financeiro</span>
                 </Link>
-                <Link href={`/clientes/${id}/editar`}>
-                  <button className="w-full aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
-                    <Pencil className="h-5 w-5 text-muted-foreground" />
-                    <span className="text-xs font-medium leading-tight">Editar</span>
-                  </button>
+                <Link href={`/clientes/${id}/editar`} className="aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
+                  <Pencil className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-xs font-medium leading-tight">Editar</span>
                 </Link>
               </div>
             </CardContent>
