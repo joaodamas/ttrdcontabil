@@ -4,14 +4,182 @@
  */
 import {
   collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, limit, serverTimestamp, Timestamp, documentId,
+  query, where, orderBy, limit, serverTimestamp, Timestamp, documentId, setDoc,
   type QueryConstraint,
 } from 'firebase/firestore'
 import { getClientDb, getClientAuth } from './firebase'
 
 // ── Generic helpers ───────────────────────────────────────────────────────────
 
+const AUDITED_COLLECTIONS = new Set([
+  'clientes',
+  'clientes_servicos',
+  'competencias',
+  'tarefas',
+  'lancamentos',
+  'cobrancas',
+  'fechamentos',
+  'fechamento_revisoes',
+  'clientes_fiscal',
+  'nfse_rascunhos',
+  'nfse_emitidas',
+  'ir_declaracoes',
+  'ir_checklist',
+  'usuarios',
+  'configuracoes',
+])
+
+const TENANT_SCOPED_COLLECTIONS = new Set([
+  'clientes',
+  'clientes_servicos',
+  'servicos',
+  'competencias',
+  'tarefas',
+  'tarefas_comentarios',
+  'lancamentos',
+  'cobrancas',
+  'fechamentos',
+  'fechamento_revisoes',
+  'clientes_fiscal',
+  'clientes_fiscal_integracao',
+  'fiscal_conectores',
+  'nfse_rascunhos',
+  'nfse_emitidas',
+  'nfse_eventos',
+  'nfse_fila_processamento',
+  'events',
+  'logs_auditoria',
+  'dashboard_kpis',
+  'documentos',
+  'ir_declaracoes',
+  'ir_checklist',
+  'usuarios',
+])
+
+const SENSITIVE_KEYS = new Set([
+  'senha',
+  'password',
+  'token',
+  'accessToken',
+  'refreshToken',
+  'certificado',
+  'certificadoBase64',
+  'certificadoSenha',
+  'senhaCertificado',
+  'privateKey',
+  'chavePrivada',
+  'configJson',
+  'credenciais',
+  'payloadEnvio',
+  'payloadRetorno',
+  'respostaIntegracao',
+])
+
+let _actorCache: { uid: string; nome: string; email: string; tenantId?: string } | null = null
+
+async function getAuditActor() {
+  const authUser = getClientAuth().currentUser
+  if (!authUser) return null
+  if (_actorCache?.uid === authUser.uid) return _actorCache
+
+  let nome = authUser.displayName ?? authUser.email ?? authUser.uid
+  try {
+    const snap = await getDoc(doc(getClientDb(), 'usuarios', authUser.uid))
+    if (snap.exists()) {
+      const data = snap.data()
+      nome = (data.nome as string | undefined) ?? nome
+      _actorCache = {
+        uid: authUser.uid,
+        nome,
+        email: authUser.email ?? '',
+        tenantId: data.tenantId as string | undefined,
+      }
+      return _actorCache
+    }
+  } catch {
+    // Perfil indisponível não deve impedir o write principal.
+  }
+
+  _actorCache = {
+    uid: authUser.uid,
+    nome,
+    email: authUser.email ?? '',
+  }
+  return _actorCache
+}
+
+function redactAuditData(value: unknown): unknown {
+  if (value == null) return value
+  if (value instanceof Timestamp) return value
+  if (Array.isArray(value)) return value.map(redactAuditData)
+  if (typeof value !== 'object') return value
+
+  if ('toDate' in (value as Record<string, unknown>)) return value
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
+      key,
+      SENSITIVE_KEYS.has(key) ? '[REDACTED]' : redactAuditData(nested),
+    ])
+  )
+}
+
+async function writeAuditLog(params: {
+  entidade: string
+  entidadeId?: string
+  acao: 'create' | 'update' | 'delete' | 'soft_delete'
+  dadosAntes?: Record<string, unknown> | null
+  dadosDepois?: Record<string, unknown> | null
+}) {
+  if (!AUDITED_COLLECTIONS.has(params.entidade)) return
+  const actor = await getAuditActor()
+  if (!actor) return
+
+  await addDoc(collection(getClientDb(), 'logs_auditoria'), {
+    usuarioId: actor.uid,
+    usuarioNome: actor.nome,
+    usuarioEmail: actor.email,
+    entidade: params.entidade,
+    entidadeId: params.entidadeId ?? null,
+    acao: params.acao,
+    dadosAntes: params.dadosAntes ? redactAuditData(params.dadosAntes) : null,
+    dadosDepois: params.dadosDepois ? redactAuditData(params.dadosDepois) : null,
+    origem: 'client',
+    path: typeof window !== 'undefined' ? window.location.pathname : null,
+    criadoEm: serverTimestamp(),
+  })
+}
+
+async function auditSafely(params: Parameters<typeof writeAuditLog>[0]) {
+  try {
+    await writeAuditLog(params)
+  } catch (err) {
+    console.error('[audit] Falha ao registrar log de auditoria', err)
+  }
+}
+
+function withActorMetadata(
+  data: Record<string, unknown>,
+  mode: 'create' | 'update',
+  actor?: { uid: string; nome: string; tenantId?: string } | null
+) {
+  const user = getClientAuth().currentUser
+  if (!user) return data
+  const nome = actor?.nome ?? (_actorCache?.uid === user.uid ? _actorCache.nome : (user.displayName ?? user.email ?? user.uid))
+  const actorFields = mode === 'create'
+    ? { criadoPorId: user.uid, criadoPorNome: nome }
+    : { atualizadoPorId: user.uid, atualizadoPorNome: nome }
+  const tenant = actor?.tenantId && !('tenantId' in data) ? { tenantId: actor.tenantId } : {}
+  return { ...data, ...actorFields, ...tenant }
+}
+
 export async function getDocument<T>(col: string, id: string): Promise<(T & { id: string }) | null> {
+  if (TENANT_SCOPED_COLLECTIONS.has(col)) {
+    // Use listDocuments so the tenantId filter is applied automatically,
+    // matching the same security rules that allow list queries.
+    const results = await listDocuments<T>(col, [where(documentId(), '==', id), limit(1)])
+    return results[0] ?? null
+  }
   const snap = await getDoc(doc(getClientDb(), col, id))
   if (!snap.exists()) return null
   return { id: snap.id, ...(snap.data() as T) }
@@ -21,7 +189,9 @@ export async function listDocuments<T>(
   col: string,
   constraints: QueryConstraint[] = []
 ): Promise<Array<T & { id: string }>> {
-  const q = query(collection(getClientDb(), col), ...constraints)
+  const actor = TENANT_SCOPED_COLLECTIONS.has(col) ? await getAuditActor() : null
+  const tenantConstraint = actor?.tenantId ? [where('tenantId', '==', actor.tenantId)] : []
+  const q = query(collection(getClientDb(), col), ...tenantConstraint, ...constraints)
   const snap = await getDocs(q)
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as T) }))
 }
@@ -31,22 +201,72 @@ function stripUndefined(data: Record<string, unknown>): Record<string, unknown> 
 }
 
 export async function createDocument(col: string, data: Record<string, unknown>) {
+  const actor = await getAuditActor()
+  const payload = withActorMetadata(stripUndefined(data), 'create', actor)
   const ref = await addDoc(
     collection(getClientDb(), col),
-    { ...stripUndefined(data), criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp() }
+    { ...payload, criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp() }
   )
+  await auditSafely({
+    entidade: col,
+    entidadeId: ref.id,
+    acao: 'create',
+    dadosAntes: null,
+    dadosDepois: payload,
+  })
   return ref.id
 }
 
+export async function setDocument(col: string, id: string, data: Record<string, unknown>) {
+  const ref = doc(getClientDb(), col, id)
+  const beforeSnap = AUDITED_COLLECTIONS.has(col) ? await getDoc(ref).catch(() => null) : null
+  if (beforeSnap?.exists()) {
+    throw new Error(`Documento já existe em ${col}/${id}`)
+  }
+  const actor = await getAuditActor()
+  const payload = withActorMetadata(stripUndefined(data), 'create', actor)
+  await setDoc(ref, { ...payload, criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp() })
+  await auditSafely({
+    entidade: col,
+    entidadeId: id,
+    acao: 'create',
+    dadosAntes: null,
+    dadosDepois: payload,
+  })
+  return id
+}
+
 export async function updateDocument(col: string, id: string, data: Record<string, unknown>) {
+  const ref = doc(getClientDb(), col, id)
+  const beforeSnap = AUDITED_COLLECTIONS.has(col) ? await getDoc(ref).catch(() => null) : null
+  const before = beforeSnap?.exists() ? beforeSnap.data() : null
+  const actor = await getAuditActor()
+  const payload = withActorMetadata(stripUndefined(data), 'update', actor)
   await updateDoc(
-    doc(getClientDb(), col, id),
-    { ...stripUndefined(data), atualizadoEm: serverTimestamp() }
+    ref,
+    { ...payload, atualizadoEm: serverTimestamp() }
   )
+  await auditSafely({
+    entidade: col,
+    entidadeId: id,
+    acao: 'update',
+    dadosAntes: before,
+    dadosDepois: { ...(before ?? {}), ...payload },
+  })
 }
 
 export async function deleteDocument(col: string, id: string) {
-  await deleteDoc(doc(getClientDb(), col, id))
+  const ref = doc(getClientDb(), col, id)
+  const beforeSnap = AUDITED_COLLECTIONS.has(col) ? await getDoc(ref).catch(() => null) : null
+  const before = beforeSnap?.exists() ? beforeSnap.data() : null
+  await deleteDoc(ref)
+  await auditSafely({
+    entidade: col,
+    entidadeId: id,
+    acao: 'delete',
+    dadosAntes: before,
+    dadosDepois: null,
+  })
 }
 
 /**
@@ -55,21 +275,36 @@ export async function deleteDocument(col: string, id: string) {
  */
 export async function softDeleteDocument(col: string, id: string) {
   const uid = getClientAuth().currentUser?.uid ?? null
-  await updateDoc(doc(getClientDb(), col, id), {
+  const ref = doc(getClientDb(), col, id)
+  const beforeSnap = AUDITED_COLLECTIONS.has(col) ? await getDoc(ref).catch(() => null) : null
+  const before = beforeSnap?.exists() ? beforeSnap.data() : null
+  const actor = await getAuditActor()
+  const payload = withActorMetadata({
     deletedAt:    serverTimestamp(),
     deletedById:  uid,
     atualizadoEm: serverTimestamp(),
+  }, 'update', actor)
+  await updateDoc(ref, payload)
+  await auditSafely({
+    entidade: col,
+    entidadeId: id,
+    acao: 'soft_delete',
+    dadosAntes: before,
+    dadosDepois: { ...(before ?? {}), deletedById: uid },
   })
 }
 
 // ── Domain queries ────────────────────────────────────────────────────────────
 
 export async function getClientes(opts: { status?: string; limit?: number } = {}) {
-  // Filtra deletados client-side junto com status para evitar índice composto extra
-  const all = await listDocuments<Record<string, unknown>>('clientes', [orderBy('razaoSocial'), limit(opts.limit ?? 500)])
+  // Filtra e ordena client-side para evitar índices compostos extras com tenantId.
+  const all = await listDocuments<Record<string, unknown>>('clientes', [limit(opts.limit ?? 500)])
   const ativos = all.filter((c) => !c.deletedAt) // exclui soft-deleted
-  if (!opts.status) return ativos
-  return ativos.filter((c) => c.status === opts.status)
+  const filtered = opts.status ? ativos.filter((c) => c.status === opts.status) : ativos
+  return filtered.sort((a, b) =>
+    String(a.razaoSocial ?? a.nomeFantasia ?? a.id)
+      .localeCompare(String(b.razaoSocial ?? b.nomeFantasia ?? b.id), 'pt-BR')
+  )
 }
 
 export async function getCliente(id: string) {
@@ -99,7 +334,11 @@ export async function getNextClienteCodigo(): Promise<number> {
 }
 
 export async function getServicos() {
-  return listDocuments('servicos', [orderBy('nome'), limit(500)])
+  const data = await listDocuments('servicos', [limit(500)])
+  return data.sort((a, b) =>
+    String((a as Record<string, unknown>).nome ?? a.id)
+      .localeCompare(String((b as Record<string, unknown>).nome ?? b.id), 'pt-BR')
+  )
 }
 
 export async function getNextServicoCodigo(): Promise<string> {
@@ -116,12 +355,14 @@ export async function getClienteServicos(clienteId: string) {
 }
 
 export async function getCompetencias(opts: { clienteId?: string; limit?: number } = {}) {
-  // where() must come before orderBy() to match deployed composite index (clienteId, ano, mes)
-  const c: QueryConstraint[] = []
-  if (opts.clienteId) c.push(where('clienteId', '==', opts.clienteId))
-  c.push(orderBy('ano', 'desc'), orderBy('mes', 'desc'))
-  c.push(limit(opts.limit ?? 200))
-  return listDocuments('competencias', c)
+  // Filtra e ordena client-side para evitar indices compostos extras com tenantId.
+  const all = await listDocuments<Record<string, unknown>>('competencias', [limit(opts.limit ?? 500)])
+  const filtered = opts.clienteId ? all.filter((c) => c.clienteId === opts.clienteId) : all
+  return filtered.sort((a, b) => {
+    const anoDiff = Number(b.ano ?? 0) - Number(a.ano ?? 0)
+    if (anoDiff !== 0) return anoDiff
+    return Number(b.mes ?? 0) - Number(a.mes ?? 0)
+  })
 }
 
 export async function getLancamentos(opts: { clienteId?: string; status?: string; limit?: number } = {}) {
@@ -135,7 +376,7 @@ export async function getLancamentos(opts: { clienteId?: string; status?: string
 }
 
 export async function getTarefas(opts: { responsavelId?: string; status?: string; limit?: number } = {}) {
-  const c: QueryConstraint[] = [orderBy('dataVencimento', 'asc')]
+  const c: QueryConstraint[] = [orderBy('dataPrazo', 'asc')]
   if (opts.responsavelId) c.push(where('responsavelId', '==', opts.responsavelId))
   if (opts.status)        c.push(where('status', '==', opts.status))
   c.push(limit(opts.limit ?? 200))
@@ -150,6 +391,7 @@ export async function getFechamentos(mes: number, ano: number, regime?: string) 
     where('ano', '==', ano),
   ]
   if (regime) c.push(where('regime', '==', regime))
+  c.push(limit(500))
   const results = await listDocuments<{ clienteCodigo?: number }>('fechamentos', c)
   return results.sort((a, b) => (a.clienteCodigo ?? 0) - (b.clienteCodigo ?? 0))
 }
@@ -227,7 +469,7 @@ export async function getNfseEmitidas(clienteId?: string) {
 
 export type ClienteTimelineEvento = {
   id: string
-  tipo: 'tarefa' | 'lancamento' | 'competencia' | 'nfse' | 'fiscal' | 'manual'
+  tipo: 'tarefa' | 'lancamento' | 'competencia' | 'fechamento' | 'nfse' | 'fiscal' | 'manual'
   titulo: string
   descricao?: string
   data: Timestamp

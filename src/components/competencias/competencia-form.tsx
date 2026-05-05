@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, Controller, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { FirebaseError } from 'firebase/app'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -18,15 +19,17 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MESES } from '@/lib/utils'
+import { formatServiceLabel, looksLikeOpaqueId } from '@/lib/service-label'
 import { Loader2 } from 'lucide-react'
 import {
   getClientes,
   getUsuarios,
   getClienteServicos,
   getServicos,
-  createDocument,
+  setDocument,
   updateDocument,
 } from '@/lib/firestore-client'
+import { SELECT_NONE_VALUE } from '@/lib/select-values'
 
 const competenciaSchema = z.object({
   clienteId:        z.string().min(1, 'Selecione o cliente'),
@@ -41,7 +44,7 @@ const competenciaSchema = z.object({
 type CompetenciaFormData = z.input<typeof competenciaSchema>
 
 interface ClienteItem { id: string; razaoSocial: string }
-interface ServicoItem { id: string; servico: { nome: string } }
+interface ServicoItem { id: string; servicoId?: string; servicoNome: string; servicoCodigo?: string | null }
 interface UsuarioItem { id: string; nome: string }
 
 interface CompetenciaFormProps {
@@ -65,7 +68,6 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
   const {
     register,
     handleSubmit,
-    watch,
     control,
     setValue,
     formState: { errors, isSubmitting },
@@ -79,11 +81,11 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
     },
   })
 
-  const clienteId = watch('clienteId')
+  const clienteId = useWatch({ control, name: 'clienteId' })
 
   useEffect(() => {
     Promise.allSettled([
-      getClientes({ status: 'ativo' }),
+      getClientes(),
       getUsuarios(),
     ]).then(([rc, ru]) => {
       if (rc.status === 'fulfilled') setClientes(rc.value as unknown as ClienteItem[])
@@ -95,7 +97,6 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
   useEffect(() => {
     if (!clienteId) {
       setServicos([])
-      setValue('clienteServicoId', '')
       return
     }
     setLoadingServicos(true)
@@ -104,13 +105,27 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
       getServicos(),
     ]).then(([rcs, rs]) => {
       if (rcs.status === 'fulfilled' && rs.status === 'fulfilled') {
-        const allServicos = rs.value as Array<{ id: string; nome: string }>
-        const joined: ServicoItem[] = (rcs.value as Array<Record<string, unknown>>).map((cs) => ({
-          id: cs.id as string,
-          servico: {
-            nome: allServicos.find((s) => s.id === (cs.servicoId as string))?.nome ?? 'Serviço',
-          },
-        }))
+        const allServicos = rs.value as Array<{ id: string; nome?: string; codigo?: string | null }>
+        const joined: ServicoItem[] = (rcs.value as Array<Record<string, unknown>>)
+          .filter((cs) => (cs.status as string | undefined) !== 'inativo')
+          .map((cs) => {
+            const catalog = allServicos.find((s) => s.id === (cs.servicoId as string))
+            const savedName = cs.servicoNome as string | undefined
+            const servicoNome = savedName && !looksLikeOpaqueId(savedName) && savedName !== cs.servicoId
+              ? savedName
+              : catalog?.nome
+            return {
+              id: cs.id as string,
+              servicoId: cs.servicoId as string | undefined,
+              servicoNome: formatServiceLabel({
+                id: catalog?.id,
+                servicoId: cs.servicoId as string | undefined,
+                nome: servicoNome,
+                codigo: (cs.servicoCodigo as string | undefined) ?? catalog?.codigo,
+              }),
+              servicoCodigo: (cs.servicoCodigo as string | undefined) ?? catalog?.codigo ?? null,
+            }
+          })
         setServicos(joined)
       }
       setValue('clienteServicoId', '')
@@ -119,20 +134,37 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
   }, [clienteId, setValue])
 
   async function onSubmit(data: CompetenciaFormData) {
+    const cliente = clientes.find((c) => c.id === data.clienteId)
+    const servico = servicos.find((s) => s.id === data.clienteServicoId)
+    const responsavel = data.responsavelId ? usuarios.find((u) => u.id === data.responsavelId) : null
+    const payload = {
+      ...data,
+      clienteNome: cliente?.razaoSocial ?? null,
+      servicoNome: servico?.servicoNome ?? null,
+      responsavelId: data.responsavelId || null,
+      responsavelNome: responsavel?.nome ?? null,
+    }
+
     try {
       if (isEditing) {
-        await updateDocument('competencias', initialData!.id!, data)
+        await updateDocument('competencias', initialData!.id!, payload)
         toast.success('Competência atualizada!')
         if (onSuccess) onSuccess(initialData!.id!)
         else router.push(`/competencias/${initialData!.id}`)
       } else {
-        const id = await createDocument('competencias', data)
+        const docId = `${data.clienteId}_${data.clienteServicoId}_${data.ano}_${String(data.mes).padStart(2, '0')}`
+        const id = await setDocument('competencias', docId, payload)
         toast.success('Competência criada!')
         if (onSuccess) onSuccess(id)
         else router.push(`/competencias/${id}`)
       }
-    } catch {
-      toast.error('Erro ao salvar. Tente novamente.')
+    } catch (err) {
+      const message = err instanceof FirebaseError && err.code === 'permission-denied'
+        ? 'Sem permissão para salvar competência.'
+        : err instanceof Error && err.message.includes('Documento já existe')
+          ? 'Competência já existe para este cliente, serviço e mês.'
+          : 'Erro ao salvar competência. Verifique cliente, serviço e tente novamente.'
+      toast.error(message)
     }
   }
 
@@ -169,29 +201,31 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
             <Controller
               name="clienteServicoId"
               control={control}
-              render={({ field }) => (
-                <Select
-                  value={field.value ?? ''}
-                  onValueChange={field.onChange}
-                  disabled={!clienteId || loadingServicos}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue
-                      placeholder={
-                        !clienteId ? 'Selecione um cliente primeiro'
-                        : loadingServicos ? 'Carregando...'
-                        : servicos.length === 0 ? 'Nenhum serviço vinculado'
-                        : 'Selecione o serviço'
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {servicos.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>{s.servico.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+              render={({ field }) => {
+                const selected = servicos.find((s) => s.id === field.value)
+                const placeholder = !clienteId ? 'Selecione um cliente primeiro'
+                  : loadingServicos ? 'Carregando...'
+                  : servicos.length === 0 ? 'Nenhum serviço vinculado'
+                  : 'Selecione o serviço'
+                return (
+                  <Select
+                    value={field.value ?? ''}
+                    onValueChange={field.onChange}
+                    disabled={!clienteId || loadingServicos}
+                  >
+                    <SelectTrigger className="w-full">
+                      <span className={selected ? 'truncate text-left' : 'truncate text-left text-muted-foreground'}>
+                        {selected ? formatServiceLabel(selected) : placeholder}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {servicos.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>{formatServiceLabel(s)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )
+              }}
             />
             {errors.clienteServicoId && <p className="text-xs text-destructive">{errors.clienteServicoId.message}</p>}
           </div>
@@ -259,10 +293,10 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
               name="responsavelId"
               control={control}
               render={({ field }) => (
-                <Select value={field.value ?? ''} onValueChange={(v) => field.onChange(v || undefined)}>
+                <Select value={field.value ?? SELECT_NONE_VALUE} onValueChange={(v) => field.onChange(v === SELECT_NONE_VALUE ? undefined : v)}>
                   <SelectTrigger className="w-full"><SelectValue placeholder="Selecione o responsável" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhum</SelectItem>
+                    <SelectItem value={SELECT_NONE_VALUE}>Nenhum</SelectItem>
                     {usuarios.map((u) => (
                       <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
                     ))}
