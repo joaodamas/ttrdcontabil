@@ -5,10 +5,10 @@ import { where, orderBy, limit } from 'firebase/firestore'
 import Link from 'next/link'
 
 import { getDocument, listDocuments } from '@/lib/firestore-client'
-import { formatCpfCnpj, formatDate, formatCurrency, formatMesAno, tsToDate } from '@/lib/utils'
+import { cn, formatCpfCnpj, formatDate, formatCurrency, formatMesAno, tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { ClienteStatusBadge, CompetenciaStatusBadge, PagamentoStatusBadge, NfseStatusBadge, AmbienteBadge } from '@/components/ui/status-badge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
@@ -22,7 +22,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import {
   Loader2, Mail, MapPin, Phone, DollarSign, Pencil,
   ShieldCheck, ShieldAlert, ShieldOff, ExternalLink,
-  Briefcase, CalendarDays, Receipt, Settings,
+  Briefcase, CalendarDays, Receipt, Settings, AlertTriangle,
 } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
@@ -51,10 +51,18 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
   const [nfses,       setNfses]       = useState<Array<Record<string, unknown>>>([])
   const [fiscal,      setFiscal]      = useState<Record<string, unknown> | null>(null)
   const [configOpen,  setConfigOpen]  = useState(false)
+  const [loadError,   setLoadError]   = useState<string | null>(null)
 
   const load = useCallback(() => {
     if (!clienteId) return
     setLoading(true)
+    setLoadError(null)
+    setCliente(null)
+    setServicos([])
+    setCompetencias([])
+    setLancamentos([])
+    setNfses([])
+    setFiscal(null)
 
     Promise.allSettled([
       getDocument('clientes', clienteId),
@@ -64,7 +72,12 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
       listDocuments('nfse_emitidas', [where('clienteId', '==', clienteId), orderBy('criadoEm', 'desc'), limit(20)]),
       listDocuments('clientes_fiscal', [where('clienteId', '==', clienteId), limit(1)]),
     ]).then(([clienteR, servicosR, competenciasR, lancamentosR, nfseEmitR, fiscalR]) => {
-      if (clienteR.status === 'fulfilled') setCliente(clienteR.value as Record<string, unknown>)
+      if (clienteR.status === 'fulfilled' && clienteR.value) {
+        setCliente(clienteR.value as Record<string, unknown>)
+      } else {
+        setCliente(null)
+        setLoadError('Cliente não encontrado ou sem permissão de acesso.')
+      }
       if (servicosR.status === 'fulfilled') setServicos(servicosR.value as Array<Record<string, unknown>>)
       if (competenciasR.status === 'fulfilled') setCompetencias(competenciasR.value as Array<Record<string, unknown>>)
       if (lancamentosR.status === 'fulfilled') setLancamentos(lancamentosR.value as Array<Record<string, unknown>>)
@@ -111,14 +124,20 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
               ) : null}
             </div>
             <div className="flex items-center gap-2 shrink-0 mt-0.5">
-              <Link href={`/clientes/${clienteId}`} tabIndex={-1}>
-                <Button size="sm" variant="ghost" className="gap-1.5 text-muted-foreground">
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Ver completo</span>
-                </Button>
+              <Link
+                href={`/clientes/${clienteId}`}
+                onClick={() => onOpenChange(false)}
+                className={cn(buttonVariants({ size: 'sm', variant: 'ghost' }), 'gap-1.5 text-muted-foreground')}
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Ver completo</span>
               </Link>
-              <Link href={`/clientes/${clienteId}/editar`} tabIndex={-1}>
-                <Button size="sm" variant="outline">Editar</Button>
+              <Link
+                href={`/clientes/${clienteId}/editar`}
+                onClick={() => onOpenChange(false)}
+                className={buttonVariants({ size: 'sm', variant: 'outline' })}
+              >
+                Editar
               </Link>
             </div>
           </div>
@@ -144,8 +163,19 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
               </div>
             </div>
           ) : !cliente ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-5 h-5 animate-spin" />
+            <div className="flex flex-col items-center justify-center gap-3 px-5 py-16 text-center">
+              <AlertTriangle className="h-6 w-6 text-warning" />
+              <div>
+                <p className="text-sm font-medium">Cliente indisponível</p>
+                <p className="mt-1 text-xs text-muted-foreground">{loadError ?? 'Não foi possível carregar este cliente.'}</p>
+              </div>
+              <Link
+                href="/clientes"
+                onClick={() => onOpenChange(false)}
+                className={buttonVariants({ size: 'sm', variant: 'outline' })}
+              >
+                Voltar para clientes
+              </Link>
             </div>
           ) : (
             <div>

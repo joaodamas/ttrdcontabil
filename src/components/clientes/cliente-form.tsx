@@ -34,16 +34,110 @@ const clienteSchema = z.object({
   bairro: z.string().optional(),
   cidade: z.string().optional(),
   uf: z.string().optional(),
+  inscricaoEstadual: z.string().optional(),
+  inscricaoMunicipal: z.string().optional(),
+  nire: z.string().optional(),
+  capitalSocial: z.string().optional(),
+  porteEmpresa: z.string().optional(),
+  cadastroImovelIptu: z.string().optional(),
+  cnaePrincipal: z.string().optional(),
+  cnaeSecundario: z.string().optional(),
+  codSimplesNacional: z.string().optional(),
+  loginPrefeitura: z.string().optional(),
+  senhaWebPrefeitura: z.string().optional(),
+  senhaPinCertificadoDigitalECnpj: z.string().optional(),
+  senhaPostoFiscal: z.string().optional(),
+  loginPostoFiscal: z.string().optional(),
+  mensalidade: z.string().optional(),
+  vencimento: z.string().optional(),
   regimeTributario: z.enum(['simples_nacional', 'lucro_presumido', 'lucro_real', 'mei', 'isento']).optional().nullable(),
   responsavelNome: z.string().optional(),
   responsavelEmail: z.string().optional(),
   responsavelTelefone: z.string().optional(),
+  responsavelEndereco: z.string().optional(),
+  responsavelBairro: z.string().optional(),
+  responsavelCidade: z.string().optional(),
+  responsavelNumero: z.string().optional(),
+  responsavelUf: z.string().optional(),
+  responsavelCep: z.string().optional(),
+  responsavelComplemento: z.string().optional(),
+  responsavelCelular: z.string().optional(),
+  responsavelCpf: z.string().optional(),
+  responsavelCnh: z.string().optional(),
+  responsavelDataEmissao: z.string().optional(),
+  responsavelRg: z.string().optional(),
+  responsavelDataNascimento: z.string().optional(),
+  responsavelOrgaoEmissor: z.string().optional(),
+  responsavelLocalNascimento: z.string().optional(),
+  responsavelNomePai: z.string().optional(),
+  responsavelNomeMae: z.string().optional(),
+  responsavelPis: z.string().optional(),
+  responsavelEstadoCivil: z.string().optional(),
+  responsavelComunhaoBens: z.string().optional(),
+  responsavelEscolaridade: z.string().optional(),
+  responsavelFormacaoSuperior: z.string().optional(),
+  responsavelTituloEleitor: z.string().optional(),
+  responsavelSenhaMeuGov: z.string().optional(),
+  responsavelSenhaEcacPf: z.string().optional(),
+  responsavelSenhaWebPrefeitura: z.string().optional(),
+  responsavelSenhaPinCertificadoDigitalCpf: z.string().optional(),
   observacoes: z.string().optional(),
   status: z.enum(['ativo', 'inativo', 'suspenso']).default('ativo'),
-  diaEmissaoNFSe: z.coerce.number().int().min(1).max(31).optional().nullable(),
+  diaEmissaoNFSe: z.preprocess(
+    (value) => value === '' || value == null ? null : value,
+    z.coerce.number().int().min(1).max(31).optional().nullable()
+  ),
 })
 
 type ClienteFormData = z.input<typeof clienteSchema>
+type FieldName = keyof ClienteFormData
+
+const EMPRESA_CADASTRAL_FIELDS: Array<{ name: FieldName; label: string; className?: string }> = [
+  { name: 'inscricaoEstadual', label: 'Inscrição Estadual' },
+  { name: 'inscricaoMunicipal', label: 'Inscrição Municipal' },
+  { name: 'nire', label: 'NIRE' },
+  { name: 'capitalSocial', label: 'Capital social' },
+  { name: 'porteEmpresa', label: 'Porte da empresa' },
+  { name: 'cadastroImovelIptu', label: 'Cadastro do imóvel (IPTU)' },
+  { name: 'cnaePrincipal', label: 'CNAE principal', className: 'md:col-span-2' },
+  { name: 'cnaeSecundario', label: 'CNAE secundário', className: 'md:col-span-2' },
+  { name: 'codSimplesNacional', label: 'Código do Simples Nacional' },
+  { name: 'mensalidade', label: 'Mensalidade' },
+  { name: 'vencimento', label: 'Vencimento' },
+]
+
+const EMPRESA_CREDENCIAIS_FIELDS: Array<{ name: FieldName; label: string; type?: string }> = [
+  { name: 'loginPrefeitura', label: 'Login Prefeitura' },
+  { name: 'senhaWebPrefeitura', label: 'Senha WEB Prefeitura', type: 'password' },
+  { name: 'senhaPinCertificadoDigitalECnpj', label: 'Senha PIN do Certificado Digital e-CNPJ', type: 'password' },
+  { name: 'loginPostoFiscal', label: 'Login do posto fiscal' },
+  { name: 'senhaPostoFiscal', label: 'Senha posto fiscal', type: 'password' },
+]
+
+const REPRESENTANTE_DOCUMENTO_FIELDS: Array<{ name: FieldName; label: string; type?: string }> = [
+  { name: 'responsavelCpf', label: 'CPF' },
+  { name: 'responsavelCnh', label: 'CNH' },
+  { name: 'responsavelDataEmissao', label: 'Data de emissão', type: 'date' },
+  { name: 'responsavelRg', label: 'RG' },
+  { name: 'responsavelDataNascimento', label: 'Data de nascimento', type: 'date' },
+  { name: 'responsavelOrgaoEmissor', label: 'Órgão emissor' },
+  { name: 'responsavelLocalNascimento', label: 'Local de nascimento' },
+  { name: 'responsavelNomePai', label: 'Nome do pai' },
+  { name: 'responsavelNomeMae', label: 'Nome da mãe' },
+  { name: 'responsavelPis', label: 'PIS' },
+  { name: 'responsavelEstadoCivil', label: 'Estado civil' },
+  { name: 'responsavelComunhaoBens', label: 'Comunhão de bens' },
+  { name: 'responsavelEscolaridade', label: 'Escolaridade' },
+  { name: 'responsavelFormacaoSuperior', label: 'Formação superior' },
+  { name: 'responsavelTituloEleitor', label: 'Título de eleitor' },
+]
+
+const REPRESENTANTE_CREDENCIAIS_FIELDS: Array<{ name: FieldName; label: string }> = [
+  { name: 'responsavelSenhaMeuGov', label: 'Senha MEU GOV' },
+  { name: 'responsavelSenhaEcacPf', label: 'Senha e-CAC PF' },
+  { name: 'responsavelSenhaWebPrefeitura', label: 'Senha WEB Prefeitura' },
+  { name: 'responsavelSenhaPinCertificadoDigitalCpf', label: 'Senha PIN do Certificado Digital CPF' },
+]
 
 interface ClienteFormProps {
   initialData?: Partial<ClienteFormData> & { id?: string }
@@ -389,25 +483,145 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
         </CardContent>
       </Card>
 
+      {/* Dados cadastrais da empresa */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Dados Cadastrais da Empresa</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {EMPRESA_CADASTRAL_FIELDS.map((field) => (
+            <div key={field.name} className={`space-y-2 ${field.className ?? ''}`}>
+              <Label htmlFor={field.name}>{field.label}</Label>
+              <Input id={field.name} {...register(field.name)} />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Credenciais da empresa */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Credenciais da Empresa</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {EMPRESA_CREDENCIAIS_FIELDS.map((field) => (
+            <div key={field.name} className="space-y-2">
+              <Label htmlFor={field.name}>{field.label}</Label>
+              <Input id={field.name} type={field.type ?? 'text'} {...register(field.name)} />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
       {/* Responsável */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Responsável / Contato</CardTitle>
+          <CardTitle className="text-base">Dados do Representante</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="responsavelNome">Nome do responsável</Label>
+              <Label htmlFor="responsavelNome">Nome do representante legal</Label>
               <Input id="responsavelNome" {...register('responsavelNome')} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="responsavelTelefone">Telefone do responsável</Label>
-              <Input id="responsavelTelefone" {...register('responsavelTelefone')} />
+              <Label htmlFor="responsavelEmail">E-mail</Label>
+              <Input id="responsavelEmail" type="email" {...register('responsavelEmail')} />
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="responsavelEmail">E-mail do responsável</Label>
-            <Input id="responsavelEmail" type="email" {...register('responsavelEmail')} className="max-w-80" />
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="responsavelTelefone">Telefone (DDD)</Label>
+              <Input id="responsavelTelefone" {...register('responsavelTelefone')} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="responsavelCelular">Telefone celular</Label>
+              <Input
+                id="responsavelCelular"
+                {...register('responsavelCelular')}
+                onChange={(e) => {
+                  e.target.value = formatPhone(e.target.value)
+                  setValue('responsavelCelular', e.target.value)
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="col-span-2 space-y-2">
+              <Label htmlFor="responsavelEndereco">Endereço</Label>
+              <Input id="responsavelEndereco" {...register('responsavelEndereco')} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="responsavelNumero">Número</Label>
+              <Input id="responsavelNumero" {...register('responsavelNumero')} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="responsavelComplemento">Complemento</Label>
+              <Input id="responsavelComplemento" {...register('responsavelComplemento')} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="responsavelBairro">Bairro</Label>
+              <Input id="responsavelBairro" {...register('responsavelBairro')} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="responsavelCep">CEP</Label>
+              <Input
+                id="responsavelCep"
+                {...register('responsavelCep')}
+                maxLength={9}
+                onChange={(e) => {
+                  const formatted = formatCep(e.target.value)
+                  e.target.value = formatted
+                  setValue('responsavelCep', formatted)
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="responsavelCidade">Cidade</Label>
+              <Input id="responsavelCidade" {...register('responsavelCidade')} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="responsavelUf">UF</Label>
+              <Select
+                defaultValue={initialData?.responsavelUf ?? ''}
+                onValueChange={(v) => setValue('responsavelUf', v ?? undefined)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="UF" />
+                </SelectTrigger>
+                <SelectContent>
+                  {UFS.map((uf) => (
+                    <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {REPRESENTANTE_DOCUMENTO_FIELDS.map((field) => (
+              <div key={field.name} className="space-y-2">
+                <Label htmlFor={field.name}>{field.label}</Label>
+                <Input id={field.name} type={field.type ?? 'text'} {...register(field.name)} />
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {REPRESENTANTE_CREDENCIAIS_FIELDS.map((field) => (
+              <div key={field.name} className="space-y-2">
+                <Label htmlFor={field.name}>{field.label}</Label>
+                <Input id={field.name} type="password" {...register(field.name)} />
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>

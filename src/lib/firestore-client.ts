@@ -119,7 +119,7 @@ function redactAuditData(value: unknown): unknown {
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
       key,
-      SENSITIVE_KEYS.has(key) ? '[REDACTED]' : redactAuditData(nested),
+      SENSITIVE_KEYS.has(key) || key.toLowerCase().includes('senha') ? '[REDACTED]' : redactAuditData(nested),
     ])
   )
 }

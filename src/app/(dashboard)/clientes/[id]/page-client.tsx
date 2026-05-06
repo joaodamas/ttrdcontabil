@@ -5,11 +5,12 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { where, orderBy, limit } from 'firebase/firestore'
 import { Timestamp } from 'firebase/firestore'
+import { toast } from 'sonner'
 
 import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { formatCpfCnpj, formatDate, formatCurrency, formatMesAno, tsToDate, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -17,7 +18,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Timeline, type TimelineEvent } from '@/components/clientes/timeline'
 import {
   ArrowLeft, Mail, MapPin, Pencil, ShieldCheck, ShieldAlert, ShieldOff,
-  AlertTriangle, Plus, Receipt, Wallet, AlertCircle, Bell,
+  AlertTriangle, Plus, Receipt, Wallet, AlertCircle, Bell, FileDown,
 } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
@@ -44,6 +45,285 @@ const REGIME_MAP: Record<string, string> = {
   lucro_real:       'Lucro Real',
   mei:              'MEI',
   isento:           'Isento / Imune',
+}
+
+const EMPRESA_GERAL_FIELDS = [
+  ['razaoSocial', 'Razão Social'],
+  ['nomeFantasia', 'Nome Fantasia'],
+  ['cpfCnpj', 'CNPJ / CPF'],
+  ['email', 'E-mail'],
+  ['telefone', 'Telefone'],
+  ['celular', 'Celular'],
+  ['regimeTributario', 'Regime Tributário'],
+  ['status', 'Status'],
+] as const
+
+const EMPRESA_ENDERECO_FIELDS = [
+  ['logradouro', 'Endereço'],
+  ['numero', 'Número'],
+  ['complemento', 'Complemento'],
+  ['bairro', 'Bairro'],
+  ['cidade', 'Cidade'],
+  ['uf', 'Estado'],
+  ['cep', 'CEP'],
+] as const
+
+const EMPRESA_CADASTRO_FIELDS = [
+  ['inscricaoEstadual', 'Inscrição Estadual'],
+  ['inscricaoMunicipal', 'Inscrição Municipal'],
+  ['nire', 'NIRE'],
+  ['capitalSocial', 'Capital social'],
+  ['porteEmpresa', 'Porte'],
+  ['cadastroImovelIptu', 'Cadastro IPTU'],
+  ['cnaePrincipal', 'CNAE principal'],
+  ['cnaeSecundario', 'CNAE secundário'],
+  ['codSimplesNacional', 'Cód. Simples Nacional'],
+  ['mensalidade', 'Mensalidade'],
+  ['vencimento', 'Vencimento'],
+] as const
+
+const EMPRESA_CREDENCIAIS_FIELDS = [
+  ['loginPrefeitura', 'Login Prefeitura'],
+  ['senhaWebPrefeitura', 'Senha WEB Prefeitura'],
+  ['senhaPinCertificadoDigitalECnpj', 'Senha PIN e-CNPJ'],
+  ['loginPostoFiscal', 'Login posto fiscal'],
+  ['senhaPostoFiscal', 'Senha posto fiscal'],
+] as const
+
+const REPRESENTANTE_FIELDS = [
+  ['responsavelNome', 'Nome'],
+  ['responsavelEmail', 'E-mail'],
+  ['responsavelTelefone', 'Telefone'],
+  ['responsavelCelular', 'Celular'],
+  ['responsavelCpf', 'CPF'],
+  ['responsavelCnh', 'CNH'],
+  ['responsavelDataEmissao', 'Data de emissão'],
+  ['responsavelRg', 'RG'],
+  ['responsavelDataNascimento', 'Data de nascimento'],
+  ['responsavelOrgaoEmissor', 'Órgão emissor'],
+  ['responsavelLocalNascimento', 'Local de nascimento'],
+  ['responsavelNomePai', 'Nome do pai'],
+  ['responsavelNomeMae', 'Nome da mãe'],
+  ['responsavelPis', 'PIS'],
+  ['responsavelEstadoCivil', 'Estado civil'],
+  ['responsavelComunhaoBens', 'Comunhão de bens'],
+  ['responsavelEscolaridade', 'Escolaridade'],
+  ['responsavelFormacaoSuperior', 'Formação superior'],
+  ['responsavelTituloEleitor', 'Título de eleitor'],
+] as const
+
+const REPRESENTANTE_ENDERECO_FIELDS = [
+  ['responsavelEndereco', 'Endereço'],
+  ['responsavelNumero', 'Número'],
+  ['responsavelComplemento', 'Complemento'],
+  ['responsavelBairro', 'Bairro'],
+  ['responsavelCep', 'CEP'],
+] as const
+
+const REPRESENTANTE_CREDENCIAIS_FIELDS = [
+  ['responsavelSenhaMeuGov', 'Senha MEU GOV'],
+  ['responsavelSenhaEcacPf', 'Senha e-CAC PF'],
+  ['responsavelSenhaWebPrefeitura', 'Senha WEB Prefeitura'],
+  ['responsavelSenhaPinCertificadoDigitalCpf', 'Senha PIN CPF'],
+] as const
+
+function fieldValue(data: Record<string, unknown>, key: string) {
+  const value = data[key]
+  return typeof value === 'string' && value.trim() ? value : '—'
+}
+
+function passwordValue(data: Record<string, unknown>, key: string) {
+  const value = data[key]
+  return typeof value === 'string' && value.trim() ? '********' : '—'
+}
+
+function printableValue(data: Record<string, unknown>, key: string) {
+  const value = data[key]
+  if (value == null || value === '') return '—'
+  if (key === 'cpfCnpj' || key === 'responsavelCpf') return formatCpfCnpj(String(value))
+  if (key === 'regimeTributario') return REGIME_LABELS[String(value)] ?? String(value)
+  if (key === 'status') return STATUS_LABELS[String(value)]?.label ?? String(value)
+  return String(value)
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
+}
+
+function fichaRows(data: Record<string, unknown>, fields: readonly (readonly [string, string])[]) {
+  return fields.map(([key, label]) => `
+    <tr>
+      <th>${escapeHtml(label)}</th>
+      <td>${escapeHtml(printableValue(data, key))}</td>
+    </tr>
+  `).join('')
+}
+
+function fichaSection(title: string, rows: string) {
+  return `
+    <section>
+      <h2>${escapeHtml(title)}</h2>
+      <table>
+        <tbody>${rows}</tbody>
+      </table>
+    </section>
+  `
+}
+
+function exportFichaCadastralPdf(cliente: Record<string, unknown>) {
+  const nome = printableValue(cliente, 'razaoSocial')
+  const now = new Date()
+  const printWindow = window.open('', '_blank', 'width=960,height=1200')
+
+  if (!printWindow) {
+    toast.error('Não foi possível abrir a janela de impressão. Verifique o bloqueador de pop-ups.')
+    return
+  }
+
+  printWindow.opener = null
+  printWindow.document.write(`
+    <!doctype html>
+    <html lang="pt-BR">
+      <head>
+        <meta charset="utf-8" />
+        <title>Ficha cadastral - ${escapeHtml(nome)}</title>
+        <style>
+          @page { size: A4; margin: 12mm; }
+          * { box-sizing: border-box; }
+          body {
+            margin: 0;
+            color: #111827;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
+            line-height: 1.35;
+          }
+          header {
+            display: flex;
+            justify-content: space-between;
+            gap: 24px;
+            border-bottom: 2px solid #111827;
+            padding-bottom: 10px;
+            margin-bottom: 12px;
+          }
+          h1 {
+            margin: 0;
+            font-size: 18px;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+          }
+          .meta {
+            text-align: right;
+            color: #4b5563;
+            white-space: nowrap;
+          }
+          .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+          }
+          section {
+            break-inside: avoid;
+            border: 1px solid #d1d5db;
+            margin-bottom: 10px;
+          }
+          h2 {
+            margin: 0;
+            padding: 6px 8px;
+            background: #f3f4f6;
+            border-bottom: 1px solid #d1d5db;
+            font-size: 12px;
+            text-transform: uppercase;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          th, td {
+            padding: 5px 8px;
+            vertical-align: top;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          tr:last-child th, tr:last-child td { border-bottom: 0; }
+          th {
+            width: 42%;
+            text-align: left;
+            font-weight: 700;
+            color: #111827;
+          }
+          td {
+            color: #1f2937;
+            word-break: break-word;
+          }
+          .full { grid-column: 1 / -1; }
+          .notice {
+            margin-top: 4px;
+            color: #6b7280;
+            font-size: 10px;
+          }
+          @media print {
+            body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>
+        <header>
+          <div>
+            <h1>Ficha cadastral</h1>
+            <div>${escapeHtml(nome)}</div>
+          </div>
+          <div class="meta">
+            <div>Emitido em ${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+            <div>Documento interno</div>
+          </div>
+        </header>
+        <main class="grid">
+          ${fichaSection('Dados da empresa', fichaRows(cliente, EMPRESA_GERAL_FIELDS))}
+          ${fichaSection('Endereço da empresa', fichaRows(cliente, EMPRESA_ENDERECO_FIELDS))}
+          <div class="full">
+            ${fichaSection('Dados cadastrais e fiscais', fichaRows(cliente, EMPRESA_CADASTRO_FIELDS))}
+          </div>
+          ${fichaSection('Credenciais da empresa', fichaRows(cliente, EMPRESA_CREDENCIAIS_FIELDS))}
+          ${fichaSection('Dados do representante', fichaRows(cliente, REPRESENTANTE_FIELDS))}
+          ${fichaSection('Endereço do representante', fichaRows(cliente, REPRESENTANTE_ENDERECO_FIELDS) + `
+            <tr><th>Cidade / UF</th><td>${escapeHtml([cliente.responsavelCidade, cliente.responsavelUf].filter(Boolean).join(' / ') || '—')}</td></tr>
+          `)}
+          <div class="full">
+            ${fichaSection('Credenciais do representante', fichaRows(cliente, REPRESENTANTE_CREDENCIAIS_FIELDS))}
+            <p class="notice">As credenciais são incluídas porque fazem parte da ficha cadastral exportada. Trate este PDF como documento confidencial.</p>
+          </div>
+        </main>
+        <script>
+          window.addEventListener('load', () => {
+            window.focus();
+            setTimeout(() => window.print(), 200);
+          });
+        </script>
+      </body>
+    </html>
+  `)
+  printWindow.document.close()
+}
+
+function DataList({ data, fields, sensitive = false }: {
+  data: Record<string, unknown>
+  fields: readonly (readonly [string, string])[]
+  sensitive?: boolean
+}) {
+  return (
+    <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+      {fields.map(([key, label]) => (
+        <div key={key} className="min-w-0">
+          <dt className="text-xs text-muted-foreground">{label}</dt>
+          <dd className="mt-0.5 truncate font-medium">{sensitive ? passwordValue(data, key) : fieldValue(data, key)}</dd>
+        </div>
+      ))}
+    </dl>
+  )
 }
 
 export default function ClienteDetailPage() {
@@ -222,8 +502,8 @@ export default function ClienteDetailPage() {
             {((cliente.cidade as string | undefined) || (cliente.uf as string | undefined)) && <span className="flex items-center gap-1 text-xs text-muted-foreground"><MapPin className="h-3 w-3" />{[cliente.cidade, cliente.uf].filter(Boolean).join(' / ')}</span>}
           </div>
         </div>
-        <Link href={`/clientes/${id}/editar`}>
-          <Button size="sm" variant="outline">Editar</Button>
+        <Link href={`/clientes/${id}/editar`} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+          Editar
         </Link>
       </div>
 
@@ -233,13 +513,13 @@ export default function ClienteDetailPage() {
         {/* ── Left: Tabs ──────────────────────────────────── */}
         <Tabs defaultValue="atividade">
           <TabsList className="w-full justify-start border-b rounded-none bg-transparent h-auto p-0 mb-4 gap-1">
-            {(['atividade','competencias','servicos'] as const).map(tab => (
+            {(['atividade','cadastro','competencias','servicos'] as const).map(tab => (
               <TabsTrigger
                 key={tab}
                 value={tab}
                 className="rounded-md px-3 py-1.5 text-sm data-[state=active]:bg-muted data-[state=active]:font-semibold"
               >
-                {tab === 'atividade' ? 'Atividade' : tab === 'competencias' ? 'Competências' : 'Serviços'}
+                {tab === 'atividade' ? 'Atividade' : tab === 'cadastro' ? 'Cadastro' : tab === 'competencias' ? 'Competências' : 'Serviços'}
               </TabsTrigger>
             ))}
             {podeAcessarFiscal && (
@@ -254,14 +534,54 @@ export default function ClienteDetailPage() {
             <Timeline events={timelineEvents} />
           </TabsContent>
 
+          {/* Cadastro */}
+          <TabsContent value="cadastro" className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
+                <CardTitle className="text-sm">Dados cadastrais da empresa</CardTitle>
+                <Button size="sm" variant="outline" onClick={() => exportFichaCadastralPdf(cliente)}>
+                  <FileDown className="h-3.5 w-3.5" />
+                  Exportar PDF
+                </Button>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-5">
+                <DataList data={cliente} fields={EMPRESA_CADASTRO_FIELDS} />
+                <div>
+                  <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Credenciais da empresa</h3>
+                  <DataList data={cliente} fields={EMPRESA_CREDENCIAIS_FIELDS} sensitive />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="py-3 px-4">
+                <CardTitle className="text-sm">Dados do representante</CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-5">
+                <DataList data={cliente} fields={REPRESENTANTE_FIELDS} />
+                <DataList data={cliente} fields={REPRESENTANTE_ENDERECO_FIELDS} />
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="min-w-0">
+                    <dt className="text-xs text-muted-foreground">Cidade / UF</dt>
+                    <dd className="mt-0.5 truncate font-medium">{[cliente.responsavelCidade, cliente.responsavelUf].filter(Boolean).join(' / ') || '—'}</dd>
+                  </div>
+                </dl>
+                <div>
+                  <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Credenciais do representante</h3>
+                  <DataList data={cliente} fields={REPRESENTANTE_CREDENCIAIS_FIELDS} sensitive />
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* Competências */}
           <TabsContent value="competencias">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
                 <CardTitle className="text-sm">Competências</CardTitle>
                 <div className="flex gap-2">
-                  <Link href={`/competencias?clienteId=${id}`}><Button size="xs" variant="ghost">Ver todas</Button></Link>
-                  <Link href={`/competencias/nova?clienteId=${id}`}><Button size="xs"><Plus className="h-3 w-3" />Nova</Button></Link>
+                  <Link href={`/competencias?clienteId=${id}`} className={buttonVariants({ size: 'xs', variant: 'ghost' })}>Ver todas</Link>
+                  <Link href={`/competencias/nova?clienteId=${id}`} className={buttonVariants({ size: 'xs' })}><Plus className="h-3 w-3" />Nova</Link>
                 </div>
               </CardHeader>
               <CardContent className="px-4 pb-4">
@@ -291,7 +611,7 @@ export default function ClienteDetailPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
                 <CardTitle className="text-sm">Serviços Vinculados</CardTitle>
-                <Link href={`/clientes/${id}/servicos/novo`}><Button size="xs"><Plus className="h-3 w-3" />Serviço</Button></Link>
+                <Link href={`/clientes/${id}/servicos/novo`} className={buttonVariants({ size: 'xs' })}><Plus className="h-3 w-3" />Serviço</Link>
               </CardHeader>
               <CardContent className="px-4 pb-4">
                 {servicos.length === 0
@@ -355,7 +675,7 @@ export default function ClienteDetailPage() {
 
             {fiscal && podeAcessarFiscal && (
               <div className="flex justify-end">
-                <Link href={`/fiscal/emitir?clienteId=${id}`}><Button size="sm"><Receipt className="h-3.5 w-3.5" />Emitir NFS-e</Button></Link>
+                <Link href={`/fiscal/emitir?clienteId=${id}`} className={buttonVariants({ size: 'sm' })}><Receipt className="h-3.5 w-3.5" />Emitir NFS-e</Link>
               </div>
             )}
           </TabsContent>
