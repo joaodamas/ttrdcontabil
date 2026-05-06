@@ -3,6 +3,7 @@
  * Evita dependência do node-soap (pesado) — usa axios com XML raw.
  */
 import axios, { AxiosRequestConfig } from 'axios'
+import * as https from 'https'
 
 export interface SoapOptions {
   endpoint: string
@@ -35,6 +36,10 @@ export function buildSoapEnvelope(body: string, xmlns?: Record<string, string>):
  * Executa uma chamada SOAP e retorna o XML de resposta.
  */
 export async function soapCall(opts: SoapOptions, bodyXml: string): Promise<string> {
+  const httpsAgent = opts.certPem && opts.keyPem
+    ? new https.Agent({ cert: opts.certPem, key: opts.keyPem })
+    : undefined
+
   const config: AxiosRequestConfig = {
     method: 'POST',
     url: opts.endpoint,
@@ -45,10 +50,25 @@ export async function soapCall(opts: SoapOptions, bodyXml: string): Promise<stri
     },
     timeout: opts.timeoutMs ?? 30_000,
     responseType: 'text',
+    ...(httpsAgent ? { httpsAgent } : {}),
   }
 
-  const resp = await axios(config)
-  return resp.data as string
+  try {
+    const resp = await axios(config)
+    return resp.data as string
+  } catch (err) {
+    if (axios.isAxiosError(err)) {
+      const status = err.response?.status
+      const data = err.response?.data
+      const body = typeof data === 'string'
+        ? data.slice(0, 1500)
+        : data != null
+          ? JSON.stringify(data).slice(0, 1500)
+          : err.message
+      throw new Error(`SOAP HTTP ${status ?? 'sem_status'} em ${opts.endpoint}: ${body}`)
+    }
+    throw err
+  }
 }
 
 /**

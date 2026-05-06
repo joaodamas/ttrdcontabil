@@ -10,6 +10,10 @@ export {
 } from './nfse/emitir'
 
 export { emitirNfseLote } from './nfse/emitir-lote'
+export { cancelarNfse, consultarNfse, retryNfse } from './nfse/ciclo'
+export { gerarRascunhosNfseMensais } from './nfse/rascunhos'
+export { gerarFechamentoMensal } from './fechamento'
+export { recalcularDashboardKpis } from './dashboard'
 
 // ── Backup ────────────────────────────────────────────────────────────────────
 export { exportarFirestoreSemanal } from './backup'
@@ -22,3 +26,12 @@ export { enviarAlertasDiarios, alertasPrazoCritico, detectarInadimplencia } from
 // ── Triggers ──────────────────────────────────────────────────────────────────
 export { propagarRazaoSocial } from './triggers/cliente-update'
 export { onTarefaConcluida } from './triggers/tarefa-concluida'
+export {
+  eventoTarefaCriada,
+  eventoTarefaAtualizada,
+  eventoLancamentoCriado,
+  eventoLancamentoAtualizado,
+  eventoCompetenciaCriada,
+  eventoNfseEmitidaCriada,
+  eventoFiscalAtualizado,
+} from './triggers/cliente-events'

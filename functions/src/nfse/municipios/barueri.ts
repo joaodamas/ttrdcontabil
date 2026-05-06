@@ -81,7 +81,12 @@ export class BarueriConector {
         : 'https://www.barueri.sp.gov.br/nfe/RecepcionarLoteRPS.asmx'
 
       const soapBody = buildSoapEnvelope(loteAssinado, { nfe: XMLNS_BARUERI })
-      const respXml  = await soapCall({ endpoint, action: `${XMLNS_BARUERI}/EnvioLoteRPS` }, soapBody)
+      const respXml  = await soapCall({
+        endpoint,
+        action: `${XMLNS_BARUERI}/EnvioLoteRPS`,
+        certPem: chave.certPem,
+        keyPem: chave.privateKeyPem,
+      }, soapBody)
       const bodyXml  = extractSoapBody(respXml)
 
       const erro = extractTag(bodyXml, 'Erro') ?? extractTag(bodyXml, 'MensagemRetorno')

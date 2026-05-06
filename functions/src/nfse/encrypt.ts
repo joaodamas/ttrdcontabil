@@ -1,8 +1,6 @@
 /**
  * Utilitário de criptografia AES-256-GCM para credenciais sensíveis.
  * A chave é lida da variável de ambiente CREDENTIAL_KEY (32 bytes em hex).
- * Se não estiver definida (ex: ambiente de dev), usa uma chave de fallback
- * com aviso — NUNCA usar o fallback em produção.
  */
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto'
 
@@ -13,9 +11,7 @@ function getKey(): Buffer {
   if (KEY_HEX && KEY_HEX.length === 64) {
     return Buffer.from(KEY_HEX, 'hex')
   }
-  // Fallback de desenvolvimento — NÃO usar em produção
-  console.warn('[encrypt] CREDENTIAL_KEY não configurada. Usando chave de fallback. Configure a variável de ambiente.')
-  return Buffer.from('ttrdcontabil_dev_key_32bytes_____', 'utf8').subarray(0, 32)
+  throw new Error('CREDENTIAL_KEY ausente ou inválida. Configure uma chave hex de 32 bytes antes de salvar credenciais fiscais.')
 }
 
 /**

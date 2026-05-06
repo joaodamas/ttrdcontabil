@@ -1,12 +1,143 @@
 /**
- * Conector Taboão da Serra — Etransparencia/Conam (REST proprietário)
+ * Conector Taboão da Serra — Etransparencia/Conam (SOAP proprietário)
  * Portal: https://nfe.etransparencia.com.br/sp.taboaodaserra/nfe
  * Autenticação: código de usuário + código do contribuinte (token)
  */
-import axios from 'axios'
 import { ConfigFiscalCliente, EmitirNfseInput, Prestador, ResultadoEmissao } from '../types'
+import { buildSoapEnvelope, extractSoapBody, extractTag, soapCall } from '../xml/soap'
+import { lerCredencial } from './credenciais'
 
-function fmt(n: number) { return n.toFixed(2) }
+function escapeXml(s: string) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+}
+
+function tag(name: string, value?: string | number | null): string {
+  return `<${name}>${escapeXml(value == null ? '' : String(value))}</${name}>`
+}
+
+function valorIss(valorServico: number, aliquotaPercentual: number): number {
+  return Number((valorServico * (aliquotaPercentual / 100)).toFixed(2))
+}
+
+function mesReferencia(date = new Date()) {
+  const ano = String(date.getFullYear())
+  const mes = String(date.getMonth() + 1).padStart(2, '0')
+  const primeiroDia = `${ano}-${mes}-01`
+  const ultimoDia = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0]
+  return { ano, mes, primeiroDia, ultimoDia }
+}
+
+function buildTaboaoEnvelope(params: {
+  codigoUsuario: string
+  codigoContribuinte: string
+  input: EmitirNfseInput
+  config: ConfigFiscalCliente
+  prestador: Prestador
+  numero: string
+}) {
+  const { codigoUsuario, codigoContribuinte, input, config, prestador, numero } = params
+  const ref = mesReferencia()
+  const tomadorEndereco = input.tomador.endereco
+  const valorServico = input.servico.valorServico
+  const valorDeducoes = input.servico.valorDeducoes ?? 0
+  const baseCalculo = Math.max(valorServico - valorDeducoes, 0)
+  const aliquota = input.servico.aliquota ?? config.aliquotaPadrao ?? 0
+  const iss = valorIss(baseCalculo, aliquota)
+  const issRetido = input.servico.issRetido ? iss : 0
+
+  const body = `<ws_nfe.PROCESSARPS xmlns="NFe">
+  <Sdt_processarpsin>
+    <Login>
+      ${tag('CodigoUsuario', codigoUsuario)}
+      ${tag('CodigoContribuinte', codigoContribuinte)}
+    </Login>
+    <SDTRPS>
+      ${tag('Ano', ref.ano)}
+      ${tag('Mes', ref.mes)}
+      ${tag('CPFCNPJ', prestador.cnpj.replace(/\D/g, ''))}
+      ${tag('DTIni', ref.primeiroDia)}
+      ${tag('DTFin', ref.ultimoDia)}
+      ${tag('TipoTrib', config.optanteSimples ? 'SN' : 'N')}
+      ${tag('DtAdeSN', '')}
+      ${tag('AlqIssSN_IP', config.optanteSimples ? aliquota.toFixed(2) : '')}
+      ${tag('RegApTribSN', '')}
+      ${tag('TribTpSusp', '')}
+      ${tag('TribProcSusp', '')}
+      ${tag('Versao', '1.00')}
+      <Reg20>
+        <Reg20Item>
+          ${tag('TipoNFS', 'N')}
+          ${tag('NumRps', numero)}
+          ${tag('SerRps', input.serieRps ?? 'RPS')}
+          ${tag('DtEmi', new Date().toISOString().split('T')[0])}
+          ${tag('RetFonte', input.servico.issRetido ? 'S' : 'N')}
+          ${tag('CodSrv', input.servico.codigoServico)}
+          ${tag('DiscrSrv', input.servico.discriminacao)}
+          ${tag('VlNFS', valorServico.toFixed(2))}
+          ${tag('VlDed', valorDeducoes.toFixed(2))}
+          ${tag('DiscrDed', '')}
+          ${tag('VlBasCalc', baseCalculo.toFixed(2))}
+          ${tag('AlqIss', aliquota.toFixed(2))}
+          ${tag('VlIss', iss.toFixed(2))}
+          ${tag('VlIssRet', issRetido.toFixed(2))}
+          ${tag('CpfCnpTom', input.tomador.cpfCnpj.replace(/\D/g, ''))}
+          ${tag('RazSocTom', input.tomador.razaoSocial)}
+          ${tag('TipoLogtom', '')}
+          ${tag('LogTom', tomadorEndereco?.logradouro ?? '')}
+          ${tag('NumEndTom', tomadorEndereco?.numero ?? '')}
+          ${tag('ComplEndTom', tomadorEndereco?.complemento ?? '')}
+          ${tag('BairroTom', tomadorEndereco?.bairro ?? '')}
+          ${tag('MunTom', tomadorEndereco?.municipioIbge ?? '')}
+          ${tag('SiglaUFTom', tomadorEndereco?.uf ?? '')}
+          ${tag('CepTom', tomadorEndereco?.cep?.replace(/\D/g, '') ?? '')}
+          ${tag('Telefone', '')}
+          ${tag('InscricaoMunicipal', '')}
+          ${tag('TipoLogLocPre', '')}
+          ${tag('LogLocPre', '')}
+          ${tag('NumEndLocPre', '')}
+          ${tag('ComplEndLocPre', '')}
+          ${tag('BairroLocPre', '')}
+          ${tag('MunLocPre', prestador.municipioIbge)}
+          ${tag('SiglaUFLocpre', 'SP')}
+          ${tag('CepLocPre', '')}
+          ${tag('Email1', input.tomador.email ?? '')}
+          ${tag('Email2', '')}
+          ${tag('Email3', '')}
+          ${tag('MoedaTrnExt', '')}
+          ${tag('ValTrnExt', '')}
+          <Reg30/>
+          <Reg40/>
+          <Reg50/>
+          <Reg60_RTC>
+            ${tag('Finalidade', '')}
+            ${tag('IndConsFin', '')}
+            ${tag('IndDest', '')}
+            ${tag('IndOpeOne', '')}
+            ${tag('IndCodOpe', '')}
+            ${tag('VlReeRepRes', '')}
+            <gIBSCBS>${tag('CST', '')}${tag('CClassTrib', '')}${tag('CCodCredPres', '')}</gIBSCBS>
+            <gTribReg>${tag('CST', '')}${tag('CClassTrib', '')}</gTribReg>
+            <gDif>${tag('PDifUF', '')}${tag('PDifMun', '')}${tag('PDifCBS', '')}</gDif>
+          </Reg60_RTC>
+        </Reg20Item>
+      </Reg20>
+      <Reg90>
+        ${tag('QtdRegNormal', '1')}
+        ${tag('ValorNFS', valorServico.toFixed(2))}
+        ${tag('ValorISS', iss.toFixed(2))}
+        ${tag('ValorDed', valorDeducoes.toFixed(2))}
+        ${tag('ValorIssRetTom', issRetido.toFixed(2))}
+        ${tag('QtdReg30', '0')}
+        ${tag('ValorTributos', '0.00')}
+        ${tag('QtdReg40', '0')}
+        ${tag('QtdReg50', '0')}
+      </Reg90>
+    </SDTRPS>
+  </Sdt_processarpsin>
+</ws_nfe.PROCESSARPS>`
+
+  return buildSoapEnvelope(body)
+}
 
 export class TaboaoSerraConector {
   async emitir(
@@ -15,72 +146,54 @@ export class TaboaoSerraConector {
     prestador: Prestador,
   ): Promise<ResultadoEmissao> {
     try {
-      const codigoUsuario      = config.credenciais?.conamCodigoUsuario
-      const codigoContribuinte = config.credenciais?.conamCodigoContribuinte
-      if (!codigoUsuario || !codigoContribuinte) {
+      const codigoUsuario      = lerCredencial(config.credenciais?.conamCodigoUsuario, 'Código de usuário Conam')
+      const codigoContribuinte = lerCredencial(config.credenciais?.conamCodigoContribuinte, 'Código de contribuinte Conam')
+      if (!codigoUsuario.valor || !codigoContribuinte.valor) {
+        const erroCredencial = codigoUsuario.erro ?? codigoContribuinte.erro
+        if (erroCredencial) return { sucesso: false, codigoErro: codigoUsuario.codigoErro ?? codigoContribuinte.codigoErro, erro: erroCredencial }
         return { sucesso: false, erro: 'Código de usuário e contribuinte Conam não configurados.' }
       }
 
-      const isHom   = config.ambienteEmissao === 'homologacao'
-      const baseUrl = isHom
-        ? 'https://nfehomo.etransparencia.com.br/sp.taboaodaserra/nfe'
-        : 'https://nfe.etransparencia.com.br/sp.taboaodaserra/nfe'
-
-      // Conam usa XML proprietário via REST
-      const xmlRps = `<?xml version="1.0" encoding="UTF-8"?>
-<RecepcionarLoteRps>
-  <cabecalho versao="3">
-    <codigoUsuario>${codigoUsuario}</codigoUsuario>
-    <codigoContribuinte>${codigoContribuinte}</codigoContribuinte>
-  </cabecalho>
-  <loteRps>
-    <rps>
-      <assinatura>${input.numeroRps ?? Date.now()}</assinatura>
-      <chaveRps>
-        <inscricaoPrestador>${prestador.inscricaoMunicipal}</inscricaoPrestador>
-        <serieRps>${input.serieRps ?? 'RPS'}</serieRps>
-        <numeroRps>${input.numeroRps ?? Date.now()}</numeroRps>
-      </chaveRps>
-      <tipoRps>RPS</tipoRps>
-      <dataEmissaoRps>${new Date().toISOString().split('T')[0]}</dataEmissaoRps>
-      <naturezaOperacao>1</naturezaOperacao>
-      <optanteSimplesNacional>${config.optanteSimples ? 'S' : 'N'}</optanteSimplesNacional>
-      <incentivoFiscal>N</incentivoFiscal>
-      <statusRps>N</statusRps>
-      <valorServicos>${fmt(input.servico.valorServico)}</valorServicos>
-      <valorDeducoes>0.00</valorDeducoes>
-      <codigoServico>${input.servico.codigoServico}</codigoServico>
-      <aliquotaServicos>${fmt(input.servico.aliquota ?? config.aliquotaPadrao ?? 0)}</aliquotaServicos>
-      <issRetido>${input.servico.issRetido ? 'S' : 'N'}</issRetido>
-      <cpfCnpjTomador>${input.tomador.cpfCnpj.replace(/\D/g, '')}</cpfCnpjTomador>
-      <razaoSocialTomador>${input.tomador.razaoSocial}</razaoSocialTomador>
-      ${input.tomador.email ? `<emailTomador>${input.tomador.email}</emailTomador>` : ''}
-      <discriminacao>${input.servico.discriminacao}</discriminacao>
-    </rps>
-  </loteRps>
-</RecepcionarLoteRps>`
-
-      const resp = await axios.post(`${baseUrl}/RecepcionarLoteRps`, xmlRps, {
-        headers: { 'Content-Type': 'text/xml; charset=UTF-8' },
-        timeout: 30_000,
-        responseType: 'text',
+      const isHom = config.ambienteEmissao === 'homologacao'
+      const endpoint = isHom
+        ? 'https://nfehomologacao.etransparencia.com.br/sp.taboaodaserra/webservice/aws_nfe.aspx'
+        : 'https://nfe.etransparencia.com.br/sp.taboaodaserra/webservice/aws_nfe.aspx'
+      const numero = input.numeroRps ?? String(Date.now())
+      console.log('[TaboaoSerra/Conam] emitindo NFS-e', {
+        ambiente: config.ambienteEmissao,
+        endpoint,
+        metodo: 'PROCESSARPS',
+        codigoUsuarioCriptografado: codigoUsuario.criptografada,
+        codigoContribuinteCriptografado: codigoContribuinte.criptografada,
+        prestadorCnpjFinal: prestador.cnpj.replace(/\D/g, '').slice(-4),
       })
 
-      const body = resp.data as string
-      const erro = body.match(/<mensagem[^>]*>(.*?)<\/mensagem>/i)?.[1]
-      if (erro && !body.includes('numeroNfe')) {
+      const respXml = await soapCall(
+        { endpoint, action: 'NFeaction/AWS_NFE.PROCESSARPS' },
+        buildTaboaoEnvelope({
+          codigoUsuario: codigoUsuario.valor,
+          codigoContribuinte: codigoContribuinte.valor,
+          input,
+          config,
+          prestador,
+          numero,
+        }),
+      )
+      const body = extractSoapBody(respXml)
+      const erro = extractTag(body, 'Description') ?? extractTag(body, 'Mensagem') ?? extractTag(body, 'Message')
+      const retorno = extractTag(body, 'Retorno')
+      if (erro && retorno !== 'true' && !extractTag(body, 'Nota')) {
         return { sucesso: false, erro, detalhes: body }
       }
 
-      const numNfse = body.match(/<numeroNfe[^>]*>(.*?)<\/numeroNfe>/i)?.[1]
-        ?? body.match(/<Numero[^>]*>(.*?)<\/Numero>/i)?.[1]
+      const numNfse = extractTag(body, 'Nota')
+        ?? extractTag(body, 'NumeroNFSe')
+        ?? extractTag(body, 'NumeroNfse')
+        ?? extractTag(body, 'Numero')
 
       return { sucesso: true, numeroNfse: numNfse, xmlNfse: body }
     } catch (err) {
-      const msg = axios.isAxiosError(err)
-        ? `HTTP ${err.response?.status}: ${err.response?.data}`
-        : (err instanceof Error ? err.message : String(err))
-      return { sucesso: false, erro: msg }
+      return { sucesso: false, erro: err instanceof Error ? err.message : String(err) }
     }
   }
 }

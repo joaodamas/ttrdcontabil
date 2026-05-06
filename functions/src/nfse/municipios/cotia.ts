@@ -6,6 +6,7 @@
  */
 import axios from 'axios'
 import { ConfigFiscalCliente, EmitirNfseInput, Prestador, ResultadoEmissao } from '../types'
+import { lerCredencial, stringifyErroHttp } from './credenciais'
 
 function fmt(n: number) { return n.toFixed(2) }
 
@@ -16,16 +17,25 @@ export class CotiaConector {
     prestador: Prestador,
   ): Promise<ResultadoEmissao> {
     try {
-      const login = config.credenciais?.giaplogin
-      const senha = config.credenciais?.giapSenha
-      if (!login || !senha) {
+      const login = lerCredencial(config.credenciais?.giaplogin, 'Login GIAP/Cotia')
+      const senha = lerCredencial(config.credenciais?.giapSenha, 'Senha GIAP/Cotia')
+      if (!login.valor || !senha.valor) {
+        const erroCredencial = login.erro ?? senha.erro
+        if (erroCredencial) return { sucesso: false, codigoErro: login.codigoErro ?? senha.codigoErro, erro: erroCredencial }
         return { sucesso: false, erro: 'Login e senha do portal Cotia não configurados.' }
       }
 
       const baseUrl = 'https://nfse.cotia.sp.gov.br/ords/cotia'
 
       // 1. Autenticar e obter token de sessão
-      const authResp = await axios.post(`${baseUrl}/auth/login`, { login, senha }, {
+      console.log('[Cotia/GIAP] autenticando para emissão NFS-e', {
+        endpoint: `${baseUrl}/auth/login`,
+        loginCriptografado: login.criptografada,
+        senhaCriptografada: senha.criptografada,
+        prestadorCnpjFinal: prestador.cnpj.replace(/\D/g, '').slice(-4),
+      })
+
+      const authResp = await axios.post(`${baseUrl}/auth/login`, { login: login.valor, senha: senha.valor }, {
         timeout: 15_000,
       })
       const sessionToken = (authResp.data as Record<string, string>).token
@@ -69,7 +79,7 @@ export class CotiaConector {
       }
     } catch (err) {
       const msg = axios.isAxiosError(err)
-        ? `HTTP ${err.response?.status}: ${JSON.stringify(err.response?.data)}`
+        ? `Cotia/GIAP HTTP ${err.response?.status ?? 'sem_status'}: ${stringifyErroHttp(err.response?.data ?? err.message)}`
         : (err instanceof Error ? err.message : String(err))
       return { sucesso: false, erro: msg }
     }

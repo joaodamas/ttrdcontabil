@@ -85,8 +85,8 @@ export class SaoPauloConector {
       const envioAssinado = assinarXml(envioXml, loteId, chave)
 
       const endpoint = isHom
-        ? 'https://nfeh.prefeitura.sp.gov.br/ws/lotenfe.asmx'
-        : 'https://nfe.prefeitura.sp.gov.br/ws/lotenfe.asmx'
+        ? 'https://nfews.prefeitura.sp.gov.br/lotenfe.asmx'
+        : 'https://nfews.prefeitura.sp.gov.br/lotenfe.asmx'
 
       const soapBody = buildSoapEnvelope(
         `<EnvioLoteRPS xmlns="${XMLNS_NFSE_SP}">${envioAssinado}</EnvioLoteRPS>`,
@@ -96,6 +96,8 @@ export class SaoPauloConector {
       const respXml = await soapCall({
         endpoint,
         action: `${XMLNS_NFSE_SP}/EnvioLoteRPS`,
+        certPem: chave.certPem,
+        keyPem: chave.privateKeyPem,
       }, soapBody)
 
       const bodyXml = extractSoapBody(respXml)

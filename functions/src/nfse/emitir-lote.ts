@@ -16,6 +16,11 @@ import { Timestamp } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { rotearEmissao } from './municipios/router'
 import { decrypt } from './encrypt'
+import { credentialSecrets } from './secrets'
+import { isProducaoLiberadaPorConfigOuConector } from './conectores'
+import { pfxBase64FromStorageBuffer } from './certificado'
+import { assertCanAccessCliente } from '../authz'
+import { validarPayloadFiscal } from './validacao'
 import type {
   EmitirNfseInput, ConfigFiscalCliente, Prestador, CertificadoA1, ResultadoEmissao,
 } from './types'
@@ -36,6 +41,19 @@ export interface ResultadoLote {
   sucesso:   boolean
   numeroNfse?: string
   erro?:     string
+}
+
+function resumoNfseInput(input: EmitirNfseInput) {
+  return {
+    clienteId: input.clienteId,
+    rascunhoId: input.rascunhoId ?? null,
+    competenciaId: input.competenciaId ?? null,
+    tomadorNome: input.tomador?.razaoSocial ?? null,
+    tomadorDocumentoFinal: input.tomador?.cpfCnpj ? String(input.tomador.cpfCnpj).replace(/\D/g, '').slice(-4) : null,
+    codigoServico: input.servico?.codigoServico ?? null,
+    valorServico: input.servico?.valorServico ?? null,
+    issRetido: input.servico?.issRetido ?? null,
+  }
 }
 
 // ─── Helpers (replicados de emitir.ts para evitar acoplamento de imports) ─────
@@ -62,7 +80,7 @@ async function getCertificado(config: ConfigFiscalCliente): Promise<CertificadoA
   const [buffer] = await file.download()
   const senhaRaw = config.credenciais?.certificadoSenha as string | undefined
   return {
-    pfxBase64: buffer.toString('base64'),
+    pfxBase64: pfxBase64FromStorageBuffer(buffer),
     senha:     senhaRaw ? (decrypt(senhaRaw) ?? senhaRaw) : '',
   }
 }
@@ -75,6 +93,7 @@ export const emitirNfseLote = onCall(
     timeoutSeconds: 540,
     memory:         '512MiB',
     invoker:        'public',
+    secrets:        credentialSecrets,
   },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Autenticação necessária.')
@@ -102,12 +121,32 @@ export const emitirNfseLote = onCall(
         if (!input.clienteId) throw new Error('clienteId obrigatório.')
         if (!input.tomador)   throw new Error('Dados do tomador obrigatórios.')
         if (!input.servico)   throw new Error('Dados do serviço obrigatórios.')
+        await assertCanAccessCliente(request.auth!.uid, input.clienteId, 'fiscal')
+
+        if (input.rascunhoId) {
+          const rascunhoRef = db().collection('nfse_rascunhos').doc(input.rascunhoId)
+          await db().runTransaction(async (tx) => {
+            const rascunho = await tx.get(rascunhoRef)
+            if (!rascunho.exists) throw new Error('Rascunho não encontrado.')
+            const status = rascunho.data()?.status as string | undefined
+            if (status === 'emitida') throw new Error('Rascunho já emitido.')
+            if (status === 'processando') throw new Error('Rascunho já está em processamento.')
+            tx.update(rascunhoRef, {
+              status: 'processando',
+              atualizadoEm: now,
+              atualizadoPorId: request.auth!.uid,
+            })
+          })
+        }
 
         // Config fiscal (cache)
         if (!configCache.has(input.clienteId)) {
           configCache.set(input.clienteId, await getConfigFiscal(input.clienteId))
         }
         const config = configCache.get(input.clienteId)!
+        if (config.ambienteEmissao === 'producao' && !(await isProducaoLiberadaPorConfigOuConector(config, 'emissao'))) {
+          throw new Error('Município/configuração fiscal ainda não liberado para emissão em produção.')
+        }
 
         // Dados do cliente (cache)
         if (!clienteCache.has(input.clienteId)) {
@@ -126,6 +165,11 @@ export const emitirNfseLote = onCall(
           inscricaoMunicipal:  config.inscricaoMunicipal,
           razaoSocial:         cliente.razaoSocial as string,
           municipioIbge:       config.municipioIbge,
+        }
+
+        const errosValidacao = validarPayloadFiscal(input, config, prestador)
+        if (errosValidacao.length > 0) {
+          throw new Error(`Payload fiscal inválido: ${errosValidacao.join(' ')}`)
         }
 
         const resultado: ResultadoEmissao = await rotearEmissao(input, config, prestador, cert)
@@ -168,7 +212,7 @@ export const emitirNfseLote = onCall(
             clienteNome: cliente.razaoSocial as string,
             erro:        resultado.erro,
             detalhes:    resultado.detalhes ?? null,
-            input:       JSON.stringify(input),
+            inputResumo: resumoNfseInput(input),
             criadoEm:    now,
             criadoPorId: request.auth!.uid,
             loteIndex:   i,

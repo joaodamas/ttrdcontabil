@@ -13,7 +13,7 @@ export class CampinasConector extends AbrasfConector {
         : 'https://novanfse.campinas.sp.gov.br/notafiscal-abrasfv203-ws/NotaFiscalSoap',
       versao:     '2.03',
       xmlns:      'http://www.abrasf.org.br/nfse.xsd',
-      soapAction: 'RecepcionarLoteRps',
+      soapAction: '',
     }
   }
 }

@@ -6,6 +6,7 @@
  */
 import axios from 'axios'
 import { ConfigFiscalCliente, EmitirNfseInput, Prestador, ResultadoEmissao } from '../types'
+import { lerCredencial, stringifyErroHttp } from './credenciais'
 
 function fmt(n: number) { return n.toFixed(2) }
 
@@ -16,13 +17,17 @@ export class SantanaParnaibhaConector {
     prestador: Prestador,
   ): Promise<ResultadoEmissao> {
     try {
-      const token = config.credenciais?.simplissToken
-      if (!token) return { sucesso: false, erro: 'Token SimplissWeb não configurado. Configure nas credenciais do cliente.' }
+      const tokenSalvo = config.credenciais?.simplissToken
+      if (!tokenSalvo) return { sucesso: false, erro: 'Token SimplissWeb não configurado. Configure nas credenciais do cliente.' }
+
+      const tokenCred = lerCredencial(tokenSalvo, 'Token SimplissWeb')
+      if (!tokenCred.valor) return { sucesso: false, codigoErro: tokenCred.codigoErro, erro: tokenCred.erro ?? 'Token SimplissWeb inválido.' }
 
       const isHom   = config.ambienteEmissao === 'homologacao'
       const baseUrl = isHom
-        ? 'https://homologacaoabrasf.simplissweb.com.br/api'
-        : 'https://santanadeparnaiba.simplissweb.com.br/api'
+        ? 'https://producaorestrita.simplissweb.com.br'
+        : 'https://santanadeparnaiba.simplissweb.com.br'
+      const endpoint = `${baseUrl}/nfse`
 
       // SimplissWeb aceita JSON no layout nacional
       const payload = {
@@ -50,9 +55,17 @@ export class SantanaParnaibhaConector {
         regimeEspecialTributacao: config.regimeTributario === 'simples_nacional' ? '1' : '0',
       }
 
-      const resp = await axios.post(`${baseUrl}/nfse/emitir`, payload, {
+      console.log('[SantanaParnaiba/SimplissWeb] emitindo NFS-e', {
+        ambiente: config.ambienteEmissao,
+        endpoint,
+        tokenCriptografado: tokenCred.criptografada,
+        prestadorCnpjFinal: prestador.cnpj.replace(/\D/g, '').slice(-4),
+        tomadorDocumentoFinal: input.tomador.cpfCnpj.replace(/\D/g, '').slice(-4),
+      })
+
+      const resp = await axios.post(endpoint, payload, {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${tokenCred.valor}`,
           'Content-Type': 'application/json',
         },
         timeout: 30_000,
@@ -70,10 +83,43 @@ export class SantanaParnaibhaConector {
         xmlNfse:           data.xmlNfse as string | undefined,
       }
     } catch (err) {
-      const msg = axios.isAxiosError(err)
-        ? `HTTP ${err.response?.status}: ${JSON.stringify(err.response?.data)}`
-        : (err instanceof Error ? err.message : String(err))
-      return { sucesso: false, erro: msg }
+      // axios.isAxiosError pode falhar em bundling ESM/CJS; verificar response diretamente
+      const anyErr = err as {
+        isAxiosError?: boolean
+        code?: string
+        message?: string
+        response?: { status?: number; data?: unknown }
+        request?: unknown
+        config?: { url?: string; method?: string; timeout?: number }
+      }
+      if (anyErr?.response != null) {
+        const status = anyErr.response.status
+        const body = stringifyErroHttp(anyErr.response.data)
+        console.error('[SantanaParnaiba/SimplissWeb] resposta HTTP de erro', {
+          status,
+          body,
+          url: anyErr.config?.url,
+        })
+        return { sucesso: false, codigoErro: `SIMPLISS_HTTP_${status ?? 'UNKNOWN'}`, erro: `SimplissWeb HTTP ${status}: ${body}` }
+      }
+
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[SantanaParnaiba/SimplissWeb] falha sem resposta HTTP', {
+        code: anyErr?.code,
+        message,
+        url: anyErr?.config?.url,
+        method: anyErr?.config?.method,
+        timeout: anyErr?.config?.timeout,
+        hasRequest: anyErr?.request != null,
+        isAxiosError: anyErr?.isAxiosError,
+      })
+      const code = anyErr?.code ? ` (${anyErr.code})` : ''
+      const url = anyErr?.config?.url ? ` URL: ${anyErr.config.url}.` : ''
+      return {
+        sucesso: false,
+        codigoErro: anyErr?.code ?? 'SIMPLISS_NETWORK_ERROR',
+        erro: `SimplissWeb falhou sem resposta HTTP${code}: ${message}.${url}`,
+      }
     }
   }
 }

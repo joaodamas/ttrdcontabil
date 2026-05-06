@@ -65,6 +65,7 @@ export interface ConfigFiscalCliente {
   cnae?: string
   naturezaOperacao?: string
   ambienteEmissao: 'producao' | 'homologacao'
+  producaoLiberada?: boolean
   // Credenciais por municipio (salvas em Firestore — campo credenciais)
   credenciais?: CredenciaisConector
 }
@@ -107,6 +108,32 @@ export interface EmitirNfseInput {
 // ─── Resultado da emissão ─────────────────────────────────────────────────────
 export interface ResultadoEmissao {
   sucesso: boolean
+  numeroNfse?: string
+  codigoVerificacao?: string
+  xmlNfse?: string
+  pdfUrl?: string
+  erro?: string
+  codigoErro?: string
+  detalhes?: string
+}
+
+export interface ConsultarNfseInput {
+  nfseId: string
+  clienteId: string
+  numeroNfse?: string
+  codigoVerificacao?: string
+  numeroRps?: string
+  serieRps?: string
+}
+
+export interface CancelarNfseInput extends ConsultarNfseInput {
+  motivo: string
+}
+
+export interface ResultadoOperacaoNfse {
+  sucesso: boolean
+  status?: 'emitida' | 'cancelada' | 'rejeitada' | 'processando' | 'erro'
+  mensagem?: string
   numeroNfse?: string
   codigoVerificacao?: string
   xmlNfse?: string

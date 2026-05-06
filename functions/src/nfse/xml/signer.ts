@@ -57,7 +57,7 @@ export function assinarXml(xmlStr: string, refId: string, chave: ChaveAssinatura
   })
 
   sig.canonicalizationAlgorithm = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
-  sig.signatureAlgorithm = 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha1'
+  sig.signatureAlgorithm = 'http://www.w3.org/2000/09/xmldsig#rsa-sha1'
 
   sig.computeSignature(xmlStr, {
     location: {
