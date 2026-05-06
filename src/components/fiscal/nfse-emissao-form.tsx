@@ -19,9 +19,11 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, Save, Send } from 'lucide-react'
-import { getClientes, getCompetencias, createDocument } from '@/lib/firestore-client'
+import { getClientes, getCompetencias, createDocument, getDocument, updateDocument } from '@/lib/firestore-client'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { getFirebaseApp } from '@/lib/firebase'
+import { getErrorMessage } from '@/lib/error-message'
+import { SELECT_NONE_VALUE } from '@/lib/select-values'
 
 const nfseSchema = z.object({
   clienteId:        z.string().min(1, 'Cliente é obrigatório'),
@@ -40,16 +42,27 @@ type NfseFormData = z.input<typeof nfseSchema>
 
 interface Cliente { id: string; razaoSocial: string; cpfCnpj?: string; email?: string }
 interface Competencia { id: string; mes: number; ano: number; servicoNome?: string }
+type RascunhoNfse = {
+  id: string
+  clienteId?: string
+  clienteNome?: string
+  competenciaId?: string | null
+  status?: string
+  dados?: Record<string, unknown>
+}
 
 export function NfseEmissaoForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const clienteIdParam = searchParams.get('clienteId') ?? ''
+  const rascunhoIdParam = searchParams.get('rascunhoId') ?? ''
 
   const [clientes,           setClientes]           = useState<Cliente[]>([])
   const [competencias,       setCompetencias]       = useState<Competencia[]>([])
   const [loadingClientes,    setLoadingClientes]    = useState(true)
   const [loadingCompetencias,setLoadingCompetencias]= useState(false)
+  const [loadingRascunho, setLoadingRascunho] = useState(Boolean(rascunhoIdParam))
+  const [rascunhoAtual, setRascunhoAtual] = useState<RascunhoNfse | null>(null)
   const [saving,   setSaving]   = useState(false)
   const [emitting, setEmitting] = useState(false)
 
@@ -59,6 +72,7 @@ export function NfseEmissaoForm() {
     control,
     watch,
     setValue,
+    reset,
     formState: { errors },
   } = useForm<NfseFormData>({
     resolver: zodResolver(nfseSchema),
@@ -71,9 +85,38 @@ export function NfseEmissaoForm() {
   useEffect(() => {
     getClientes({ status: 'ativo' })
       .then((data) => setClientes(data as unknown as Cliente[]))
-      .catch(() => toast.error('Erro ao carregar clientes'))
+      .catch((err) => toast.error(getErrorMessage(err, 'Não foi possível carregar clientes ativos. Verifique sua permissão de acesso.')))
       .finally(() => setLoadingClientes(false))
   }, [])
+
+  useEffect(() => {
+    if (!rascunhoIdParam) return
+    setLoadingRascunho(true)
+    getDocument<RascunhoNfse>('nfse_rascunhos', rascunhoIdParam)
+      .then((rascunho) => {
+        if (!rascunho) {
+          toast.error('Rascunho NFS-e não encontrado.')
+          router.push('/fiscal')
+          return
+        }
+        const dados = rascunho.dados ?? {}
+        setRascunhoAtual(rascunho)
+        reset({
+          clienteId: rascunho.clienteId ?? '',
+          competenciaId: (rascunho.competenciaId as string | null | undefined) ?? (dados.competenciaId as string | null | undefined) ?? null,
+          tomadorNome: (dados.tomadorNome as string | undefined) ?? (dados.tomador as Record<string, unknown> | undefined)?.razaoSocial as string | undefined ?? rascunho.clienteNome ?? '',
+          tomadorCpfCnpj: (dados.tomadorCpfCnpj as string | undefined) ?? (dados.tomador as Record<string, unknown> | undefined)?.cpfCnpj as string | undefined ?? '',
+          tomadorEmail: (dados.tomadorEmail as string | undefined) ?? (dados.tomador as Record<string, unknown> | undefined)?.email as string | undefined ?? '',
+          descricaoServico: (dados.descricaoServico as string | undefined) ?? (dados.servico as Record<string, unknown> | undefined)?.discriminacao as string | undefined ?? '',
+          codigoServico: (dados.codigoServico as string | undefined) ?? (dados.servico as Record<string, unknown> | undefined)?.codigoServico as string | undefined ?? '',
+          valorServico: Number((dados.valorServico as number | undefined) ?? (dados.servico as Record<string, unknown> | undefined)?.valorServico ?? 0),
+          aliquota: (dados.aliquota as number | null | undefined) ?? (dados.servico as Record<string, unknown> | undefined)?.aliquota as number | null | undefined ?? null,
+          issRetido: Boolean((dados.issRetido as boolean | undefined) ?? (dados.servico as Record<string, unknown> | undefined)?.issRetido ?? false),
+        })
+      })
+      .catch((err) => toast.error(getErrorMessage(err, 'Não foi possível carregar o rascunho NFS-e para revisão.')))
+      .finally(() => setLoadingRascunho(false))
+  }, [rascunhoIdParam, reset, router])
 
   // When client selected: auto-fill tomador + load competencias
   useEffect(() => {
@@ -84,25 +127,31 @@ export function NfseEmissaoForm() {
 
     const cliente = clientes.find((c) => c.id === selectedClienteId)
     if (cliente) {
-      setValue('tomadorNome', cliente.razaoSocial)
-      if (cliente.cpfCnpj) setValue('tomadorCpfCnpj', cliente.cpfCnpj)
-      if (cliente.email)   setValue('tomadorEmail', cliente.email)
+      if (!rascunhoAtual) {
+        setValue('tomadorNome', cliente.razaoSocial)
+        if (cliente.cpfCnpj) setValue('tomadorCpfCnpj', cliente.cpfCnpj)
+        if (cliente.email)   setValue('tomadorEmail', cliente.email)
+      }
     }
 
     setLoadingCompetencias(true)
     getCompetencias({ clienteId: selectedClienteId })
-      .then((data) => setCompetencias(data as Competencia[]))
-      .catch(() => toast.error('Erro ao carregar competências'))
+      .then((data) => setCompetencias(data as unknown as Competencia[]))
+      .catch((err) => toast.error(getErrorMessage(err, 'Não foi possível carregar competências do cliente selecionado.')))
       .finally(() => setLoadingCompetencias(false))
-  }, [selectedClienteId, clientes, setValue])
+  }, [selectedClienteId, clientes, setValue, rascunhoAtual])
 
   async function handleSaveRascunho(data: NfseFormData) {
     setSaving(true)
     try {
-      await createDocument('nfse_rascunhos', {
+      const cliente = clientes.find((c) => c.id === data.clienteId)
+      const payload = {
         clienteId:     data.clienteId,
+        clienteNome:   cliente?.razaoSocial ?? data.tomadorNome,
         competenciaId: data.competenciaId ?? null,
         titulo:        `NFS-e — ${data.tomadorNome}`,
+        status:        'aguardando_emissao',
+        requerRevisao: false,
         dados: {
           tomadorNome:      data.tomadorNome,
           tomadorCpfCnpj:   data.tomadorCpfCnpj.replace(/\D/g, ''),
@@ -113,27 +162,47 @@ export function NfseEmissaoForm() {
           aliquota:         data.aliquota ?? null,
           issRetido:        data.issRetido,
         },
-      })
-      toast.success('Rascunho salvo com sucesso!')
+      }
+      if (rascunhoAtual) {
+        await updateDocument('nfse_rascunhos', rascunhoAtual.id, payload)
+        toast.success('Rascunho revisado e liberado para emissão em lote.')
+      } else {
+        await createDocument('nfse_rascunhos', payload)
+        toast.success('Rascunho salvo com sucesso!')
+      }
       router.push('/fiscal')
-    } catch {
-      toast.error('Erro ao salvar rascunho. Tente novamente.')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Não foi possível salvar o rascunho. Verifique cliente, serviço e permissão fiscal.'))
     } finally {
       setSaving(false)
     }
   }
 
   async function handleEmitir(data: NfseFormData) {
+    const confirmado = window.confirm(
+      [
+        'Confirmar emissão de NFS-e?',
+        `Cliente: ${clientes.find((c) => c.id === data.clienteId)?.razaoSocial ?? data.clienteId}`,
+        `Tomador: ${data.tomadorNome}`,
+        `CPF/CNPJ: ${data.tomadorCpfCnpj}`,
+        `Serviço: ${data.codigoServico}`,
+        `Valor: R$ ${data.valorServico.toFixed(2)}`,
+        `ISS retido: ${data.issRetido ? 'Sim' : 'Não'}`,
+      ].join('\n')
+    )
+    if (!confirmado) return
+
     setEmitting(true)
     try {
       const functions = getFunctions(getFirebaseApp(), 'southamerica-east1')
-      const emitirNfse = httpsCallable<Record<string, unknown>, { sucesso: boolean; numeroNfse?: string; codigoVerificacao?: string; erro?: string }>(
+      const emitirNfse = httpsCallable<Record<string, unknown>, { sucesso: boolean; numeroNfse?: string; codigoVerificacao?: string; erro?: string; detalhes?: string }>(
         functions,
         'emitirNfse'
       )
 
       const payload = {
         clienteId:     data.clienteId,
+        rascunhoId:    rascunhoAtual?.id,
         competenciaId: data.competenciaId ?? null,
         tomador: {
           razaoSocial: data.tomadorNome,
@@ -159,22 +228,35 @@ export function NfseEmissaoForm() {
         toast.success(msg)
         router.push('/fiscal')
       } else {
-        toast.error(res.erro ?? 'Erro ao emitir NFS-e.')
+        const detalhes = res.detalhes && res.detalhes !== res.erro ? ` Detalhes: ${res.detalhes}` : ''
+        toast.error(`${res.erro ?? 'Erro ao emitir NFS-e.'}${detalhes}`.slice(0, 1500))
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Erro ao emitir NFS-e. Tente novamente.'
-      toast.error(msg)
+      toast.error(getErrorMessage(err, 'Não foi possível emitir a NFS-e. Verifique configuração fiscal, credencial e homologação do município.'))
     } finally {
       setEmitting(false)
     }
   }
 
   const isLoading = saving || emitting
+  const isEditingRascunho = Boolean(rascunhoAtual)
+  const previewCliente = clientes.find((c) => c.id === selectedClienteId)
+  const previewCompetenciaId = watch('competenciaId')
+  const previewCompetencia = competencias.find((c) => c.id === previewCompetenciaId)
+  const previewValor = watch('valorServico')
+  const previewCodigo = watch('codigoServico')
+  const previewAliquota = watch('aliquota')
+  const previewIssRetido = watch('issRetido')
 
   return (
     <form className="space-y-5">
+      {loadingRascunho ? (
+        <div className="flex items-center justify-center rounded-xl border py-10">
+          <Loader2 className="h-5 w-5 animate-spin" />
+        </div>
+      ) : null}
       {/* Vínculo */}
-      <Card>
+      <Card className={loadingRascunho ? 'pointer-events-none opacity-60' : undefined}>
         <CardHeader><CardTitle className="text-sm">Vínculo</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
@@ -182,10 +264,14 @@ export function NfseEmissaoForm() {
             <Controller
               name="clienteId"
               control={control}
-              render={({ field }) => (
+              render={({ field }) => {
+                const selected = clientes.find((c) => c.id === field.value)
+                return (
                 <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={loadingClientes}>
                   <SelectTrigger>
-                    <SelectValue placeholder={loadingClientes ? 'Carregando...' : 'Selecione o cliente'} />
+                    <span className={selected ? 'truncate text-left' : 'truncate text-left text-muted-foreground'}>
+                      {selected?.razaoSocial ?? (loadingClientes ? 'Carregando...' : 'Selecione o cliente')}
+                    </span>
                   </SelectTrigger>
                   <SelectContent>
                     {clientes.map((c) => (
@@ -193,7 +279,8 @@ export function NfseEmissaoForm() {
                     ))}
                   </SelectContent>
                 </Select>
-              )}
+                )
+              }}
             />
             {errors.clienteId && <p className="text-xs text-destructive">{errors.clienteId.message}</p>}
           </div>
@@ -205,8 +292,8 @@ export function NfseEmissaoForm() {
               control={control}
               render={({ field }) => (
                 <Select
-                  value={field.value ?? ''}
-                  onValueChange={(v) => field.onChange(v || null)}
+                  value={field.value ?? SELECT_NONE_VALUE}
+                  onValueChange={(v) => field.onChange(v === SELECT_NONE_VALUE ? null : v)}
                   disabled={loadingCompetencias || !selectedClienteId}
                 >
                   <SelectTrigger>
@@ -219,7 +306,7 @@ export function NfseEmissaoForm() {
                     />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhuma</SelectItem>
+                    <SelectItem value={SELECT_NONE_VALUE}>Nenhuma</SelectItem>
                     {competencias.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
                         {String(c.mes).padStart(2, '0')}/{c.ano}
@@ -308,15 +395,29 @@ export function NfseEmissaoForm() {
         </CardContent>
       </Card>
 
+      <Card className="border-warning/30 bg-warning/5">
+        <CardHeader><CardTitle className="text-sm">Checklist antes da emissão</CardTitle></CardHeader>
+        <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
+          <div><span className="text-muted-foreground">Ambiente:</span> Validado na configuração fiscal do cliente</div>
+          <div><span className="text-muted-foreground">Prestador:</span> {previewCliente?.razaoSocial ?? 'Selecione o cliente'}</div>
+          <div><span className="text-muted-foreground">Competência:</span> {previewCompetencia ? `${String(previewCompetencia.mes).padStart(2, '0')}/${previewCompetencia.ano}` : 'Não vinculada'}</div>
+          <div><span className="text-muted-foreground">Serviço:</span> {previewCodigo || 'Informe o código'}</div>
+          <div><span className="text-muted-foreground">Valor:</span> {Number.isFinite(previewValor) ? `R$ ${Number(previewValor).toFixed(2)}` : 'Informe o valor'}</div>
+          <div><span className="text-muted-foreground">Alíquota:</span> {Number.isFinite(previewAliquota) ? `${Number(previewAliquota)}%` : 'Padrão da configuração'}</div>
+          <div><span className="text-muted-foreground">ISS retido:</span> {previewIssRetido ? 'Sim' : 'Não'}</div>
+          <div><span className="text-muted-foreground">Credencial/certificado:</span> Validado pela Cloud Function fiscal</div>
+        </CardContent>
+      </Card>
+
       {/* Ações */}
       <div className="flex items-center gap-3">
-        <Button type="button" disabled={isLoading} onClick={handleSubmit(handleEmitir)}>
+        <Button type="button" disabled={isLoading || loadingRascunho} onClick={handleSubmit(handleEmitir)}>
           {emitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
           Emitir (Assistida)
         </Button>
-        <Button type="button" variant="outline" disabled={isLoading} onClick={handleSubmit(handleSaveRascunho)}>
+        <Button type="button" variant="outline" disabled={isLoading || loadingRascunho} onClick={handleSubmit(handleSaveRascunho)}>
           {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-          Salvar Rascunho
+          {isEditingRascunho ? 'Liberar para lote' : 'Salvar Rascunho'}
         </Button>
         <Button type="button" variant="ghost" disabled={isLoading} onClick={() => router.back()}>
           Cancelar

@@ -56,6 +56,26 @@ function extrairMensagemGeisWeb(bodyXml: string): string {
   return unescapeXml(msg)
 }
 
+function textoErroGeisWeb(mensagem: string, erro?: string): string {
+  const campos = [
+    extractTag(mensagem, 'Mensagem'),
+    extractTag(mensagem, 'MensagemRetorno'),
+    extractTag(mensagem, 'Descricao'),
+    extractTag(mensagem, 'Descrição'),
+    extractTag(mensagem, 'Motivo'),
+    extractTag(mensagem, 'Erro'),
+    extractTag(mensagem, 'Msg'),
+  ].filter((valor): valor is string => Boolean(valor && valor.trim()))
+
+  const texto = campos.find((valor) => !/^\d+$/.test(valor.trim())) ?? erro
+  if (texto && !/^\d+$/.test(texto.trim())) return texto
+
+  const compacto = mensagem.replace(/\s+/g, ' ').trim()
+  if (compacto && compacto !== erro) return `GeisWeb retornou código ${erro ?? 'sem mensagem'}: ${compacto.slice(0, 1000)}`
+
+  return `GeisWeb retornou código ${erro ?? 'sem mensagem'} sem descrição.`
+}
+
 export class CajamarConector {
   async emitir(
     input: EmitirNfseInput,
@@ -132,7 +152,13 @@ export class CajamarConector {
       const codigoVerificacao = extractTag(mensagem, 'CodigoVerificacao')
 
       if (erro && !numeroNfse) {
-        return { sucesso: false, erro, codigoErro, detalhes: mensagem }
+        const textoErro = textoErroGeisWeb(mensagem, erro)
+        console.warn('[Cajamar/GeisWeb] retorno com erro', {
+          codigoErro,
+          erro: textoErro,
+          retorno: mensagem.slice(0, 1500),
+        })
+        return { sucesso: false, erro: textoErro, codigoErro, detalhes: mensagem }
       }
 
       if (!numeroNfse && /usu[aá]rio n[aã]o liberado/i.test(mensagem)) {
@@ -144,7 +170,7 @@ export class CajamarConector {
         numeroNfse,
         codigoVerificacao,
         xmlNfse: mensagem,
-        erro: numeroNfse ? undefined : 'GeisWeb não retornou número da NFS-e.',
+        erro: numeroNfse ? undefined : textoErroGeisWeb(mensagem),
         detalhes: numeroNfse ? undefined : mensagem,
       }
     } catch (err) {
