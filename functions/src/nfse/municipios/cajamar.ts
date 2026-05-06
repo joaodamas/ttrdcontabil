@@ -4,8 +4,6 @@
  * WSDL:   https://geisweb.com.br/cajamar/webservice/GeisWebServiceImpl.php?wsdl
  * Método: EnviaLoteRPS
  */
-import { buildInfRpsXml, buildLoteRpsXml } from '../xml/builder'
-import { assinarXml, extrairChaveDoPfx } from '../xml/signer'
 import { extractSoapBody, extractTag, soapCall } from '../xml/soap'
 import {
   CancelarNfseInput,
@@ -17,6 +15,7 @@ import {
   ResultadoEmissao,
   ResultadoOperacaoNfse,
 } from '../types'
+import { lerCredencial } from './credenciais'
 
 const GEISWEB_ENDPOINT = 'https://geisweb.com.br/cajamar/webservice/GeisWebServiceImpl.php'
 const GEISWEB_NS = 'urn:http://www.geisweb.com.br/cajamar/webservice'
@@ -56,6 +55,70 @@ function extrairMensagemGeisWeb(bodyXml: string): string {
   return unescapeXml(msg)
 }
 
+function tag(name: string, value?: string | number | null): string {
+  return `<${name}>${escapeXml(value == null ? '' : String(value))}</${name}>`
+}
+
+function dataGeis(date = new Date()): string {
+  return date.toISOString().split('T')[0]
+}
+
+function buildLoteGeisWebXml(params: {
+  usuario: string
+  senha: string
+  input: EmitirNfseInput
+  prestador: Prestador
+  numero: string
+  numeroLote: string
+}) {
+  const { usuario, senha, input, prestador, numero, numeroLote } = params
+  const valor = input.servico.valorServico
+  const deducoes = input.servico.valorDeducoes ?? 0
+  const baseCalculo = Math.max(valor - deducoes, 0)
+  const tomador = input.tomador
+  const endereco = tomador.endereco
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<EnviaLoteRPS>
+  ${tag('Usuario', usuario)}
+  ${tag('Senha', senha)}
+  ${tag('NumeroLote', numeroLote)}
+  <Rps>
+    <ItensLote>
+      ${tag('NumeroRps', Number(numero.replace(/\D/g, '').slice(-9)) || Date.now() % 1000000000)}
+      ${tag('Serie', input.serieRps ?? 'RPS')}
+      ${tag('Tipo', '1')}
+      ${tag('TipoLcmto', input.servico.issRetido ? 'R' : 'N')}
+      ${tag('CodServ', Number(input.servico.codigoServico.replace(/\D/g, '')) || input.servico.codigoServico)}
+      ${tag('DtEmissao', dataGeis())}
+      ${tag('Valor', valor.toFixed(2))}
+      ${tag('BaseCalc', baseCalculo.toFixed(2))}
+      <Tomador>
+        ${tag('CNPJ', tomador.cpfCnpj.replace(/\D/g, ''))}
+        ${tag('InscricaoMunicipal', '')}
+        ${tag('RazaoSocial', tomador.razaoSocial)}
+        <Endereco>
+          ${tag('Rua', endereco?.logradouro ?? '')}
+          ${tag('Numero', endereco?.numero ?? '')}
+          ${tag('Bairro', endereco?.bairro ?? '')}
+          ${tag('Cidade', endereco?.municipioIbge ?? '')}
+          ${tag('Estado', endereco?.uf ?? '')}
+          ${tag('Cep', endereco?.cep?.replace(/\D/g, '') ?? '')}
+        </Endereco>
+        <Contato>
+          ${tag('Telefone', '')}
+          ${tag('Email', tomador.email ?? '')}
+        </Contato>
+      </Tomador>
+      ${tag('Municipio', prestador.municipioIbge)}
+      ${tag('DtLanc', dataGeis())}
+      ${tag('Descricao', input.servico.discriminacao)}
+      ${tag('OutrosImp', '0.00')}
+    </ItensLote>
+  </Rps>
+</EnviaLoteRPS>`
+}
+
 function textoErroGeisWeb(mensagem: string, erro?: string): string {
   const campos = [
     extractTag(mensagem, 'Mensagem'),
@@ -84,47 +147,36 @@ export class CajamarConector {
     prestador: Prestador,
   ): Promise<ResultadoEmissao> {
     try {
-      const chave = extrairChaveDoPfx(cert.pfxBase64, cert.senha)
+      const usuario = lerCredencial(config.credenciais?.usuario, 'Usuário GeisWeb/Cajamar')
+      const senha = lerCredencial(config.credenciais?.senha, 'Senha GeisWeb/Cajamar')
+      if (!usuario.valor || !senha.valor) {
+        const erroCredencial = usuario.erro ?? senha.erro
+        if (erroCredencial) return { sucesso: false, codigoErro: usuario.codigoErro ?? senha.codigoErro, erro: erroCredencial }
+        return {
+          sucesso: false,
+          codigoErro: 'GEISWEB_CREDENCIAL_AUSENTE',
+          erro: 'Usuário e senha GeisWeb/Cajamar não configurados. Cajamar exige credenciais do portal além do certificado.',
+        }
+      }
+
       const numero = input.numeroRps ?? String(Date.now())
       const serie = input.serieRps ?? 'RPS'
       const numeroLote = String(Date.now())
-      const infRpsId = `rps${numero}`
-      const infLoteId = `lote${numeroLote}`
-
-      const infRpsXml = buildInfRpsXml({
-        numero,
-        serie,
-        naturezaOperacao: config.naturezaOperacao ?? '1',
-        optanteSimples: config.optanteSimples,
-        incentivadorCultural: config.incentivadorCultural,
+      const xmlLote = buildLoteGeisWebXml({
+        usuario: usuario.valor,
+        senha: senha.valor,
+        input,
         prestador,
-        tomador: input.tomador,
-        servico: {
-          ...input.servico,
-          itemListaServico: input.servico.itemListaServico ?? config.itemListaServico ?? input.servico.codigoServico,
-          cnae: input.servico.cnae ?? config.cnae,
-          aliquota: input.servico.aliquota ?? config.aliquotaPadrao,
-          municipioPrestacao: prestador.municipioIbge,
-        },
-        regimeTributario: config.regimeTributario,
-        infRpsId,
-      })
-
-      const xmlInfRpsAssinado = assinarXml(`<Rps>${infRpsXml}</Rps>`, infRpsId, chave)
-      const infLoteXml = buildLoteRpsXml({
+        numero,
         numeroLote,
-        cnpjPrestador: prestador.cnpj,
-        inscricaoMunicipal: prestador.inscricaoMunicipal,
-        rpsListXml: xmlInfRpsAssinado,
-        quantidadeRps: 1,
-        infLoteId,
       })
-      const xmlLoteAssinado = assinarXml(`<EnviarLoteRpsEnvio>${infLoteXml}</EnviarLoteRpsEnvio>`, infLoteId, chave)
 
       console.log('[Cajamar/GeisWeb] emitindo NFS-e', {
         ambiente: config.ambienteEmissao,
         endpoint: GEISWEB_ENDPOINT,
         metodo: 'EnviaLoteRPS',
+        usuarioCriptografado: usuario.criptografada,
+        senhaCriptografada: senha.criptografada,
         prestadorCnpjFinal: prestador.cnpj.replace(/\D/g, '').slice(-4),
         numeroRps: numero,
         serieRps: serie,
@@ -134,10 +186,8 @@ export class CajamarConector {
         {
           endpoint: GEISWEB_ENDPOINT,
           action: `${GEISWEB_NS}#EnviaLoteRPS`,
-          certPem: chave.certPem,
-          keyPem: chave.privateKeyPem,
         },
-        buildRpcEnvelope(xmlLoteAssinado),
+        buildRpcEnvelope(xmlLote),
       )
       const bodyXml = extractSoapBody(respXml)
       const mensagem = extrairMensagemGeisWeb(bodyXml)
