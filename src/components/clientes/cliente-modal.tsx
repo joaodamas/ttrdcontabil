@@ -20,7 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/ui/empty-state'
 import {
-  Loader2, Mail, MapPin, Phone, DollarSign, Pencil,
+  Mail, MapPin, Phone, DollarSign, Pencil,
   ShieldCheck, ShieldAlert, ShieldOff, ExternalLink,
   Briefcase, CalendarDays, Receipt, Settings, AlertTriangle,
 } from 'lucide-react'

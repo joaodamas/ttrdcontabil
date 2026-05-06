@@ -17,9 +17,10 @@ export default function Page() {
   useEffect(() => {
     if (!id) return
     let active = true
-    setLoading(true)
-    setErro(null)
     queueMicrotask(() => {
+      if (!active) return
+      setLoading(true)
+      setErro(null)
       void getDocument<Record<string, unknown>>('clientes', id)
         .then((doc) => {
           if (!active) return
