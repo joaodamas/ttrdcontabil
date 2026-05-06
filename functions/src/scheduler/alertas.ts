@@ -6,11 +6,12 @@
  *   1. Tarefas vencendo nos próximos 3 dias (status != 'concluida' e != 'cancelada')
  *   2. Lançamentos atrasados (dataVencimento < hoje, status == 'pendente')
  *   3. Certificados digitais vencendo em até 30 dias
+ *   4. NFS-e com erro, cancelamento pendente ou rascunho aguardando emissão
  *
  * Destinatário: variável de ambiente EMAIL_TO (email do escritório).
  *
  * Coleções consultadas:
- *   tarefas         — responsavelNome, titulo, dataVencimento, status
+ *   tarefas         — responsavelNome, titulo, dataPrazo, status
  *   lancamentos     — clienteNome, descricao, dataVencimento, valor, status
  *   clientes_fiscal — clienteId, credenciais.certVencimento, credenciais.certTitular
  *   clientes        — razaoSocial (para enriquecer clientes_fiscal)
@@ -50,9 +51,9 @@ export const enviarAlertasDiarios = onSchedule(
     // ── 1. Tarefas vencendo nos próximos 3 dias ───────────────────────────────
     const tarefasSnap = await db()
       .collection('tarefas')
-      .where('dataVencimento', '>=', tsHoje)
-      .where('dataVencimento', '<=', tsEm3)
-      .orderBy('dataVencimento', 'asc')
+      .where('dataPrazo', '>=', tsHoje)
+      .where('dataPrazo', '<=', tsEm3)
+      .orderBy('dataPrazo', 'asc')
       .get()
 
     const tarefasAlerta = tarefasSnap.docs
@@ -86,8 +87,22 @@ export const enviarAlertasDiarios = onSchedule(
       }
     }
 
+    // ── 4. Alertas NFS-e ─────────────────────────────────────────────────────
+    const [nfseErroSnap, nfseCancelamentoSnap, nfseRascunhosSnap] = await Promise.all([
+      db().collection('nfse_emitidas').where('status', 'in', ['erro_integracao', 'rejeitada']).limit(50).get(),
+      db().collection('nfse_emitidas').where('status', '==', 'cancelamento_pendente').limit(50).get(),
+      db().collection('nfse_rascunhos').where('status', 'in', ['aguardando_emissao', 'erro_integracao']).limit(50).get(),
+    ])
+
     // Se nada a alertar, não envia email
-    if (tarefasAlerta.length === 0 && lancamentosSnap.empty && certAlertas.length === 0) {
+    if (
+      tarefasAlerta.length === 0
+      && lancamentosSnap.empty
+      && certAlertas.length === 0
+      && nfseErroSnap.empty
+      && nfseCancelamentoSnap.empty
+      && nfseRascunhosSnap.empty
+    ) {
       console.log('[alertas] Nenhum alerta para enviar hoje.')
       return
     }
@@ -106,7 +121,7 @@ export const enviarAlertasDiarios = onSchedule(
             t.titulo as string ?? '—',
             t.responsavelNome as string ?? '—',
             t.clienteNome as string ?? '—',
-            fmtDate(t.dataVencimento as FirebaseFirestore.Timestamp),
+            fmtDate(t.dataPrazo as FirebaseFirestore.Timestamp),
             t.prioridade as string ?? '—',
           ]
         })
@@ -137,15 +152,67 @@ export const enviarAlertasDiarios = onSchedule(
       )
     }
 
+    if (!nfseErroSnap.empty) {
+      html += tableHtml(
+        `NFS-e com erro (${nfseErroSnap.size})`,
+        ['Cliente', 'Número', 'Status', 'Erro'],
+        nfseErroSnap.docs.map((d) => {
+          const n = d.data()
+          return [
+            n.clienteNome as string ?? '—',
+            n.numeroNfse as string ?? '—',
+            n.status as string ?? '—',
+            n.erroUltimaTentativa as string ?? n.erroUltimaConsulta as string ?? '—',
+          ]
+        })
+      )
+    }
+
+    if (!nfseCancelamentoSnap.empty) {
+      html += tableHtml(
+        `NFS-e com cancelamento pendente (${nfseCancelamentoSnap.size})`,
+        ['Cliente', 'Número', 'Motivo'],
+        nfseCancelamentoSnap.docs.map((d) => {
+          const n = d.data()
+          return [
+            n.clienteNome as string ?? '—',
+            n.numeroNfse as string ?? '—',
+            n.motivoCancelamento as string ?? '—',
+          ]
+        })
+      )
+    }
+
+    if (!nfseRascunhosSnap.empty) {
+      html += tableHtml(
+        `Rascunhos NFS-e pendentes (${nfseRascunhosSnap.size})`,
+        ['Cliente', 'Status', 'Erro'],
+        nfseRascunhosSnap.docs.map((d) => {
+          const n = d.data()
+          return [
+            n.clienteNome as string ?? n.titulo as string ?? '—',
+            n.status as string ?? '—',
+            n.erroUltimaTentativa as string ?? '—',
+          ]
+        })
+      )
+    }
+
     html += `<p style="font-size:12px;color:#888;margin-top:24px">TTRD Contábil — alerta automático. Não responda este email.</p></div>`
 
-    const totalAlertas = tarefasAlerta.length + lancamentosSnap.size + certAlertas.length
+    const totalAlertas =
+      tarefasAlerta.length
+      + lancamentosSnap.size
+      + certAlertas.length
+      + nfseErroSnap.size
+      + nfseCancelamentoSnap.size
+      + nfseRascunhosSnap.size
     await sendEmail({
       subject: `[TTRD] ${totalAlertas} alerta(s) para hoje — ${hoje.toLocaleDateString('pt-BR')}`,
       html,
     })
 
-    console.log(`[alertas] Email enviado. Tarefas: ${tarefasAlerta.length}, Lançamentos: ${lancamentosSnap.size}, Certs: ${certAlertas.length}`)
+    console.log(`[alertas] Email enviado. Tarefas: ${tarefasAlerta.length}, Lançamentos: ${lancamentosSnap.size}, Certs: ${certAlertas.length}, NFS-e erro: ${nfseErroSnap.size}, cancelamento: ${nfseCancelamentoSnap.size}, rascunhos: ${nfseRascunhosSnap.size}`)
   }
 )
 
@@ -171,8 +238,8 @@ export const alertasPrazoCritico = onSchedule(
     const criticasSnap = await db()
       .collection('tarefas')
       .where('status', 'in', ['pendente', 'em_andamento'])
-      .where('dataVencimento', '>=', tsAgora)
-      .where('dataVencimento', '<=', tsEm48h)
+      .where('dataPrazo', '>=', tsAgora)
+      .where('dataPrazo', '<=', tsEm48h)
       .get()
 
     const flaggedSnap = await db()

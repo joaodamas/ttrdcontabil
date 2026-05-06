@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { appConfig } from "@/lib/app-config";
 import "./globals.css";
 
 const inter = Inter({
@@ -11,7 +12,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "TTRD Contábil | Gestão",
+  title: `${appConfig.name} | Gestão`,
   description: "Plataforma de Gestão Contábil, Operacional e Fiscal",
 };
 

@@ -1,17 +1,28 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFeatureKeys } from '@/lib/feature-keys'
-import { fetchFiscalSnapshot } from './services'
+import { queryStaleTimes } from '@/lib/query-stale-times'
+import { fetchFiscalReadiness, fetchFiscalSnapshot } from './services'
 
 const base = createFeatureKeys('fiscal')
 
 export const fiscalKeys = {
   all: base.all,
   snapshot: () => base.list('snapshot'),
+  readiness: () => base.list('readiness'),
 }
 
 export function useFiscalSnapshotQuery() {
   return useQuery({
     queryKey: fiscalKeys.snapshot(),
     queryFn: fetchFiscalSnapshot,
+    staleTime: queryStaleTimes.fiscal,
+  })
+}
+
+export function useFiscalReadinessQuery() {
+  return useQuery({
+    queryKey: fiscalKeys.readiness(),
+    queryFn: fetchFiscalReadiness,
+    staleTime: queryStaleTimes.fiscal,
   })
 }

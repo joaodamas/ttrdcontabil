@@ -18,6 +18,7 @@
       { "source": "/clientes/*",               "destination": "/clientes/placeholder.html" },
       { "source": "/competencias/*/editar",    "destination": "/competencias/placeholder/editar.html" },
       { "source": "/competencias/*",           "destination": "/competencias/placeholder.html" },
+      { "source": "/fiscal/*",                 "destination": "/fiscal/placeholder.html" },
       { "source": "/ir/*/editar",              "destination": "/ir/placeholder/editar.html" },
       { "source": "/ir/*",                     "destination": "/ir/placeholder.html" },
       { "source": "/tarefas/*/editar",         "destination": "/tarefas/placeholder/editar.html" },

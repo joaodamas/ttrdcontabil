@@ -17,7 +17,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Timeline, type TimelineEvent } from '@/components/clientes/timeline'
 import {
   ArrowLeft, Mail, MapPin, Pencil, ShieldCheck, ShieldAlert, ShieldOff,
-  AlertTriangle, Plus, Receipt, Wallet, CheckCircle2, AlertCircle, Bell,
+  AlertTriangle, Plus, Receipt, Wallet, AlertCircle, Bell,
 } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
@@ -56,6 +56,8 @@ export default function ClienteDetailPage() {
   const [servicos,     setServicos]     = useState<Array<Record<string, unknown>>>([])
   const [competencias, setCompetencias] = useState<Array<Record<string, unknown>>>([])
   const [lancamentos,  setLancamentos]  = useState<Array<Record<string, unknown>>>([])
+  const [tarefas,      setTarefas]      = useState<Array<Record<string, unknown>>>([])
+  const [rascunhos,    setRascunhos]    = useState<Array<Record<string, unknown>>>([])
   const [fiscal,       setFiscal]       = useState<Record<string, unknown> | null>(null)
   const [loading,      setLoading]      = useState(true)
   const [configOpen,   setConfigOpen]   = useState(false)
@@ -69,20 +71,23 @@ export default function ClienteDetailPage() {
 
   useEffect(() => {
     if (!id) return
-    setLoading(true)
     function get<T>(p: Promise<T>): Promise<T | null> { return p.catch(() => null) }
     Promise.all([
       get(getDocument('clientes', id)),
       get(listDocuments('clientes_servicos', [where('clienteId', '==', id), orderBy('dataInicio', 'desc'), limit(50)])),
       get(listDocuments('competencias',      [where('clienteId', '==', id), orderBy('ano', 'desc'), orderBy('mes', 'desc'), limit(20)])),
       get(listDocuments('lancamentos',       [where('clienteId', '==', id), orderBy('dataVencimento', 'desc'), limit(20)])),
+      get(listDocuments('tarefas',           [where('clienteId', '==', id), limit(30)])),
+      get(listDocuments('nfse_rascunhos',    [where('clienteId', '==', id), limit(20)])),
       get(listDocuments('clientes_fiscal',   [where('clienteId', '==', id), limit(1)])),
-    ]).then(([clienteData, servicosData, competenciasData, lancamentosData, fiscalData]) => {
+    ]).then(([clienteData, servicosData, competenciasData, lancamentosData, tarefasData, rascunhosData, fiscalData]) => {
       if (!clienteData) { router.push('/clientes'); return }
       setCliente(clienteData as Record<string, unknown>)
       setServicos((servicosData ?? []) as Array<Record<string, unknown>>)
       setCompetencias((competenciasData ?? []) as Array<Record<string, unknown>>)
       setLancamentos((lancamentosData ?? []) as Array<Record<string, unknown>>)
+      setTarefas((tarefasData ?? []) as Array<Record<string, unknown>>)
+      setRascunhos((rascunhosData ?? []) as Array<Record<string, unknown>>)
       setFiscal(fiscalData && fiscalData.length > 0 ? fiscalData[0] as Record<string, unknown> : null)
     }).finally(() => setLoading(false))
   }, [id, router])
@@ -122,22 +127,41 @@ export default function ClienteDetailPage() {
     return events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, 15)
   }, [competencias, lancamentos])
 
+  const fiscalCredenciais = useMemo(
+    () => (fiscal?.credenciais ?? {}) as Record<string, unknown>,
+    [fiscal]
+  )
+  const fiscalIbge = fiscal?.municipioIbge as string | undefined
+  const fiscalTipo = fiscalIbge ? MUNICIPIO_TIPO[fiscalIbge] : undefined
+
   /* ── proximosPassos ───────────────────────────────────── */
   const proximosPassos = useMemo(() => {
     const hoje = new Date()
     const list: Array<{ id: string; titulo: string; descricao: string; severidade: 'danger' | 'warning'; href?: string }> = []
+    if (servicos.length === 0) list.push({ id: 'servico-ausente', titulo: 'Sem serviço contratado', descricao: 'Vincule pelo menos um serviço para gerar competências, tarefas e honorários.', severidade: 'danger', href: `/clientes/${id}/servicos/novo` })
     const competenciaAberta = competencias.find(c => (c.status as string) === 'aberta')
     if (competenciaAberta) list.push({ id: 'comp-aberta', titulo: 'Competência em aberto', descricao: `Pendente em ${formatMesAno(competenciaAberta.mes as number, competenciaAberta.ano as number)}.`, severidade: 'warning', href: `/competencias/${competenciaAberta.id as string}` })
+    const tarefaAtrasada = tarefas.find(t => { if (!['pendente', 'em_andamento'].includes((t.status as string) ?? '')) return false; const v = tsToDate(t.dataPrazo); return !!v && v < hoje })
+    if (tarefaAtrasada) list.push({ id: 'tarefa-atrasada', titulo: 'Tarefa atrasada', descricao: (tarefaAtrasada.titulo as string | undefined) ?? 'Tarefa pendente com prazo vencido.', severidade: 'danger', href: `/tarefas/${tarefaAtrasada.id as string}` })
     const lancAtrasado = lancamentos.find(l => { if ((l.status as string) !== 'pendente') return false; const v = tsToDate(l.dataVencimento); return !!v && v < hoje })
     if (lancAtrasado) list.push({ id: 'lanc-atrasado', titulo: 'Cobrança em atraso', descricao: `Lançamento vencido: ${(lancAtrasado.descricao as string) ?? 'sem descrição'}.`, severidade: 'danger', href: '/financeiro' })
     if (!fiscal) list.push({ id: 'fiscal-config', titulo: 'Configuração fiscal pendente', descricao: 'Cliente sem configuração NFS-e.', severidade: 'warning' })
+    const certVencimento = fiscalCredenciais.certVencimento as string | undefined
+    if (fiscal && !certVencimento && (fiscalTipo === 'abrasf_a1' || fiscalTipo === 'geisweb_a1')) list.push({ id: 'cert-ausente', titulo: 'Certificado A1 ausente', descricao: 'Envie o certificado para liberar integração fiscal A1.', severidade: 'warning' })
+    if (certVencimento) {
+      const venc = new Date(certVencimento)
+      const em30Dias = new Date(hoje); em30Dias.setDate(hoje.getDate() + 30)
+      if (venc <= em30Dias) list.push({ id: 'cert-vencendo', titulo: 'Certificado vencido ou vencendo', descricao: `Validade: ${venc.toLocaleDateString('pt-BR')}.`, severidade: venc < hoje ? 'danger' : 'warning' })
+    }
+    const rascunhoPendente = rascunhos.find(r => ['rascunho', 'pronto_para_emitir', 'aguardando_emissao', 'erro_integracao'].includes((r.status as string) ?? ''))
+    if (rascunhoPendente) list.push({ id: 'nfse-rascunho', titulo: 'Rascunho NFS-e pendente', descricao: `Status: ${(rascunhoPendente.status as string) ?? 'rascunho'}.`, severidade: 'warning', href: '/fiscal' })
     return list
-  }, [competencias, lancamentos, fiscal])
+  }, [competencias, fiscal, fiscalCredenciais, fiscalTipo, id, lancamentos, rascunhos, servicos.length, tarefas])
 
   const competenciaAberta   = competencias.find(c => (c.status as string) === 'aberta')
   const lancamentoAtrasado  = lancamentos.find(l => { const v = tsToDate(l.dataVencimento); return (l.status as string) === 'pendente' && !!v && v < new Date() })
 
-  const healthScore = (fiscal ? 1 : 0) + (!competenciaAberta ? 1 : 0) + (!lancamentoAtrasado ? 1 : 0)
+  const healthScore = (servicos.length > 0 ? 1 : 0) + (fiscal ? 1 : 0) + (!competenciaAberta ? 1 : 0) + (!lancamentoAtrasado ? 1 : 0)
 
   // Alerta de emissão NFS-e
   const diaEmissaoNFSe = cliente ? (cliente.diaEmissaoNFSe as number | undefined) : undefined
@@ -169,9 +193,9 @@ export default function ClienteDetailPage() {
   if (!cliente) return null
 
   const statusInfo = STATUS_LABELS[cliente.status as string] ?? { label: String(cliente.status), variant: 'outline' as const }
-  const creds      = (fiscal?.credenciais ?? {}) as Record<string, unknown>
-  const ibge       = fiscal?.municipioIbge as string | undefined
-  const tipo       = ibge ? MUNICIPIO_TIPO[ibge] : undefined
+  const creds      = fiscalCredenciais
+  const ibge       = fiscalIbge
+  const tipo       = fiscalTipo
   const municipioNome = MUNICIPIOS.find(m => m.ibge === ibge)?.nome ?? ibge ?? '—'
   const certInfo: CertInfo | null = creds.certTitular
     ? { titular: creds.certTitular as string, vencimento: creds.certVencimento as string, valido: creds.certValido as boolean, storagePath: creds.certificadoStoragePath as string }
@@ -317,7 +341,7 @@ export default function ClienteDetailPage() {
               </CardContent>
             </Card>
 
-            {fiscal && tipo === 'abrasf_a1' && (
+            {fiscal && (tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
               <Card>
                 <CardHeader className="flex flex-row items-center gap-2 py-3 px-4">
                   {certInfo ? certInfo.valido ? <ShieldCheck className="h-4 w-4 text-success" /> : <ShieldAlert className="h-4 w-4 text-destructive" /> : <ShieldOff className="h-4 w-4 text-muted-foreground" />}
@@ -344,6 +368,10 @@ export default function ClienteDetailPage() {
           <Card>
             <CardHeader className="py-3 px-4"><CardTitle className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Saúde do Cliente</CardTitle></CardHeader>
             <CardContent className="px-4 pb-4 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-sm"><Plus className="h-3.5 w-3.5 text-muted-foreground" />Serviços</span>
+                <Badge variant={servicos.length > 0 ? 'success' : 'destructive'}>{servicos.length > 0 ? 'Vinculado' : 'Pendente'}</Badge>
+              </div>
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-sm"><Receipt className="h-3.5 w-3.5 text-muted-foreground" />Fiscal NFS-e</span>
                 <Badge variant={fiscal ? 'success' : 'destructive'}>{fiscal ? 'Configurado' : 'Pendente'}</Badge>
@@ -376,9 +404,9 @@ export default function ClienteDetailPage() {
               <div className="pt-2 border-t border-border/50">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs text-muted-foreground">Saúde geral</span>
-                  <span className="text-xs font-semibold tabular-nums">{healthScore}/3</span>
+                  <span className="text-xs font-semibold tabular-nums">{healthScore}/4</span>
                 </div>
-                <Progress value={(healthScore / 3) * 100} className="h-1.5" />
+                <Progress value={(healthScore / 4) * 100} className="h-1.5" />
               </div>
             </CardContent>
           </Card>

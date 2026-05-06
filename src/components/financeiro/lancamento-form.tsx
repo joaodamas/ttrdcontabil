@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, Controller, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { Timestamp } from 'firebase/firestore'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,6 +21,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { getClientes, createDocument, updateDocument } from '@/lib/firestore-client'
+import { SELECT_NONE_VALUE } from '@/lib/select-values'
 
 const lancamentoSchema = z.object({
   clienteId:        z.string().optional().nullable(),
@@ -33,9 +35,22 @@ const lancamentoSchema = z.object({
   status:           z.enum(['pendente', 'pago', 'atrasado', 'cancelado', 'estornado']).default('pendente'),
   formaPagamento:   z.string().max(50).optional().nullable(),
   observacoes:      z.string().optional().nullable(),
+}).superRefine((data, ctx) => {
+  if (data.tipo === 'receita' && !data.clienteId) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['clienteId'],
+      message: 'Receitas devem estar vinculadas a um cliente',
+    })
+  }
 })
 
 type LancamentoFormData = z.input<typeof lancamentoSchema>
+type LancamentoPayload = Omit<LancamentoFormData, 'dataVencimento' | 'dataPagamento'> & {
+  clienteNome?: string | null
+  dataVencimento: Timestamp
+  dataPagamento?: Timestamp | null
+}
 
 interface ClienteItem { id: string; razaoSocial: string }
 
@@ -61,6 +76,7 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
     resolver: zodResolver(lancamentoSchema),
     defaultValues: { tipo: 'receita', status: 'pendente', ...initialData },
   })
+  const tipo = useWatch({ control, name: 'tipo' })
 
   useEffect(() => {
     getClientes({ status: 'ativo' })
@@ -70,20 +86,29 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
   }, [])
 
   async function onSubmit(data: LancamentoFormData) {
+    const cliente = data.clienteId ? clientes.find((c) => c.id === data.clienteId) : null
+    const payload: LancamentoPayload = {
+      ...data,
+      clienteId: data.clienteId || null,
+      clienteNome: cliente?.razaoSocial ?? null,
+      dataVencimento: Timestamp.fromDate(new Date(`${data.dataVencimento}T12:00:00`)),
+      dataPagamento: data.dataPagamento ? Timestamp.fromDate(new Date(`${data.dataPagamento}T12:00:00`)) : null,
+    }
+
     try {
       if (isEditing) {
-        await updateDocument('lancamentos', initialData!.id!, data)
+        await updateDocument('lancamentos', initialData!.id!, payload)
         toast.success('Lançamento atualizado!')
         if (onSuccess) onSuccess(initialData!.id!)
         else { router.push('/financeiro'); router.refresh() }
       } else {
-        const id = await createDocument('lancamentos', data)
+        const id = await createDocument('lancamentos', payload)
         toast.success('Lançamento criado!')
         if (onSuccess) onSuccess(id)
         else { router.push('/financeiro'); router.refresh() }
       }
     } catch {
-      toast.error('Erro ao salvar. Tente novamente.')
+      toast.error('Erro ao salvar lançamento. Verifique cliente, valor e vencimento.')
     }
   }
 
@@ -171,17 +196,17 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
           </div>
 
           <div className="space-y-1.5">
-            <Label>Cliente</Label>
+            <Label>Cliente {tipo === 'receita' ? <span className="text-destructive">*</span> : null}</Label>
             <Controller
               name="clienteId"
               control={control}
               render={({ field }) => (
-                <Select value={field.value ?? ''} onValueChange={(v) => field.onChange(v || null)} disabled={loadingClientes}>
+                <Select value={field.value ?? SELECT_NONE_VALUE} onValueChange={(v) => field.onChange(v === SELECT_NONE_VALUE ? null : v)} disabled={loadingClientes}>
                   <SelectTrigger>
                     <SelectValue placeholder={loadingClientes ? 'Carregando...' : 'Selecione o cliente'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhum</SelectItem>
+                    <SelectItem value={SELECT_NONE_VALUE}>Nenhum</SelectItem>
                     {clientes.map((c) => (
                       <SelectItem key={c.id} value={c.id}>{c.razaoSocial}</SelectItem>
                     ))}
@@ -189,6 +214,7 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
                 </Select>
               )}
             />
+            {errors.clienteId && <p className="text-xs text-destructive">{errors.clienteId.message}</p>}
           </div>
 
           <div className="space-y-1.5">

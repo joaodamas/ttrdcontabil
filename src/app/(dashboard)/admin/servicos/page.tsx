@@ -2,13 +2,16 @@
 
 import { useState, useEffect, useCallback } from 'react'
 
-import { getServicos, createDocument } from '@/lib/firestore-client'
 import { formatCurrency } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { TableEmptyState } from '@/components/ui/empty-state'
 import { ServicoForm } from '@/components/admin/servico-form'
-import { Loader2, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import { Loader2, ChevronUp, ChevronDown, ChevronsUpDown, BriefcaseBusiness } from 'lucide-react'
 import { toast } from 'sonner'
+import { getErrorMessage } from '@/lib/error-message'
+import { fetchServicosAdmin, gerarTabelaCobAdmin } from '@/features/admin/services'
+import type { ServicoAdmin } from '@/features/admin/types'
 
 type SortKey = 'codigo' | 'nome' | 'frequencia' | 'valorPadrao' | 'ativo'
 type SortDir = 'asc' | 'desc'
@@ -21,7 +24,7 @@ const FREQUENCIA_LABELS: Record<string, string> = {
 }
 
 export default function AdminServicosPage() {
-  const [servicos, setServicos] = useState<Array<Record<string, unknown>>>([])
+  const [servicos, setServicos] = useState<ServicoAdmin[]>([])
   const [loading, setLoading] = useState(true)
   const [gerando, setGerando] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('codigo')
@@ -29,8 +32,9 @@ export default function AdminServicosPage() {
 
   const load = useCallback(() => {
     setLoading(true)
-    getServicos()
-      .then((data) => setServicos(data as Array<Record<string, unknown>>))
+    fetchServicosAdmin()
+      .then(setServicos)
+      .catch((err) => toast.error(getErrorMessage(err, 'Nao foi possivel carregar os servicos cadastrados. Verifique sua permissao de acesso.')))
       .finally(() => setLoading(false))
   }, [])
 
@@ -61,24 +65,11 @@ export default function AdminServicosPage() {
   async function gerarTabelaCob() {
     setGerando(true)
     try {
-      const promises = Array.from({ length: 20 }, (_, i) => {
-        const n = i + 1
-        const valor = n * 50
-        const codigo = `COB${String(n).padStart(2, '0')}`
-        return createDocument('servicos', {
-          codigo,
-          codigoNumero: n,
-          nome: `Honorário ${codigo}`,
-          frequencia: 'mensal',
-          valorPadrao: valor,
-          ativo: true,
-        })
-      })
-      await Promise.all(promises)
+      await gerarTabelaCobAdmin()
       toast.success('Tabela COB01–COB20 criada com sucesso!')
       load()
-    } catch {
-      toast.error('Erro ao gerar tabela COB.')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Nao foi possivel gerar a tabela COB. Verifique se ja existem servicos cadastrados e tente novamente.'))
     } finally {
       setGerando(false)
     }
@@ -152,11 +143,13 @@ export default function AdminServicosPage() {
             </thead>
             <tbody className="divide-y">
               {sorted.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                    Nenhum serviço cadastrado.
-                  </td>
-                </tr>
+                <TableEmptyState
+                  colSpan={6}
+                  icon={BriefcaseBusiness}
+                  title="Nenhum serviço cadastrado"
+                  description="Gere a tabela COB inicial ou cadastre um serviço manualmente para conseguir vincular clientes e gerar competências."
+                  action={{ label: gerando ? 'Gerando...' : 'Gerar Tabela COB01-COB20', onClick: () => { void gerarTabelaCob() } }}
+                />
               ) : (
                 sorted.map((s) => (
                   <tr key={s.id as string} className="transition-colors hover:bg-muted/35">

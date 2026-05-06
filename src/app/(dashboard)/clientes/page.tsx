@@ -33,6 +33,14 @@ const REGIME_BADGE: Record<string, string> = {
   isento:           'bg-muted text-muted-foreground border-border',
 }
 
+function clientesPageHref(params: { busca: string; status: string; page: number }) {
+  const search = new URLSearchParams()
+  if (params.busca) search.set('busca', params.busca)
+  if (params.status) search.set('status', params.status)
+  search.set('page', String(params.page))
+  return `/clientes?${search.toString()}`
+}
+
 function clienteInitials(razaoSocial: string): string {
   const words = razaoSocial.trim().split(/\s+/)
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
@@ -66,7 +74,7 @@ function ClientesContent() {
   const { busca, status, page } = result.success
     ? result.data
     : { busca: '', status: '', page: 1 }
-  const { paginados, total, totalPages, isLoading } = useClientesList({ busca, status, page })
+  const { paginados, total, totalPages, isLoading, isError } = useClientesList({ busca, status, page })
   const [modalClienteId,   setModalClienteId]   = useState<string | null>(null)
   const [modalClienteNome, setModalClienteNome] = useState('')
 
@@ -105,6 +113,13 @@ function ClientesContent() {
           <tbody className="divide-y divide-border">
             {isLoading ? (
               <TableRowSkeleton cols={7} rows={8} />
+            ) : isError ? (
+              <TableEmptyState
+                colSpan={7}
+                icon={Users}
+                title="Não foi possível carregar clientes"
+                description="Atualize a página. Se continuar, valide regras e índices do Firestore."
+              />
             ) : paginados.length === 0 ? (
               <TableEmptyState
                 colSpan={7}
@@ -203,12 +218,12 @@ function ClientesContent() {
           <span className="text-muted-foreground">Página {page} de {totalPages}</span>
           <div className="flex gap-2">
             {page > 1 && (
-              <Link href={`/clientes?${new URLSearchParams({ busca, status, page: String(page - 1) })}`} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
+              <Link href={clientesPageHref({ busca, status, page: page - 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
                 Anterior
               </Link>
             )}
             {page < totalPages && (
-              <Link href={`/clientes?${new URLSearchParams({ busca, status, page: String(page + 1) })}`} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
+              <Link href={clientesPageHref({ busca, status, page: page + 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
                 Próxima
               </Link>
             )}

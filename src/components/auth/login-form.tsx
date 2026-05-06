@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { signIn } from '@/lib/auth-client'
+import { appConfig } from '@/lib/app-config'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -43,9 +44,10 @@ const FEATURES = [
 export function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const from = searchParams.get('from') ?? '/dashboard'
+  const from = searchParams.get('from') ?? '/hoje'
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const brandColor = appConfig.brandPrimary
 
   const {
     register,
@@ -124,18 +126,23 @@ export function LoginForm() {
         <div className="relative z-10 flex flex-col h-full px-12 py-10">
 
           {/* Logo */}
-          <div className="flex items-center gap-3">
-            <div
-              className="flex items-center justify-center w-10 h-10 rounded-xl shrink-0"
-              style={{ background: '#F5C200' }}
-            >
+        <div className="flex items-center gap-3">
+          <div
+            className="flex items-center justify-center w-10 h-10 rounded-xl shrink-0"
+            style={{ background: brandColor }}
+          >
+            {appConfig.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={appConfig.logoUrl} alt="" className="h-7 w-7 object-contain" />
+            ) : (
               <Building2 className="w-5 h-5 text-black" strokeWidth={2.5} />
-            </div>
-            <div>
-              <p className="font-bold text-white text-base leading-tight tracking-wide">TTRD Contábil</p>
-              <p className="text-white/40 text-xs tracking-wider uppercase">Gestão Integrada</p>
-            </div>
+            )}
           </div>
+          <div>
+              <p className="font-bold text-white text-base leading-tight tracking-wide">{appConfig.name}</p>
+              <p className="text-white/40 text-xs tracking-wider uppercase">{appConfig.tagline}</p>
+          </div>
+        </div>
 
           {/* Headline central */}
           <div className="flex-1 flex flex-col justify-center space-y-8">
@@ -183,7 +190,7 @@ export function LoginForm() {
               </p>
               <p className="text-sm text-white/55 leading-relaxed">
                 ERPs populares organizam o financeiro <em className="text-white/70 not-italic">da empresa do cliente</em>.
-                A TTRD organiza o <strong className="text-white/85">trabalho do contador</strong>: competências, fechamento,
+                {appConfig.shortName} organiza o <strong className="text-white/85">trabalho do contador</strong>: competências, fechamento,
                 obrigações e fiscal — com cliente 360 e cockpit diário.
               </p>
               <ul className="text-xs text-white/45 space-y-1.5 leading-relaxed">
@@ -211,7 +218,7 @@ export function LoginForm() {
 
           {/* Rodapé */}
           <p className="text-xs text-white/20">
-            © {new Date().getFullYear()} TTRD Contábil · Acesso restrito
+            © {new Date().getFullYear()} {appConfig.name} · Acesso restrito
           </p>
         </div>
       </div>
@@ -234,12 +241,17 @@ export function LoginForm() {
         <div className="flex flex-col items-center mb-8 lg:hidden relative z-10">
           <div
             className="flex items-center justify-center w-12 h-12 rounded-xl mb-3"
-            style={{ background: '#F5C200' }}
+            style={{ background: brandColor }}
           >
-            <Building2 className="w-6 h-6 text-black" />
+            {appConfig.logoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={appConfig.logoUrl} alt="" className="h-8 w-8 object-contain" />
+            ) : (
+              <Building2 className="w-6 h-6 text-black" />
+            )}
           </div>
-          <p className="font-bold text-[#0a0a0a] text-base">TTRD Contábil</p>
-          <p className="text-xs text-gray-400 mt-0.5">Gestão Contábil Integrada</p>
+          <p className="font-bold text-[#0a0a0a] text-base">{appConfig.name}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{appConfig.tagline}</p>
         </div>
 
         {/* Card do formulário */}

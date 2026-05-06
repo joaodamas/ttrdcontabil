@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { Timestamp } from 'firebase/firestore'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,11 +14,12 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { createDocument } from '@/lib/firestore-client'
+import { getErrorMessage } from '@/lib/error-message'
+import { formatServiceLabel } from '@/lib/service-label'
 
 const schema = z.object({
   servicoId: z.string().min(1, 'Selecione um serviço'),
@@ -33,15 +35,17 @@ type FormData = z.input<typeof schema>
 interface Servico {
   id: string
   nome: string
+  codigo?: string | null
   valorPadrao: number | null
 }
 
 interface ClienteServicoFormProps {
   clienteId: string
+  clienteNome?: string
   servicos: Servico[]
 }
 
-export function ClienteServicoForm({ clienteId, servicos }: ClienteServicoFormProps) {
+export function ClienteServicoForm({ clienteId, clienteNome, servicos }: ClienteServicoFormProps) {
   const router = useRouter()
 
   const {
@@ -65,22 +69,25 @@ export function ClienteServicoForm({ clienteId, servicos }: ClienteServicoFormPr
   async function onSubmit(data: FormData) {
     try {
       const servico = servicos.find((s) => s.id === data.servicoId)
+      const servicoNome = formatServiceLabel(servico)
       await createDocument('clientes_servicos', {
         clienteId,
+        clienteNome:  clienteNome ?? null,
         servicoId:    data.servicoId,
-        servicoNome:  servico?.nome ?? null,
+        servicoNome,
+        servicoCodigo: servico?.codigo ?? null,
         valor:        data.valor,
         diaVencimento: data.diaVencimento ?? null,
-        dataInicio:   data.dataInicio,
-        dataFim:      data.dataFim ?? null,
+        dataInicio:   Timestamp.fromDate(new Date(`${data.dataInicio}T12:00:00`)),
+        dataFim:      data.dataFim ? Timestamp.fromDate(new Date(`${data.dataFim}T12:00:00`)) : null,
         observacoes:  data.observacoes ?? null,
         status:       'ativo',
       })
       toast.success('Serviço adicionado!')
       router.push(`/clientes/${clienteId}`)
       router.refresh()
-    } catch {
-      toast.error('Erro inesperado. Tente novamente.')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Não foi possível vincular o serviço. Verifique valor, datas e permissões.'))
     }
   }
 
@@ -99,26 +106,37 @@ export function ClienteServicoForm({ clienteId, servicos }: ClienteServicoFormPr
             <Controller
               name="servicoId"
               control={control}
-              render={({ field }) => (
-                <Select
-                  value={field.value ?? ''}
-                  onValueChange={(v) => {
-                    field.onChange(v)
-                    if (v) handleServicoChange(v)
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o serviço" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {servicos.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+              render={({ field }) => {
+                  const selected = servicos.find((s) => s.id === field.value)
+                  return (
+                    <Select
+                      value={field.value ?? ''}
+                      onValueChange={(v) => {
+                        field.onChange(v)
+                        if (v) handleServicoChange(v)
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <span className={selected ? 'truncate text-left' : 'truncate text-left text-muted-foreground'}>
+                          {selected ? formatServiceLabel(selected) : 'Selecione o serviço'}
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {servicos.length === 0 ? (
+                          <div className="px-2 py-2 text-xs text-muted-foreground">
+                            Nenhum serviço cadastrado ativo.
+                          </div>
+                        ) : (
+                          servicos.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {formatServiceLabel(s)}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  )
+                }}
             />
             {errors.servicoId && (
               <p className="text-xs text-destructive">{errors.servicoId.message}</p>
@@ -137,7 +155,7 @@ export function ClienteServicoForm({ clienteId, servicos }: ClienteServicoFormPr
                 step="0.01"
                 min="0.01"
                 placeholder="0,00"
-                {...register('valor')}
+                {...register('valor', { valueAsNumber: true })}
               />
               {errors.valor && (
                 <p className="text-xs text-destructive">{errors.valor.message}</p>
@@ -152,7 +170,7 @@ export function ClienteServicoForm({ clienteId, servicos }: ClienteServicoFormPr
                 min="1"
                 max="31"
                 placeholder="Ex: 10"
-                {...register('diaVencimento')}
+                {...register('diaVencimento', { valueAsNumber: true })}
               />
             </div>
           </div>

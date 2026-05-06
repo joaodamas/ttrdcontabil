@@ -1,13 +1,13 @@
 import { useMemo } from 'react'
 import { useFinanceiroSnapshotQuery } from './queries'
-import type { FinanceiroBaseFilters, LancamentoRecord } from './types'
+import type { FinanceiroListFilters, LancamentoRecord } from './types'
 
 const PAGE_SIZE = 20
 
 export function useFinanceiroList(
-  filters: FinanceiroBaseFilters & { tipo: string; status: string; page: number }
+  filters: FinanceiroListFilters & { tipo: string; status: string; page: number }
 ) {
-  const query = useFinanceiroSnapshotQuery(filters)
+  const query = useFinanceiroSnapshotQuery({ ...filters, pageSize: PAGE_SIZE })
 
   const filteredLancamentos = useMemo(() => {
     const all = (query.data?.allLancamentos ?? []) as LancamentoRecord[]
@@ -19,12 +19,15 @@ export function useFinanceiroList(
   }, [query.data?.allLancamentos, filters.tipo, filters.status])
 
   const total = filteredLancamentos.length
-  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const totalPages = query.data?.hasMore
+    ? filters.page + 1
+    : Math.max(1, Math.ceil(total / PAGE_SIZE))
   const lancamentos = filteredLancamentos.slice((filters.page - 1) * PAGE_SIZE, filters.page * PAGE_SIZE)
 
   return {
     ...query,
     lancamentos,
+    filteredLancamentos,
     total,
     totalPages,
     somaAReceber: query.data?.somaAReceber ?? 0,

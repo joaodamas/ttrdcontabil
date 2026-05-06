@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/nextjs'
 import {
   Table, TableHeader, TableBody, TableFooter,
-  TableHead, TableRow, TableCell, TableCurrencyCell, TableCaption,
+  TableHead, TableRow, TableCell, TableCurrencyCell,
 } from '../table'
 import { Badge } from '../badge'
 

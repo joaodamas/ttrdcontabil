@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { Timestamp } from 'firebase/firestore'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,6 +21,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { getClientes, getUsuarios, createDocument, updateDocument } from '@/lib/firestore-client'
+import { getErrorMessage } from '@/lib/error-message'
+import { SELECT_NONE_VALUE } from '@/lib/select-values'
 
 const tarefaSchema = z.object({
   clienteId:     z.string().optional().nullable(),
@@ -33,6 +36,11 @@ const tarefaSchema = z.object({
 })
 
 type TarefaFormData = z.input<typeof tarefaSchema>
+type TarefaPayload = Omit<TarefaFormData, 'dataPrazo'> & {
+  dataPrazo?: Timestamp | null
+  clienteNome?: string | null
+  responsavelNome?: string | null
+}
 
 interface ClienteItem { id: string; razaoSocial: string }
 interface UsuarioItem { id: string; nome: string }
@@ -73,20 +81,22 @@ export function TarefaForm({ initialData, onSuccess, onClose }: TarefaFormProps)
   }, [])
 
   async function onSubmit(data: TarefaFormData) {
+    const payload = buildPayload(data, clientes, usuarios)
+
     try {
       if (isEditing) {
-        await updateDocument('tarefas', initialData!.id!, data)
+        await updateDocument('tarefas', initialData!.id!, payload)
         toast.success('Tarefa atualizada!')
         if (onSuccess) onSuccess(initialData!.id!)
         else { router.push('/tarefas'); router.refresh() }
       } else {
-        const id = await createDocument('tarefas', data)
+        const id = await createDocument('tarefas', payload)
         toast.success('Tarefa criada!')
         if (onSuccess) onSuccess(id)
         else { router.push('/tarefas'); router.refresh() }
       }
-    } catch {
-      toast.error('Erro ao salvar. Tente novamente.')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Não foi possível salvar a tarefa. Verifique título, status e permissões.'))
     }
   }
 
@@ -154,12 +164,12 @@ export function TarefaForm({ initialData, onSuccess, onClose }: TarefaFormProps)
               name="clienteId"
               control={control}
               render={({ field }) => (
-                <Select value={field.value ?? ''} onValueChange={(v) => field.onChange(v || null)} disabled={loading}>
+                <Select value={field.value ?? SELECT_NONE_VALUE} onValueChange={(v) => field.onChange(v === SELECT_NONE_VALUE ? null : v)} disabled={loading}>
                   <SelectTrigger>
                     <SelectValue placeholder={loading ? 'Carregando...' : 'Selecione o cliente'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhum</SelectItem>
+                    <SelectItem value={SELECT_NONE_VALUE}>Nenhum</SelectItem>
                     {clientes.map((c) => (
                       <SelectItem key={c.id} value={c.id}>{c.razaoSocial}</SelectItem>
                     ))}
@@ -175,12 +185,12 @@ export function TarefaForm({ initialData, onSuccess, onClose }: TarefaFormProps)
               name="responsavelId"
               control={control}
               render={({ field }) => (
-                <Select value={field.value ?? ''} onValueChange={(v) => field.onChange(v || null)} disabled={loading}>
+                <Select value={field.value ?? SELECT_NONE_VALUE} onValueChange={(v) => field.onChange(v === SELECT_NONE_VALUE ? null : v)} disabled={loading}>
                   <SelectTrigger>
                     <SelectValue placeholder={loading ? 'Carregando...' : 'Selecione o responsável'} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhum</SelectItem>
+                    <SelectItem value={SELECT_NONE_VALUE}>Nenhum</SelectItem>
                     {usuarios.map((u) => (
                       <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
                     ))}
@@ -208,4 +218,25 @@ export function TarefaForm({ initialData, onSuccess, onClose }: TarefaFormProps)
       </div>
     </form>
   )
+}
+
+function buildPayload(
+  data: TarefaFormData,
+  clientes: ClienteItem[],
+  usuarios: UsuarioItem[]
+): TarefaPayload {
+  const cliente = data.clienteId ? clientes.find((c) => c.id === data.clienteId) : null
+  const responsavel = data.responsavelId ? usuarios.find((u) => u.id === data.responsavelId) : null
+  const dataPrazo = data.dataPrazo
+    ? Timestamp.fromDate(new Date(`${data.dataPrazo}T12:00:00`))
+    : null
+
+  return {
+    ...data,
+    clienteId: data.clienteId || null,
+    clienteNome: cliente?.razaoSocial ?? null,
+    responsavelId: data.responsavelId || null,
+    responsavelNome: responsavel?.nome ?? null,
+    dataPrazo,
+  }
 }

@@ -18,15 +18,24 @@ function filterClientes(clientes: ClienteRecord[], busca: string): ClienteRecord
 }
 
 export function useClientesList(params: { busca: string; status: string; page: number }) {
-  const query = useClientesListQuery(params.status || undefined)
+  const status = params.status === 'all' ? '' : params.status
+  const query = useClientesListQuery({
+    status: status || undefined,
+    busca: params.busca,
+    page: params.page,
+    pageSize: PAGE_SIZE,
+  })
 
   const filtered = useMemo(
     () => filterClientes((query.data ?? []) as ClienteRecord[], params.busca),
     [query.data, params.busca]
   )
 
-  const total = filtered.length
-  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const hasMore = !params.busca && filtered.length > params.page * PAGE_SIZE
+  const total = params.busca ? filtered.length : Math.min(filtered.length, params.page * PAGE_SIZE)
+  const totalPages = hasMore
+    ? params.page + 1
+    : Math.max(1, Math.ceil(total / PAGE_SIZE))
   const paginados = filtered.slice((params.page - 1) * PAGE_SIZE, params.page * PAGE_SIZE)
 
   return {

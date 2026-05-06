@@ -1,18 +1,19 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Timestamp } from 'firebase/firestore'
-import { getUsuarios } from '@/lib/firestore-client'
 import { formatDate , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { TableEmptyState } from '@/components/ui/empty-state'
 import { UsuarioForm, TELAS_LIST } from '@/components/admin/usuario-form'
-import { Loader2, Shield } from 'lucide-react'
+import { Loader2, Shield, UsersRound } from 'lucide-react'
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { fetchUsuariosAdmin } from '@/features/admin/services'
+import type { UsuarioAdmin } from '@/features/admin/types'
 
 const PERFIL_LABELS: Record<string, string> = {
   admin:       'Admin',
@@ -30,24 +31,14 @@ const PERFIL_COLORS: Record<string, string> = {
   leitura:     'bg-muted text-muted-foreground border-border',
 }
 
-type UsuarioRow = {
-  id: string
-  nome?: string
-  email?: string
-  perfil?: string
-  ativo?: boolean
-  telas?: string[]
-  ultimoAcesso?: Timestamp
-}
-
 export default function AdminUsuariosPage() {
-  const [usuarios, setUsuarios] = useState<UsuarioRow[]>([])
+  const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([])
   const [loading, setLoading]   = useState(true)
 
   const load = useCallback(() => {
     setLoading(true)
-    getUsuarios()
-      .then((data) => setUsuarios(data as UsuarioRow[]))
+    fetchUsuariosAdmin()
+      .then(setUsuarios)
       .finally(() => setLoading(false))
   }, [])
 
@@ -91,11 +82,12 @@ export default function AdminUsuariosPage() {
             </thead>
             <tbody className="divide-y">
               {usuarios.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
-                    Nenhum usuário cadastrado.
-                  </td>
-                </tr>
+                <TableEmptyState
+                  colSpan={7}
+                  icon={UsersRound}
+                  title="Nenhum usuário cadastrado"
+                  description="Crie pelo menos dois usuários por perfil principal antes de liberar o ambiente."
+                />
               ) : (
                 usuarios.map((u) => {
                   const perfilKey = u.perfil ?? 'leitura'

@@ -18,8 +18,16 @@ export type FinanceiroBaseFilters = {
   competenciaId: string
 }
 
+export type FinanceiroListFilters = FinanceiroBaseFilters & {
+  tipo?: string
+  status?: string
+  page?: number
+  pageSize?: number
+}
+
 export type FinanceiroSnapshot = {
   allLancamentos: LancamentoRecord[]
+  hasMore: boolean
   somaAReceber: number
   somaRecebidoMes: number
   somaEmAtraso: number

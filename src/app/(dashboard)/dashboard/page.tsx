@@ -3,10 +3,13 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
-import { listDocuments } from '@/lib/firestore-client'
+import { getFunctions, httpsCallable } from 'firebase/functions'
+import { getDocument, listDocuments } from '@/lib/firestore-client'
+import { getFirebaseApp } from '@/lib/firebase'
+import { appConfig } from '@/lib/app-config'
+import { useAuth } from '@/contexts/auth-context'
 import { formatCurrency, formatDate, formatMesAno, tsToDate, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { buttonVariants } from '@/components/ui/button'
 import {
   Users, ClipboardList, CheckSquare, TrendingUp,
   AlertTriangle, ArrowRight, CheckCircle2, DollarSign,
@@ -54,8 +57,50 @@ const COMP_STATUS: Record<string, { label: string; variant: 'neutral' | 'warning
   concluida:    { label: 'Concluídas',   variant: 'success' },
 }
 
+type DashboardKpis = {
+  id?: string
+  totalClientesAtivos?: number
+  compCounts?: Record<string, number>
+  tarefasPendentes?: number
+  somaVencendo?: number
+  vencendoCount?: number
+  somaAtrasados?: number
+  atrasadosCount?: number
+}
+
+function applyKpis(
+  kpis: DashboardKpis,
+  setters: {
+    setTotalClientesAtivos: (value: number) => void
+    setCompCounts: (value: Record<string, number>) => void
+    setTarefasPendentes: (value: number) => void
+    setSomaVencendo: (value: number) => void
+    setVencendoCount: (value: number) => void
+    setSomaAtrasados: (value: number) => void
+    setAtrasadosCount: (value: number) => void
+  }
+) {
+  setters.setTotalClientesAtivos(kpis.totalClientesAtivos ?? 0)
+  setters.setCompCounts(kpis.compCounts ?? {})
+  setters.setTarefasPendentes(kpis.tarefasPendentes ?? 0)
+  setters.setSomaVencendo(kpis.somaVencendo ?? 0)
+  setters.setVencendoCount(kpis.vencendoCount ?? 0)
+  setters.setSomaAtrasados(kpis.somaAtrasados ?? 0)
+  setters.setAtrasadosCount(kpis.atrasadosCount ?? 0)
+}
+
+async function recalcularDashboardKpis(params: { mes: number; ano: number }) {
+  const fn = httpsCallable<{ mes: number; ano: number }, DashboardKpis>(
+    getFunctions(getFirebaseApp(), 'southamerica-east1'),
+    'recalcularDashboardKpis'
+  )
+  const { data } = await fn(params)
+  return data
+}
+
 /* ─── Page ──────────────────────────────────────────────────────────────── */
 export default function DashboardPage() {
+  const { usuario } = useAuth()
   const hoje = new Date()
   const mesAtual    = hoje.getMonth() + 1
   const anoAtual    = hoje.getFullYear()
@@ -80,38 +125,46 @@ export default function DashboardPage() {
   useEffect(() => {
     const em7Dias   = new Date(hoje); em7Dias.setDate(hoje.getDate() + 7)
     const hojeTs    = Timestamp.fromDate(hoje)
-    const em7DiasTs = Timestamp.fromDate(em7Dias)
 
-    Promise.allSettled([
-      listDocuments('clientes',     [where('status', '==', 'ativo')]),
-      listDocuments('competencias', [where('mes', '==', mesAtual), where('ano', '==', anoAtual)]),
-      listDocuments('tarefas',      [where('status', 'in', ['pendente', 'em_andamento']), orderBy('dataPrazo', 'asc')]),
-      listDocuments('lancamentos',  [where('tipo', '==', 'receita'), where('status', '==', 'pendente'), where('dataVencimento', '>=', hojeTs), where('dataVencimento', '<=', em7DiasTs)]),
-      listDocuments('lancamentos',  [where('tipo', '==', 'receita'), where('status', '==', 'pendente'), where('dataVencimento', '<', hojeTs)]),
-      listDocuments('competencias', [where('mes', '==', mesAnterior), where('ano', '==', anoAnterior), where('status', '==', 'aberta'), limit(5)]),
-      listDocuments('lancamentos',  [where('tipo', '==', 'receita'), where('status', '==', 'pendente'), where('dataVencimento', '<', hojeTs), orderBy('dataVencimento', 'asc'), limit(5)]),
-    ]).then((results) => {
+    async function load() {
+      const tenantId = usuario?.tenantId ?? appConfig.tenantId
+      const kpiDocId = `${tenantId}_${anoAtual}_${String(mesAtual).padStart(2, '0')}`
+      const setters = {
+        setTotalClientesAtivos,
+        setCompCounts,
+        setTarefasPendentes,
+        setSomaVencendo,
+        setVencendoCount,
+        setSomaAtrasados,
+        setAtrasadosCount,
+      }
+
+      const kpis = await getDocument<DashboardKpis>('dashboard_kpis', kpiDocId).catch(() => null)
+      if (kpis) {
+        applyKpis(kpis, setters)
+      } else {
+        const refreshed = await recalcularDashboardKpis({ mes: mesAtual, ano: anoAtual }).catch(() => null)
+        if (refreshed) applyKpis(refreshed, setters)
+      }
+
+      return Promise.allSettled([
+        listDocuments('clientes',     [where('status', '==', 'ativo'), limit(500)]),
+        listDocuments('tarefas',      [where('status', 'in', ['pendente', 'em_andamento']), orderBy('dataPrazo', 'asc'), limit(300)]),
+        listDocuments('competencias', [where('mes', '==', mesAnterior), where('ano', '==', anoAnterior), where('status', '==', 'aberta'), limit(5)]),
+        listDocuments('lancamentos',  [where('tipo', '==', 'receita'), where('status', '==', 'pendente'), where('dataVencimento', '<', hojeTs), orderBy('dataVencimento', 'asc'), limit(5)]),
+      ])
+    }
+
+    load().then((results) => {
       function get<T>(idx: number): T[] {
         const r = results[idx]
         return r.status === 'fulfilled' ? (r as PromiseFulfilledResult<unknown[]>).value as T[] : []
       }
       const clientesData     = get<Record<string, unknown>>(0)
-      const compMesData      = get<Record<string, unknown>>(1)
-      const tarefasData      = get<Record<string, unknown>>(2)
-      const vencendoData     = get<Record<string, unknown>>(3)
-      const atrasadosData    = get<Record<string, unknown>>(4)
-      const compAbertasData  = get<Record<string, unknown>>(5)
-      const lancVencidosData = get<Record<string, unknown>>(6)
+      const tarefasData      = get<Record<string, unknown>>(1)
+      const compAbertasData  = get<Record<string, unknown>>(2)
+      const lancVencidosData = get<Record<string, unknown>>(3)
 
-      setTotalClientesAtivos(clientesData.length)
-      const counts: Record<string, number> = {}
-      compMesData.forEach((d) => { const s = d.status as string; counts[s] = (counts[s] ?? 0) + 1 })
-      setCompCounts(counts)
-      setTarefasPendentes(tarefasData.length)
-      setSomaVencendo(vencendoData.reduce((acc, d) => acc + ((d.valor as number) ?? 0), 0))
-      setVencendoCount(vencendoData.length)
-      setSomaAtrasados(atrasadosData.reduce((acc, d) => acc + ((d.valor as number) ?? 0), 0))
-      setAtrasadosCount(atrasadosData.length)
       const vencidas = tarefasData.filter((t) => {
         if (!t.dataPrazo) return false
         const prazo = tsToDate(t.dataPrazo)
@@ -141,7 +194,7 @@ export default function DashboardPage() {
       setAlertasNFSe(alertas)
     }).finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [usuario?.tenantId])
 
   /* ─── Loading ─────────────────────────────────────────────────────────── */
   if (loading) {

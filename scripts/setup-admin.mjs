@@ -47,6 +47,7 @@ async function main() {
     nome: 'João Damas',
     email: EMAIL,
     perfil: 'admin',
+    ativo: true,
   }, { merge: true })
 
   console.log('✅ Documento /usuarios/' + uid + ' criado com perfil "admin"!')

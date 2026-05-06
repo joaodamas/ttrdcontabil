@@ -201,7 +201,7 @@ export default function ClienteFiscalPage() {
       </Card>
 
       {/* Certificado A1 — só para municípios ABRASF */}
-      {fiscal && tipo === 'abrasf_a1' && (
+      {fiscal && (tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
         <Card>
           <CardHeader className="flex flex-row items-center gap-2">
             {certInfo

@@ -2,8 +2,8 @@
  * Scheduler: criação automática de competências
  *
  * Executa todo dia 1º às 01:00 BRT (04:00 UTC).
- * Para cada cliente ativo com pelo menos um serviço ativo, cria um documento
- * de competência no mês corrente caso ainda não exista.
+ * Para cada serviço ativo de cliente ativo, cria uma competência no mês
+ * corrente caso ainda não exista.
  *
  * Coleções envolvidas:
  *   clientes          — razaoSocial, status
@@ -13,6 +13,7 @@
 import * as admin from 'firebase-admin'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { Timestamp } from 'firebase-admin/firestore'
+import { DEFAULT_TENANT_ID } from '../tenant'
 
 const db = () => admin.firestore()
 
@@ -35,6 +36,7 @@ export const criarCompetenciasMensais = onSchedule(
     const servicosSnap = await db()
       .collection('clientes_servicos')
       .where('status', '==', 'ativo')
+      .where('tenantId', '==', DEFAULT_TENANT_ID)
       .get()
 
     if (servicosSnap.empty) {
@@ -43,15 +45,16 @@ export const criarCompetenciasMensais = onSchedule(
     }
 
     // 2. Agrupa serviços por clienteId
-    const porCliente = new Map<string, Array<{ id: string; descricao: string; valor: number }>>()
+    const porCliente = new Map<string, Array<{ id: string; servicoId?: string; nome: string; valor: number }>>()
     for (const doc of servicosSnap.docs) {
       const d = doc.data()
       const cid = d.clienteId as string
       if (!porCliente.has(cid)) porCliente.set(cid, [])
       porCliente.get(cid)!.push({
-        id:       doc.id,
-        descricao: (d.descricaoServico ?? d.nomeServico ?? d.descricao ?? '') as string,
-        valor:    (d.valor ?? 0) as number,
+        id:        doc.id,
+        servicoId: d.servicoId as string | undefined,
+        nome:      (d.servicoNome ?? d.descricaoServico ?? d.nomeServico ?? d.descricao ?? 'Serviço') as string,
+        valor:     (d.valor ?? 0) as number,
       })
     }
 
@@ -62,53 +65,68 @@ export const criarCompetenciasMensais = onSchedule(
     let ignoradas = 0
 
     for (const [clienteId, servicos] of porCliente.entries()) {
-      // Checa se já existe competência para este cliente/mês/ano
-      const jaExiste = await db()
-        .collection('competencias')
-        .where('clienteId', '==', clienteId)
-        .where('mes', '==', mes)
-        .where('ano', '==', ano)
-        .limit(1)
-        .get()
-
-      if (!jaExiste.empty) {
-        ignoradas++
-        continue
-      }
-
       // Busca razaoSocial do cliente
       const clienteDoc = await db().collection('clientes').doc(clienteId).get()
-      if (!clienteDoc.exists || clienteDoc.data()?.status === 'inativo') {
-        ignoradas++
+      if (!clienteDoc.exists || clienteDoc.data()?.status !== 'ativo' || clienteDoc.data()?.tenantId !== DEFAULT_TENANT_ID) {
+        ignoradas += servicos.length
         continue
       }
 
       const razaoSocial = (clienteDoc.data()?.razaoSocial ?? '') as string
-      const valorTotal  = servicos.reduce((sum, s) => sum + s.valor, 0)
 
-      const ref = db().collection('competencias').doc()
-      batch.set(ref, {
-        clienteId,
-        clienteNome:   razaoSocial,
-        mes,
-        ano,
-        competencia:   `${String(mes).padStart(2, '0')}/${ano}`,
-        status:        'pendente',
-        valorTotal,
-        servicosIds:   servicos.map((s) => s.id),
-        servicosNomes: servicos.map((s) => s.descricao),
-        observacoes:   '',
-        criadoEm:      Timestamp.now(),
-        criadoAutomaticamente: true,
-      })
-      criadas++
-      batchOps++
+      for (const servico of servicos) {
+        const competenciaId = `${clienteId}_${servico.id}_${ano}_${String(mes).padStart(2, '0')}`
+        const ref = db().collection('competencias').doc(competenciaId)
+        const jaExiste = await ref.get()
+        if (jaExiste.exists) {
+          ignoradas++
+          continue
+        }
 
-      // Firestore batch limit is 500 — commit and start a fresh batch
-      if (batchOps === 400) {
-        await batch.commit()
-        batch    = db().batch()
-        batchOps = 0
+        batch.set(ref, {
+          tenantId: DEFAULT_TENANT_ID,
+          clienteId,
+          clienteNome:       razaoSocial,
+          clienteServicoId:  servico.id,
+          servicoId:         servico.servicoId ?? null,
+          servicoNome:       servico.nome,
+          mes,
+          ano,
+          competencia:       `${String(mes).padStart(2, '0')}/${ano}`,
+          status:            'aberta',
+          valorTotal:        servico.valor,
+          observacoes:       '',
+          criadoEm:          Timestamp.now(),
+          atualizadoEm:      Timestamp.now(),
+          criadoAutomaticamente: true,
+        })
+
+        const prazo = new Date(ano, mes - 1, 20, 12, 0, 0)
+        const tarefaRef = db().collection('tarefas').doc(`${competenciaId}_execucao`)
+        batch.set(tarefaRef, {
+          tenantId: DEFAULT_TENANT_ID,
+          clienteId,
+          clienteNome:      razaoSocial,
+          competenciaId,
+          titulo:           `Executar ${servico.nome} - ${String(mes).padStart(2, '0')}/${ano}`,
+          descricao:        'Tarefa recorrente criada automaticamente a partir do serviço contratado.',
+          prioridade:       'normal',
+          status:           'pendente',
+          dataPrazo:        Timestamp.fromDate(prazo),
+          criadoEm:         Timestamp.now(),
+          atualizadoEm:     Timestamp.now(),
+          criadoAutomaticamente: true,
+        })
+
+        criadas++
+        batchOps += 2
+
+        // Firestore batch limit is 500 — commit and start a fresh batch
+        if (batchOps >= 400) {
+          await batch.commit()
+          batch    = db().batch()
+          batchOps = 0
+        }
       }
     }
 

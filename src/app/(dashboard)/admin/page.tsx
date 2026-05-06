@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Users, Briefcase, Plug } from 'lucide-react'
+import { Users, Briefcase, Plug, SlidersHorizontal } from 'lucide-react'
 
 export default function AdminPage() {
   const links = [
@@ -19,10 +19,16 @@ export default function AdminPage() {
       desc: 'Gerenciar tipos de serviços contábeis',
     },
     {
-      href: '/fiscal',
+      href: '/admin/conectores',
       icon: Plug,
       title: 'Conectores Fiscais',
-      desc: 'Configurar integrações de NFS-e',
+      desc: 'Homologação, capacidades e liberação de produção',
+    },
+    {
+      href: '/admin/parametros',
+      icon: SlidersHorizontal,
+      title: 'Parâmetros',
+      desc: 'Dados do escritório, alertas e ambiente fiscal padrão',
     },
   ]
 

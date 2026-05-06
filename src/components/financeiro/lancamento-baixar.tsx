@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/select'
 import { Loader2, ArrowDownCircle, AlertTriangle } from 'lucide-react'
 import { updateDocument } from '@/lib/firestore-client'
+import { getErrorMessage } from '@/lib/error-message'
 import { formatCurrency, formatDate, tsToDate } from '@/lib/utils'
 
 const FORMAS_PAGAMENTO = [
@@ -91,8 +92,8 @@ export function LancamentoBaixar({ lancamentoId, onBaixado, valor, clienteNome, 
       toast.success(`Baixa confirmada: ${cliente}${valorLabel ? ` · ${valorLabel}` : ''}`)
       setOpen(false)
       onBaixado?.()
-    } catch {
-      toast.error('Erro ao baixar lançamento. Tente novamente.')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Não foi possível baixar o lançamento. Verifique permissão financeira e tente novamente.'))
     } finally {
       setSalvando(false)
     }

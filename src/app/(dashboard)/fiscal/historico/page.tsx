@@ -1,19 +1,29 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useCallback, useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { where, orderBy, Timestamp } from 'firebase/firestore'
+import { limit, where, orderBy, Timestamp, type QueryConstraint } from 'firebase/firestore'
+import { getFunctions, httpsCallable } from 'firebase/functions'
+import { toast } from 'sonner'
 
 import { listDocuments } from '@/lib/firestore-client'
 import { formatDate, formatCurrency , tsToDate } from '@/lib/utils'
+import { exportToCsv } from '@/lib/export-csv'
+import { exportToExcel } from '@/lib/export-excel'
+import { getFirebaseApp } from '@/lib/firebase'
+import { getErrorMessage } from '@/lib/error-message'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { TableEmptyState } from '@/components/ui/empty-state'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { ArrowLeft, Download, Eye, FileText, Loader2, RefreshCw, XCircle } from 'lucide-react'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   emitida: { label: 'Emitida', variant: 'default' },
   pendente_processamento: { label: 'Pendente', variant: 'outline' },
+  cancelamento_pendente: { label: 'Cancelamento pendente', variant: 'outline' },
   rejeitada: { label: 'Rejeitada', variant: 'destructive' },
   cancelada: { label: 'Cancelada', variant: 'secondary' },
   erro_integracao: { label: 'Erro', variant: 'destructive' },
@@ -31,32 +41,132 @@ function FiscalHistoricoContent() {
 
   const [allNotas, setAllNotas] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(true)
+  const [cancelamentoId, setCancelamentoId] = useState<string | null>(null)
+  const [motivoCancelamento, setMotivoCancelamento] = useState('')
+  const [cancelando, setCancelando] = useState(false)
+
+  const loadNotas = useCallback(() => {
+    setLoading(true)
+    const hasDateWindow = Boolean(ano && (!mes || (mes >= 1 && mes <= 12)))
+    const inicioPeriodo = hasDateWindow
+      ? Timestamp.fromDate(new Date(ano!, mes ? mes - 1 : 0, 1))
+      : null
+    const fimPeriodo = hasDateWindow
+      ? Timestamp.fromDate(new Date(ano!, mes ? mes : 12, 0, 23, 59, 59))
+      : null
+
+    const constraints: QueryConstraint[] = [
+      ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
+      ...(status ? [where('status', '==', status)] : []),
+      ...(inicioPeriodo && fimPeriodo
+        ? [where('dataEmissao', '>=', inicioPeriodo), where('dataEmissao', '<=', fimPeriodo), orderBy('dataEmissao', 'desc')]
+        : [orderBy('criadoEm', 'desc')]),
+      limit(page * PAGE_SIZE + 1),
+    ]
+    listDocuments('nfse_emitidas', constraints).then((data) => {
+      let filtered = data as Array<Record<string, unknown>>
+      if ((mes || ano) && !hasDateWindow) {
+        filtered = filtered.filter((n) => {
+          const dataEmissao = n.dataEmissao as Timestamp | undefined
+          if (!dataEmissao) return false
+          const dt = tsToDate(dataEmissao)
+          if (!dt) return false
+          if (mes && dt.getMonth() + 1 !== mes) return false
+          if (ano && dt.getFullYear() !== ano) return false
+          return true
+        })
+      }
+      setAllNotas(filtered)
+    }).catch((err) => {
+      toast.error(getErrorMessage(err, 'Nao foi possivel carregar o historico de NFS-e. Verifique os filtros e tente novamente.'))
+      setAllNotas([])
+    }).finally(() => setLoading(false))
+  }, [ano, clienteId, mes, page, status])
 
   useEffect(() => {
-    queueMicrotask(() => {
-      setLoading(true)
-      const constraints = [
-        ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
-        ...(status ? [where('status', '==', status)] : []),
-        orderBy('criadoEm', 'desc'),
-      ]
-      listDocuments('nfse_emitidas', constraints).then((data) => {
-        let filtered = data as Array<Record<string, unknown>>
-        if (mes || ano) {
-          filtered = filtered.filter((n) => {
-            const dataEmissao = n.dataEmissao as Timestamp | undefined
-            if (!dataEmissao) return false
-            const dt = tsToDate(dataEmissao)
-            if (!dt) return false
-            if (mes && dt.getMonth() + 1 !== mes) return false
-            if (ano && dt.getFullYear() !== ano) return false
-            return true
-          })
-        }
-        setAllNotas(filtered)
-      }).finally(() => setLoading(false))
-    })
-  }, [clienteId, status, mes, ano])
+    queueMicrotask(loadNotas)
+  }, [loadNotas])
+
+  function exportarCsv() {
+    const rows = montarLinhasExportacao()
+    exportToCsv(
+      `historico-nfse-${ano ?? 'todos'}-${mes ?? 'todos'}`,
+      rows,
+      exportColumns
+    )
+  }
+
+  const exportColumns = [
+    { key: 'cliente', label: 'Cliente' },
+    { key: 'numero', label: 'Numero NFS-e' },
+    { key: 'tomador', label: 'Tomador' },
+    { key: 'emissao', label: 'Emissao' },
+    { key: 'valor', label: 'Valor' },
+    { key: 'status', label: 'Status' },
+  ]
+
+  function montarLinhasExportacao() {
+    return allNotas.map((n) => ({
+      cliente: n.clienteNome,
+      numero: n.numeroNfse,
+      tomador: n.tomadorNome,
+      emissao: n.dataEmissao ? formatDate(tsToDate(n.dataEmissao as Timestamp)) : '',
+      valor: n.valorServico,
+      status: n.status,
+    }))
+  }
+
+  function exportarExcel() {
+    exportToExcel(
+      `historico-nfse-${ano ?? 'todos'}-${mes ?? 'todos'}`,
+      montarLinhasExportacao(),
+      exportColumns
+    )
+  }
+
+  async function consultarStatus(nfseId: string) {
+    try {
+      const fn = httpsCallable<{ nfseId: string }, { status: string; message: string }>(
+        getFunctions(getFirebaseApp(), 'southamerica-east1'),
+        'consultarNfse'
+      )
+      const { data } = await fn({ nfseId })
+      toast.success(data.message)
+      loadNotas()
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Nao foi possivel consultar a NFS-e. Verifique a configuracao fiscal do cliente.'))
+    }
+  }
+
+  function abrirCancelamento(nfseId: string) {
+    setCancelamentoId(nfseId)
+    setMotivoCancelamento('')
+  }
+
+  async function confirmarCancelamento() {
+    if (!cancelamentoId) return
+    const motivo = motivoCancelamento.trim()
+    if (motivo.length < 10) {
+      toast.error('Informe um motivo com pelo menos 10 caracteres.')
+      return
+    }
+    setCancelando(true)
+    try {
+      const fn = httpsCallable<{ nfseId: string; motivo: string }, { status: string; message: string }>(
+        getFunctions(getFirebaseApp(), 'southamerica-east1'),
+        'cancelarNfse'
+      )
+      const { data } = await fn({ nfseId: cancelamentoId, motivo })
+      toast.success(data.message)
+      setCancelamentoId(null)
+      setMotivoCancelamento('')
+      loadNotas()
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Nao foi possivel solicitar o cancelamento. Verifique o status da nota e a configuracao fiscal.'))
+    } finally {
+      setCancelando(false)
+    }
+  }
 
   function buildUrl(overrides: Record<string, string | number>) {
     const params = new URLSearchParams({
@@ -78,13 +188,14 @@ function FiscalHistoricoContent() {
     )
   }
 
-  const total = allNotas.length
-  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const hasMore = allNotas.length > page * PAGE_SIZE
+  const total = Math.min(allNotas.length, page * PAGE_SIZE)
+  const totalPages = hasMore ? page + 1 : Math.max(1, Math.ceil(total / PAGE_SIZE))
   const notas = allNotas.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle flex items-center gap-3 border px-4 py-4 sm:px-5">
+      <div className="surface-subtle flex flex-wrap items-center gap-3 border px-4 py-4 sm:px-5">
         <Link href="/fiscal">
           <Button variant="outline" size="sm" className="h-10 w-10 rounded-xl p-0">
             <ArrowLeft className="h-4 w-4" />
@@ -96,10 +207,18 @@ function FiscalHistoricoContent() {
             {total} nota{total !== 1 ? 's' : ''} encontrada{total !== 1 ? 's' : ''}
           </p>
         </div>
+        <Button variant="outline" size="sm" className="ml-auto h-9 rounded-xl" onClick={exportarExcel}>
+          <Download className="h-4 w-4" />
+          Excel
+        </Button>
+        <Button variant="outline" size="sm" className="h-9 rounded-xl" onClick={exportarCsv}>
+          <Download className="h-4 w-4" />
+          CSV
+        </Button>
       </div>
 
       <div className="surface-subtle flex flex-wrap items-center gap-2 border px-3 py-2.5">
-        {['', 'emitida', 'pendente_processamento', 'rejeitada', 'cancelada', 'erro_integracao'].map(
+        {['', 'emitida', 'pendente_processamento', 'cancelamento_pendente', 'rejeitada', 'cancelada', 'erro_integracao'].map(
           (s) => (
             <Link key={s} href={buildUrl({ status: s, page: 1 })}>
               <Button
@@ -114,8 +233,8 @@ function FiscalHistoricoContent() {
         )}
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-2xl border border-border/65 bg-card/95 card-shadow">
+        <table className="min-w-[920px] w-full text-sm">
           <thead className="bg-muted/50 text-muted-foreground">
             <tr>
               <th className="px-4 py-3 text-left font-medium">Cliente</th>
@@ -124,15 +243,22 @@ function FiscalHistoricoContent() {
               <th className="px-4 py-3 text-left font-medium">Emissão</th>
               <th className="px-4 py-3 text-right font-medium">Valor</th>
               <th className="px-4 py-3 text-left font-medium">Status</th>
+              <th className="px-4 py-3 text-right font-medium">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {notas.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                  Nenhuma NFS-e encontrada.
-                </td>
-              </tr>
+              <TableEmptyState
+                colSpan={7}
+                icon={FileText}
+                title="Nenhuma NFS-e encontrada"
+                description={clienteId || status || mes || ano
+                  ? 'Remova filtros para conferir se existem notas em outros períodos ou status.'
+                  : 'Crie um rascunho revisado e emita em homologação antes de liberar produção.'}
+                action={clienteId || status || mes || ano
+                  ? { label: 'Limpar filtros', href: '/fiscal/historico' }
+                  : { label: 'Emitir NFS-e', href: '/fiscal/emitir' }}
+              />
             ) : (
               notas.map((n) => {
                 const st = STATUS_MAP[n.status as string] ?? {
@@ -157,6 +283,30 @@ function FiscalHistoricoContent() {
                     </td>
                     <td className="px-4 py-3">
                       <Badge variant={st.variant}>{st.label}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-1.5">
+                        <Link href={`/fiscal/${n.id as string}`}>
+                          <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Ver detalhe">
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                        </Link>
+                        <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Consultar status" onClick={() => consultarStatus(n.id as string)}>
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </Button>
+                        {n.pdfUrl ? (
+                          <a href={n.pdfUrl as string} target="_blank" rel="noreferrer">
+                            <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Baixar PDF">
+                              <Download className="h-3.5 w-3.5" />
+                            </Button>
+                          </a>
+                        ) : null}
+                        {n.status === 'emitida' ? (
+                          <Button variant="outline" size="sm" className="h-8 w-8 p-0 text-destructive" title="Solicitar cancelamento" onClick={() => abrirCancelamento(n.id as string)}>
+                            <XCircle className="h-3.5 w-3.5" />
+                          </Button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 )
@@ -189,6 +339,31 @@ function FiscalHistoricoContent() {
           </div>
         </div>
       ) : null}
+
+      <Dialog open={Boolean(cancelamentoId)} onOpenChange={(open) => !open && setCancelamentoId(null)}>
+        <DialogContent className="max-w-md" showCloseButton>
+          <DialogHeader>
+            <DialogTitle>Solicitar cancelamento</DialogTitle>
+            <DialogDescription>
+              A solicitação será registrada com auditoria e ficará pendente de processamento fiscal.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={motivoCancelamento}
+            onChange={(event) => setMotivoCancelamento(event.target.value)}
+            placeholder="Informe o motivo fiscal do cancelamento"
+            className="min-h-28"
+          />
+          <DialogFooter className="flex-row justify-end border-0 bg-transparent p-0">
+            <Button type="button" variant="outline" onClick={() => setCancelamentoId(null)} disabled={cancelando}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={confirmarCancelamento} disabled={cancelando}>
+              {cancelando ? 'Registrando...' : 'Confirmar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -16,6 +16,7 @@
 import * as admin from 'firebase-admin'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { Timestamp } from 'firebase-admin/firestore'
+import { DEFAULT_TENANT_ID } from '../tenant'
 
 const db = () => admin.firestore()
 
@@ -50,6 +51,7 @@ export const criarLancamentosMensais = onSchedule(
     const servicosSnap = await db()
       .collection('clientes_servicos')
       .where('status', '==', 'ativo')
+      .where('tenantId', '==', DEFAULT_TENANT_ID)
       .get()
 
     if (servicosSnap.empty) {
@@ -68,6 +70,7 @@ export const criarLancamentosMensais = onSchedule(
       if (!c.exists) continue
       const data = c.data()
       if (!data || data.status === 'inativo') continue
+      if (data.tenantId !== DEFAULT_TENANT_ID) continue
       clienteAtivoMap.set(c.id, (data.razaoSocial ?? '') as string)
     }
 
@@ -76,6 +79,7 @@ export const criarLancamentosMensais = onSchedule(
       .collection('lancamentos')
       .where('mes', '==', mes)
       .where('ano', '==', ano)
+      .where('tenantId', '==', DEFAULT_TENANT_ID)
       .get()
     const servicosComLancamento = new Set(
       existentesSnap.docs
@@ -107,8 +111,12 @@ export const criarLancamentosMensais = onSchedule(
       const dataVencimento = buildDataVencimento(ano, mes, diaVencimento)
       const descricao = (servico.descricaoServico ?? servico.nomeServico ?? servico.descricao ?? 'Honorários contábeis') as string
 
-      const ref = db().collection('lancamentos').doc()
+      const tenantId = DEFAULT_TENANT_ID
+      const ref = db()
+        .collection('lancamentos')
+        .doc(`${tenantId}_${ano}_${String(mes).padStart(2, '0')}_${servicoDoc.id}`)
       batch.set(ref, {
+        tenantId,
         clienteId,
         clienteNome: razaoSocial,
         servicoId: servicoDoc.id,

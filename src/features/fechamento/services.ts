@@ -1,5 +1,84 @@
-import { createDocument, getClientes, getFechamentos, updateDocument } from '@/lib/firestore-client'
+import { Timestamp, doc, getDoc } from 'firebase/firestore'
+import { getFunctions, httpsCallable } from 'firebase/functions'
+import { getClientDb, getFirebaseApp } from '@/lib/firebase'
+import { createDocument, getFechamentos, setDocument, updateDocument } from '@/lib/firestore-client'
 import type { FechamentoFilters, FechamentoRecord } from './types'
+
+export type RevisaoRecord = {
+  ano: number
+  mes: number
+  nota: string
+  uid: string
+  nomeUsuario: string
+  revisadoEm: string
+  totalFechamentos?: number
+  pendentes?: number
+  parciais?: number
+  enviados?: number
+  snapshotStatus?: Record<string, number>
+}
+
+export type GerarFechamentoResult = {
+  criados: number
+  ignorados: number
+  totalClientes: number
+}
+
+export async function salvarRevisao(
+  ano: number,
+  mes: number,
+  nota: string,
+  uid: string,
+  nomeUsuario: string,
+  snapshot: {
+    totalFechamentos: number
+    pendentes: number
+    parciais: number
+    enviados: number
+    snapshotStatus: Record<string, number>
+  }
+): Promise<void> {
+  const id = `${ano}_${String(mes).padStart(2, '0')}`
+  const payload = {
+    ano,
+    mes,
+    nota,
+    uid,
+    nomeUsuario,
+    revisadoEm: new Date().toISOString(),
+    ...snapshot,
+  }
+
+  const existing = await getDoc(doc(getClientDb(), 'fechamento_revisoes', id))
+  if (existing.exists()) {
+    await updateDocument('fechamento_revisoes', id, payload)
+  } else {
+    await setDocument('fechamento_revisoes', id, payload)
+  }
+
+  await createDocument('events', {
+    tipo: 'fechamento',
+    titulo: `Revisão de fechamento encerrada - ${String(mes).padStart(2, '0')}/${ano}`,
+    descricao: `${snapshot.enviados}/${snapshot.totalFechamentos} fechamento(s) concluídos. Pendentes: ${snapshot.pendentes}. Parciais: ${snapshot.parciais}.`,
+    origemColecao: 'fechamento_revisoes',
+    origemId: id,
+    actorId: uid,
+    actorNome: nomeUsuario,
+    metadata: {
+      severidade: snapshot.pendentes > 0 || snapshot.parciais > 0 ? 'alta' : 'baixa',
+      href: `/fechamento?mes=${mes}&ano=${ano}`,
+      ...snapshot,
+    },
+    criadoEm: Timestamp.now(),
+  })
+}
+
+export async function buscarRevisao(ano: number, mes: number): Promise<RevisaoRecord | null> {
+  const id = `${ano}_${String(mes).padStart(2, '0')}`
+  const snap = await getDoc(doc(getClientDb(), 'fechamento_revisoes', id))
+  if (!snap.exists()) return null
+  return snap.data() as RevisaoRecord
+}
 
 export async function fetchFechamentos(filters: FechamentoFilters): Promise<FechamentoRecord[]> {
   const data = await getFechamentos(filters.mes, filters.ano, filters.regime || undefined)
@@ -10,35 +89,19 @@ export async function updateFechamentoField(id: string, field: string, value: st
   await updateDocument('fechamentos', id, { [field]: value })
 }
 
-export async function gerarFechamentoMensal(filters: FechamentoFilters): Promise<number> {
-  const clientes = await getClientes({ status: 'ativo' })
-  const existentes = await getFechamentos(filters.mes, filters.ano)
-  const existentesIds = new Set(
-    existentes.map((f) => (f as Record<string, unknown>).clienteId as string)
-  )
+export async function gerarFechamentoMensal(
+  filters: FechamentoFilters
+): Promise<GerarFechamentoResult> {
+  const callable = httpsCallable<
+    { mes: number; ano: number; regime?: string },
+    GerarFechamentoResult
+  >(getFunctions(getFirebaseApp(), 'southamerica-east1'), 'gerarFechamentoMensal')
 
-  let criados = 0
-  for (const cliente of clientes) {
-    const c = cliente as Record<string, unknown>
-    if (existentesIds.has(c.id as string)) continue
+  const result = await callable({
+    mes: filters.mes,
+    ano: filters.ano,
+    regime: filters.regime || undefined,
+  })
 
-    await createDocument('fechamentos', {
-      clienteId: c.id,
-      clienteNome: c.razaoSocial ?? '',
-      clienteCodigo: c.codigo ?? 0,
-      mes: filters.mes,
-      ano: filters.ano,
-      regime: c.regimeTributario ?? 'simples_nacional',
-      responsavel: c.responsavelNome ?? '',
-      portalUrl: c.portalUrl ?? null,
-      formaEntrega: c.formaEntrega ?? null,
-      dasStatus: 'pendente',
-      esocialStatus: 'na',
-      reinfStatus: 'na',
-      fgtsStatus: 'na',
-    })
-    criados++
-  }
-
-  return criados
+  return result.data
 }

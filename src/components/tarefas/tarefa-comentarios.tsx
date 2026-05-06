@@ -48,7 +48,7 @@ export function TarefaComentarios({ tarefaId, comentariosIniciais }: TarefaComen
     try {
       const usuarioNome = usuario?.nome ?? 'Usuário'
       const usuarioId   = usuario?.uid ?? null
-      const id = await createDocument('tarefa_comentarios', {
+      const id = await createDocument('tarefas_comentarios', {
         tarefaId,
         texto:       trimmed,
         usuarioNome,

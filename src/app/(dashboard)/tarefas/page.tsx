@@ -25,6 +25,7 @@ import { concluirTarefa } from '@/features/tarefas/services'
 import { tarefasFiltroSchema } from '@/features/tarefas/schemas'
 import { useTarefasList } from '@/features/tarefas/hooks'
 import { tarefasKeys } from '@/features/tarefas/queries'
+import { getErrorMessage } from '@/lib/error-message'
 import type { TarefaRecord, TarefasFilters } from '@/features/tarefas/types'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
@@ -63,13 +64,26 @@ function TarefasContent() {
 
   async function handleConcluir(id: string, titulo: string) {
     setConcluding(id)
+    await queryClient.cancelQueries({ queryKey: tarefasKeys.all })
+    const previousLists = queryClient.getQueriesData<TarefaRecord[]>({ queryKey: tarefasKeys.all })
+    const concluidaEm = Timestamp.now()
+    queryClient.setQueriesData<TarefaRecord[]>({ queryKey: tarefasKeys.all }, (old) =>
+      old?.map((tarefa) =>
+        tarefa.id === id
+          ? { ...tarefa, status: 'concluida', concluidaEm }
+          : tarefa
+      )
+    )
     try {
       await concluirTarefa(id)
-      await queryClient.invalidateQueries({ queryKey: tarefasKeys.list(filters) })
       toast.success(`"${titulo}" concluída`)
-    } catch {
-      toast.error('Erro ao concluir tarefa.')
+    } catch (err) {
+      previousLists.forEach(([queryKey, data]) => {
+        queryClient.setQueryData(queryKey, data)
+      })
+      toast.error(getErrorMessage(err, 'Não foi possível concluir a tarefa. Verifique permissões e tente novamente.'))
     } finally {
+      await queryClient.invalidateQueries({ queryKey: tarefasKeys.all })
       setConcluding(null)
     }
   }

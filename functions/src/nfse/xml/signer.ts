@@ -8,6 +8,7 @@ import { SignedXml } from 'xml-crypto'
 export interface ChaveAssinatura {
   privateKeyPem: string
   certPem: string
+  certChainPem: string
 }
 
 /**
@@ -24,13 +25,28 @@ export function extrairChaveDoPfx(pfxBase64: string, senha: string): ChaveAssina
   if (!keyBag?.key) throw new Error('Chave privada não encontrada no certificado')
   const privateKeyPem = forge.pki.privateKeyToPem(keyBag.key)
 
-  // Extrai certificado
+  // Extrai certificado e cadeia. Alguns webservices municipais rejeitam o
+  // mTLS quando recebe apenas o certificado folha, sem intermediárias.
   const certBags = pfx.getBags({ bagType: forge.pki.oids.certBag })
-  const certBag = certBags[forge.pki.oids.certBag]?.[0]
-  if (!certBag?.cert) throw new Error('Certificado não encontrado no PFX')
-  const certPem = forge.pki.certificateToPem(certBag.cert)
+  const certs = (certBags[forge.pki.oids.certBag] ?? [])
+    .map((bag) => bag.cert)
+    .filter((cert): cert is forge.pki.Certificate => Boolean(cert))
+  if (certs.length === 0) throw new Error('Certificado não encontrado no PFX')
 
-  return { privateKeyPem, certPem }
+  const keyAny = keyBag.key as forge.pki.rsa.PrivateKey
+  const leafCert = certs.find((cert) => {
+    const publicKey = cert.publicKey as forge.pki.rsa.PublicKey
+    return publicKey.n?.equals(keyAny.n) && publicKey.e?.equals(keyAny.e)
+  }) ?? certs[0]
+
+  const chain = [
+    leafCert,
+    ...certs.filter((cert) => cert !== leafCert),
+  ]
+  const certPem = forge.pki.certificateToPem(leafCert)
+  const certChainPem = chain.map((cert) => forge.pki.certificateToPem(cert)).join('')
+
+  return { privateKeyPem, certPem, certChainPem }
 }
 
 /**

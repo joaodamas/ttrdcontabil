@@ -1,6 +1,7 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
+import { appConfig } from '@/lib/app-config'
 
 const ROUTE_LABELS: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -26,7 +27,7 @@ function getLabel(pathname: string): string {
     const partial = '/' + segments.slice(0, i).join('/')
     if (ROUTE_LABELS[partial]) return ROUTE_LABELS[partial]
   }
-  return 'TTRD Contábil'
+  return appConfig.name
 }
 
 export function Header() {

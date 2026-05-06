@@ -13,6 +13,7 @@ const firebaseConfig = {
 
 const EMAIL = 'joaodamasit@gmail.com'
 const PASSWORD = process.env.ADMIN_PASSWORD
+const TENANT_ID = process.env.TENANT_ID ?? process.env.NEXT_PUBLIC_APP_TENANT_ID ?? 'ttrd'
 
 async function main() {
   const app = initializeApp(firebaseConfig)
@@ -30,15 +31,17 @@ async function main() {
       nome: 'João Damas',
       email: EMAIL,
       perfil: 'admin',
+      ativo: true,
+      tenantId: TENANT_ID,
     })
     const snap2 = await getDoc(doc(db, 'usuarios', uid))
     console.log('✅ Criado:', snap2.data())
   } else {
     console.log('📄 Documento atual:', snap.data())
-    if (snap.data().perfil !== 'admin') {
-      console.log('⚠️  Perfil errado, corrigindo...')
-      await setDoc(doc(db, 'usuarios', uid), { perfil: 'admin' }, { merge: true })
-      console.log('✅ Perfil atualizado para admin')
+    if (snap.data().perfil !== 'admin' || snap.data().ativo !== true || snap.data().tenantId !== TENANT_ID) {
+      console.log('⚠️  Perfil/ativo/tenant incorreto, corrigindo...')
+      await setDoc(doc(db, 'usuarios', uid), { perfil: 'admin', ativo: true, tenantId: TENANT_ID }, { merge: true })
+      console.log(`✅ Perfil atualizado para admin, ativo=true e tenantId=${TENANT_ID}`)
     } else {
       console.log('✅ Perfil já é admin — faça logout e login novamente no app')
     }

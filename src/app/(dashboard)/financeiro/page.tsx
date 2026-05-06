@@ -1,23 +1,26 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Timestamp } from 'firebase/firestore'
 import { useQueryClient } from '@tanstack/react-query'
 
 import { formatDate, formatCurrency, tsToDate } from '@/lib/utils'
+import { exportToExcel } from '@/lib/export-excel'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LancamentoBaixar } from '@/components/financeiro/lancamento-baixar'
-import { Plus, TrendingUp, CheckCircle, AlertTriangle, Loader2, Receipt } from 'lucide-react'
+import { FilaCobrancaItem } from '@/components/financeiro/fila-cobranca'
+import { Download, Plus, TrendingUp, CheckCircle, AlertTriangle, Receipt } from 'lucide-react'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { FilterBtn } from '@/components/ui/filter-btn'
 import { financeiroBaseFiltroSchema } from '@/features/financeiro/schemas'
 import { useFinanceiroList } from '@/features/financeiro/hooks'
 import { financeiroKeys } from '@/features/financeiro/queries'
+import { scoreCobranca } from '@/lib/financeiro-prioridade'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   pendente: { label: 'Pendente', variant: 'outline' },
@@ -43,12 +46,46 @@ function FinanceiroContent() {
   const [tipo, setTipo] = useState(() => searchParams.get('tipo') ?? '')
   const [status, setStatus] = useState(() => searchParams.get('status') ?? '')
   const [page, setPage] = useState(1)
-  const { lancamentos, total, totalPages, somaAReceber, somaRecebidoMes, somaEmAtraso, isLoading } =
+  const { lancamentos, filteredLancamentos, total, totalPages, somaAReceber, somaRecebidoMes, somaEmAtraso, isLoading } =
     useFinanceiroList({ clienteId, competenciaId, tipo, status, page })
+  const agora = new Date()
+  const filaCobranca = [...filteredLancamentos]
+    .filter((l) => l.tipo === 'receita' && l.status === 'pendente')
+    .sort((a, b) => scoreCobranca(b, agora) - scoreCobranca(a, agora))
+    .slice(0, 5)
 
-  useEffect(() => {
-    setPage(1)
-  }, [tipo, status])
+  function exportarInadimplencia() {
+    const hoje = new Date()
+    const agrupado = new Map<string, { cliente: string; quantidade: number; total: number; vencimentoMaisAntigo: string }>()
+
+    for (const lancamento of filteredLancamentos) {
+      const vencimento = tsToDate(lancamento.dataVencimento)
+      if (lancamento.tipo !== 'receita' || lancamento.status !== 'pendente' || !vencimento || vencimento >= hoje) continue
+      const cliente = (lancamento.clienteNome as string | undefined) ?? 'Sem cliente'
+      const atual = agrupado.get(cliente) ?? {
+        cliente,
+        quantidade: 0,
+        total: 0,
+        vencimentoMaisAntigo: formatDate(vencimento),
+      }
+      atual.quantidade += 1
+      atual.total += (lancamento.valor as number | undefined) ?? 0
+      const antigo = new Date(atual.vencimentoMaisAntigo.split('/').reverse().join('-'))
+      if (vencimento < antigo) atual.vencimentoMaisAntigo = formatDate(vencimento)
+      agrupado.set(cliente, atual)
+    }
+
+    exportToExcel(
+      'relatorio-inadimplencia',
+      Array.from(agrupado.values()).sort((a, b) => b.total - a.total),
+      [
+        { key: 'cliente', label: 'Cliente' },
+        { key: 'quantidade', label: 'Lancamentos em atraso' },
+        { key: 'total', label: 'Total em atraso' },
+        { key: 'vencimentoMaisAntigo', label: 'Vencimento mais antigo' },
+      ]
+    )
+  }
 
   return (
     <div className="space-y-5">
@@ -59,12 +96,18 @@ function FinanceiroContent() {
             {total} lançamento{total !== 1 ? 's' : ''}
           </p>
         </div>
-        <Link href="/financeiro/novo">
-          <Button size="sm" className="h-10 rounded-xl">
-            <Plus className="w-4 h-4 mr-1" />
-            Novo Lançamento
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" className="h-10 rounded-xl" onClick={exportarInadimplencia}>
+            <Download className="w-4 h-4 mr-1" />
+            Inadimplência
           </Button>
-        </Link>
+          <Link href="/financeiro/novo">
+            <Button size="sm" className="h-10 rounded-xl">
+              <Plus className="w-4 h-4 mr-1" />
+              Novo Lançamento
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -110,19 +153,49 @@ function FinanceiroContent() {
       <div className="surface-subtle flex flex-wrap items-center gap-3 border px-3 py-2.5">
         <div className="flex items-center gap-1">
           {(['', 'receita', 'despesa'] as const).map((t) => (
-            <FilterBtn key={t} onClick={() => setTipo(t)} active={tipo === t}>
+            <FilterBtn key={t} onClick={() => { setTipo(t); setPage(1) }} active={tipo === t}>
               {t === '' ? 'Todos' : TIPO_MAP[t]?.label ?? t}
             </FilterBtn>
           ))}
         </div>
         <div className="flex items-center gap-1">
-          {(['', 'pendente', 'pago', 'cancelado'] as const).map((s) => (
-            <FilterBtn key={s} onClick={() => setStatus(s)} active={status === s}>
+          {(['', 'pendente', 'atrasado', 'pago', 'cancelado', 'estornado'] as const).map((s) => (
+            <FilterBtn key={s} onClick={() => { setStatus(s); setPage(1) }} active={status === s}>
               {s === '' ? 'Qualquer' : STATUS_MAP[s]?.label ?? s}
             </FilterBtn>
           ))}
         </div>
       </div>
+
+      {filaCobranca.length > 0 ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h3 className="text-base font-semibold">Fila de cobrança</h3>
+              <p className="text-sm text-muted-foreground">
+                Ordenada por atraso, proximidade do vencimento e impacto de caixa.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => { setTipo('receita'); setStatus('pendente'); setPage(1) }}>
+              Ver receitas pendentes
+            </Button>
+          </div>
+          <div className="space-y-2">
+            {filaCobranca.map((item) => (
+              <FilaCobrancaItem
+                key={item.id as string}
+                item={item}
+                agora={agora}
+                onBaixado={() =>
+                  void queryClient.invalidateQueries({
+                    queryKey: financeiroKeys.snapshot({ clienteId, competenciaId, tipo, status, page }),
+                  })
+                }
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
         <table className="w-full text-sm">
@@ -193,7 +266,7 @@ function FinanceiroContent() {
                           dataVencimento={l.dataVencimento as Timestamp | undefined}
                           onBaixado={() =>
                             void queryClient.invalidateQueries({
-                              queryKey: financeiroKeys.snapshot({ clienteId, competenciaId }),
+                              queryKey: financeiroKeys.snapshot({ clienteId, competenciaId, tipo, status, page }),
                             })
                           }
                         />

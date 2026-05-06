@@ -80,7 +80,6 @@ export const Empty: Story = {
 }
 
 export const SomenteAlertas: Story = {
-  name: 'Somente Alertas',
   args: {
     events: eventos.filter((e) => e.variant === 'destructive' || e.variant === 'warning'),
   },

@@ -20,6 +20,9 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { getClientes, getUsuarios, createDocument, updateDocument } from '@/lib/firestore-client'
+import { Timestamp } from 'firebase/firestore'
+import { getErrorMessage } from '@/lib/error-message'
+import { SELECT_NONE_VALUE } from '@/lib/select-values'
 
 const irSchema = z.object({
   clienteId: z.string().min(1, 'Cliente é obrigatório'),
@@ -44,6 +47,15 @@ interface Usuario {
   id: string
   nome: string
 }
+
+const CHECKLIST_IR_PADRAO = [
+  'Informe de rendimentos',
+  'Comprovantes de despesas médicas',
+  'Comprovantes de educação',
+  'Informe de bancos e investimentos',
+  'Comprovantes de bens, dívidas e financiamentos',
+  'Recibos de aluguéis ou rendimentos recebidos',
+]
 
 interface IrFormProps {
   initialData?: Partial<IrFormData> & { id?: string }
@@ -83,18 +95,51 @@ export function IrForm({ initialData }: IrFormProps) {
 
   async function onSubmit(data: IrFormData) {
     try {
+      const cliente = clientes.find((c) => c.id === data.clienteId)
+      const responsavel = usuarios.find((u) => u.id === data.responsavelId)
+      const payload = {
+        ...data,
+        clienteNome: cliente?.razaoSocial ?? null,
+        responsavelNome: responsavel?.nome ?? null,
+        dataEntrega: data.dataEntrega ? Timestamp.fromDate(new Date(`${data.dataEntrega}T12:00:00`)) : null,
+      }
+
       if (isEditing) {
-        await updateDocument('ir_declaracoes', initialData!.id!, data as Record<string, unknown>)
+        await updateDocument('ir_declaracoes', initialData!.id!, payload as Record<string, unknown>)
         toast.success('Declaração atualizada!')
         router.push(`/ir/${initialData!.id}`)
       } else {
-        const id = await createDocument('ir_declaracoes', data as Record<string, unknown>)
+        const id = await createDocument('ir_declaracoes', payload as Record<string, unknown>)
+        await Promise.all([
+          ...CHECKLIST_IR_PADRAO.map((descricao, index) =>
+            createDocument('ir_checklist', {
+              declaracaoId: id,
+              clienteId: data.clienteId,
+              clienteNome: cliente?.razaoSocial ?? null,
+              descricao,
+              ordem: index + 1,
+              recebido: false,
+            })
+          ),
+          createDocument('tarefas', {
+            titulo: `Coletar documentos IR ${data.anoBase} - ${cliente?.razaoSocial ?? 'cliente'}`,
+            clienteId: data.clienteId,
+            clienteNome: cliente?.razaoSocial ?? null,
+            responsavelId: data.responsavelId ?? null,
+            responsavelNome: responsavel?.nome ?? null,
+            prioridade: 'alta',
+            status: 'pendente',
+            dataPrazo: Timestamp.fromDate(new Date(data.anoBase + 1, 3, 15, 12, 0, 0)),
+            origem: 'ir_declaracao',
+            origemId: id,
+          }),
+        ])
         toast.success('Declaração criada!')
         router.push(`/ir/${id}`)
       }
       router.refresh()
-    } catch {
-      toast.error('Erro inesperado. Tente novamente.')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Nao foi possivel salvar a declaracao de IR. Verifique cliente, responsavel e permissao de acesso.'))
     }
   }
 
@@ -153,7 +198,7 @@ export function IrForm({ initialData }: IrFormProps) {
                 type="number"
                 min="2000"
                 max="2100"
-                {...register('anoBase')}
+                {...register('anoBase', { valueAsNumber: true })}
               />
               {errors.anoBase && (
                 <p className="text-xs text-destructive">{errors.anoBase.message}</p>
@@ -191,8 +236,8 @@ export function IrForm({ initialData }: IrFormProps) {
               control={control}
               render={({ field }) => (
                 <Select
-                  value={field.value ?? ''}
-                  onValueChange={(v) => field.onChange(v || null)}
+                  value={field.value ?? SELECT_NONE_VALUE}
+                  onValueChange={(v) => field.onChange(v === SELECT_NONE_VALUE ? null : v)}
                   disabled={loading}
                 >
                   <SelectTrigger>
@@ -201,7 +246,7 @@ export function IrForm({ initialData }: IrFormProps) {
                     />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhum</SelectItem>
+                    <SelectItem value={SELECT_NONE_VALUE}>Nenhum</SelectItem>
                     {usuarios.map((u) => (
                       <SelectItem key={u.id} value={u.id}>
                         {u.nome}

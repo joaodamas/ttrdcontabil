@@ -1,20 +1,29 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFeatureKeys } from '@/lib/feature-keys'
+import { queryStaleTimes } from '@/lib/query-stale-times'
 import { fetchClientes, fetchClienteDetail } from './services'
 
 const base = createFeatureKeys('clientes')
 
 export const clientesKeys = {
   all:    base.all,
-  list:   (status?: string) => [...base.list('list'), status ?? 'todos'] as const,
+  list:   (params: { status?: string; busca?: string; page?: number; pageSize?: number } = {}) =>
+    [
+      ...base.list('list'),
+      params.status ?? 'todos',
+      params.busca ?? '',
+      params.page ?? 1,
+      params.pageSize ?? 20,
+    ] as const,
   detail: (id: string)      => [...base.all, 'detail', id] as const,
   fiscal: (id: string)      => [...base.all, 'fiscal', id] as const,
 }
 
-export function useClientesListQuery(status?: string) {
+export function useClientesListQuery(params: { status?: string; busca?: string; page?: number; pageSize?: number } = {}) {
   return useQuery({
-    queryKey: clientesKeys.list(status),
-    queryFn:  () => fetchClientes(status),
+    queryKey: clientesKeys.list(params),
+    queryFn:  () => fetchClientes(params),
+    staleTime: queryStaleTimes.reference,
   })
 }
 
@@ -23,6 +32,6 @@ export function useClienteDetailQuery(id: string) {
     queryKey: clientesKeys.detail(id),
     queryFn:  () => fetchClienteDetail(id),
     enabled:  !!id,
-    staleTime: 60_000,
+    staleTime: queryStaleTimes.operational,
   })
 }

@@ -5,15 +5,13 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { initializeApp, deleteApp, getApps } from 'firebase/app'
+import { initializeApp, deleteApp } from 'firebase/app'
 import {
   getAuth,
   createUserWithEmailAndPassword,
   signOut as fbSignOut,
 } from 'firebase/auth'
-import { doc, setDoc } from 'firebase/firestore'
-import { getClientDb, firebaseConfig } from '@/lib/firebase'
-import { updateDocument, invalidateUsuariosCache } from '@/lib/firestore-client'
+import { firebaseConfig } from '@/lib/firebase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -35,6 +33,11 @@ import {
 } from '@radix-ui/react-dialog'
 import { Loader2, Plus, Pencil, X, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getErrorMessage } from '@/lib/error-message'
+import { appConfig } from '@/lib/app-config'
+import { createUsuarioProfileAdmin, updateUsuarioAdmin } from '@/features/admin/services'
+
+const DEFAULT_TENANT_ID = appConfig.tenantId
 
 /* ─── Perfis ──────────────────────────────────────────────── */
 const PERFIS = ['admin', 'operacional', 'fiscal', 'financeiro', 'leitura'] as const
@@ -100,13 +103,13 @@ interface UsuarioFormProps {
     perfil?: string
     ativo?: boolean
     telas?: string[]
+    tenantId?: string
   }
   onSaved?: () => void
 }
 
 /* ─── Component ───────────────────────────────────────────── */
 export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
-  const db = getClientDb()
   const isEditing = !!usuario?.id
   const [open, setOpen] = useState(false)
 
@@ -160,7 +163,7 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
   async function onSubmit(data: EditData) {
     try {
       if (isEditing) {
-        await updateDocument('usuarios', usuario!.id, {
+        await updateUsuarioAdmin(usuario!.id, {
           nome:   data.nome,
           perfil: data.perfil,
           ativo:  data.ativo,
@@ -180,15 +183,13 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
           )
           await fbSignOut(secondaryAuth)
 
-          // Save Firestore profile
-          await setDoc(doc(db, 'usuarios', cred.user.uid), {
+          await createUsuarioProfileAdmin(cred.user.uid, {
             nome:           data.nome,
             email:          (data as CreateData).email,
             perfil:         data.perfil,
             telas:          data.telas,
             ativo:          true,
-            criadoEm:       new Date(),
-            atualizadoEm:   new Date(),
+            tenantId:       DEFAULT_TENANT_ID,
           })
 
           toast.success(`Usuário ${data.nome} criado com sucesso!`)
@@ -198,7 +199,6 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
         }
       }
 
-      invalidateUsuariosCache()
       setOpen(false)
       reset()
       onSaved?.()
@@ -209,7 +209,7 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
       } else if (msg.includes('weak-password')) {
         toast.error('Senha muito fraca. Use ao menos 6 caracteres.')
       } else {
-        toast.error('Erro ao salvar usuário. Tente novamente.')
+        toast.error(getErrorMessage(err, 'Nao foi possivel salvar o usuario. Verifique seu perfil de acesso e os dados obrigatorios.'))
         console.error(err)
       }
     }

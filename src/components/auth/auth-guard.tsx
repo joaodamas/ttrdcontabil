@@ -7,6 +7,7 @@ import { Loader2 } from 'lucide-react'
 import { canAccessTela, type TelaKey } from '@/lib/permissions'
 
 function getTelaFromPath(pathname: string): TelaKey | null {
+  if (pathname.startsWith('/hoje')) return 'hoje'
   if (pathname.startsWith('/clientes')) return 'clientes'
   if (pathname.startsWith('/tarefas')) return 'tarefas'
   if (pathname.startsWith('/competencias')) return 'competencias'
@@ -22,6 +23,7 @@ function getTelaFromPath(pathname: string): TelaKey | null {
 
 function getFirstAllowedRoute(usuario: NonNullable<ReturnType<typeof useAuth>['usuario']>): string {
   const priority: Array<{ tela: TelaKey; href: string }> = [
+    { tela: 'hoje', href: '/hoje' },
     { tela: 'dashboard', href: '/dashboard' },
     { tela: 'clientes', href: '/clientes' },
     { tela: 'tarefas', href: '/tarefas' },
@@ -34,7 +36,7 @@ function getFirstAllowedRoute(usuario: NonNullable<ReturnType<typeof useAuth>['u
     { tela: 'admin', href: '/admin' },
   ]
   const firstAllowed = priority.find(({ tela }) => canAccessTela(usuario, tela))
-  return firstAllowed?.href ?? '/dashboard'
+  return firstAllowed?.href ?? '/hoje'
 }
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {

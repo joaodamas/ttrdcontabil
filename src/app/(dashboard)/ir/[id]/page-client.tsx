@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { where, orderBy, Timestamp } from 'firebase/firestore'
 
-import { getDocument, listDocuments } from '@/lib/firestore-client'
+import { getDocument, listDocuments, updateDocument } from '@/lib/firestore-client'
 import { formatDate , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -69,6 +69,20 @@ export default function IrDetalhePage() {
   const criadoEm = declaracao.criadoEm as Timestamp | undefined
   const recebidos = checklist.filter((item) => item.recebido).length
 
+  async function toggleChecklistItem(itemId: string, checked: boolean) {
+    await updateDocument('ir_checklist', itemId, {
+      recebido: checked,
+      dataRecebimento: checked ? Timestamp.now() : null,
+    })
+    setChecklist((prev) =>
+      prev.map((item) =>
+        item.id === itemId
+          ? { ...item, recebido: checked, dataRecebimento: checked ? Timestamp.now() : null }
+          : item
+      )
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
@@ -124,8 +138,9 @@ export default function IrDetalhePage() {
                         <Checkbox
                           id={`item-${item.id}`}
                           checked={Boolean(item.recebido)}
-                          disabled
-                          className="pointer-events-none"
+                          onCheckedChange={(checked) =>
+                            void toggleChecklistItem(item.id as string, Boolean(checked))
+                          }
                         />
                         <label
                           htmlFor={`item-${item.id}`}

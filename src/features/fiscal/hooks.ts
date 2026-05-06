@@ -1,4 +1,4 @@
-import { useFiscalSnapshotQuery } from './queries'
+import { useFiscalReadinessQuery, useFiscalSnapshotQuery } from './queries'
 
 export function useFiscalDashboard() {
   const query = useFiscalSnapshotQuery()
@@ -10,5 +10,17 @@ export function useFiscalDashboard() {
     erroCount: query.data?.erroCount ?? 0,
     canceladaCount: query.data?.canceladaCount ?? 0,
     notas: query.data?.notas ?? [],
+  }
+}
+
+export function useFiscalReadiness() {
+  const query = useFiscalReadinessQuery()
+  return {
+    ...query,
+    totalClientesAtivos: query.data?.totalClientesAtivos ?? 0,
+    prontosRascunho: query.data?.prontosRascunho ?? 0,
+    prontosEmissao: query.data?.prontosEmissao ?? 0,
+    bloqueados: query.data?.bloqueados ?? 0,
+    clientes: query.data?.clientes ?? [],
   }
 }

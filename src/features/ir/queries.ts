@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFeatureKeys } from '@/lib/feature-keys'
+import { queryStaleTimes } from '@/lib/query-stale-times'
 import { fetchIrDeclaracoes } from './services'
 import type { IrFilters } from './types'
 
@@ -14,5 +15,6 @@ export function useIrListQuery(filters: IrFilters) {
   return useQuery({
     queryKey: irKeys.list(filters),
     queryFn: () => fetchIrDeclaracoes(filters),
+    staleTime: queryStaleTimes.operational,
   })
 }

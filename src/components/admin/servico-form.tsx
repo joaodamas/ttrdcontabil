@@ -24,7 +24,8 @@ import {
   DialogClose,
 } from '@/components/ui/dialog'
 import { Loader2, Plus, Pencil } from 'lucide-react'
-import { createDocument, updateDocument } from '@/lib/firestore-client'
+import { getErrorMessage } from '@/lib/error-message'
+import { createServicoAdmin, updateServicoAdmin } from '@/features/admin/services'
 
 // COB pricing table: COB01 = R$50, COB02 = R$100, ..., COB20 = R$1000
 const COB_TABLE = Array.from({ length: 20 }, (_, i) => ({
@@ -91,13 +92,13 @@ export function ServicoForm({ servico, onSaved }: ServicoFormProps) {
       const codigoNumero = parseInt(data.codigo.replace(/\D/g, '') || '0', 10)
 
       if (isEditing) {
-        await updateDocument('servicos', servico!.id as string, {
+        await updateServicoAdmin(servico!.id as string, {
           ...data,
           codigoNumero,
         })
         toast.success('Serviço atualizado!')
       } else {
-        await createDocument('servicos', {
+        await createServicoAdmin({
           ...data,
           codigoNumero,
         })
@@ -106,8 +107,8 @@ export function ServicoForm({ servico, onSaved }: ServicoFormProps) {
       setOpen(false)
       reset()
       onSaved?.()
-    } catch {
-      toast.error('Erro ao salvar serviço. Tente novamente.')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Nao foi possivel salvar o servico. Verifique codigo, valor e permissao de acesso.'))
     }
   }
 

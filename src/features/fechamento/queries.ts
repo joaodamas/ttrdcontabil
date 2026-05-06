@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFeatureKeys } from '@/lib/feature-keys'
+import { queryStaleTimes } from '@/lib/query-stale-times'
 import { fetchFechamentos } from './services'
 import type { FechamentoFilters } from './types'
 
@@ -15,5 +16,6 @@ export function useFechamentosQuery(filters: FechamentoFilters) {
   return useQuery({
     queryKey: fechamentoKeys.list(filters),
     queryFn: () => fetchFechamentos(filters),
+    staleTime: queryStaleTimes.operational,
   })
 }

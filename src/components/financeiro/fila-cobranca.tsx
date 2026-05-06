@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { LancamentoBaixar } from '@/components/financeiro/lancamento-baixar'
 import { motivoPrioridade } from '@/lib/financeiro-prioridade'
+import { createDocument } from '@/lib/firestore-client'
 import { Building2, Mail, Wallet } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
@@ -32,6 +33,41 @@ export function FilaCobrancaItem({ item, agora, onBaixado }: Props) {
   const mailtoHref = clienteEmail?.includes('@')
     ? `mailto:${clienteEmail}?subject=${mailSubject}&body=${mailBody}`
     : `mailto:?subject=${mailSubject}&body=${mailBody}`
+
+  async function registrarNegociacao() {
+    try {
+      await createDocument('cobrancas', {
+        lancamentoId: id,
+        clienteId: clienteId ?? null,
+        clienteNome: (item.clienteNome as string | undefined) ?? null,
+        clienteEmail: clienteEmail ?? null,
+        descricao,
+        valor: item.valor ?? 0,
+        dataVencimento: item.dataVencimento ?? null,
+        canal: 'email',
+        status: 'contato_iniciado',
+        observacao: 'Contato iniciado pela fila de cobrança.',
+      })
+      await createDocument('events', {
+        tipo: 'lancamento',
+        titulo: `Cobrança iniciada: ${descricao}`,
+        descricao: `${valorFmt} com vencimento em ${vencFmt}`,
+        clienteId: clienteId ?? null,
+        origemColecao: 'lancamentos',
+        origemId: id,
+        metadata: {
+          severidade: atrasado ? 'alta' : 'media',
+          href: clienteId ? `/clientes/${clienteId}` : '/financeiro',
+          canal: 'email',
+        },
+      })
+    } catch {
+      // O contato ainda deve abrir; a falha fica visível no console para diagnóstico.
+      console.error('[cobranca] Não foi possível registrar a negociação.')
+    } finally {
+      window.location.href = mailtoHref
+    }
+  }
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
@@ -86,13 +122,14 @@ export function FilaCobrancaItem({ item, agora, onBaixado }: Props) {
           </Link>
           <Tooltip>
             <TooltipTrigger>
-              <a
-                href={mailtoHref}
+              <button
+                type="button"
+                onClick={registrarNegociacao}
                 className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'h-8')}
               >
                 <Mail className="mr-1 h-3.5 w-3.5" />
                 Negociar
-              </a>
+              </button>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-xs text-left leading-snug">
               Abre o e-mail com assunto e texto sugeridos. O destinatário usa o e-mail do lançamento, se existir; senão, o

@@ -17,6 +17,7 @@ import { Loader2 } from 'lucide-react'
 import { createDocument, updateDocument } from '@/lib/firestore-client'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { getFirebaseApp } from '@/lib/firebase'
+import { getErrorMessage } from '@/lib/error-message'
 
 export const MUNICIPIOS = [
   { ibge: '3525904', nome: 'Jundiaí' },
@@ -29,7 +30,7 @@ export const MUNICIPIOS = [
   { ibge: '3513009', nome: 'Cotia' },
 ]
 
-export const MUNICIPIO_TIPO: Record<string, 'abrasf_a1' | 'simpliss' | 'conam' | 'giap'> = {
+export const MUNICIPIO_TIPO: Record<string, 'abrasf_a1' | 'geisweb_a1' | 'simpliss' | 'conam' | 'giap'> = {
   '3525904': 'abrasf_a1',
   '3509502': 'abrasf_a1',
   '3508900': 'abrasf_a1',
@@ -49,11 +50,16 @@ const schema = z.object({
   optanteSimples:      z.boolean(),
   incentivadorCultural: z.boolean().optional(),
   naturezaOperacao:    z.string().optional(),
+  codigoServicoPadrao: z.string().optional().nullable(),
+  descricaoServicoPadrao: z.string().optional().nullable(),
   itemListaServico:    z.string().optional().nullable(),
   cnae:                z.string().optional().nullable(),
   aliquotaPadrao:      z.number().min(0).max(100).optional().nullable(),
+  issRetidoPadrao:     z.boolean().optional(),
   // token credentials
   simplissToken:       z.string().optional().nullable(),
+  usuario:             z.string().optional().nullable(),
+  senha:               z.string().optional().nullable(),
   conamCodigoUsuario:  z.string().optional().nullable(),
   conamCodigoContribuinte: z.string().optional().nullable(),
   giaplogin:           z.string().optional().nullable(),
@@ -92,6 +98,8 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       naturezaOperacao: '1',
       ...defaultValues,
       simplissToken:          (creds.simplissToken as string) ?? null,
+      usuario:                (creds.usuario as string) ?? null,
+      senha:                  (creds.senha as string) ?? null,
       conamCodigoUsuario:     (creds.conamCodigoUsuario as string) ?? null,
       conamCodigoContribuinte:(creds.conamCodigoContribuinte as string) ?? null,
       giaplogin:              (creds.giaplogin as string) ?? null,
@@ -118,9 +126,12 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
         optanteSimples:       data.optanteSimples,
         incentivadorCultural: data.incentivadorCultural ?? false,
         naturezaOperacao:     data.naturezaOperacao || '1',
+        codigoServicoPadrao:  data.codigoServicoPadrao || null,
+        descricaoServicoPadrao: data.descricaoServicoPadrao || null,
         itemListaServico:     data.itemListaServico  || null,
         cnae:                 data.cnae              || null,
         aliquotaPadrao:       data.aliquotaPadrao    ?? null,
+        issRetidoPadrao:      data.issRetidoPadrao   ?? false,
       }
 
       let savedDocId = docId
@@ -147,8 +158,8 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       toast.success('Configuração fiscal salva!')
       onOpenChange(false)
       onSaved?.()
-    } catch {
-      toast.error('Erro ao salvar configuração.')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Nao foi possivel salvar a configuracao fiscal. Verifique permissao, municipio e credenciais.'))
     } finally {
       setSaving(false)
     }
@@ -242,6 +253,10 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
           {/* Serviço padrão */}
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
+              <Label>Código Serviço Municipal</Label>
+              <Input {...register('codigoServicoPadrao')} placeholder="Ex: 1719" />
+            </div>
+            <div className="space-y-1.5">
               <Label>Item Lista Serviço</Label>
               <Input {...register('itemListaServico')} placeholder="Ex: 17.19" />
             </div>
@@ -256,6 +271,25 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
                 placeholder="Ex: 5"
                 {...register('aliquotaPadrao', { valueAsNumber: true })}
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-[1fr_180px] gap-3">
+            <div className="space-y-1.5">
+              <Label>Descrição padrão da NFS-e</Label>
+              <Input {...register('descricaoServicoPadrao')} placeholder="Ex: Serviços contábeis mensais" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>ISS retido padrão</Label>
+              <Controller name="issRetidoPadrao" control={control} render={({ field }) => (
+                <Select value={field.value ? 'sim' : 'nao'} onValueChange={v => field.onChange(v === 'sim')}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nao">Não</SelectItem>
+                    <SelectItem value="sim">Sim</SelectItem>
+                  </SelectContent>
+                </Select>
+              )} />
             </div>
           </div>
 
@@ -323,7 +357,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
           )}
 
           {/* Aviso certificado A1 */}
-          {tipo === 'abrasf_a1' && (
+          {(tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
             <div className="border rounded-md p-3 bg-warning/8 border-warning/25">
               <p className="text-xs text-warning">
                 <strong>Certificado A1 necessário.</strong> Após salvar, faça o upload do arquivo .pfx na seção de credenciais da página fiscal.

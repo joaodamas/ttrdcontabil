@@ -29,6 +29,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, CheckCircle2, AlertCircle, SendHorizonal } from 'lucide-react'
 import { toast } from 'sonner'
+import { getFirebaseApp } from '@/lib/firebase'
 
 const LOTE_MAX = 50
 
@@ -36,6 +37,7 @@ interface Rascunho {
   id:           string
   clienteId:    string
   clienteNome:  string
+  competenciaId?: string | null
   valorServico: number
   dados:        Record<string, unknown>
 }
@@ -77,6 +79,7 @@ export function EmitirLoteModal({ open, onOpenChange, onSuccess }: EmitirLoteMod
           id:           r.id as string,
           clienteId:    (r.clienteId ?? dados.clienteId ?? '') as string,
           clienteNome:  (r.clienteNome ?? r.titulo ?? '') as string,
+          competenciaId: (r.competenciaId ?? dados.competenciaId ?? null) as string | null,
           valorServico: (dados.valorServico ?? r.valorServico ?? 0) as number,
           dados,
         }
@@ -123,21 +126,36 @@ export function EmitirLoteModal({ open, onOpenChange, onSuccess }: EmitirLoteMod
 
     const itensParaEmitir = rascunhos
       .filter((r) => selected.has(r.id))
-      .map((r) => ({
-        clienteId:   r.clienteId,
-        rascunhoId:  r.id,
-        tomador:     r.dados.tomador,
-        servico:     r.dados.servico,
-        competenciaId: r.dados.competenciaId ?? undefined,
-        numeroRps:   r.dados.numeroRps ?? undefined,
-        serieRps:    r.dados.serieRps ?? undefined,
-      }))
+      .map((r) => {
+        const tomador = (r.dados.tomador as Record<string, unknown> | undefined) ?? {
+          razaoSocial: r.dados.tomadorNome,
+          cpfCnpj: r.dados.tomadorCpfCnpj,
+          email: r.dados.tomadorEmail || undefined,
+        }
+        const servico = (r.dados.servico as Record<string, unknown> | undefined) ?? {
+          discriminacao: r.dados.descricaoServico,
+          codigoServico: r.dados.codigoServico,
+          valorServico: r.dados.valorServico,
+          aliquota: r.dados.aliquota ?? undefined,
+          issRetido: r.dados.issRetido,
+        }
+
+        return {
+          clienteId:   r.clienteId,
+          rascunhoId:  r.id,
+          tomador,
+          servico,
+          competenciaId: r.competenciaId ?? r.dados.competenciaId ?? undefined,
+          numeroRps:   r.dados.numeroRps ?? undefined,
+          serieRps:    r.dados.serieRps ?? undefined,
+        }
+      })
 
     setStep('running')
 
     try {
       const fn = httpsCallable<{ itens: unknown[] }, { resultados: ResultadoLote[]; sucessos: number; falhas: number }>(
-        getFunctions(undefined, 'southamerica-east1'),
+        getFunctions(getFirebaseApp(), 'southamerica-east1'),
         'emitirNfseLote'
       )
       const { data } = await fn({ itens: itensParaEmitir })

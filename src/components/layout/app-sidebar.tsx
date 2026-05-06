@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
+import { appConfig } from '@/lib/app-config'
 import { canAccessTela, type TelaKey } from '@/lib/permissions'
 import { getInitials } from '@/lib/utils'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
@@ -13,7 +14,7 @@ import {
   BarChart3, Users, ClipboardList, Layers, FolderOpen,
   Receipt, FileText, Wallet, Settings, LogOut,
   Building2, ChevronDown, Menu, History, UserCog,
-  Package2, CheckSquare, Plus,
+  Package2, CheckSquare, Plus, CalendarClock, Plug, SlidersHorizontal,
 } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────
@@ -35,6 +36,13 @@ type NavSection = {
 
 // ── Navigation structure ───────────────────────────────────────
 const NAV_SECTIONS: NavSection[] = [
+  {
+    id: 'hoje',
+    label: 'Hoje',
+    icon: CalendarClock,
+    href: '/hoje',
+    telaKey: 'hoje',
+  },
   {
     id: 'painel',
     label: 'Painel',
@@ -85,6 +93,8 @@ const NAV_SECTIONS: NavSection[] = [
       { href: '/admin',          label: 'Painel Admin',     icon: Settings, telaKey: 'admin' },
       { href: '/admin/usuarios', label: 'Usuários',         icon: UserCog,  telaKey: 'admin' },
       { href: '/admin/servicos', label: 'Tipos de Serviço', icon: Package2, telaKey: 'servicos' },
+      { href: '/admin/conectores', label: 'Conectores',     icon: Plug, telaKey: 'admin' },
+      { href: '/admin/parametros', label: 'Parâmetros',     icon: SlidersHorizontal, telaKey: 'admin' },
     ],
   },
 ]
@@ -127,19 +137,25 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   const visibleSections = NAV_SECTIONS.filter(canSeeSection)
+  const logoNode = appConfig.logoUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={appConfig.logoUrl} alt="" className="h-7 w-7 rounded-lg object-contain" />
+  ) : (
+    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
+      <Building2 size={14} className="text-primary-foreground" />
+    </div>
+  )
 
   return (
     <div className="flex h-full flex-col">
       {/* Logo */}
       <div className="flex h-14 items-center gap-2.5 border-b border-border px-4 shrink-0">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
-          <Building2 size={14} className="text-primary-foreground" />
-        </div>
+        {logoNode}
         <div className="min-w-0">
           <p className="text-sm font-bold tracking-tight leading-none">
-            TTRD <span className="text-primary">Contábil</span>
+            {appConfig.name}
           </p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">Sistema de Gestão</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">{appConfig.tagline}</p>
         </div>
       </div>
 

@@ -21,4 +21,5 @@ export type TarefasFilters = {
   clienteId: string
   competenciaId: string
   page: number
+  pageSize?: number
 }

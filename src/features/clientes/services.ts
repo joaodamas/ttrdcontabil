@@ -1,10 +1,25 @@
-import { where, orderBy, limit } from 'firebase/firestore'
-import { getClientes, getDocument, listDocuments } from '@/lib/firestore-client'
+import { where, orderBy, limit, type QueryConstraint } from 'firebase/firestore'
+import { getDocument, listDocuments } from '@/lib/firestore-client'
 import type { ClienteRecord, ClienteDetalheData } from './types'
 
-export async function fetchClientes(status?: string): Promise<ClienteRecord[]> {
-  const data = await getClientes(status ? { status } : {})
-  return data as ClienteRecord[]
+export async function fetchClientes(params: {
+  status?: string
+  busca?: string
+  page?: number
+  pageSize?: number
+} = {}): Promise<ClienteRecord[]> {
+  const status = params.status === 'all' ? undefined : params.status
+  const constraints: QueryConstraint[] = []
+  if (status) constraints.push(where('status', '==', status))
+  constraints.push(limit(500))
+
+  const data = await listDocuments('clientes', constraints)
+  return (data as ClienteRecord[])
+    .filter((cliente) => !cliente.deletedAt)
+    .sort((a, b) =>
+      String(a.razaoSocial ?? a.nomeFantasia ?? a.id)
+        .localeCompare(String(b.razaoSocial ?? b.nomeFantasia ?? b.id), 'pt-BR')
+    )
 }
 
 export async function fetchClienteDetail(id: string): Promise<ClienteDetalheData> {

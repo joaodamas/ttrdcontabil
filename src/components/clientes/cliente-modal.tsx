@@ -419,7 +419,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                           </Card>
 
                           {/* Certificado A1 */}
-                          {fiscal && tipo === 'abrasf_a1' && (
+                          {fiscal && (tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
                             <Card>
                               <CardHeader className="flex flex-row items-center gap-2 pb-3">
                                 {certInfo

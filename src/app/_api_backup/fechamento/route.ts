@@ -5,8 +5,6 @@ import { adminDb } from '@/lib/firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { z } from 'zod'
 
-const statusOb = z.enum(['pendente', 'enviado', 'parcial', 'ok', 'sm', 'guia', 'na'])
-
 const createSchema = z.object({
   mes: z.number().min(1).max(12),
   ano: z.number().min(2020).max(2099),

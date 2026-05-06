@@ -15,4 +15,5 @@ export type CompetenciasFilters = {
   status: string
   clienteId: string
   page: number
+  pageSize?: number
 }

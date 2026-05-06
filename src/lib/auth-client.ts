@@ -16,6 +16,7 @@ export interface UserSession {
   email: string
   nome: string
   perfil: string
+  tenantId?: string
   telas?: string[]   // granular screen access; undefined = use perfil defaults
 }
 
@@ -34,9 +35,11 @@ export async function signIn(email: string, password: string): Promise<UserSessi
       if (data.ativo === false) throw new Error('Usuário inativo. Contate o administrador.')
       nome   = data.nome   ?? email
       perfil = data.perfil ?? 'leitura'
+      const tenantId = data.tenantId as string | undefined
       if (Array.isArray(data.telas)) {
-        return { uid: cred.user.uid, email: cred.user.email ?? email, nome, perfil, telas: data.telas }
+        return { uid: cred.user.uid, email: cred.user.email ?? email, nome, perfil, tenantId, telas: data.telas }
       }
+      return { uid: cred.user.uid, email: cred.user.email ?? email, nome, perfil, tenantId }
     }
     // If document doesn't exist, proceed with defaults — admin should run seed
   } catch (err) {
@@ -66,6 +69,7 @@ export function onSession(callback: (session: UserSession | null) => void) {
     // we always return a session. The Firestore profile is optional metadata.
     let nome = user.email ?? ''
     let perfil = 'leitura'
+    let tenantId: string | undefined
     try {
       const snap = await getDoc(doc(getClientDb(), 'usuarios', user.uid))
       if (snap.exists()) {
@@ -73,14 +77,15 @@ export function onSession(callback: (session: UserSession | null) => void) {
         if (data.ativo === false) { callback(null); return }
         nome   = data.nome   ?? nome
         perfil = data.perfil ?? perfil
+        tenantId = data.tenantId as string | undefined
         if (Array.isArray(data.telas)) {
-          callback({ uid: user.uid, email: user.email ?? '', nome, perfil, telas: data.telas })
+          callback({ uid: user.uid, email: user.email ?? '', nome, perfil, tenantId, telas: data.telas })
           return
         }
       }
     } catch {
       // Firestore unavailable — still allow access with defaults
     }
-    callback({ uid: user.uid, email: user.email ?? '', nome, perfil })
+    callback({ uid: user.uid, email: user.email ?? '', nome, perfil, tenantId })
   })
 }

@@ -12,12 +12,21 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
     }
 
-    // Usuário existe no sistema e está ativo
+    function userExists() {
+      return isAuth() && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
+    }
+
+    function userHasTenant() {
+      return userExists()
+        && ('tenantId' in userDoc())
+        && (userDoc().tenantId is string)
+        && userDoc().tenantId.size() > 0;
+    }
+
+    // Usuário existe no sistema, está ativo e pertence ao ambiente atual.
     function isAtivo() {
-      return isAuth() && (
-        !exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) ||
-        userDoc().ativo != false
-      );
+      return userHasTenant()
+        && (!('ativo' in userDoc()) || userDoc().ativo == true);
     }
 
     // Helpers de perfil — hierarquia: admin > operacional/fiscal/financeiro > leitura
@@ -26,6 +35,26 @@ service cloud.firestore {
     function isFiscal()      { return isAtivo() && userDoc().perfil in ['admin', 'fiscal']; }
     function isFinanceiro()  { return isAtivo() && userDoc().perfil in ['admin', 'financeiro']; }
     function canRead()       { return isAtivo(); }
+
+    function sameTenantExisting() {
+      return isAtivo()
+        && ('tenantId' in resource.data)
+        && resource.data.tenantId == userDoc().tenantId;
+    }
+
+    function sameTenantNew() {
+      return isAtivo()
+        && ('tenantId' in request.resource.data)
+        && request.resource.data.tenantId == userDoc().tenantId;
+    }
+
+    function sameTenantWrite() {
+      return sameTenantNew();
+    }
+
+    function sameTenantUpdate() {
+      return sameTenantExisting() && sameTenantNew();
+    }
 
     // ─── Validadores de payload ───────────────────────────────────────────────
 
@@ -66,164 +95,208 @@ service cloud.firestore {
     // ─── Usuários ─────────────────────────────────────────────────────────────
 
     match /usuarios/{uid} {
-      // Leitura: qualquer autenticado pode ler perfis (evita referência circular
-      // no isAtivo() quando um usuário lê seu próprio documento).
-      allow read: if isAuth();
+      allow get: if (isAuth() && request.auth.uid == uid) || (canRead() && sameTenantExisting());
+      allow list: if canRead();
       allow update: if (isAuth() && request.auth.uid == uid
           && !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['perfil', 'ativo', 'criadoEm']))
-        || isAdmin();
-      allow create, delete: if isAdmin();
+              .hasAny(['perfil', 'ativo', 'criadoEm', 'tenantId']))
+        || (isAdmin() && sameTenantUpdate());
+      allow create: if isAdmin() && sameTenantNew();
+      allow delete: if isAdmin() && sameTenantExisting();
     }
 
     // ─── Clientes ─────────────────────────────────────────────────────────────
 
     match /clientes/{id} {
-      allow read: if canRead();
-      allow create, update: if isOperacional() && clientePayloadValido();
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isOperacional() && clientePayloadValido() && sameTenantWrite();
+      allow update: if isOperacional() && clientePayloadValido() && sameTenantUpdate();
       // [MELHORIA 2] Delete separado: apenas admin pode remover clientes.
       // isOperacional inclui admin, mas tornar explícito evita que um
       // 'operacional' delete por acidente ou ataque direto à API.
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() && sameTenantExisting();
     }
 
     match /clientes_servicos/{id} {
-      allow read: if canRead();
-      allow create, update: if isOperacional();
-      allow delete: if isAdmin();
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isOperacional() && sameTenantWrite();
+      allow update: if isOperacional() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
     }
 
     // ─── Serviços (tipos cadastrais do escritório) ────────────────────────────
 
     match /servicos/{id} {
-      allow read: if canRead();
-      allow write: if isAdmin();
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isAdmin() && sameTenantNew();
+      allow update: if isAdmin() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
     }
 
     // ─── Competências ─────────────────────────────────────────────────────────
 
     match /competencias/{id} {
-      allow read: if canRead();
-      allow create, update: if isOperacional();
-      allow delete: if isAdmin();
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isOperacional() && sameTenantWrite();
+      allow update: if isOperacional() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
     }
 
     // ─── Tarefas ──────────────────────────────────────────────────────────────
 
     match /tarefas/{id} {
-      allow read: if canRead();
+      allow read: if canRead() && sameTenantExisting();
       // Todos os ativos podem criar e atualizar tarefas (payload validado).
-      allow create, update: if isAtivo() && tarefaPayloadValido();
+      allow create: if isOperacional() && tarefaPayloadValido() && sameTenantWrite();
+      allow update: if isOperacional() && tarefaPayloadValido() && sameTenantUpdate();
       // [MELHORIA 2] Delete separado: apenas operacional+ pode deletar tarefas.
-      allow delete: if isOperacional();
+      allow delete: if isOperacional() && sameTenantExisting();
     }
 
     match /tarefas_comentarios/{id} {
-      allow read: if canRead();
-      allow create: if isAtivo();
-      allow update, delete: if isAdmin();
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isOperacional() && sameTenantNew();
+      allow update: if isAdmin() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
     }
 
     // ─── Declarações de IR ────────────────────────────────────────────────────
 
     match /ir_declaracoes/{id} {
-      allow read: if canRead();
-      allow create, update: if isOperacional();
-      allow delete: if isAdmin();
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isOperacional() && sameTenantWrite();
+      allow update: if isOperacional() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
     }
 
     match /ir_checklist/{id} {
-      allow read: if canRead();
-      allow create, update: if isOperacional();
-      allow delete: if isAdmin();
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isOperacional() && sameTenantWrite();
+      allow update: if isOperacional() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
     }
 
     // ─── Financeiro ───────────────────────────────────────────────────────────
 
     match /lancamentos/{id} {
-      allow read: if canRead();
-      allow create, update: if isFinanceiro();
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isFinanceiro() && sameTenantWrite();
+      allow update: if isFinanceiro() && sameTenantUpdate();
       // [MELHORIA 2] Lançamentos financeiros só podem ser deletados por admin —
       // garante rastreabilidade e evita fraude por deleção direta.
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() && sameTenantExisting();
+    }
+
+    match /cobrancas/{id} {
+      allow read: if isFinanceiro() && sameTenantExisting();
+      allow create: if isFinanceiro() && sameTenantNew();
+      allow update: if isAdmin() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
     }
 
     // ─── Fechamento mensal ────────────────────────────────────────────────────
 
     match /fechamentos/{id} {
-      allow read: if canRead();
-      allow create, update: if isOperacional();
-      allow delete: if isAdmin();
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isOperacional() && sameTenantWrite();
+      allow update: if isOperacional() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
+    }
+
+    match /fechamento_revisoes/{id} {
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isOperacional() && sameTenantWrite();
+      allow update: if isOperacional() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
     }
 
     // ─── Fiscal — configuração ────────────────────────────────────────────────
 
     match /clientes_fiscal/{id} {
-      allow read: if canRead();
-      allow create, update: if isFiscal();
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isFiscal() && sameTenantWrite();
+      allow update: if isFiscal() && sameTenantUpdate();
       // Configuração fiscal nunca deve ser deletada sem supervisão admin.
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() && sameTenantExisting();
     }
 
     match /fiscal_conectores/{id} {
-      allow read: if canRead();
-      allow write: if isAdmin();
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isAdmin() && sameTenantNew();
+      allow update: if isAdmin() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
     }
 
     match /clientes_fiscal_integracao/{id} {
-      allow read: if canRead();
-      allow create, update: if isFiscal();
-      allow delete: if isAdmin();
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isFiscal() && sameTenantWrite();
+      allow update: if isFiscal() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
     }
 
     // ─── NFS-e ────────────────────────────────────────────────────────────────
 
     match /nfse_rascunhos/{id} {
-      allow read: if canRead();
-      allow create, update: if isFiscal();
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isFiscal() && sameTenantWrite();
+      allow update: if isFiscal() && sameTenantUpdate();
       // Rascunhos podem ser deletados pelo fiscal (limpeza de rascunhos antigos).
-      allow delete: if isFiscal();
+      allow delete: if isFiscal() && sameTenantExisting();
     }
 
     // nfse_emitidas: NUNCA escrita direta do browser — apenas Admin SDK via Cloud Functions.
     match /nfse_emitidas/{id} {
-      allow read: if canRead();
+      allow read: if canRead() && sameTenantExisting();
       allow write: if false;
     }
 
     match /nfse_eventos/{id} {
-      allow read: if canRead();
-      allow create: if isFiscal();
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isFiscal() && sameTenantNew();
+      allow update, delete: if false;
+    }
+
+    match /events/{id} {
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isAtivo() && sameTenantNew();
       allow update, delete: if false;
     }
 
     // nfse_fila_processamento: somente Cloud Functions.
     match /nfse_fila_processamento/{id} {
-      allow read: if isFiscal();
+      allow read: if isFiscal() && sameTenantExisting();
       allow write: if false;
     }
 
     // ─── Logs de auditoria — append-only, nunca deletar ──────────────────────
 
     match /logs_auditoria/{id} {
-      allow read: if isAdmin();
-      allow create: if isAtivo();
+      allow read: if isAdmin() && sameTenantExisting();
+      allow create: if isAtivo() && sameTenantNew();
       allow update, delete: if false;
     }
 
     // ─── Configurações do sistema ─────────────────────────────────────────────
 
     match /configuracoes/{id} {
-      allow read: if canRead();
-      allow write: if isAdmin();
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isAdmin() && sameTenantNew();
+      allow update: if isAdmin() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
+    }
+
+    match /dashboard_kpis/{id} {
+      allow read: if canRead() && sameTenantExisting();
+      allow write: if false;
     }
 
     // ─── Documentos (referências de arquivos no Storage) ─────────────────────
 
     match /documentos/{id} {
-      allow read: if canRead();
-      allow create, update: if isAtivo();
-      allow delete: if isAdmin();
+      allow read: if canRead() && sameTenantExisting();
+      allow create: if isOperacional() && sameTenantWrite();
+      allow update: if isOperacional() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
     }
   }
 }

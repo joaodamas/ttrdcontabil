@@ -1,10 +1,11 @@
 /**
  * Conector Cajamar — GeisWeb (SOAP NuSOAP proprietário)
  * Portal: https://geisweb.com.br/cajamar/nfse/php/login.php
- * WSDL:   https://geisweb.com.br/cajamar/webservice/GeisWebServiceImpl.php?wsdl
- * Método: EnviaLoteRPS
+ * WSDL:   https://www.gerenciadecidades.com.br/producao/cajamar/webservice/GeisWebServiceImpl.php?wsdl
+ * Método: EnviaLoteRps
  */
 import { extractSoapBody, extractTag, soapCall } from '../xml/soap'
+import { extrairChaveDoPfx } from '../xml/signer'
 import {
   CancelarNfseInput,
   CertificadoA1,
@@ -15,10 +16,12 @@ import {
   ResultadoEmissao,
   ResultadoOperacaoNfse,
 } from '../types'
-import { lerCredencial } from './credenciais'
 
-const GEISWEB_ENDPOINT = 'https://geisweb.com.br/cajamar/webservice/GeisWebServiceImpl.php'
-const GEISWEB_NS = 'urn:http://www.geisweb.com.br/cajamar/webservice'
+const GEISWEB_ENDPOINT_PROD = 'https://www.gerenciadecidades.com.br/producao/cajamar/webservice/GeisWebServiceImpl.php'
+const GEISWEB_ENDPOINT_HOM = 'https://www.gerenciadecidades.com.br/homologacao/modelo/webservice/GeisWebServiceImpl.php'
+const GEISWEB_NS_PROD = `urn:${GEISWEB_ENDPOINT_PROD}`
+const GEISWEB_NS_HOM = `urn:${GEISWEB_ENDPOINT_HOM}`
+const GEISWEB_LOTE_NS = 'http://www.gerenciadecidades.com.br/xsd/envio_lote_rps.xsd'
 
 function escapeXml(str: string): string {
   return str
@@ -38,14 +41,14 @@ function unescapeXml(str: string): string {
     .replace(/&amp;/g, '&')
 }
 
-function buildRpcEnvelope(xmlLoteAssinado: string): string {
+function buildRpcEnvelope(xmlLoteAssinado: string, namespace: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="${GEISWEB_NS}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:tns="${namespace}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <soapenv:Header/>
   <soapenv:Body>
-    <tns:EnviaLoteRPS>
-      <EnviaLoteRPS xsi:type="xsd:string">${escapeXml(xmlLoteAssinado)}</EnviaLoteRPS>
-    </tns:EnviaLoteRPS>
+    <tns:EnviaLoteRps>
+      <EnviaLoteRps xsi:type="xsd:string">${escapeXml(xmlLoteAssinado)}</EnviaLoteRps>
+    </tns:EnviaLoteRps>
   </soapenv:Body>
 </soapenv:Envelope>`
 }
@@ -63,60 +66,91 @@ function dataGeis(date = new Date()): string {
   return date.toISOString().split('T')[0]
 }
 
+function regimeGeis(config: ConfigFiscalCliente): string {
+  if (config.regimeTributario === 'mei') return '2'
+  if (config.regimeTributario === 'isento') return '4'
+  if (config.optanteSimples || config.regimeTributario === 'simples_nacional') return '1'
+  return '6'
+}
+
+function tipoLancamentoGeis(input: EmitirNfseInput, config: ConfigFiscalCliente): string {
+  if (config.optanteSimples || config.regimeTributario === 'simples_nacional' || config.regimeTributario === 'mei') return 'P'
+  if (input.servico.issRetido) return 'T'
+  return 'N'
+}
+
+function numeroRpsGeis(numero: string): string {
+  return String(Number(numero.replace(/\D/g, '').slice(-8)) || Date.now() % 100000000)
+}
+
 function buildLoteGeisWebXml(params: {
-  usuario: string
-  senha: string
   input: EmitirNfseInput
+  config: ConfigFiscalCliente
   prestador: Prestador
   numero: string
   numeroLote: string
 }) {
-  const { usuario, senha, input, prestador, numero, numeroLote } = params
+  const { input, config, prestador, numero, numeroLote } = params
   const valor = input.servico.valorServico
   const deducoes = input.servico.valorDeducoes ?? 0
   const baseCalculo = Math.max(valor - deducoes, 0)
   const tomador = input.tomador
   const endereco = tomador.endereco
 
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<EnviaLoteRPS>
-  ${tag('Usuario', usuario)}
-  ${tag('Senha', senha)}
+  return `<EnviaLoteRps xmlns="${GEISWEB_LOTE_NS}">
+  ${tag('CnpjCpf', prestador.cnpj.replace(/\D/g, ''))}
   ${tag('NumeroLote', numeroLote)}
   <Rps>
-    <ItensLote>
-      ${tag('NumeroRps', Number(numero.replace(/\D/g, '').slice(-9)) || Date.now() % 1000000000)}
-      ${tag('Serie', input.serieRps ?? 'RPS')}
-      ${tag('Tipo', '1')}
-      ${tag('TipoLcmto', input.servico.issRetido ? 'R' : 'N')}
-      ${tag('CodServ', Number(input.servico.codigoServico.replace(/\D/g, '')) || input.servico.codigoServico)}
-      ${tag('DtEmissao', dataGeis())}
-      ${tag('Valor', valor.toFixed(2))}
-      ${tag('BaseCalc', baseCalculo.toFixed(2))}
-      <Tomador>
-        ${tag('CNPJ', tomador.cpfCnpj.replace(/\D/g, ''))}
-        ${tag('InscricaoMunicipal', '')}
-        ${tag('RazaoSocial', tomador.razaoSocial)}
-        <Endereco>
-          ${tag('Rua', endereco?.logradouro ?? '')}
-          ${tag('Numero', endereco?.numero ?? '')}
-          ${tag('Bairro', endereco?.bairro ?? '')}
-          ${tag('Cidade', endereco?.municipioIbge ?? '')}
-          ${tag('Estado', endereco?.uf ?? '')}
-          ${tag('Cep', endereco?.cep?.replace(/\D/g, '') ?? '')}
-        </Endereco>
-        <Contato>
-          ${tag('Telefone', '')}
-          ${tag('Email', tomador.email ?? '')}
-        </Contato>
-      </Tomador>
-      ${tag('Municipio', prestador.municipioIbge)}
-      ${tag('DtLanc', dataGeis())}
-      ${tag('Descricao', input.servico.discriminacao)}
-      ${tag('OutrosImp', '0.00')}
-    </ItensLote>
+    <IdentificacaoRps>
+      ${tag('NumeroRps', numeroRpsGeis(numero))}
+    </IdentificacaoRps>
+    ${tag('DataEmissao', dataGeis())}
+    <Servico>
+      <Valores>
+        ${tag('ValorServicos', valor.toFixed(2))}
+        ${tag('BaseCalculo', baseCalculo.toFixed(2))}
+        ${tag('Aliquota', (input.servico.aliquota ?? config.aliquotaPadrao ?? 0).toFixed(2))}
+      </Valores>
+      ${tag('CodigoServico', Number(input.servico.codigoServico.replace(/\D/g, '')) || input.servico.codigoServico)}
+      ${tag('TipoLancamento', tipoLancamentoGeis(input, config))}
+      ${tag('Discriminacao', input.servico.discriminacao)}
+      ${tag('MunicipioPrestacaoServico', endereco?.municipioIbge ?? prestador.municipioIbge)}
+    </Servico>
+    <PrestadorServico>
+      <IdentificacaoPrestador>
+        ${tag('CnpjCpf', prestador.cnpj.replace(/\D/g, ''))}
+        ${tag('InscricaoMunicipal', prestador.inscricaoMunicipal)}
+        ${tag('Regime', regimeGeis(config))}
+      </IdentificacaoPrestador>
+    </PrestadorServico>
+    <TomadorServico>
+      <IdentificacaoTomador>
+        ${tag('CnpjCpf', tomador.cpfCnpj.replace(/\D/g, ''))}
+      </IdentificacaoTomador>
+      ${tag('RazaoSocial', tomador.razaoSocial)}
+      <Endereco>
+        ${tag('Rua', endereco?.logradouro ?? '')}
+        ${tag('Numero', endereco?.numero ?? '')}
+        ${tag('Bairro', endereco?.bairro ?? '')}
+        ${tag('Cidade', endereco?.municipioIbge ?? '')}
+        ${tag('Estado', endereco?.uf ?? '')}
+        ${tag('Cep', endereco?.cep?.replace(/\D/g, '') ?? '')}
+        ${tomador.email ? tag('Email', tomador.email) : ''}
+      </Endereco>
+    </TomadorServico>
+    <OrgaoGerador>
+      ${tag('CodigoMunicipio', prestador.municipioIbge)}
+      ${tag('Uf', 'SP')}
+    </OrgaoGerador>
+    <OutrosImpostos>
+      ${tag('Pis', (input.servico.valorPis ?? 0).toFixed(2))}
+      ${tag('Cofins', (input.servico.valorCofins ?? 0).toFixed(2))}
+      ${tag('Csll', (input.servico.valorCsll ?? 0).toFixed(2))}
+      ${tag('Irrf', (input.servico.valorIr ?? 0).toFixed(2))}
+      ${tag('Inss', (input.servico.valorInss ?? 0).toFixed(2))}
+    </OutrosImpostos>
   </Rps>
-</EnviaLoteRPS>`
+</EnviaLoteRps>`
 }
 
 function textoErroGeisWeb(mensagem: string, erro?: string): string {
@@ -126,6 +160,7 @@ function textoErroGeisWeb(mensagem: string, erro?: string): string {
     extractTag(mensagem, 'Descricao'),
     extractTag(mensagem, 'Descrição'),
     extractTag(mensagem, 'Motivo'),
+    extractTag(mensagem, 'Status'),
     extractTag(mensagem, 'Erro'),
     extractTag(mensagem, 'Msg'),
   ].filter((valor): valor is string => Boolean(valor && valor.trim()))
@@ -147,25 +182,15 @@ export class CajamarConector {
     prestador: Prestador,
   ): Promise<ResultadoEmissao> {
     try {
-      const usuario = lerCredencial(config.credenciais?.usuario, 'Usuário GeisWeb/Cajamar')
-      const senha = lerCredencial(config.credenciais?.senha, 'Senha GeisWeb/Cajamar')
-      if (!usuario.valor || !senha.valor) {
-        const erroCredencial = usuario.erro ?? senha.erro
-        if (erroCredencial) return { sucesso: false, codigoErro: usuario.codigoErro ?? senha.codigoErro, erro: erroCredencial }
-        return {
-          sucesso: false,
-          codigoErro: 'GEISWEB_CREDENCIAL_AUSENTE',
-          erro: 'Usuário e senha GeisWeb/Cajamar não configurados. Cajamar exige credenciais do portal além do certificado.',
-        }
-      }
-
+      const endpoint = config.ambienteEmissao === 'homologacao' ? GEISWEB_ENDPOINT_HOM : GEISWEB_ENDPOINT_PROD
+      const namespace = config.ambienteEmissao === 'homologacao' ? GEISWEB_NS_HOM : GEISWEB_NS_PROD
+      const chave = extrairChaveDoPfx(cert.pfxBase64, cert.senha)
       const numero = input.numeroRps ?? String(Date.now())
       const serie = input.serieRps ?? 'RPS'
-      const numeroLote = String(Date.now())
+      const numeroLote = String(Date.now()).slice(-10)
       const xmlLote = buildLoteGeisWebXml({
-        usuario: usuario.valor,
-        senha: senha.valor,
         input,
+        config,
         prestador,
         numero,
         numeroLote,
@@ -173,10 +198,8 @@ export class CajamarConector {
 
       console.log('[Cajamar/GeisWeb] emitindo NFS-e', {
         ambiente: config.ambienteEmissao,
-        endpoint: GEISWEB_ENDPOINT,
-        metodo: 'EnviaLoteRPS',
-        usuarioCriptografado: usuario.criptografada,
-        senhaCriptografada: senha.criptografada,
+        endpoint,
+        metodo: 'EnviaLoteRps',
         prestadorCnpjFinal: prestador.cnpj.replace(/\D/g, '').slice(-4),
         numeroRps: numero,
         serieRps: serie,
@@ -184,21 +207,25 @@ export class CajamarConector {
 
       const respXml = await soapCall(
         {
-          endpoint: GEISWEB_ENDPOINT,
-          action: `${GEISWEB_NS}#EnviaLoteRPS`,
+          endpoint,
+          action: `${namespace}#EnviaLoteRps`,
+          certPem: chave.certChainPem,
+          keyPem: chave.privateKeyPem,
         },
-        buildRpcEnvelope(xmlLote),
+        buildRpcEnvelope(xmlLote, namespace),
       )
       const bodyXml = extractSoapBody(respXml)
       const mensagem = extrairMensagemGeisWeb(bodyXml)
 
       const erro = extractTag(mensagem, 'Mensagem')
         ?? extractTag(mensagem, 'MensagemRetorno')
+        ?? extractTag(mensagem, 'Status')
         ?? extractTag(mensagem, 'Erro')
-      const codigoErro = extractTag(mensagem, 'Codigo')
+      const codigoErro = extractTag(mensagem, 'Codigo') ?? extractTag(mensagem, 'Erro')
       const numeroNfse = extractTag(mensagem, 'Numero')
         ?? extractTag(mensagem, 'NumeroNfse')
         ?? extractTag(mensagem, 'NumeroNFSe')
+        ?? extractTag(mensagem, 'NumeroNfse')
       const codigoVerificacao = extractTag(mensagem, 'CodigoVerificacao')
 
       if (erro && !numeroNfse) {

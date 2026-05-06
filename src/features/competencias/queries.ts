@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFeatureKeys } from '@/lib/feature-keys'
+import { queryStaleTimes } from '@/lib/query-stale-times'
 import { fetchCompetencias } from './services'
 import type { CompetenciasFilters } from './types'
 
@@ -14,6 +15,8 @@ export const competenciasKeys = {
       filters.ano,
       filters.status || 'todos',
       filters.clienteId || 'todos-clientes',
+      filters.page,
+      filters.pageSize ?? 20,
     ] as const,
 }
 
@@ -21,5 +24,6 @@ export function useCompetenciasListQuery(filters: CompetenciasFilters) {
   return useQuery({
     queryKey: competenciasKeys.list(filters),
     queryFn: () => fetchCompetencias(filters),
+    staleTime: queryStaleTimes.operational,
   })
 }

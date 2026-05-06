@@ -11,18 +11,21 @@ import { buttonVariants } from '@/components/ui/button'
 import {
   FileText, CheckCircle2, XCircle, AlertTriangle,
   Plus, Loader2, Trash2, Layers, History, Receipt,
-  TrendingUp, Download,
+  TrendingUp, Pencil, ShieldCheck, ShieldAlert,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { EmitirLoteModal } from '@/components/fiscal/emitir-lote-modal'
-import { removeRascunho } from '@/features/fiscal/services'
-import { useFiscalDashboard } from '@/features/fiscal/hooks'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { gerarRascunhosNfseMensais, removeRascunho } from '@/features/fiscal/services'
+import { getErrorMessage } from '@/lib/error-message'
+import { useFiscalDashboard, useFiscalReadiness } from '@/features/fiscal/hooks'
 import { fiscalKeys } from '@/features/fiscal/queries'
 
 // ── Status map — soft colors inspired by QIVE ────────────────
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   emitida:                 { label: 'Emitida',    className: 'bg-success/10 text-success border-success/20' },
   pendente_processamento:  { label: 'Pendente',   className: 'bg-warning/10 text-amber-800 dark:text-warning border-warning/20' },
+  rascunho:                { label: 'Rascunho',   className: 'bg-muted text-muted-foreground border-border' },
   aguardando_emissao:      { label: 'Aguardando', className: 'bg-info/10 text-info border-info/20' },
   rejeitada:               { label: 'Rejeitada',  className: 'bg-destructive/10 text-destructive border-destructive/20' },
   cancelada:               { label: 'Cancelada',  className: 'bg-muted text-muted-foreground border-border' },
@@ -41,15 +44,42 @@ function StatusPill({ status }: { status: string }) {
 export default function FiscalPage() {
   const queryClient = useQueryClient()
   const [loteOpen, setLoteOpen] = useState(false)
+  const [rascunhoParaRemover, setRascunhoParaRemover] = useState<string | null>(null)
+  const [gerarRascunhosOpen, setGerarRascunhosOpen] = useState(false)
   const { isLoading: loading, emitidaMesCount, somaEmitidaMes, pendenteCount, erroCount, canceladaCount, notas } = useFiscalDashboard()
+  const {
+    isLoading: readinessLoading,
+    totalClientesAtivos,
+    prontosRascunho,
+    prontosEmissao,
+    bloqueados,
+    clientes: readinessClientes,
+  } = useFiscalReadiness()
 
-  async function deleteRascunho(id: string) {
+  async function deleteRascunho() {
+    if (!rascunhoParaRemover) return
     try {
-      await removeRascunho(id)
+      await removeRascunho(rascunhoParaRemover)
       await queryClient.invalidateQueries({ queryKey: fiscalKeys.snapshot() })
       toast.success('Rascunho removido.')
-    } catch {
-      toast.error('Erro ao remover rascunho.')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Não foi possível remover o rascunho. Verifique perfil fiscal e tente novamente.'))
+    }
+  }
+
+  async function prepararRascunhosMensais() {
+    const hoje = new Date()
+    try {
+      const result = await gerarRascunhosNfseMensais({
+        mes: hoje.getMonth() + 1,
+        ano: hoje.getFullYear(),
+        gerarAteHoje: true,
+      })
+      await queryClient.invalidateQueries({ queryKey: fiscalKeys.snapshot() })
+      const detalhes = result.motivos.length > 0 ? ` ${result.motivos.slice(0, 3).join(' ')}` : ''
+      toast.success(`${result.criados} rascunho(s) gerado(s) para revisão. ${result.ignorados} ignorado(s).${detalhes}`)
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Não foi possível gerar rascunhos NFS-e. Verifique perfil fiscal e configuração dos clientes.'))
     }
   }
 
@@ -96,6 +126,14 @@ export default function FiscalPage() {
             <Layers size={13} />
             Emitir em Lote
           </button>
+          <button
+            type="button"
+            onClick={() => setGerarRascunhosOpen(true)}
+            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')}
+          >
+            <FileText size={13} />
+            Preparar mês
+          </button>
           <Link
             href="/fiscal/emitir"
             className={cn(buttonVariants({ size: 'sm' }), 'gap-1.5')}
@@ -127,6 +165,97 @@ export default function FiscalPage() {
             <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
           </div>
         ))}
+      </div>
+
+      <div className="rounded-xl border border-border bg-card card-shadow overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <div className="flex items-center gap-2">
+            <ShieldAlert size={14} className="text-muted-foreground" />
+            <h2 className="text-sm font-semibold">Prontidão para emissão recorrente</h2>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {prontosEmissao}/{totalClientesAtivos} cliente{totalClientesAtivos !== 1 ? 's' : ''} pronto{totalClientesAtivos !== 1 ? 's' : ''} para emissão
+          </span>
+        </div>
+        <div className="grid gap-3 p-4 md:grid-cols-4">
+          {[
+            { label: 'Clientes ativos', value: totalClientesAtivos, tone: 'text-foreground' },
+            { label: 'Prontos p/ rascunho', value: prontosRascunho, tone: 'text-info' },
+            { label: 'Prontos p/ emissão', value: prontosEmissao, tone: 'text-success' },
+            { label: 'Com bloqueios', value: bloqueados, tone: bloqueados > 0 ? 'text-destructive' : 'text-muted-foreground' },
+          ].map((item) => (
+            <div key={item.label} className="rounded-lg border border-border bg-muted/20 p-3">
+              <p className="text-xs font-medium text-muted-foreground">{item.label}</p>
+              <p className={cn('mt-1 text-xl font-bold tabular-nums', item.tone)}>{item.value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-border overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cliente</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Município</th>
+                <th className="px-4 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Serviços</th>
+                <th className="px-4 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Dia NFS-e</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
+                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Bloqueios</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {readinessLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    <Loader2 className="mx-auto mb-2 h-4 w-4 animate-spin" />
+                    Validando clientes e configurações fiscais...
+                  </td>
+                </tr>
+              ) : readinessClientes.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    Nenhum cliente ativo encontrado para validação fiscal.
+                  </td>
+                </tr>
+              ) : (
+                readinessClientes.slice(0, 8).map((cliente) => (
+                  <tr key={cliente.clienteId} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-3 font-medium max-w-[240px]">
+                      <Link href={`/clientes/${cliente.clienteId}`} className="truncate block hover:text-primary">
+                        {cliente.clienteNome}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{cliente.municipio ?? '—'}</td>
+                    <td className="px-4 py-3 text-center tabular-nums">{cliente.servicosAtivos}</td>
+                    <td className="px-4 py-3 text-center tabular-nums">{cliente.diaEmissaoNFSe ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      {cliente.prontoEmissao ? (
+                        <Badge className="gap-1 bg-success/10 text-success border-success/20">
+                          <ShieldCheck size={11} /> Pronto
+                        </Badge>
+                      ) : cliente.prontoRascunho ? (
+                        <Badge variant="outline" className="gap-1 border-warning/30 text-amber-800 dark:text-warning">
+                          <AlertTriangle size={11} /> Falta credencial
+                        </Badge>
+                      ) : (
+                        <Badge variant="destructive" className="gap-1">
+                          <XCircle size={11} /> Bloqueado
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground max-w-[320px]">
+                      {cliente.bloqueios.length > 0 ? cliente.bloqueios.slice(0, 3).join(', ') : 'Sem bloqueios'}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {readinessClientes.length > 8 && (
+          <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
+            Exibindo os 8 primeiros clientes. Use a página do cliente para corrigir serviço, dia de emissão, configuração fiscal e credenciais.
+          </div>
+        )}
       </div>
 
       {/* Notas table — estilo QIVE */}
@@ -161,7 +290,7 @@ export default function FiscalPage() {
                 <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Emissão</th>
                 <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Valor</th>
                 <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
-                <th className="w-10 px-4 py-2.5" />
+                <th className="w-24 px-4 py-2.5" />
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -206,14 +335,23 @@ export default function FiscalPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         {isRascunho && (
-                          <button
-                            type="button"
-                            onClick={() => deleteRascunho(n.id as string)}
-                            className="text-muted-foreground hover:text-destructive transition-colors"
-                            title="Remover rascunho"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                          <div className="flex justify-end gap-2">
+                            <Link
+                              href={`/fiscal/emitir?rascunhoId=${n.id as string}`}
+                              className="text-muted-foreground hover:text-primary transition-colors"
+                              title="Revisar rascunho"
+                            >
+                              <Pencil size={13} />
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => setRascunhoParaRemover(n.id as string)}
+                              className="text-muted-foreground hover:text-destructive transition-colors"
+                              title="Remover rascunho"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -232,6 +370,24 @@ export default function FiscalPage() {
           setLoteOpen(false)
           void queryClient.invalidateQueries({ queryKey: fiscalKeys.snapshot() })
         }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(rascunhoParaRemover)}
+        onOpenChange={(open) => !open && setRascunhoParaRemover(null)}
+        title="Remover rascunho de NFS-e?"
+        description="Esta ação exclui o rascunho fiscal e não pode ser desfeita pela interface."
+        confirmLabel="Remover rascunho"
+        destructive
+        onConfirm={deleteRascunho}
+      />
+      <ConfirmDialog
+        open={gerarRascunhosOpen}
+        onOpenChange={setGerarRascunhosOpen}
+        title="Gerar rascunhos NFS-e do mês?"
+        description="A ferramenta criará rascunhos recorrentes para clientes ativos com dia de emissão vencido, serviço ativo e configuração fiscal completa. Os rascunhos ficam para revisão antes de qualquer emissão."
+        confirmLabel="Gerar rascunhos"
+        onConfirm={prepararRascunhosMensais}
       />
     </div>
   )

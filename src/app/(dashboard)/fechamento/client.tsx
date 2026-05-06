@@ -4,11 +4,13 @@ import { useState, useEffect, useTransition, useCallback, Suspense, useRef } fro
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '@/contexts/auth-context'
 import { FechamentoTable } from '@/components/fechamento/fechamento-table'
 import { FechamentoPendenciasCards } from '@/components/fechamento/fechamento-pendencias-cards'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import {
@@ -24,10 +26,14 @@ import { RefreshCw, Plus, CheckCircle2, Clock, AlertCircle, ClipboardList } from
 import {
   updateFechamentoField,
   gerarFechamentoMensal,
+  salvarRevisao,
+  buscarRevisao,
+  type RevisaoRecord,
 } from '@/features/fechamento/services'
 import { fechamentoFiltroSchema } from '@/features/fechamento/schemas'
 import { useFechamentoList } from '@/features/fechamento/hooks'
 import { fechamentoKeys } from '@/features/fechamento/queries'
+import { getErrorMessage } from '@/lib/error-message'
 import type { FechamentoFilters, FechamentoRecord } from '@/features/fechamento/types'
 
 const MESES = [
@@ -73,22 +79,21 @@ function FechamentoContent() {
 
   const [fechamentos, setFechamentos] = useState<FechamentoRecord[]>([])
   const { fechamentos: fechamentosData, isLoading: loading, refetch } = useFechamentoList(parsed)
+  const { usuario } = useAuth()
   const [gerando, setGerando] = useState(false)
+  const [confirmGeracaoOpen, setConfirmGeracaoOpen] = useState(false)
   const [revisaoDialogOpen, setRevisaoDialogOpen] = useState(false)
   const [revisaoNota, setRevisaoNota] = useState('')
-  const [revisaoSalva, setRevisaoSalva] = useState<{ nota: string; at: string } | null>(null)
-
-  const revisaoStorageKey = `ttrd-fechamento-revisao:v1:${ano}:${mes}`
+  const [revisaoSalva, setRevisaoSalva] = useState<RevisaoRecord | null>(null)
+  const [revisaoLoading, setRevisaoLoading] = useState(false)
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(revisaoStorageKey)
-      if (raw) setRevisaoSalva(JSON.parse(raw) as { nota: string; at: string })
-      else setRevisaoSalva(null)
-    } catch {
-      setRevisaoSalva(null)
-    }
-  }, [revisaoStorageKey])
+    setRevisaoLoading(true)
+    buscarRevisao(ano, mes)
+      .then(setRevisaoSalva)
+      .catch(() => setRevisaoSalva(null))
+      .finally(() => setRevisaoLoading(false))
+  }, [ano, mes])
 
   useEffect(() => {
     setFechamentos(fechamentosData as FechamentoRecord[])
@@ -97,8 +102,8 @@ function FechamentoContent() {
   async function load() {
     try {
       await refetch()
-    } catch {
-      toast.error('Erro ao carregar fechamentos')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Não foi possível carregar fechamentos. Verifique conexão e permissões.'))
     }
   }
 
@@ -118,13 +123,15 @@ function FechamentoContent() {
   async function gerarFechamento() {
     setGerando(true)
     try {
-      const criados = await gerarFechamentoMensal(parsed)
+      const result = await gerarFechamentoMensal(parsed)
 
-      toast.success(`${criados} registros gerados para ${mesLabel}/${ano}`)
+      toast.success(
+        `${result.criados} registro(s) gerado(s) para ${mesLabel}/${ano}. ${result.ignorados} ignorado(s).`
+      )
       await queryClient.invalidateQueries({ queryKey: fechamentoKeys.list(parsed) })
       await load()
-    } catch {
-      toast.error('Erro ao gerar fechamento')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Não foi possível gerar fechamento. Verifique perfil operacional e tente novamente.'))
     } finally {
       setGerando(false)
     }
@@ -137,19 +144,36 @@ function FechamentoContent() {
         prev.map((f) => (f.id === id ? { ...f, [field]: value } : f))
       )
       await queryClient.invalidateQueries({ queryKey: fechamentoKeys.list(parsed) })
-    } catch {
-      toast.error('Erro ao salvar')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Não foi possível salvar o status do fechamento. Atualize a tela e tente novamente.'))
     }
   }, [parsed, queryClient])
 
-  function registrarRevisaoMes() {
-    const payload = { nota: revisaoNota.trim(), at: new Date().toISOString() }
+  async function registrarRevisaoMes() {
+    const confirmado = window.confirm(
+      `Encerrar a revisão de ${mesLabel}/${ano}? Este registro será usado como evidência de auditoria do mês.`
+    )
+    if (!confirmado) return
+
     try {
-      localStorage.setItem(revisaoStorageKey, JSON.stringify(payload))
-      setRevisaoSalva(payload)
-      toast.success('Revisão registrada neste dispositivo.')
-    } catch {
-      toast.error('Não foi possível salvar o registro')
+      await salvarRevisao(
+        ano,
+        mes,
+        revisaoNota.trim(),
+        usuario?.uid ?? '',
+        usuario?.nome ?? usuario?.email ?? 'Usuário',
+        {
+          totalFechamentos: total,
+          pendentes,
+          parciais,
+          enviados,
+          snapshotStatus: statusSnapshot,
+        }
+      )
+      setRevisaoSalva(await buscarRevisao(ano, mes))
+      toast.success('Revisão registrada com auditoria.')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Não foi possível registrar a revisão. Verifique permissões e tente novamente.'))
       return
     }
     setRevisaoDialogOpen(false)
@@ -164,6 +188,13 @@ function FechamentoContent() {
   const pendentes = fechamentos.filter((f) => f.dasStatus === 'pendente').length
   const parciais = fechamentos.filter((f) => f.dasStatus === 'parcial').length
   const pct = total > 0 ? Math.round((enviados / total) * 100) : 0
+  const statusSnapshot = fechamentos.reduce<Record<string, number>>((acc, fechamento) => {
+    for (const field of ['dasStatus', 'esocialStatus', 'reinfStatus', 'fgtsStatus'] as const) {
+      const key = `${field}:${fechamento[field]}`
+      acc[key] = (acc[key] ?? 0) + 1
+    }
+    return acc
+  }, {})
 
   return (
     <div className="stack-6">
@@ -187,12 +218,12 @@ function FechamentoContent() {
             variant="outline"
             size="sm"
             onClick={() => setRevisaoDialogOpen(true)}
-            disabled={loading}
+            disabled={loading || revisaoLoading}
           >
             <ClipboardList className="w-4 h-4 mr-1" />
             Encerrar revisão do mês
           </Button>
-          <Button size="sm" onClick={gerarFechamento} disabled={gerando || loading}>
+          <Button size="sm" onClick={() => setConfirmGeracaoOpen(true)} disabled={gerando || loading}>
             <Plus className="w-4 h-4 mr-1" />
             {gerando ? 'Gerando...' : 'Gerar Fechamento'}
           </Button>
@@ -204,7 +235,7 @@ function FechamentoContent() {
           <DialogHeader>
             <DialogTitle>Encerrar revisão de {mesLabel} / {ano}</DialogTitle>
             <DialogDescription>
-              Registro local neste navegador (por competência). Útil para ritual de fechamento; auditoria no servidor pode ser adicionada depois.
+              O registro fica salvo no Firestore com usuário, data e observação para auditoria do fechamento.
             </DialogDescription>
           </DialogHeader>
           <Textarea
@@ -224,12 +255,21 @@ function FechamentoContent() {
         </DialogContent>
       </Dialog>
 
+      <ConfirmDialog
+        open={confirmGeracaoOpen}
+        onOpenChange={setConfirmGeracaoOpen}
+        title={`Gerar fechamento de ${mesLabel}/${ano}?`}
+        description="A geração cria registros mensais para todos os clientes ativos ainda sem fechamento. Registros existentes serão ignorados."
+        confirmLabel="Gerar fechamento"
+        onConfirm={gerarFechamento}
+      />
+
       {revisaoSalva ? (
         <InlineAlert
           tone="success"
-          title="Revisão do mês registrada neste dispositivo"
+          title="Revisão do mês registrada"
           description={
-            `${new Date(revisaoSalva.at).toLocaleString('pt-BR')}` +
+            `${new Date(revisaoSalva.revisadoEm).toLocaleString('pt-BR')} por ${revisaoSalva.nomeUsuario}` +
             (revisaoSalva.nota ? ` — ${revisaoSalva.nota}` : '')
           }
         />

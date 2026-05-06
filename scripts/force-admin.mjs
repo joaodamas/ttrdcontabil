@@ -25,7 +25,7 @@ async function main() {
   const idToken = await cred.user.getIdToken()
   console.log('✅ UID:', uid)
 
-  const url = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/usuarios/${uid}?updateMask.fieldPaths=nome&updateMask.fieldPaths=email&updateMask.fieldPaths=perfil`
+  const url = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/usuarios/${uid}?updateMask.fieldPaths=nome&updateMask.fieldPaths=email&updateMask.fieldPaths=perfil&updateMask.fieldPaths=ativo`
 
   // Tenta PATCH (atualizar ou criar)
   const body = {
@@ -33,12 +33,13 @@ async function main() {
       nome:   { stringValue: 'João Damas' },
       email:  { stringValue: EMAIL },
       perfil: { stringValue: 'admin' },
+      ativo:  { booleanValue: true },
     },
   }
 
   console.log('📝 Escrevendo documento via REST...')
   const res = await fetch(
-    `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/usuarios/${uid}`,
+    url,
     {
       method: 'PATCH',
       headers: {

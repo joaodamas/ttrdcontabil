@@ -15,6 +15,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCpfCnpj, formatPhone, formatCep, UFS } from '@/lib/utils'
 import { Loader2, CheckCircle2, Bell } from 'lucide-react'
 import { createDocument, updateDocument, getNextClienteCodigo } from '@/lib/firestore-client'
+import { getErrorMessage } from '@/lib/error-message'
+import { SELECT_NONE_VALUE } from '@/lib/select-values'
 import { useViaCep } from '@/hooks/use-viacep'
 
 const clienteSchema = z.object({
@@ -115,8 +117,8 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
 
       setCnpjOk(true)
       toast.success('Dados da empresa preenchidos automaticamente')
-    } catch {
-      toast.error('Não foi possível buscar dados do CNPJ')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Não foi possível consultar o CNPJ. Preencha os dados manualmente.'))
     } finally {
       setBuscandoCnpj(false)
     }
@@ -153,7 +155,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
       }
     } catch (err) {
       console.error(err)
-      toast.error('Erro ao salvar cliente. Tente novamente.')
+      toast.error(getErrorMessage(err, 'Não foi possível salvar cliente. Verifique campos obrigatórios e permissões.'))
     }
   }
 
@@ -237,16 +239,16 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
             <div className="space-y-2">
               <Label htmlFor="regimeTributario">Regime Tributário</Label>
               <Select
-                defaultValue={initialData?.regimeTributario ?? ''}
+                defaultValue={initialData?.regimeTributario ?? SELECT_NONE_VALUE}
                 onValueChange={(v) =>
-                  setValue('regimeTributario', v === '' ? null : (v as NonNullable<ClienteFormData['regimeTributario']>))
+                  setValue('regimeTributario', v === SELECT_NONE_VALUE ? null : (v as NonNullable<ClienteFormData['regimeTributario']>))
                 }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">—</SelectItem>
+                  <SelectItem value={SELECT_NONE_VALUE}>—</SelectItem>
                   <SelectItem value="simples_nacional">Simples Nacional</SelectItem>
                   <SelectItem value="lucro_presumido">Lucro Presumido</SelectItem>
                   <SelectItem value="lucro_real">Lucro Real</SelectItem>

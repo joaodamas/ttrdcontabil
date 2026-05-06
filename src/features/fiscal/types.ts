@@ -18,3 +18,23 @@ export type FiscalSnapshot = {
   canceladaCount: number
   notas: NotaFiscalRecord[]
 }
+
+export type FiscalReadinessCliente = {
+  clienteId: string
+  clienteNome: string
+  cpfCnpj?: string
+  municipio?: string
+  diaEmissaoNFSe?: number
+  servicosAtivos: number
+  bloqueios: string[]
+  prontoRascunho: boolean
+  prontoEmissao: boolean
+}
+
+export type FiscalReadiness = {
+  totalClientesAtivos: number
+  prontosRascunho: number
+  prontosEmissao: number
+  bloqueados: number
+  clientes: FiscalReadinessCliente[]
+}
