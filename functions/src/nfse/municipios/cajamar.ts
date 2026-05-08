@@ -229,6 +229,18 @@ export class CajamarConector {
         ?? extractTag(mensagem, 'NumeroNfse')
       const codigoVerificacao = extractTag(mensagem, 'CodigoVerificacao')
 
+      if (!numeroNfse && /usu[aá]rio n[aã]o liberado/i.test(mensagem)) {
+        const mensagemTecnica = textoErroGeisWeb(mensagem, 'Usuário não liberado para o uso do Web Service.')
+        return {
+          sucesso: false,
+          codigoErro: 'GEISWEB_USUARIO_NAO_LIBERADO',
+          erro: 'Usuário não liberado para o uso do Web Service.',
+          detalhes: mensagemTecnica === 'Usuário não liberado para o uso do Web Service.'
+            ? sanitizeAuditString(mensagem)
+            : mensagemTecnica,
+        }
+      }
+
       if (erro && !numeroNfse) {
         const textoErro = textoErroGeisWeb(mensagem, erro)
         console.warn('[Cajamar/GeisWeb] retorno com erro', {
@@ -237,11 +249,6 @@ export class CajamarConector {
           retorno: sanitizeAuditString(mensagem).slice(0, 500),
         })
         return { sucesso: false, erro: textoErro, codigoErro, detalhes: sanitizeAuditString(mensagem) }
-      }
-
-      if (!numeroNfse && /usu[aá]rio n[aã]o liberado/i.test(mensagem)) {
-        const mensagemSanitizada = sanitizeAuditString(mensagem)
-        return { sucesso: false, codigoErro: 'GEISWEB_USUARIO_NAO_LIBERADO', erro: mensagemSanitizada, detalhes: mensagemSanitizada }
       }
 
       return {
@@ -258,11 +265,15 @@ export class CajamarConector {
   }
 
   async consultar(
-    _input: ConsultarNfseInput,
-    _config: ConfigFiscalCliente,
-    _cert: CertificadoA1 | undefined,
-    _prestador: Prestador,
+    input: ConsultarNfseInput,
+    config: ConfigFiscalCliente,
+    cert: CertificadoA1 | undefined,
+    prestador: Prestador,
   ): Promise<ResultadoOperacaoNfse> {
+    void input
+    void config
+    void cert
+    void prestador
     return {
       sucesso: false,
       codigoErro: 'CONSULTA_NAO_IMPLEMENTADA',
@@ -271,11 +282,15 @@ export class CajamarConector {
   }
 
   async cancelar(
-    _input: CancelarNfseInput,
-    _config: ConfigFiscalCliente,
-    _cert: CertificadoA1 | undefined,
-    _prestador: Prestador,
+    input: CancelarNfseInput,
+    config: ConfigFiscalCliente,
+    cert: CertificadoA1 | undefined,
+    prestador: Prestador,
   ): Promise<ResultadoOperacaoNfse> {
+    void input
+    void config
+    void cert
+    void prestador
     return {
       sucesso: false,
       codigoErro: 'CANCELAMENTO_NAO_IMPLEMENTADO',

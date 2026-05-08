@@ -5,15 +5,20 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Timestamp } from 'firebase/firestore'
 import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 
 import { formatDate, formatCurrency, tsToDate } from '@/lib/utils'
 import { exportToExcel } from '@/lib/export-excel'
+import { deleteDocument } from '@/lib/firestore-client'
+import { getErrorMessage } from '@/lib/error-message'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LancamentoBaixar } from '@/components/financeiro/lancamento-baixar'
 import { FilaCobrancaItem } from '@/components/financeiro/fila-cobranca'
-import { Download, Plus, TrendingUp, CheckCircle, AlertTriangle, Receipt } from 'lucide-react'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { useAuth } from '@/contexts/auth-context'
+import { Download, Plus, TrendingUp, CheckCircle, AlertTriangle, Receipt, Trash2 } from 'lucide-react'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { FilterBtn } from '@/components/ui/filter-btn'
@@ -38,6 +43,7 @@ const TIPO_MAP: Record<string, { label: string; variant: 'default' | 'secondary'
 
 function FinanceiroContent() {
   const queryClient = useQueryClient()
+  const { usuario } = useAuth()
   const searchParams = useSearchParams()
   const parsed = financeiroBaseFiltroSchema.parse({
     clienteId: searchParams.get('clienteId') ?? '',
@@ -68,6 +74,21 @@ function FinanceiroContent() {
     .filter((l) => l.tipo === 'receita' && l.status === 'pendente')
     .sort((a, b) => scoreCobranca(b, agora) - scoreCobranca(a, agora))
     .slice(0, 5)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+
+  async function refreshFinanceiro() {
+    await queryClient.invalidateQueries({
+      queryKey: financeiroKeys.snapshot({ clienteId, competenciaId, tipo, status, page }),
+    })
+  }
+
+  async function handleDeleteLancamento() {
+    if (!deleteId) return
+    await deleteDocument('lancamentos', deleteId)
+    toast.success('Lançamento excluído.')
+    await refreshFinanceiro()
+    setDeleteId(null)
+  }
 
   function exportarInadimplencia() {
     const hoje = new Date()
@@ -248,13 +269,13 @@ function FinanceiroContent() {
 
       <div className="overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
         <div className="overflow-x-auto">
-        <table className="min-w-[920px] w-full text-sm">
+        <table className="min-w-[1120px] w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
-              <th className="px-4 py-3 text-left section-label">Descrição</th>
-              <th className="px-4 py-3 text-left section-label">Cliente</th>
-              <th className="px-4 py-3 text-left section-label">Tipo</th>
+              <th className="px-4 py-3 text-left section-label">Pagador</th>
+              <th className="px-4 py-3 text-left section-label">Serviço / Referência</th>
               <th className="px-4 py-3 text-left section-label">Vencimento</th>
+              <th className="px-4 py-3 text-left section-label">Pagamento</th>
               <th className="px-4 py-3 text-right section-label">Valor</th>
               <th className="px-4 py-3 text-left section-label">Status</th>
               <th className="px-4 py-3 text-left section-label">Ações</th>
@@ -276,51 +297,75 @@ function FinanceiroContent() {
                   label: l.status as string,
                   variant: 'outline' as const,
                 }
-                const tip = TIPO_MAP[l.tipo as string] ?? {
-                  label: l.tipo as string,
-                  variant: 'outline' as const,
-                }
                 const dataVenc = tsToDate(l.dataVencimento)
+                const dataPagamento = tsToDate(l.dataPagamento)
                 const atrasado =
                   dataVenc &&
                   dataVenc < new Date() &&
                   l.status === 'pendente'
+                const statusOperacional =
+                  l.status === 'pago'
+                    ? 'Pago'
+                    : l.status === 'cancelado'
+                      ? 'Cancelado'
+                      : atrasado
+                        ? 'Atrasado'
+                        : 'Em dia'
 
                 return (
                   <tr key={l.id as string} className="transition-colors hover:bg-muted/35">
-                    <td className="px-4 py-3 font-medium">{l.descricao as string}</td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {(l.clienteNome as string) ?? '—'}
+                    <td className="px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="font-medium">{(l.clienteNome as string) ?? '—'}</p>
+                        <p className="text-xs text-muted-foreground">{TIPO_MAP[l.tipo as string]?.label ?? (l.tipo as string) ?? '—'}</p>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge variant={tip.variant}>{tip.label}</Badge>
+                      <div className="min-w-0">
+                        <p className="font-medium">{(l.descricao as string) ?? '—'}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {(l.competencia as string | undefined) ?? (l.servicoNome as string | undefined) ?? 'Mensalidade / honorário'}
+                        </p>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={atrasado ? 'text-destructive font-medium' : ''}>
                         {dataVenc ? formatDate(dataVenc) : '—'}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {dataPagamento ? formatDate(dataPagamento) : '—'}
+                    </td>
                     <td className="px-4 py-3 text-right font-medium tabular-nums">
                       {formatCurrency(l.valor as number)}
                     </td>
                     <td className="px-4 py-3">
-                      <Badge variant={st.variant}>{st.label}</Badge>
+                      <div className="flex flex-col items-start gap-1">
+                        <Badge variant={st.variant}>{st.label}</Badge>
+                        <span className={`text-xs ${atrasado ? 'text-destructive' : 'text-muted-foreground'}`}>
+                          {statusOperacional}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
-                      {l.status === 'pendente' ? (
-                        <LancamentoBaixar
-                          lancamentoId={l.id as string}
-                          valor={l.valor as number}
-                          clienteNome={l.clienteNome as string | undefined}
-                          descricao={l.descricao as string | undefined}
-                          dataVencimento={l.dataVencimento as Timestamp | undefined}
-                          onBaixado={() =>
-                            void queryClient.invalidateQueries({
-                              queryKey: financeiroKeys.snapshot({ clienteId, competenciaId, tipo, status, page }),
-                            })
-                          }
-                        />
-                      ) : null}
+                      <div className="flex flex-wrap gap-2">
+                        {l.status === 'pendente' ? (
+                          <LancamentoBaixar
+                            lancamentoId={l.id as string}
+                            valor={l.valor as number}
+                            clienteNome={l.clienteNome as string | undefined}
+                            descricao={l.descricao as string | undefined}
+                            dataVencimento={l.dataVencimento as Timestamp | undefined}
+                            onBaixado={() => void refreshFinanceiro()}
+                          />
+                        ) : null}
+                        {usuario?.perfil === 'admin' ? (
+                          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setDeleteId(l.id as string)}>
+                            <Trash2 className="mr-1 h-3 w-3" />
+                            Excluir
+                          </Button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 )
@@ -372,6 +417,22 @@ function FinanceiroContent() {
           </div>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={!!deleteId}
+        onOpenChange={(open) => { if (!open) setDeleteId(null) }}
+        title="Excluir lançamento?"
+        description="Esta ação remove a linha financeira atual. Use apenas para lançamentos indevidos."
+        confirmLabel="Excluir"
+        destructive
+        onConfirm={async () => {
+          try {
+            await handleDeleteLancamento()
+          } catch (err) {
+            toast.error(getErrorMessage(err, 'Não foi possível excluir o lançamento.'))
+          }
+        }}
+      />
     </div>
   )
 }

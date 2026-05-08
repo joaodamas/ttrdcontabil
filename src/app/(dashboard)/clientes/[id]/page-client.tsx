@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { where, orderBy, limit } from 'firebase/firestore'
@@ -16,6 +16,7 @@ import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Timeline, type TimelineEvent } from '@/components/clientes/timeline'
+import { ClienteServicoDialog } from '@/components/clientes/cliente-servico-dialog'
 import {
   ArrowLeft, Mail, MapPin, Pencil, ShieldCheck, ShieldAlert, ShieldOff,
   AlertTriangle, Plus, Receipt, Wallet, AlertCircle, Bell, FileDown,
@@ -343,25 +344,20 @@ export default function ClienteDetailPage() {
   const [fiscal,       setFiscal]       = useState<Record<string, unknown> | null>(null)
   const [loading,      setLoading]      = useState(true)
   const [configOpen,   setConfigOpen]   = useState(false)
+  const [servicoDialogOpen, setServicoDialogOpen] = useState(false)
 
-  function loadFiscal() {
-    if (!id) return
-    listDocuments('clientes_fiscal', [where('clienteId', '==', id), limit(1)])
-      .then(data => setFiscal(data.length > 0 ? data[0] as Record<string, unknown> : null))
-      .catch(() => null)
-  }
-
-  useEffect(() => {
-    if (!id) return
+  const loadClienteContext = useCallback(() => {
+    if (!id) return Promise.resolve()
     function get<T>(p: Promise<T>): Promise<T | null> { return p.catch(() => null) }
-    Promise.all([
+    setLoading(true)
+    return Promise.all([
       get(getDocument('clientes', id)),
       get(listDocuments('clientes_servicos', [where('clienteId', '==', id), limit(50)])),
-      get(listDocuments('competencias',      [where('clienteId', '==', id), orderBy('ano', 'desc'), orderBy('mes', 'desc'), limit(20)])),
-      get(listDocuments('lancamentos',       [where('clienteId', '==', id), orderBy('dataVencimento', 'desc'), limit(20)])),
-      get(listDocuments('tarefas',           [where('clienteId', '==', id), limit(30)])),
-      get(listDocuments('nfse_rascunhos',    [where('clienteId', '==', id), limit(20)])),
-      get(listDocuments('clientes_fiscal',   [where('clienteId', '==', id), limit(1)])),
+      get(listDocuments('competencias', [where('clienteId', '==', id), orderBy('ano', 'desc'), orderBy('mes', 'desc'), limit(20)])),
+      get(listDocuments('lancamentos', [where('clienteId', '==', id), orderBy('dataVencimento', 'desc'), limit(20)])),
+      get(listDocuments('tarefas', [where('clienteId', '==', id), limit(30)])),
+      get(listDocuments('nfse_rascunhos', [where('clienteId', '==', id), limit(20)])),
+      get(listDocuments('clientes_fiscal', [where('clienteId', '==', id), limit(1)])),
     ]).then(([clienteData, servicosData, competenciasData, lancamentosData, tarefasData, rascunhosData, fiscalData]) => {
       if (!clienteData) { router.push('/clientes'); return }
       setCliente(clienteData as Record<string, unknown>)
@@ -377,6 +373,18 @@ export default function ClienteDetailPage() {
       setFiscal(fiscalData && fiscalData.length > 0 ? fiscalData[0] as Record<string, unknown> : null)
     }).finally(() => setLoading(false))
   }, [id, router])
+
+  function loadFiscal() {
+    if (!id) return
+    listDocuments('clientes_fiscal', [where('clienteId', '==', id), limit(1)])
+      .then(data => setFiscal(data.length > 0 ? data[0] as Record<string, unknown> : null))
+      .catch(() => null)
+  }
+
+  useEffect(() => {
+    if (!id) return
+    queueMicrotask(() => { void loadClienteContext() })
+  }, [id, loadClienteContext])
 
   /* ── timeline events ──────────────────────────────────── */
   const timelineEvents = useMemo((): TimelineEvent[] => {
@@ -424,7 +432,7 @@ export default function ClienteDetailPage() {
   const proximosPassos = useMemo(() => {
     const hoje = new Date()
     const list: Array<{ id: string; titulo: string; descricao: string; severidade: 'danger' | 'warning'; href?: string }> = []
-    if (servicos.length === 0) list.push({ id: 'servico-ausente', titulo: 'Sem serviço contratado', descricao: 'Vincule pelo menos um serviço para gerar competências, tarefas e honorários.', severidade: 'danger', href: `/clientes/${id}/servicos/novo` })
+    if (servicos.length === 0) list.push({ id: 'servico-ausente', titulo: 'Sem serviço contratado', descricao: 'Vincule pelo menos um serviço para gerar competências, tarefas e honorários.', severidade: 'danger' })
     const competenciaAberta = competencias.find(c => (c.status as string) === 'aberta')
     if (competenciaAberta) list.push({ id: 'comp-aberta', titulo: 'Competência em aberto', descricao: `Pendente em ${formatMesAno(competenciaAberta.mes as number, competenciaAberta.ano as number)}.`, severidade: 'warning', href: `/competencias/${competenciaAberta.id as string}` })
     const tarefaAtrasada = tarefas.find(t => { if (!['pendente', 'em_andamento'].includes((t.status as string) ?? '')) return false; const v = tsToDate(t.dataPrazo); return !!v && v < hoje })
@@ -442,7 +450,7 @@ export default function ClienteDetailPage() {
     const rascunhoPendente = rascunhos.find(r => ['rascunho', 'pronto_para_emitir', 'aguardando_emissao', 'erro_integracao'].includes((r.status as string) ?? ''))
     if (rascunhoPendente) list.push({ id: 'nfse-rascunho', titulo: 'Rascunho NFS-e pendente', descricao: `Status: ${(rascunhoPendente.status as string) ?? 'rascunho'}.`, severidade: 'warning', href: '/fiscal' })
     return list
-  }, [competencias, fiscal, fiscalCredenciais, fiscalTipo, id, lancamentos, rascunhos, servicos.length, tarefas])
+  }, [competencias, fiscal, fiscalCredenciais, fiscalTipo, lancamentos, rascunhos, servicos.length, tarefas])
 
   const competenciaAberta   = competencias.find(c => (c.status as string) === 'aberta')
   const lancamentoAtrasado  = lancamentos.find(l => { const v = tsToDate(l.dataVencimento); return (l.status as string) === 'pendente' && !!v && v < new Date() })
@@ -617,7 +625,7 @@ export default function ClienteDetailPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
                 <CardTitle className="text-sm">Serviços Vinculados</CardTitle>
-                <Link href={`/clientes/${id}/servicos/novo`} className={buttonVariants({ size: 'xs' })}><Plus className="h-3 w-3" />Serviço</Link>
+                <Button size="xs" onClick={() => setServicoDialogOpen(true)}><Plus className="h-3 w-3" />Serviço</Button>
               </CardHeader>
               <CardContent className="px-4 pb-4">
                 {servicos.length === 0
@@ -812,7 +820,13 @@ export default function ClienteDetailPage() {
           issRetidoPadrao:      (fiscal.issRetidoPadrao    as boolean) ?? false,
           credenciais:          (fiscal.credenciais        as Record<string, unknown>) ?? {},
         } : undefined}
-        onSaved={loadFiscal}
+        onSaved={() => { void loadClienteContext() }}
+      />
+      <ClienteServicoDialog
+        open={servicoDialogOpen}
+        onOpenChange={setServicoDialogOpen}
+        clienteId={id}
+        onSaved={() => { void loadClienteContext() }}
       />
     </div>
   )

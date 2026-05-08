@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Timestamp } from 'firebase/firestore'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -43,10 +44,21 @@ interface ClienteServicoFormProps {
   clienteId: string
   clienteNome?: string
   servicos: Servico[]
+  mode?: 'page' | 'modal'
+  onSaved?: () => void
+  onCancel?: () => void
 }
 
-export function ClienteServicoForm({ clienteId, clienteNome, servicos }: ClienteServicoFormProps) {
+export function ClienteServicoForm({
+  clienteId,
+  clienteNome,
+  servicos,
+  mode = 'page',
+  onSaved,
+  onCancel,
+}: ClienteServicoFormProps) {
   const router = useRouter()
+  const isModal = mode === 'modal'
 
   const {
     register,
@@ -84,7 +96,8 @@ export function ClienteServicoForm({ clienteId, clienteNome, servicos }: Cliente
         status:       'ativo',
       })
       toast.success('Serviço adicionado!')
-      router.push(`/clientes/${clienteId}`)
+      onSaved?.()
+      if (!isModal) router.push(`/clientes/${clienteId}`)
     } catch (err) {
       toast.error(getErrorMessage(err, 'Não foi possível vincular o serviço. Verifique valor, datas e permissões.'))
     }
@@ -92,7 +105,7 @@ export function ClienteServicoForm({ clienteId, clienteNome, servicos }: Cliente
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-      <Card>
+      <Card className={cn(isModal && 'border-border/70 shadow-none')}>
         <CardHeader>
           <CardTitle className="text-sm">Dados do Serviço</CardTitle>
         </CardHeader>
@@ -209,7 +222,7 @@ export function ClienteServicoForm({ clienteId, clienteNome, servicos }: Cliente
           {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
           Adicionar Serviço
         </Button>
-        <Button type="button" variant="outline" onClick={() => router.back()}>
+        <Button type="button" variant="outline" onClick={() => onCancel?.() ?? router.back()}>
           Cancelar
         </Button>
       </div>

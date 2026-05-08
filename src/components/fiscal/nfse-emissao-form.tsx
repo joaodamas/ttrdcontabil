@@ -191,7 +191,7 @@ export function NfseEmissaoForm() {
     setEmitting(true)
     try {
       const functions = getFunctions(getFirebaseApp(), 'southamerica-east1')
-      const emitirNfse = httpsCallable<Record<string, unknown>, { sucesso: boolean; numeroNfse?: string; codigoVerificacao?: string; erro?: string; detalhes?: string }>(
+      const emitirNfse = httpsCallable<Record<string, unknown>, { sucesso: boolean; numeroNfse?: string; codigoVerificacao?: string; erro?: string; detalhes?: string; codigoErro?: string }>(
         functions,
         'emitirNfse'
       )
@@ -224,8 +224,12 @@ export function NfseEmissaoForm() {
         toast.success(msg)
         router.push('/fiscal')
       } else {
-        const detalhes = res.detalhes && res.detalhes !== res.erro ? ` Detalhes: ${res.detalhes}` : ''
-        toast.error(`${res.erro ?? 'Erro ao emitir NFS-e.'}${detalhes}`.slice(0, 1500))
+        const mensagem = [
+          res.codigoErro ? `Código: ${res.codigoErro}` : null,
+          res.erro ?? 'Erro ao emitir NFS-e.',
+          res.detalhes && res.detalhes !== res.erro ? `Detalhes técnicos: ${res.detalhes}` : null,
+        ].filter(Boolean).join('\n')
+        toast.error(mensagem.slice(0, 1500))
       }
     } catch (err) {
       toast.error(getErrorMessage(err, 'Não foi possível emitir a NFS-e. Verifique configuração fiscal, credencial e homologação do município.'))

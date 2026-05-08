@@ -18,6 +18,7 @@ import { createDocument, updateDocument } from '@/lib/firestore-client'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { getFirebaseApp } from '@/lib/firebase'
 import { getErrorMessage } from '@/lib/error-message'
+import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 
 export const MUNICIPIOS = [
   { ibge: '3525904', nome: 'Jundiaí' },
@@ -110,6 +111,15 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
   const municipioIbge = watch('municipioIbge')
   const tipo = MUNICIPIO_TIPO[municipioIbge]
   const municipioNome = MUNICIPIOS.find(m => m.ibge === municipioIbge)?.nome ?? ''
+  const credenciais = (defaultValues?.credenciais ?? {}) as Record<string, unknown>
+  const certInfo: CertInfo | null = credenciais.certTitular
+    ? {
+        titular: credenciais.certTitular as string,
+        vencimento: credenciais.certVencimento as string,
+        valido: credenciais.certValido as boolean,
+        storagePath: credenciais.certificadoStoragePath as string,
+      }
+    : null
 
   async function onSubmit(data: FormData) {
     setSaving(true)
@@ -358,10 +368,11 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
 
           {/* Aviso certificado A1 */}
           {(tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
-            <div className="border rounded-md p-3 bg-warning/8 border-warning/25">
+            <div className="space-y-3 rounded-md border border-warning/25 bg-warning/8 p-3">
               <p className="text-xs text-warning">
-                <strong>Certificado A1 necessário.</strong> Após salvar, faça o upload do arquivo .pfx na seção de credenciais da página fiscal.
+                <strong>Certificado A1 necessário.</strong> O upload pode ser feito aqui mesmo na configuração fiscal do cliente.
               </p>
+              <CertificadoUpload clienteId={clienteId} certInfo={certInfo} onUploaded={() => onSaved?.()} />
             </div>
           )}
 

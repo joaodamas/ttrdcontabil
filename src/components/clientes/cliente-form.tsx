@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,6 +19,7 @@ import { createDocument, updateDocument, getNextClienteCodigo } from '@/lib/fire
 import { getErrorMessage } from '@/lib/error-message'
 import { SELECT_NONE_VALUE } from '@/lib/select-values'
 import { useViaCep } from '@/hooks/use-viacep'
+import { clientesKeys } from '@/features/clientes/queries'
 
 const clienteSchema = z.object({
   tipoPessoa: z.enum(['pf', 'pj']).default('pj'),
@@ -144,6 +146,7 @@ interface ClienteFormProps {
 
 export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const isEditing = !!initialData?.id
   const { buscar: buscarCepHook, loading: buscandoCep } = useViaCep()
   const [buscandoCnpj, setBuscandoCnpj] = useState(false)
@@ -232,6 +235,10 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
           ...data,
           regimeTributario: data.regimeTributario ?? null,
         })
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: clientesKeys.all }),
+          queryClient.invalidateQueries({ queryKey: clientesKeys.detail(initialData!.id!) }),
+        ])
         toast.success('Cliente atualizado')
         if (onSuccess) {
           onSuccess(initialData!.id!)
@@ -245,6 +252,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
           codigo,
           regimeTributario: data.regimeTributario ?? null,
         })
+        await queryClient.invalidateQueries({ queryKey: clientesKeys.all })
         toast.success('Cliente cadastrado com sucesso!')
         if (onSuccess) {
           onSuccess(id)

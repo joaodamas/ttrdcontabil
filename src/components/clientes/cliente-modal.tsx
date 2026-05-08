@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { where, orderBy, limit } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useQueryClient } from '@tanstack/react-query'
 
 import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { formatCpfCnpj, formatDate, formatCurrency, formatMesAno, tsToDate } from '@/lib/utils'
@@ -27,6 +28,8 @@ import {
 } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
+import { ClienteServicoDialog } from '@/components/clientes/cliente-servico-dialog'
+import { clientesKeys } from '@/features/clientes/queries'
 
 const TAB_CONTENT_CLASS = 'mt-3 min-h-0 max-h-[calc(100dvh-19rem)] overflow-y-auto overscroll-contain md:max-h-[430px]'
 const MODAL_TAB_TRIGGER_CLASS = 'h-9 min-w-0 justify-center gap-1.5 rounded-lg px-2 text-xs'
@@ -64,6 +67,7 @@ function TabCount({ count }: { count?: number }) {
 
 export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: ClienteModalProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [loading,     setLoading]     = useState(false)
   const [cliente,     setCliente]     = useState<Record<string, unknown> | null>(null)
   const [servicos,    setServicos]    = useState<Array<Record<string, unknown>>>([])
@@ -72,6 +76,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
   const [nfses,       setNfses]       = useState<Array<Record<string, unknown>>>([])
   const [fiscal,      setFiscal]      = useState<Record<string, unknown> | null>(null)
   const [configOpen,  setConfigOpen]  = useState(false)
+  const [servicoDialogOpen, setServicoDialogOpen] = useState(false)
   const [loadError,   setLoadError]   = useState<string | null>(null)
 
   const load = useCallback(() => {
@@ -128,6 +133,14 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
   function navigateTo(path: string) {
     onOpenChange(false)
     router.push(path)
+  }
+
+  async function syncClienteAfterMutation() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: clientesKeys.all }),
+      queryClient.invalidateQueries({ queryKey: clientesKeys.detail(clienteId) }),
+    ])
+    load()
   }
 
   const valorMensalAtivo = servicos
@@ -284,7 +297,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                     <Card className={MODAL_CARD_CLASS}>
                       <CardHeader className={MODAL_CARD_HEADER_CLASS}>
                         <CardTitle className="text-sm">Serviços Vinculados</CardTitle>
-                        <Button size="sm" className="h-8" onClick={() => navigateTo(`/clientes/${clienteId}/servicos/novo`)}>
+                        <Button size="sm" className="h-8" onClick={() => setServicoDialogOpen(true)}>
                           + Serviço
                         </Button>
                       </CardHeader>
@@ -294,7 +307,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                             icon={Briefcase}
                             title="Nenhum serviço vinculado"
                             description="Adicione serviços para gerar competências automaticamente."
-                            action={{ label: '+ Vincular Serviço', href: `/clientes/${clienteId}/servicos/novo` }}
+                            action={{ label: '+ Vincular Serviço', onClick: () => setServicoDialogOpen(true) }}
                           />
                         ) : (
                           <>
@@ -486,7 +499,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                                 <CardTitle className="text-sm">Certificado Digital A1</CardTitle>
                               </CardHeader>
                               <CardContent className={MODAL_CARD_CONTENT_CLASS}>
-                                <CertificadoUpload clienteId={clienteId} certInfo={certInfo} onUploaded={() => load()} />
+                                <CertificadoUpload clienteId={clienteId} certInfo={certInfo} onUploaded={() => { void syncClienteAfterMutation() }} />
                               </CardContent>
                             </Card>
                           )}
@@ -544,36 +557,42 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                       )
                     })()}
 
-                    <ConfigFiscalForm
-                      open={configOpen}
-                      onOpenChange={setConfigOpen}
-                      clienteId={clienteId}
-                      docId={fiscal?.id as string | undefined}
-                      defaultValues={fiscal ? {
-                        municipioIbge:        fiscal.municipioIbge       as string,
-                        inscricaoMunicipal:   fiscal.inscricaoMunicipal  as string,
-                        inscricaoEstadual:    fiscal.inscricaoEstadual   as string,
-                        ambienteEmissao:      (fiscal.ambienteEmissao    as 'homologacao' | 'producao') ?? 'homologacao',
-                        regimeTributario:     fiscal.regimeTributario    as string,
-                        optanteSimples:       (fiscal.optanteSimples     as boolean) ?? true,
-                        incentivadorCultural: (fiscal.incentivadorCultural as boolean) ?? false,
-                        naturezaOperacao:     (fiscal.naturezaOperacao   as string) ?? '1',
-                        codigoServicoPadrao:  fiscal.codigoServicoPadrao as string,
-                        descricaoServicoPadrao: fiscal.descricaoServicoPadrao as string,
-                        itemListaServico:     fiscal.itemListaServico    as string,
-                        cnae:                 fiscal.cnae                as string,
-                        aliquotaPadrao:       fiscal.aliquotaPadrao      as number,
-                        issRetidoPadrao:      (fiscal.issRetidoPadrao    as boolean) ?? false,
-                        credenciais:          (fiscal.credenciais        as Record<string, unknown>) ?? {},
-                      } : undefined}
-                      onSaved={load}
-                    />
                   </TabsContent>
                 </Tabs>
               </div>
             </div>
           )}
         </div>
+        <ClienteServicoDialog
+          open={servicoDialogOpen}
+          onOpenChange={setServicoDialogOpen}
+          clienteId={clienteId}
+          onSaved={() => { void syncClienteAfterMutation() }}
+        />
+        <ConfigFiscalForm
+          open={configOpen}
+          onOpenChange={setConfigOpen}
+          clienteId={clienteId}
+          docId={fiscal?.id as string | undefined}
+          defaultValues={fiscal ? {
+            municipioIbge: fiscal.municipioIbge as string,
+            inscricaoMunicipal: fiscal.inscricaoMunicipal as string,
+            inscricaoEstadual: fiscal.inscricaoEstadual as string,
+            ambienteEmissao: (fiscal.ambienteEmissao as 'homologacao' | 'producao') ?? 'homologacao',
+            regimeTributario: fiscal.regimeTributario as string,
+            optanteSimples: (fiscal.optanteSimples as boolean) ?? true,
+            incentivadorCultural: (fiscal.incentivadorCultural as boolean) ?? false,
+            naturezaOperacao: (fiscal.naturezaOperacao as string) ?? '1',
+            codigoServicoPadrao: fiscal.codigoServicoPadrao as string,
+            descricaoServicoPadrao: fiscal.descricaoServicoPadrao as string,
+            itemListaServico: fiscal.itemListaServico as string,
+            cnae: fiscal.cnae as string,
+            aliquotaPadrao: fiscal.aliquotaPadrao as number,
+            issRetidoPadrao: (fiscal.issRetidoPadrao as boolean) ?? false,
+            credenciais: (fiscal.credenciais as Record<string, unknown>) ?? {},
+          } : undefined}
+          onSaved={() => { void syncClienteAfterMutation() }}
+        />
       </DialogContent>
     </Dialog>
   )
