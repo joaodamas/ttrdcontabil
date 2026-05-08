@@ -58,6 +58,14 @@ function resumoNfseInput(input: EmitirNfseInput) {
   }
 }
 
+function resumoTentativaNfse(input: EmitirNfseInput, config: ConfigFiscalCliente) {
+  return {
+    ...resumoNfseInput(input),
+    municipioIbge: config.municipioIbge,
+    ambienteEmissao: config.ambienteEmissao,
+  }
+}
+
 // ─── Helpers (replicados de emitir.ts para evitar acoplamento de imports) ─────
 
 async function getConfigFiscal(clienteId: string): Promise<ConfigFiscalCliente> {
@@ -220,7 +228,13 @@ export const emitirNfseLote = onCall(
 
           if (input.rascunhoId) {
             await db().collection('nfse_rascunhos').doc(input.rascunhoId).update({
-              status: 'emitida', atualizadoEm: now,
+              status: 'emitida',
+              erroUltimaTentativa: null,
+              codigoErroUltimaTentativa: null,
+              detalhesUltimaTentativa: null,
+              requestResumoUltimaTentativa: null,
+              ultimaTentativaEm: now,
+              atualizadoEm: now,
             })
           }
           await writeAuditLog({
@@ -257,6 +271,9 @@ export const emitirNfseLote = onCall(
               erroId: erroRef.id,
               erroUltimaTentativa: resultado.erro ?? 'Erro não informado pelo conector.',
               codigoErroUltimaTentativa: resultado.codigoErro ?? null,
+              detalhesUltimaTentativa: resultado.detalhes ?? null,
+              requestResumoUltimaTentativa: resumoTentativaNfse(input, config),
+              ultimaTentativaEm: now,
               atualizadoEm: Timestamp.now(),
               atualizadoPorId: request.auth!.uid,
             })
@@ -293,6 +310,9 @@ export const emitirNfseLote = onCall(
             status: 'erro_integracao',
             erroUltimaTentativa: msg,
             codigoErroUltimaTentativa: null,
+            detalhesUltimaTentativa: null,
+            requestResumoUltimaTentativa: input ? resumoNfseInput(input) : null,
+            ultimaTentativaEm: Timestamp.now(),
             atualizadoEm: Timestamp.now(),
             atualizadoPorId: request.auth!.uid,
           }).catch((updateErr) => {

@@ -184,6 +184,28 @@ export default function NfseDetalhePage() {
                 <p className="mt-1 text-destructive">{nota.erroUltimaTentativa as string}</p>
               </div>
             ) : null}
+            {nota.codigoErroUltimaTentativa ? (
+              <div>
+                <p className="text-xs font-medium uppercase text-muted-foreground">Código técnico</p>
+                <p className="mt-1 font-mono">{nota.codigoErroUltimaTentativa as string}</p>
+              </div>
+            ) : null}
+            {nota.detalhesUltimaTentativa ? (
+              <div>
+                <p className="text-xs font-medium uppercase text-muted-foreground">Detalhes técnicos</p>
+                <pre className="mt-1 max-h-60 overflow-auto rounded-lg bg-muted p-3 text-xs leading-relaxed whitespace-pre-wrap">
+                  {String(nota.detalhesUltimaTentativa)}
+                </pre>
+              </div>
+            ) : null}
+            {nota.requestResumoUltimaTentativa ? (
+              <div>
+                <p className="text-xs font-medium uppercase text-muted-foreground">Resumo do request</p>
+                <pre className="mt-1 max-h-60 overflow-auto rounded-lg bg-muted p-3 text-xs leading-relaxed whitespace-pre-wrap">
+                  {JSON.stringify(nota.requestResumoUltimaTentativa as Record<string, unknown>, null, 2)}
+                </pre>
+              </div>
+            ) : null}
             {nota.motivoCancelamento ? (
               <div>
                 <p className="text-xs font-medium uppercase text-muted-foreground">Motivo de cancelamento</p>

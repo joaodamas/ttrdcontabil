@@ -134,6 +134,14 @@ function resumoNfseInput(input: EmitirNfseInput) {
   }
 }
 
+function resumoTentativaNfse(input: EmitirNfseInput, config: ConfigFiscalCliente) {
+  return {
+    ...resumoNfseInput(input),
+    municipioIbge: config.municipioIbge,
+    ambienteEmissao: config.ambienteEmissao,
+  }
+}
+
 export async function processarEmissao(input: EmitirNfseInput, uid: string) {
   const actor: AuditActor = { id: uid, nome: 'Usuário autenticado' }
   if (input.rascunhoId) {
@@ -216,6 +224,10 @@ export async function processarEmissao(input: EmitirNfseInput, uid: string) {
       await db().collection('nfse_rascunhos').doc(input.rascunhoId).update({
         status:       'emitida',
         erroUltimaTentativa: null,
+        codigoErroUltimaTentativa: null,
+        detalhesUltimaTentativa: null,
+        requestResumoUltimaTentativa: null,
+        ultimaTentativaEm: now,
         atualizadoEm: now,
         atualizadoPorId: uid,
       })
@@ -251,8 +263,12 @@ export async function processarEmissao(input: EmitirNfseInput, uid: string) {
     if (input.rascunhoId) {
       await db().collection('nfse_rascunhos').doc(input.rascunhoId).update({
         status: 'erro_integracao',
+        erroId: erroRef.id,
         erroUltimaTentativa: erro,
         codigoErroUltimaTentativa: resultado.codigoErro ?? null,
+        detalhesUltimaTentativa: resultado.detalhes ?? null,
+        requestResumoUltimaTentativa: resumoTentativaNfse(input, config),
+        ultimaTentativaEm: now,
         atualizadoEm: now,
         atualizadoPorId: uid,
       })

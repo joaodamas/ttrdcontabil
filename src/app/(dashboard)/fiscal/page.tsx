@@ -8,10 +8,11 @@ import { useQueryClient } from '@tanstack/react-query'
 import { formatDate, formatCurrency, tsToDate, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   FileText, CheckCircle2, XCircle, AlertTriangle,
   Plus, Loader2, Trash2, Layers, History, Receipt,
-  TrendingUp, Pencil, ShieldCheck, ShieldAlert,
+  TrendingUp, Pencil, ShieldCheck, ShieldAlert, Eye,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { EmitirLoteModal } from '@/components/fiscal/emitir-lote-modal'
@@ -46,6 +47,7 @@ export default function FiscalPage() {
   const [loteOpen, setLoteOpen] = useState(false)
   const [rascunhoParaRemover, setRascunhoParaRemover] = useState<string | null>(null)
   const [gerarRascunhosOpen, setGerarRascunhosOpen] = useState(false)
+  const [notaErroOpen, setNotaErroOpen] = useState<Record<string, unknown> | null>(null)
   const { isLoading: loading, emitidaMesCount, somaEmitidaMes, pendenteCount, erroCount, canceladaCount, notas } = useFiscalDashboard()
   const {
     isLoading: readinessLoading,
@@ -96,6 +98,17 @@ export default function FiscalPage() {
   }
 
   const totalNotas = notas.length
+
+  function hasErroTecnico(nota: Record<string, unknown>) {
+    return Boolean(
+      nota.erroUltimaTentativa
+      || nota.codigoErroUltimaTentativa
+      || nota.detalhesUltimaTentativa
+      || nota.requestResumoUltimaTentativa
+      || nota.status === 'erro_integracao'
+      || nota.status === 'rejeitada'
+    )
+  }
 
   return (
     <div className="space-y-5">
@@ -334,8 +347,19 @@ export default function FiscalPage() {
                         <StatusPill status={n.status as string} />
                       </td>
                       <td className="px-4 py-3 text-right">
-                        {isRascunho && (
-                          <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-2">
+                          {hasErroTecnico(n) ? (
+                            <button
+                              type="button"
+                              onClick={() => setNotaErroOpen(n)}
+                              className="text-muted-foreground hover:text-destructive transition-colors"
+                              title="Ver erro técnico"
+                            >
+                              <Eye size={13} />
+                            </button>
+                          ) : null}
+                          {isRascunho && (
+                            <>
                             <Link
                               href={`/fiscal/emitir?rascunhoId=${n.id as string}`}
                               className="text-muted-foreground hover:text-primary transition-colors"
@@ -351,8 +375,9 @@ export default function FiscalPage() {
                             >
                               <Trash2 size={13} />
                             </button>
-                          </div>
-                        )}
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )
@@ -389,6 +414,58 @@ export default function FiscalPage() {
         confirmLabel="Gerar rascunhos"
         onConfirm={prepararRascunhosMensais}
       />
+      <Dialog open={Boolean(notaErroOpen)} onOpenChange={(open) => !open && setNotaErroOpen(null)}>
+        <DialogContent className="max-w-2xl" showCloseButton>
+          <DialogHeader>
+            <DialogTitle>Erro técnico da emissão</DialogTitle>
+            <DialogDescription>
+              Diagnóstico da última tentativa registrada para esta emissão ou rascunho fiscal.
+            </DialogDescription>
+          </DialogHeader>
+          {notaErroOpen ? (
+            <div className="space-y-4 text-sm">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs font-medium uppercase text-muted-foreground">Cliente</p>
+                  <p className="mt-1 font-medium">{(notaErroOpen.clienteNome as string) ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium uppercase text-muted-foreground">Status</p>
+                  <p className="mt-1">{String(notaErroOpen.status ?? '—')}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium uppercase text-muted-foreground">Código do erro</p>
+                  <p className="mt-1 font-mono">{(notaErroOpen.codigoErroUltimaTentativa as string) ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium uppercase text-muted-foreground">Última tentativa</p>
+                  <p className="mt-1">
+                    {notaErroOpen.ultimaTentativaEm ? tsToDate(notaErroOpen.ultimaTentativaEm as Timestamp)?.toLocaleString('pt-BR') ?? '—' : '—'}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase text-muted-foreground">Mensagem operacional</p>
+                <p className="mt-1 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-destructive">
+                  {(notaErroOpen.erroUltimaTentativa as string) ?? 'Sem mensagem operacional registrada.'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase text-muted-foreground">Detalhes técnicos</p>
+                <pre className="mt-1 max-h-52 overflow-auto rounded-lg bg-muted p-3 text-xs leading-relaxed whitespace-pre-wrap">
+                  {String(notaErroOpen.detalhesUltimaTentativa ?? 'Sem detalhe técnico adicional.')}
+                </pre>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase text-muted-foreground">Resumo do request enviado</p>
+                <pre className="mt-1 max-h-52 overflow-auto rounded-lg bg-muted p-3 text-xs leading-relaxed whitespace-pre-wrap">
+                  {JSON.stringify((notaErroOpen.requestResumoUltimaTentativa as Record<string, unknown> | undefined) ?? {}, null, 2)}
+                </pre>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
