@@ -28,9 +28,9 @@ import {
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 
-const TAB_CONTENT_CLASS = 'mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1'
-const MODAL_TAB_TRIGGER_CLASS = 'h-8 min-w-0 overflow-hidden gap-1 rounded-lg px-1 text-[11px] sm:px-2 sm:text-xs'
-const MODAL_CARD_CLASS = 'min-h-[320px] border-border/70 shadow-none'
+const TAB_CONTENT_CLASS = 'mt-3 min-h-0 max-h-[calc(100dvh-19rem)] overflow-y-auto overscroll-contain md:max-h-[430px]'
+const MODAL_TAB_TRIGGER_CLASS = 'h-9 min-w-0 justify-center gap-1.5 rounded-lg px-2 text-xs'
+const MODAL_CARD_CLASS = 'border-border/70 shadow-none'
 const MODAL_CARD_HEADER_CLASS = 'flex flex-row items-center justify-between px-4 py-3'
 const MODAL_CARD_CONTENT_CLASS = 'px-4 pb-4'
 
@@ -138,7 +138,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton
-        className="h-[min(780px,calc(100dvh-1rem))] max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none flex flex-col overflow-hidden gap-0 p-0 sm:h-[min(780px,88dvh)] sm:max-h-[88dvh] sm:w-[min(920px,calc(100vw-2rem))]"
+        className="!w-[min(900px,calc(100vw-2rem))] !max-w-[min(900px,calc(100vw-2rem))] max-h-[calc(100dvh-2rem)] grid grid-rows-[auto_minmax(0,1fr)] overflow-hidden gap-0 p-0 sm:min-h-[560px]"
       >
         {/* ── Header ─────────────────────────────────────────────── */}
         <DialogHeader className="shrink-0 border-b bg-background px-5 py-4">
@@ -174,7 +174,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
         </DialogHeader>
 
         {/* ── Body ───────────────────────────────────────────────── */}
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="min-h-0 overflow-hidden">
           {loading ? (
             <div className="px-5 py-5 space-y-4">
               <div className="grid grid-cols-3 gap-4">
@@ -208,17 +208,17 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
               </Link>
             </div>
           ) : (
-            <div className="flex h-full min-h-0 flex-col">
+            <div className="flex min-h-0 flex-col">
               {/* Info strip */}
               <div className="shrink-0 border-b bg-muted/25 px-5 py-3">
-                <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+                <dl className="grid grid-cols-2 gap-x-5 gap-y-3 md:grid-cols-5">
                   <div>
                     <dt className="text-xs text-muted-foreground">CPF / CNPJ</dt>
-                    <dd className="text-sm font-medium font-mono mt-0.5">{formatCpfCnpj(cliente.cpfCnpj as string)}</dd>
+                    <dd className="mt-0.5 break-words font-mono text-sm font-medium leading-snug">{formatCpfCnpj(cliente.cpfCnpj as string)}</dd>
                   </div>
                   <div>
                     <dt className="text-xs text-muted-foreground">Regime</dt>
-                    <dd className="text-sm font-medium mt-0.5">
+                    <dd className="mt-0.5 text-sm font-medium leading-snug">
                       {cliente.regimeTributario
                         ? REGIME_LABELS[cliente.regimeTributario as string] ?? String(cliente.regimeTributario)
                         : '—'}
@@ -233,18 +233,18 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                   {cliente.telefone ? (
                     <div>
                       <dt className="text-xs text-muted-foreground flex items-center gap-1"><Phone className="h-3 w-3" />Telefone</dt>
-                      <dd className="text-sm font-medium mt-0.5">{cliente.telefone as string}</dd>
+                      <dd className="mt-0.5 text-sm font-medium leading-snug">{cliente.telefone as string}</dd>
                     </div>
                   ) : null}
                   {(cliente.cidade || cliente.uf) ? (
                     <div>
                       <dt className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" />Cidade / UF</dt>
-                      <dd className="text-sm font-medium mt-0.5">
+                      <dd className="mt-0.5 text-sm font-medium leading-snug">
                         {[cliente.cidade as string, cliente.uf as string].filter(Boolean).join(' / ')}
                       </dd>
                     </div>
                   ) : null}
-                  <div className="col-span-2 sm:col-span-1">
+                  <div className="col-span-2 md:col-span-1">
                     <dt className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="h-3 w-3" />Valor Mensal</dt>
                     <dd className={`text-base font-bold tabular-nums mt-0.5 ${valorMensalAtivo > 0 ? 'text-primary' : 'text-muted-foreground'}`}>
                       {valorMensalAtivo > 0 ? formatCurrency(valorMensalAtivo) : '—'}
@@ -254,27 +254,27 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
               </div>
 
               {/* 4 tabs */}
-              <div className="flex min-h-0 flex-1 flex-col px-5 py-4">
-                <Tabs defaultValue="servicos" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                  <TabsList className="grid h-10 w-full shrink-0 grid-cols-4 rounded-xl bg-muted/70 p-1">
+              <div className="min-h-0 px-5 py-4">
+                <Tabs defaultValue="servicos" className="min-h-0">
+                  <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl bg-muted/70 p-1 md:h-10 md:grid-cols-4">
                     <TabsTrigger value="servicos" className={MODAL_TAB_TRIGGER_CLASS}>
                       <Briefcase className="h-3.5 w-3.5" />
-                      <span className="min-w-0 truncate">Serviços</span>
+                      <span>Serviços</span>
                       <TabCount count={servicos.length} />
                     </TabsTrigger>
                     <TabsTrigger value="operacional" className={MODAL_TAB_TRIGGER_CLASS}>
                       <CalendarDays className="h-3.5 w-3.5" />
-                      <span className="min-w-0 truncate">Operacional</span>
+                      <span>Operacional</span>
                       <TabCount count={competencias.length} />
                     </TabsTrigger>
                     <TabsTrigger value="financeiro" className={MODAL_TAB_TRIGGER_CLASS}>
                       <DollarSign className="h-3.5 w-3.5" />
-                      <span className="min-w-0 truncate">Financeiro</span>
+                      <span>Financeiro</span>
                       <TabCount count={lancamentos.length} />
                     </TabsTrigger>
                     <TabsTrigger value="fiscal" className={MODAL_TAB_TRIGGER_CLASS}>
                       <Receipt className="h-3.5 w-3.5" />
-                      <span className="min-w-0 truncate">Fiscal</span>
+                      <span>Fiscal</span>
                       <TabCount count={nfses.length} />
                     </TabsTrigger>
                   </TabsList>
