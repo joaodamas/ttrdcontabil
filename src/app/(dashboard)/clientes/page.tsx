@@ -51,17 +51,58 @@ function saudeCliente(c: ClienteRecord): {
   score: 0 | 1 | 2 | 3
   label: 'crítica' | 'atenção' | 'estável'
   reason: string
+  areas: {
+    operacional: string
+    fiscal: string
+    financeiro: string
+  }
 } {
   if ((c.status as string) === 'suspenso') {
-    return { score: 0, label: 'crítica', reason: 'Cliente suspenso' }
+    return {
+      score: 0,
+      label: 'crítica',
+      reason: 'Cliente suspenso',
+      areas: {
+        operacional: 'Bloqueado por suspensão cadastral',
+        fiscal: 'Validar pendências antes de executar',
+        financeiro: 'Validar cobrança antes de retomar',
+      },
+    }
   }
   if ((c.riscoInadimplencia as boolean) === true) {
-    return { score: 1, label: 'atenção', reason: 'Risco de inadimplência acima de R$ 500' }
+    return {
+      score: 1,
+      label: 'atenção',
+      reason: 'Risco de inadimplência acima de R$ 500',
+      areas: {
+        operacional: 'Sem bloqueio operacional informado',
+        fiscal: 'Sem bloqueio fiscal informado',
+        financeiro: 'Risco de inadimplência ativo',
+      },
+    }
   }
   if ((c.status as string) === 'inativo') {
-    return { score: 2, label: 'atenção', reason: 'Cliente inativo' }
+    return {
+      score: 2,
+      label: 'atenção',
+      reason: 'Cliente inativo',
+      areas: {
+        operacional: 'Cliente inativo',
+        fiscal: 'Sem execução fiscal recorrente',
+        financeiro: 'Sem cobrança recorrente esperada',
+      },
+    }
   }
-  return { score: 3, label: 'estável', reason: 'Sem alertas ativos' }
+  return {
+    score: 3,
+    label: 'estável',
+    reason: 'Sem alertas ativos',
+    areas: {
+      operacional: 'Sem alertas ativos',
+      fiscal: 'Sem alertas ativos',
+      financeiro: 'Sem alertas ativos',
+    },
+  }
 }
 
 function ClientesContent() {
@@ -98,16 +139,17 @@ function ClientesContent() {
       </div>
 
       <div className="mt-4 overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="min-w-[860px] w-full text-sm">
           <thead className="border-b bg-muted/50">
             <tr>
-              <th className="text-left px-4 py-3 section-label">Nome / Razão Social</th>
-              <th className="text-left px-4 py-3 section-label">CPF / CNPJ</th>
-              <th className="text-left px-4 py-3 section-label hidden md:table-cell">Regime</th>
-              <th className="text-left px-4 py-3 section-label hidden lg:table-cell">Cidade / UF</th>
-              <th className="text-left px-4 py-3 section-label">Status</th>
-              <th className="text-left px-4 py-3 section-label">Saúde</th>
-              <th className="px-4 py-3" />
+              <th className="text-left px-3 py-2 section-label">Nome / Razão Social</th>
+              <th className="text-left px-3 py-2 section-label">CPF / CNPJ</th>
+              <th className="text-left px-3 py-2 section-label hidden md:table-cell">Regime</th>
+              <th className="text-left px-3 py-2 section-label hidden lg:table-cell">Cidade / UF</th>
+              <th className="text-left px-3 py-2 section-label">Status</th>
+              <th className="text-left px-3 py-2 section-label">Saúde</th>
+              <th className="px-3 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -139,9 +181,9 @@ function ClientesContent() {
                   className="cursor-pointer transition-colors hover:bg-muted/35"
                   onClick={() => { setModalClienteId(c.id as string); setModalClienteNome((c.razaoSocial as string) ?? '') }}
                 >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                  <td className="px-3 py-1.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
                         <span className="text-xs font-semibold text-primary">
                           {clienteInitials((c.razaoSocial as string) || '?')}
                         </span>
@@ -154,26 +196,26 @@ function ClientesContent() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground font-mono text-xs">
+                  <td className="px-3 py-1.5 text-muted-foreground font-mono text-xs">
                     {formatCpfCnpj(c.cpfCnpj as string)}
                   </td>
-                  <td className="px-4 py-3 hidden md:table-cell">
+                  <td className="px-3 py-1.5 hidden md:table-cell">
                     {c.regimeTributario ? (
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${REGIME_BADGE[c.regimeTributario as string] ?? REGIME_BADGE.isento}`}>
                         {REGIME_LABELS[c.regimeTributario as string] ?? (c.regimeTributario as string)}
                       </span>
                     ) : <span className="text-muted-foreground">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">
+                  <td className="px-3 py-1.5 text-muted-foreground hidden lg:table-cell">
                     {c.cidade && c.uf ? `${c.cidade as string} / ${c.uf as string}` : '—'}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-1.5">
                     <ClienteStatusBadge status={c.status as string} />
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-1.5">
                     <div
                       className="inline-flex items-center gap-1.5"
-                      title={`Saúde ${saude.label}: ${saude.reason}`}
+                      title={`Saúde ${saude.label}: ${saude.reason}. Operacional: ${saude.areas.operacional}. Fiscal: ${saude.areas.fiscal}. Financeiro: ${saude.areas.financeiro}.`}
                     >
                       {[1, 2, 3].map((dot) => (
                         <span
@@ -191,7 +233,7 @@ function ClientesContent() {
                       ))}
                     </div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-1.5">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -210,6 +252,7 @@ function ClientesContent() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Paginação */}

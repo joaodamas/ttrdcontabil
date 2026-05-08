@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { ClienteServicoForm } from '@/components/clientes/cliente-servico-form'
 import { getCliente, getServicos } from '@/lib/firestore-client'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { getErrorMessage } from '@/lib/error-message'
+import { getPathSegmentAfter } from '@/lib/route-params'
 
 interface Servico {
   id: string
@@ -16,7 +17,8 @@ interface Servico {
 }
 
 export default function Page() {
-  const { id } = useParams<{ id: string }>()
+  const pathname = usePathname()
+  const id = getPathSegmentAfter(pathname, 'clientes')
   const [servicos, setServicos] = useState<Servico[]>([])
   const [clienteNome, setClienteNome] = useState<string | undefined>()
   const [loading, setLoading] = useState(true)

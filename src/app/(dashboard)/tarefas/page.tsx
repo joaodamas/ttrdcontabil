@@ -153,16 +153,17 @@ function TarefasContent() {
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="min-w-[940px] w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
-              <th className="px-4 py-3 text-left section-label">Título</th>
-              <th className="px-4 py-3 text-left section-label">Cliente</th>
-              <th className="px-4 py-3 text-left section-label">Prioridade</th>
-              <th className="px-4 py-3 text-left section-label">Responsável</th>
-              <th className="px-4 py-3 text-left section-label">Prazo</th>
-              <th className="px-4 py-3 text-left section-label">Status</th>
-              <th className="px-4 py-3 w-10" />
+              <th className="px-3 py-2 text-left section-label">Título</th>
+              <th className="px-3 py-2 text-left section-label">Cliente</th>
+              <th className="px-3 py-2 text-left section-label">Prioridade</th>
+              <th className="px-3 py-2 text-left section-label">Responsável</th>
+              <th className="px-3 py-2 text-left section-label">Prazo</th>
+              <th className="px-3 py-2 text-left section-label">Status</th>
+              <th className="px-3 py-2 w-10" />
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -193,7 +194,7 @@ function TarefasContent() {
 
                 return (
                   <tr key={t.id as string} className="transition-colors hover:bg-muted/35">
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-1.5">
                       <Link
                         href={`/tarefas/${t.id}`}
                         className="font-medium hover:underline"
@@ -201,10 +202,10 @@ function TarefasContent() {
                         {t.titulo as string}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">
+                    <td className="px-3 py-1.5 text-muted-foreground">
                       {(t.clienteNome as string) ?? '—'}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-1.5">
                       {t.prioridade ? (
                         <Badge variant={pr.variant} className={pr.className}>
                           {pr.pulse && (
@@ -216,7 +217,7 @@ function TarefasContent() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">
+                    <td className="px-3 py-1.5 text-muted-foreground">
                       {t.responsavelNome ? (
                         t.responsavelNome as string
                       ) : (
@@ -226,7 +227,7 @@ function TarefasContent() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-1.5">
                       {dataPrazo ? (
                         <span className={vencida ? 'text-destructive font-medium' : ''}>
                           {formatDate(tsToDate(dataPrazo))}
@@ -238,10 +239,10 @@ function TarefasContent() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-1.5">
                       <Badge variant={st.variant}>{st.label}</Badge>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-1.5">
                       {!['concluida', 'cancelada'].includes(t.status as string) && (
                         <button
                           onClick={() => handleConcluirClick(t)}
@@ -289,6 +290,7 @@ function TarefasContent() {
               })}
           </tbody>
         </table>
+        </div>
       </div>
 
       {totalPages > 1 ? (

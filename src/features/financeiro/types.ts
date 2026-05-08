@@ -1,4 +1,5 @@
 import type { Timestamp } from 'firebase/firestore'
+import type { FirestoreCursor } from '@/lib/firestore-client'
 
 export type LancamentoRecord = Record<string, unknown> & {
   id: string
@@ -23,11 +24,14 @@ export type FinanceiroListFilters = FinanceiroBaseFilters & {
   status?: string
   page?: number
   pageSize?: number
+  cursor?: FirestoreCursor | null
+  cursorKey?: string
 }
 
 export type FinanceiroSnapshot = {
   allLancamentos: LancamentoRecord[]
   hasMore: boolean
+  lastCursor: FirestoreCursor | null
   somaAReceber: number
   somaRecebidoMes: number
   somaEmAtraso: number

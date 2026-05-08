@@ -12,6 +12,13 @@ Decisao de arquitetura em 2026-05-05:
 - Mesmo single-tenant, `tenantId` continua obrigatorio como identificador fixo do ambiente, protecao de acesso, organizacao de dados e base para clonagem futura.
 - Tenant padrao atual: `ttrd`.
 
+Decisao operacional em 2026-05-08:
+
+- Senhas e credenciais operacionais dos clientes e representantes legais devem permanecer disponiveis no formulario de cadastro/edicao de clientes.
+- Esta e uma excecao consciente de produto por necessidade do contador.
+- A mitigacao obrigatoria nao e remover os campos, e sim reduzir vazamento: mascarar por padrao, restringir visualizacao por perfil, auditar revelacao/edicao, redigir logs, impedir exportacao acidental e validar Firestore Rules.
+- Credenciais fiscais usadas diretamente em emissao NFS-e continuam seguindo fluxo criptografado via Functions/Secret Manager; a excecao acima se aplica ao controle operacional do contador no cadastro do cliente.
+
 Legenda:
 
 - [ ] Pendente
@@ -40,9 +47,10 @@ Legenda:
   - Criterio de aceite: usuario nao ve selecao/troca de tenant; tenant e detalhe tecnico de ambiente.
   - Status 2026-05-05: campo editavel "Tenant atual" removido da tela de parametros; tenant segue preservado internamente via usuario/configuracao de ambiente.
 
-- [ ] Criar seed inicial para ambiente single-tenant.
+- [~] Criar seed inicial para ambiente single-tenant.
   - Deve criar: tenant fixo, usuario admin, parametros do escritorio, perfis/telas padrao e servicos base.
   - Criterio de aceite: ambiente novo fica operacional apos deploy + seed.
+  - Execucao 2026-05-08: criado `scripts/seed-single-tenant.mjs` e script `npm run seed:single-tenant`; seed inicial cria parametros whitelabel, servicos base, conectores fiscais bloqueados para producao e usuario admin opcional por `ADMIN_EMAIL`/`ADMIN_PASSWORD`. Falta executar em ambiente novo com `FIREBASE_SERVICE_ACCOUNT_KEY` e validar clone completo.
 
 ### 1.1 Seguranca e controle de acesso
 
@@ -90,8 +98,24 @@ Legenda:
   - Incidente 2026-05-05: upload do certificado A1 falhava porque o segredo `CREDENTIAL_KEY` nao existia e as Functions fiscais nao estavam vinculadas ao Secret Manager.
   - Execucao 2026-05-05: criado segredo `CREDENTIAL_KEY` valido, adicionado binding `secrets` em `emitirNfse`, `emitirNfseLote`, `uploadCertificado`, `salvarCredenciaisFiscais`, `consultarNfse`, `cancelarNfse` e `retryNfse`; Functions publicadas.
 
-- [ ] Remover fallback de senha de certificado em texto puro nos fluxos de emissao.
+- [x] Remover fallback de senha de certificado em texto puro nos fluxos de emissao.
   - Criterio de aceite: certificado/credencial fiscal precisa estar criptografado; se descriptografia falhar, emissao bloqueia com erro operacional claro.
+  - Execucao 2026-05-08: removido `decrypt(...) ?? senhaRaw` de emissao avulsa, lote, consulta/cancelamento/retry. Senha A1 em formato legado ou com descriptografia falha agora bloqueia a operacao e orienta reenvio do certificado.
+
+- [ ] Proteger senhas operacionais mantidas no cadastro de clientes.
+  - Decisao: campos de senha permanecem no formulario por necessidade operacional do contador.
+  - Campos envolvidos:
+    - empresa: `loginPrefeitura`, `senhaWebPrefeitura`, `senhaPinCertificadoDigitalECnpj`, `loginPostoFiscal`, `senhaPostoFiscal`;
+    - representante: `representanteSenhaMeuGov`, `representanteSenhaEcacPf`, `representanteSenhaWebPrefeitura`, `representanteSenhaPinCertificadoDigitalCpf`.
+  - Criterio de aceite:
+    - campos aparecem no formulario de cadastro/edicao;
+    - valores ficam mascarados por padrao;
+    - botao "revelar" exige perfil autorizado e registra auditoria sem gravar o valor;
+    - perfil `leitura` nao visualiza nem revela senhas;
+    - exportacoes, timeline, logs, erros e auditoria nunca exibem valores;
+    - testes de Firestore Rules cobrem leitura/edicao conforme perfil.
+  - Execucao parcial 2026-05-08: campos adicionados ao formulario e inputs configurados como `type=password`; auditoria client-side passou a redigir campos cujo nome contenha `senha`, `password`, `token`, `credencial`, `cert`, `chave`, `private` ou `secret`.
+  - Pendente: restringir visualizacao/revelacao por perfil, auditar evento de revelacao, bloquear exportacao desses campos, revisar rules e publicar.
 
 ### 1.2 Auditoria e rastreabilidade
 
@@ -99,10 +123,13 @@ Legenda:
   - Colecoes: `clientes`, `clientes_servicos`, `competencias`, `tarefas`, `lancamentos`, `fechamentos`, `clientes_fiscal`, `nfse_rascunhos`, `nfse_emitidas`, `usuarios`.
   - Criterio de aceite: cada create/update/delete sensivel gera evento com ator, data, entidade, antes/depois e origem.
   - Status 2026-05-05: helpers client-side geram `logs_auditoria` com redacao de campos sensiveis para colecoes criticas, incluindo IR, cobrancas e revisoes; `gerarFechamentoMensal` gera log server-side de criados/ignorados. Falta cobrir todos os writes feitos diretamente por Admin SDK/Cloud Functions.
+  - Execucao 2026-05-08: criado helper server-side `functions/src/audit.ts` com redacao de campos sensiveis; fechamento passou a usar log padronizado; schedulers de competencias/lancamentos registram batch auditado com ator `Sistema`; upload de certificado e credenciais fiscais registram auditoria e evento de timeline redigido.
 
 - [ ] Revisar redacao LGPD dos logs de auditoria.
   - Campos a redigir: CPF/CNPJ, e-mail, telefone, XML de NFS-e, dados de certificado, senha, token, payload fiscal completo, dados aninhados sensiveis.
   - Criterio de aceite: logs preservam rastreabilidade sem armazenar dado sensivel desnecessario.
+  - Execucao 2026-05-08: helper server-side passou a redigir chaves por normalizacao/substrings sensiveis e mascarar strings com CPF/CNPJ, e-mail, telefone, XML e payloads extensos. Erros SOAP e retorno Cajamar/GeisWeb passaram a remover XML/payload bruto antes de persistir/logar. Falta revisar conectores municipais restantes com homologacao real.
+  - Atualizacao 2026-05-08: a excecao de senhas operacionais no cadastro aumenta a prioridade deste item; logs devem redigir qualquer chave que contenha `senha`, `password`, `token`, `credencial`, `cert`, `chave`, `secret` ou equivalentes.
 
 - [x] Padronizar eventos de timeline do cliente.
   - Criterio de aceite: toda tarefa, lancamento, competencia, fechamento e NFS-e relevante aparece no Cliente 360.
@@ -112,9 +139,10 @@ Legenda:
   - Remover CPF/CNPJ completo, e-mail e payload integral.
   - Criterio de aceite: `nfse_erros` guarda payload minimo, hash/id e mensagem util.
 
-- [ ] Vincular eventos fiscais ao tenant e cliente.
+- [~] Vincular eventos fiscais ao tenant e cliente.
   - Criterio de aceite: todo documento em `nfse_eventos` possui `tenantId`, `clienteId` quando aplicavel, ator, origem e payload redigido.
   - Motivo: mesmo single-tenant, eventos fiscais precisam ser filtraveis, auditaveis e seguros para clone whitelabel.
+  - Execucao 2026-05-08: `nfse_eventos` criados por consulta, cancelamento e retry passam a receber `tenantId`, `clienteId`, `origem=cloud_function` e detalhes redigidos. Emissao avulsa/lote, consulta, cancelamento e retry tambem registram `logs_auditoria` padronizado. Falta revisar eventos legados e demais fluxos fiscais futuros.
 
 ### 1.3 NFS-e
 
@@ -124,12 +152,14 @@ Legenda:
 - [x] Garantir idempotencia transacional para emissao em lote.
   - Criterio de aceite: lote concorrente nao duplica NFS-e.
 
-- [ ] Implementar idempotencia fiscal real contra provedor municipal.
+- [~] Implementar idempotencia fiscal real contra provedor municipal.
   - Criterio de aceite: numero de RPS e chave de idempotencia sao persistidos antes da chamada externa; retry consulta a prefeitura pelo RPS antes de tentar nova emissao; `nfse_emitidas` usa id deterministico por rascunho/RPS.
   - Motivo: a idempotencia transacional evita duplo clique interno, mas nao cobre timeout/crash apos envio para a prefeitura.
+  - Execucao 2026-05-08: `retryNfse` deixou de emitir as cegas; se o rascunho nao tiver RPS persistido, o retry e bloqueado. Quando ha RPS, consulta historico interno e prefeitura antes de nova emissao. Ainda falta persistir RPS/chave antes da primeira chamada externa e usar ID deterministico em `nfse_emitidas`.
 
-- [ ] Garantir recuperacao de erro em lote.
+- [x] Garantir recuperacao de erro em lote.
   - Criterio de aceite: qualquer item com falha sai de `processando`, volta para `erro_integracao` ou estado retryavel, grava `erroId` e aparece no historico.
+  - Execucao 2026-05-08: emissao em lote atualiza rascunhos com falha para `erro_integracao`, grava `erroId` quando o conector retorna erro e destrava rascunhos tambem em excecoes inesperadas.
 
 - [ ] Homologar emissao real por municipio configurado.
   - Municipios atuais: Jundiai, Campinas, Cajamar, Sao Paulo, Barueri, Santana de Parnaiba, Taboao da Serra, Cotia.
@@ -244,6 +274,7 @@ Legenda:
 - [x] Paginar financeiro no Firestore.
   - Criterio de aceite: nao baixar toda a colecao para filtrar/paginar no cliente.
   - Status 2026-05-05: query principal de `lancamentos` passou a aplicar `clienteId`, `competenciaId`, `tipo`, `status/atrasado` e `limit` progressivo por pagina no Firestore; indices compostos enviados.
+  - Execucao 2026-05-08: financeiro passou de limite progressivo `page * pageSize` para cursor real com `startAfter` e pilha local de cursores. A UI mantem anterior/proxima, mas sem prometer total exato de paginas.
 
 ## 4. Fiscal / NFS-e
 
@@ -312,6 +343,8 @@ Legenda:
 - [x] Adicionar confirmacoes fortes para acoes irreversiveis.
   - Emissao NFS-e, cancelamento, exclusao, fechamento/revisao do mes.
   - Status 2026-05-05: emissao avulsa ja exige confirmacao, cancelamento exige modal com motivo, remocao de rascunho exige confirmacao destrutiva, fechamento e revisao mensal exigem confirmacao. Varredura final nao encontrou exclusao direta exposta na UI fora do fluxo fiscal; hooks de delete restantes nao estao usados por telas.
+  - Revisao 2026-05-08: agentes encontraram `window.confirm` remanescente em NFS-e assistida e encerramento de fechamento mensal. Falta substituir por `ConfirmDialog`/modal estruturado com resumo, impacto e auditoria.
+  - Execucao 2026-05-08: NFS-e assistida e encerramento de fechamento mensal passaram a usar `ConfirmDialog`; busca por `window.confirm`/`confirm(` em `src/**/*.tsx` nao retornou ocorrencias.
 
 - [x] Melhorar mensagens de erro.
   - Trocar "Erro ao salvar" por causa provavel e proxima acao.
@@ -326,6 +359,24 @@ Legenda:
   - Telas: cockpit, cliente 360, fiscal emitir, historico NFS-e, fechamento, financeiro.
   - Status 2026-05-05: historico NFS-e recebeu tabela com scroll horizontal e cabecalho com quebra responsiva. Falta validacao visual final em viewport real/autenticada para todas as telas criticas.
 
+- [~] Consolidar melhorias UI/UX levantadas por agentes.
+  - Revisao 2026-05-08: os artefatos locais `.claude/agents` e `.claude/skills` existem no projeto e devem ser usados como referencia nas proximas rodadas. Principais apoios: `ui-ux-designer`, `frontend-design`, `ui-ux-pro-max`, `react-best-practices`, `tailwind-patterns`, `firebase`, `code-reviewer`, `webapp-testing`, `security-auditor` e `test-engineer`.
+  - Revisao 2026-05-08: a primeira avaliacao foi feita com agentes exploradores em modo leitura; a proxima rodada de implementacao deve cruzar os achados com as instrucoes locais do Claude antes de editar telas/modais.
+  - [x] Prioridade P0: padronizar responsividade das tabelas de Clientes, Tarefas e Financeiro com `overflow-x-auto`, `min-w` e densidade consistente.
+  - [x] Prioridade P0: substituir confirmacoes nativas por modais estruturados em NFS-e e fechamento mensal.
+  - [x] Prioridade P0: bloquear ou exigir justificativa para encerrar fechamento mensal com pendencias abertas.
+  - [~] Prioridade P0: proteger senhas operacionais mantidas no cadastro com mascaramento, permissao por perfil, auditoria de revelacao/edicao e redacao em logs/exportacoes. Execucao parcial: formulario usa campos mascarados e aviso operacional; ainda faltam regra/perfil, auditoria de revelacao e bloqueio de exportacao.
+  - [~] Prioridade P1: reorganizar formulario de cliente em secoes mais navegaveis, com barra de acoes fixa e melhor leitura dos campos sensiveis. Execucao parcial: campos empresariais, representante e credenciais foram incorporados e grids ficaram responsivos; barra fixa ainda pendente.
+  - [~] Prioridade P1: corrigir grids fixos sem responsividade em cliente, configuracao fiscal e emissao NFS-e. Execucao parcial: formulario de cliente corrigido; falta varredura final em configuracao fiscal e emissao NFS-e.
+  - [x] Prioridade P1: estabilizar abas do Cliente 360/modal para nao mudar altura/largura ao alternar entre Servicos, Operacional, Financeiro e Fiscal.
+  - [x] Prioridade P1: incluir `codigoServicoPadrao`, `descricaoServicoPadrao` e `issRetidoPadrao` em todos os `defaultValues` fiscais para evitar perda de dados ao editar configuracao fiscal.
+  - [~] Prioridade P1: revisar fluxos com reload/navegacao brusca, incluindo `router.refresh()` apos salvar financeiro e saida por `window.location.href` na fila de cobranca. Execucao parcial: cadastro de cliente deixou de chamar `router.refresh()`; fila de cobranca ainda pendente.
+  - Prioridade P2: criar ou aplicar um padrao unico de `DataTable`/`Table` para listas operacionais.
+  - Prioridade P2: padronizar headers, filtros, loading states e cores semanticas, removendo cores hardcoded em cards e tabelas.
+  - [~] Prioridade P2: melhorar Cliente 360 para mostrar saude operacional/fiscal/financeira com tooltip e detalhes claros. Execucao parcial: coluna Saude da lista de Clientes ganhou tooltip por area; falta refletir o mesmo nivel de detalhe dentro do Cliente 360.
+  - Prioridade P3: tornar command palette mais contextual para acoes frequentes.
+  - Validacao 2026-05-08: lint focado nos arquivos alterados passou; `npx tsc --noEmit` passou; `npm run build` passou.
+
 - [x] Remover/limpar componentes obsoletos de layout.
   - Validar antes: `sidebar.tsx`, `topbar.tsx`, `navbar.tsx`, `topnav.tsx`, `app-sidebar.tsx`.
   - Status 2026-05-05: `app-sidebar.tsx` e o layout ativo foram mantidos; `sidebar.tsx`, `topbar.tsx`, `navbar.tsx` e `topnav.tsx` nao tinham importadores e foram removidos.
@@ -335,6 +386,7 @@ Legenda:
 - [~] Trocar paginacao client-side por cursor Firestore.
   - Telas: clientes, fiscal historico, financeiro, tarefas, competencias.
   - Status 2026-05-05: financeiro, clientes, tarefas, competencias e historico fiscal deixaram de baixar a colecao inteira e passaram a usar limite progressivo por pagina no Firestore. Falta substituir pagina numerica por cursor real (`startAfter`) onde a UX permitir.
+  - Execucao 2026-05-08: financeiro e historico fiscal migrados para cursor real em memoria (`startAfter`). Clientes, tarefas e competencias seguem com limite/progressao por menor risco operacional e ainda podem migrar em rodada futura.
 
 - [x] Evitar queries sem `limit` em dashboards/KPIs.
   - Status 2026-05-05: dashboard principal passou a limitar consultas de clientes ativos, competencias do mes, tarefas abertas e lancamentos de vencimento/atraso.
@@ -351,6 +403,10 @@ Legenda:
 
 ## 9. Qualidade, testes e deploy
 
+- [x] Atualizar runtime das Cloud Functions.
+  - Motivo: Node.js 20 entrou em janela de deprecacao no Google Cloud em 2026-04-30 e bloqueia deploys apos 2026-10-30.
+  - Execucao 2026-05-08: `functions/package.json` migrado para `engines.node = 22` e `@types/node = ^22`; lockfile atualizado; `functions/npm run build` passou. Smoke fiscal real ainda depende de homologacao/credenciais municipais.
+
 - [x] Corrigir `npm run lint`.
   - Problema atual: dependencia/config `eslint-plugin-storybook`.
   - Status 2026-05-05: lint executa limpo, sem erros e sem warnings.
@@ -361,8 +417,12 @@ Legenda:
     - operacional sem financeiro;
     - financeiro sem fiscal;
     - fiscal sem financeiro;
-    - tenant A nao acessa tenant B.
+    - tenant A nao acessa tenant B;
+    - perfil sem autorizacao nao consegue ler/revelar senhas operacionais do cadastro;
+    - exportacao/log/auditoria nao recebe valores dos campos de senha operacional.
   - Status 2026-05-05: criada suite `__tests__/rules/firestore.rules.test.ts` e script `npm run test:rules`. Execucao bloqueada localmente porque Firebase Emulator atual exige JDK 21+ e o ambiente esta com Java 8.
+  - Execucao 2026-05-08: baixado JDK 21 portatil em `.tools` e executado `npm run test:rules` com `JAVA_HOME` apontando para Temurin 21. Resultado: 1 arquivo, 5 testes passando.
+  - Pendente 2026-05-08: expandir a suite para cobrir a excecao de senhas operacionais e permissao de listagem/leitura de `usuarios`.
 
 - [~] Criar E2E com fixtures reais.
   - Fluxos:
@@ -410,10 +470,24 @@ Legenda:
 
 ## 11. Ordem recomendada de execucao
 
-1. Formalizar arquitetura single-tenant por ambiente e documentar whitelabel.
-2. Corrigir seguranca critica: tenant fixo, Rules, Functions, Storage e leitura de usuarios.
-3. Corrigir NFS-e: idempotencia fiscal real, recuperacao de lote, homologacao e confirmacao forte.
-4. Corrigir base operacional pendente: `clientes_servicos`, competencias, tarefas e cenarios reais.
-5. Completar auditoria, timeline e redacao LGPD.
-6. Otimizar performance/paginacao restante.
-7. Rodar testes, smoke test e 5 dias de uso interno.
+1. Proteger senhas operacionais que devem permanecer no cadastro de clientes.
+   - Mascarar por padrao, restringir visualizacao por perfil, auditar revelacao, redigir logs e bloquear exportacao acidental.
+   - Este item vem antes de popular clientes reais, porque as senhas passam a existir no documento operacional do cliente.
+2. Fechar seguranca critica verificavel.
+   - Revisar Firestore Rules/Storage Rules, leitura/listagem de `usuarios`, tenant fixo, Functions sensiveis e testes no emulator.
+3. Resolver rotas dinamicas com `output: export` e `placeholder`.
+   - Aplicar extracao de ID real em todas as rotas dinamicas ou decidir migrar para runtime Next com suporte nativo a rotas dinamicas.
+4. Corrigir NFS-e critica.
+   - Idempotencia fiscal real antes da primeira chamada externa, homologacao piloto, consulta/cancelamento real e confirmacao fiscal forte.
+5. Corrigir UX/UI de alto risco operacional.
+   - Tabelas responsivas, modais de confirmacao, formulario de cliente, Cliente 360, grids mobile, default values fiscais e fluxos sem reload brusco.
+6. Publicar ajustes locais ja validados.
+   - Modal de cliente, cadastro completo, campos operacionais, protecoes de senha, rules e hosting/functions conforme escopo alterado.
+7. Corrigir base operacional pendente.
+   - `clientes_servicos`, competencias, tarefas, financeiro, IR e cenarios reais para Cliente 360.
+8. Completar auditoria, timeline e redacao LGPD.
+   - Incluir auditoria de visualizacao/revelacao de senhas operacionais.
+9. Otimizar performance/paginacao restante.
+   - Clientes, tarefas e competencias podem migrar para cursor real em rodada posterior.
+10. Rodar testes, smoke test e 5 dias de uso interno.
+   - `npm run build`, `npm run test`, `npm run test:rules`, `npm run smoke:prod`, E2E mutacional controlado e operacao sem planilha paralela.

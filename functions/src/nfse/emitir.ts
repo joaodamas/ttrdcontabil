@@ -6,12 +6,14 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { rotearEmissao } from './municipios/router'
-import { encrypt, decrypt } from './encrypt'
+import { encrypt, decrypt, isEncrypted } from './encrypt'
 import { credentialSecrets } from './secrets'
 import { isProducaoLiberadaPorConfigOuConector } from './conectores'
 import { pfxBase64FromStorageBuffer } from './certificado'
 import { assertCanAccessCliente } from '../authz'
 import { validarPayloadFiscal } from './validacao'
+import { writeAuditLog, type AuditActor } from '../audit'
+import { requireEnvironmentTenant } from '../tenant'
 import type {
   EmitirNfseInput, ConfigFiscalCliente,
   Prestador, CertificadoA1,
@@ -32,13 +34,74 @@ async function getConfigFiscal(clienteId: string): Promise<ConfigFiscalCliente> 
     .limit(1)
     .get()
   if (snap.empty) throw new HttpsError('not-found', 'Configuração fiscal do cliente não encontrada. Configure em Clientes → Fiscal.')
-  return { clienteId, ...snap.docs[0].data() } as ConfigFiscalCliente
+  const data = snap.docs[0].data()
+  return { clienteId, ...data, tenantId: requireEnvironmentTenant(data.tenantId, 'Configuração fiscal') } as ConfigFiscalCliente
 }
 
 async function getCliente(clienteId: string): Promise<Record<string, unknown>> {
   const doc = await db().collection('clientes').doc(clienteId).get()
   if (!doc.exists) throw new HttpsError('not-found', 'Cliente não encontrado.')
   return { id: doc.id, ...doc.data() } as Record<string, unknown>
+}
+
+async function getActor(uid: string): Promise<AuditActor> {
+  const snap = await db().collection('usuarios').doc(uid).get()
+  const data = snap.exists ? snap.data() : null
+  return {
+    id: uid,
+    nome: (data?.nome as string | undefined) ?? uid,
+    email: (data?.email as string | undefined) ?? null,
+  }
+}
+
+async function registrarEventoFiscal(params: {
+  tenantId: string
+  clienteId: string
+  titulo: string
+  descricao: string
+  origemColecao: string
+  origemId: string
+  actor: AuditActor
+  metadata?: Record<string, unknown>
+}) {
+  await db().collection('events').add({
+    tenantId: params.tenantId,
+    clienteId: params.clienteId,
+    tipo: 'fiscal',
+    titulo: params.titulo,
+    descricao: params.descricao,
+    origemColecao: params.origemColecao,
+    origemId: params.origemId,
+    actorId: params.actor.id,
+    actorNome: params.actor.nome,
+    metadata: {
+      severidade: 'media',
+      href: `/clientes/${params.clienteId}/fiscal`,
+      actorId: params.actor.id,
+      actorNome: params.actor.nome,
+      ...(params.metadata ?? {}),
+    },
+    criadoEm: Timestamp.now(),
+  })
+}
+
+function decryptSenhaCertificado(senhaRaw: string | undefined): string {
+  if (!senhaRaw) return ''
+  if (!isEncrypted(senhaRaw)) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Senha do certificado em formato legado não criptografado. Reenvie o certificado A1 para salvar a credencial com criptografia.'
+    )
+  }
+
+  const senha = decrypt(senhaRaw)
+  if (!senha) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Não foi possível descriptografar a senha do certificado. Verifique o secret CREDENTIAL_KEY e reenvie o certificado A1.'
+    )
+  }
+  return senha
 }
 
 async function getCertificado(clienteId: string, config: ConfigFiscalCliente): Promise<CertificadoA1 | undefined> {
@@ -50,9 +113,7 @@ async function getCertificado(clienteId: string, config: ConfigFiscalCliente): P
   if (!exists) return undefined
   const [buffer] = await file.download()
 
-  // Descriptografa a senha do certificado
-  const senhaRaw     = config.credenciais?.certificadoSenha as string | undefined
-  const senhaDecrypt = senhaRaw ? (decrypt(senhaRaw) ?? senhaRaw) : ''
+  const senhaDecrypt = decryptSenhaCertificado(config.credenciais?.certificadoSenha as string | undefined)
 
   return {
     pfxBase64: pfxBase64FromStorageBuffer(buffer),
@@ -74,6 +135,7 @@ function resumoNfseInput(input: EmitirNfseInput) {
 }
 
 export async function processarEmissao(input: EmitirNfseInput, uid: string) {
+  const actor: AuditActor = { id: uid, nome: 'Usuário autenticado' }
   if (input.rascunhoId) {
     const rascunhoRef = db().collection('nfse_rascunhos').doc(input.rascunhoId)
     await db().runTransaction(async (tx) => {
@@ -99,6 +161,7 @@ export async function processarEmissao(input: EmitirNfseInput, uid: string) {
 
   if (!config.municipioIbge)       throw new HttpsError('failed-precondition', 'Código IBGE do município não configurado.')
   if (!config.inscricaoMunicipal)  throw new HttpsError('failed-precondition', 'Inscrição municipal não configurada.')
+  const tenantId = requireEnvironmentTenant(config.tenantId, 'Configuração fiscal')
   if (config.ambienteEmissao === 'producao' && !(await isProducaoLiberadaPorConfigOuConector(config, 'emissao'))) {
     throw new HttpsError('failed-precondition', 'Município/configuração fiscal ainda não liberado para emissão em produção.')
   }
@@ -122,6 +185,7 @@ export async function processarEmissao(input: EmitirNfseInput, uid: string) {
   const now = Timestamp.now()
   if (resultado.sucesso) {
     await db().collection('nfse_emitidas').add({
+      tenantId:          config.tenantId,
       clienteId:         input.clienteId,
       clienteNome:       cliente.razaoSocial as string,
       competenciaId:     input.competenciaId ?? null,
@@ -156,9 +220,25 @@ export async function processarEmissao(input: EmitirNfseInput, uid: string) {
         atualizadoPorId: uid,
       })
     }
+    await writeAuditLog({
+      tenantId,
+      actor,
+      entidade: 'nfse_emitidas',
+      entidadeId: resultado.numeroNfse ?? input.rascunhoId ?? null,
+      acao: 'emissao_nfse_sucesso',
+      dadosDepois: {
+        ...resumoNfseInput(input),
+        numeroNfse: resultado.numeroNfse ?? null,
+        codigoVerificacao: resultado.codigoVerificacao ?? null,
+        municipioIbge: config.municipioIbge,
+        ambienteEmissao: config.ambienteEmissao,
+      },
+      origem: 'cloud_function',
+    })
   } else {
     const erro = resultado.erro ?? 'Erro não informado pelo conector.'
-    await db().collection('nfse_erros').add({
+    const erroRef = await db().collection('nfse_erros').add({
+      tenantId:    config.tenantId,
       clienteId:   input.clienteId,
       clienteNome: cliente.razaoSocial as string,
       erro,
@@ -177,6 +257,21 @@ export async function processarEmissao(input: EmitirNfseInput, uid: string) {
         atualizadoPorId: uid,
       })
     }
+    await writeAuditLog({
+      tenantId,
+      actor,
+      entidade: 'nfse_erros',
+      entidadeId: erroRef.id,
+      acao: 'emissao_nfse_erro',
+      dadosDepois: {
+        ...resumoNfseInput(input),
+        erro,
+        codigoErro: resultado.codigoErro ?? null,
+        municipioIbge: config.municipioIbge,
+        ambienteEmissao: config.ambienteEmissao,
+      },
+      origem: 'cloud_function',
+    })
   }
 
   return resultado
@@ -258,13 +353,47 @@ export const uploadCertificado = onCall(
       .get()
 
     if (!snap.empty) {
-      await snap.docs[0].ref.update({
+      const fiscalDoc = snap.docs[0]
+      const fiscalData = fiscalDoc.data()
+      const tenantId = requireEnvironmentTenant(fiscalData.tenantId, 'Configuração fiscal')
+      const actor = await getActor(request.auth.uid)
+
+      await fiscalDoc.ref.update({
         'credenciais.certificadoStoragePath': path,
         'credenciais.certificadoSenha':       senhaCriptografada, // criptografada
         'credenciais.certTitular':            info.titular,
         'credenciais.certVencimento':         info.vencimento.toISOString(),
         'credenciais.certValido':             info.valido,
         atualizadoEm: Timestamp.now(),
+        atualizadoPorId: actor.id,
+        atualizadoPorNome: actor.nome,
+      })
+
+      await writeAuditLog({
+        tenantId,
+        actor,
+        entidade: 'clientes_fiscal',
+        entidadeId: fiscalDoc.id,
+        acao: 'upload_certificado_a1',
+        dadosAntes: null,
+        dadosDepois: {
+          clienteId,
+          certificadoStoragePath: path,
+          certTitular: info.titular,
+          certVencimento: info.vencimento.toISOString(),
+          certValido: info.valido,
+        },
+        origem: 'cloud_function',
+      })
+
+      await registrarEventoFiscal({
+        tenantId,
+        clienteId,
+        titulo: 'Certificado A1 atualizado',
+        descricao: `Certificado fiscal salvo e validado para ${info.titular}.`,
+        origemColecao: 'clientes_fiscal',
+        origemId: fiscalDoc.id,
+        actor,
       })
     }
 
@@ -326,14 +455,42 @@ export const salvarCredenciaisFiscais = onCall(
     }
 
     const now = Timestamp.now()
+    const actor = await getActor(request.auth.uid)
 
     if (docId) {
       // Atualiza doc existente — merge no sub-objeto credenciais
-      const updates: Record<string, unknown> = { atualizadoEm: now }
+      const fiscalDoc = await db().collection('clientes_fiscal').doc(docId).get()
+      if (!fiscalDoc.exists) throw new HttpsError('not-found', 'Configuração fiscal não encontrada.')
+      const tenantId = requireEnvironmentTenant(fiscalDoc.data()?.tenantId, 'Configuração fiscal')
+      const updates: Record<string, unknown> = { atualizadoEm: now, atualizadoPorId: actor.id, atualizadoPorNome: actor.nome }
       for (const [key, value] of Object.entries(credenciaisCriptografadas)) {
         updates[`credenciais.${key}`] = value
       }
-      await db().collection('clientes_fiscal').doc(docId).update(updates)
+      await fiscalDoc.ref.update(updates)
+
+      await writeAuditLog({
+        tenantId,
+        actor,
+        entidade: 'clientes_fiscal',
+        entidadeId: docId,
+        acao: 'update_credenciais_fiscais',
+        dadosAntes: null,
+        dadosDepois: {
+          clienteId,
+          camposAtualizados: Object.keys(credenciaisCriptografadas),
+        },
+        origem: 'cloud_function',
+      })
+
+      await registrarEventoFiscal({
+        tenantId,
+        clienteId,
+        titulo: 'Credenciais fiscais atualizadas',
+        descricao: 'Credenciais de integração fiscal foram atualizadas.',
+        origemColecao: 'clientes_fiscal',
+        origemId: docId,
+        actor,
+      })
     } else {
       // Busca pelo clienteId se docId não fornecido
       const snap = await db().collection('clientes_fiscal')
@@ -345,11 +502,37 @@ export const salvarCredenciaisFiscais = onCall(
         throw new HttpsError('not-found', 'Configuração fiscal não encontrada para este cliente.')
       }
 
-      const updates: Record<string, unknown> = { atualizadoEm: now }
+      const fiscalDoc = snap.docs[0]
+      const tenantId = requireEnvironmentTenant(fiscalDoc.data().tenantId, 'Configuração fiscal')
+      const updates: Record<string, unknown> = { atualizadoEm: now, atualizadoPorId: actor.id, atualizadoPorNome: actor.nome }
       for (const [key, value] of Object.entries(credenciaisCriptografadas)) {
         updates[`credenciais.${key}`] = value
       }
-      await snap.docs[0].ref.update(updates)
+      await fiscalDoc.ref.update(updates)
+
+      await writeAuditLog({
+        tenantId,
+        actor,
+        entidade: 'clientes_fiscal',
+        entidadeId: fiscalDoc.id,
+        acao: 'update_credenciais_fiscais',
+        dadosAntes: null,
+        dadosDepois: {
+          clienteId,
+          camposAtualizados: Object.keys(credenciaisCriptografadas),
+        },
+        origem: 'cloud_function',
+      })
+
+      await registrarEventoFiscal({
+        tenantId,
+        clienteId,
+        titulo: 'Credenciais fiscais atualizadas',
+        descricao: 'Credenciais de integração fiscal foram atualizadas.',
+        origemColecao: 'clientes_fiscal',
+        origemId: fiscalDoc.id,
+        actor,
+      })
     }
 
     return { sucesso: true }

@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Loader2, Save, Send } from 'lucide-react'
 import { getClientes, getCompetencias, createDocument, getDocument, updateDocument } from '@/lib/firestore-client'
 import { getFunctions, httpsCallable } from 'firebase/functions'
@@ -65,6 +66,7 @@ export function NfseEmissaoForm() {
   const [rascunhoAtual, setRascunhoAtual] = useState<RascunhoNfse | null>(null)
   const [saving,   setSaving]   = useState(false)
   const [emitting, setEmitting] = useState(false)
+  const [emissaoPendente, setEmissaoPendente] = useState<NfseFormData | null>(null)
 
   const {
     register,
@@ -178,19 +180,13 @@ export function NfseEmissaoForm() {
     }
   }
 
-  async function handleEmitir(data: NfseFormData) {
-    const confirmado = window.confirm(
-      [
-        'Confirmar emissão de NFS-e?',
-        `Cliente: ${clientes.find((c) => c.id === data.clienteId)?.razaoSocial ?? data.clienteId}`,
-        `Tomador: ${data.tomadorNome}`,
-        `CPF/CNPJ: ${data.tomadorCpfCnpj}`,
-        `Serviço: ${data.codigoServico}`,
-        `Valor: R$ ${data.valorServico.toFixed(2)}`,
-        `ISS retido: ${data.issRetido ? 'Sim' : 'Não'}`,
-      ].join('\n')
-    )
-    if (!confirmado) return
+  function solicitarEmissao(data: NfseFormData) {
+    setEmissaoPendente(data)
+  }
+
+  async function confirmarEmissao() {
+    if (!emissaoPendente) return
+    const data = emissaoPendente
 
     setEmitting(true)
     try {
@@ -235,6 +231,7 @@ export function NfseEmissaoForm() {
       toast.error(getErrorMessage(err, 'Não foi possível emitir a NFS-e. Verifique configuração fiscal, credencial e homologação do município.'))
     } finally {
       setEmitting(false)
+      setEmissaoPendente(null)
     }
   }
 
@@ -411,7 +408,7 @@ export function NfseEmissaoForm() {
 
       {/* Ações */}
       <div className="flex items-center gap-3">
-        <Button type="button" disabled={isLoading || loadingRascunho} onClick={handleSubmit(handleEmitir)}>
+        <Button type="button" disabled={isLoading || loadingRascunho} onClick={handleSubmit(solicitarEmissao)}>
           {emitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
           Emitir (Assistida)
         </Button>
@@ -423,6 +420,30 @@ export function NfseEmissaoForm() {
           Cancelar
         </Button>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(emissaoPendente)}
+        onOpenChange={(open) => {
+          if (!open && !emitting) setEmissaoPendente(null)
+        }}
+        title="Confirmar emissão de NFS-e?"
+        description={
+          emissaoPendente
+            ? [
+                `Cliente: ${clientes.find((c) => c.id === emissaoPendente.clienteId)?.razaoSocial ?? emissaoPendente.clienteId}.`,
+                `Tomador: ${emissaoPendente.tomadorNome}.`,
+                `CPF/CNPJ: ${emissaoPendente.tomadorCpfCnpj}.`,
+                `Serviço: ${emissaoPendente.codigoServico}.`,
+                `Valor: R$ ${Number(emissaoPendente.valorServico).toFixed(2)}.`,
+                `ISS retido: ${emissaoPendente.issRetido ? 'Sim' : 'Não'}.`,
+                'Após confirmar, a solicitação será enviada para a prefeitura e poderá gerar documento fiscal.',
+              ].join(' ')
+            : undefined
+        }
+        confirmLabel="Emitir NFS-e"
+        cancelLabel="Revisar dados"
+        onConfirm={confirmarEmissao}
+      />
     </form>
   )
 }

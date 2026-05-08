@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useMemo, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Timestamp } from 'firebase/firestore'
@@ -21,6 +21,7 @@ import { financeiroBaseFiltroSchema } from '@/features/financeiro/schemas'
 import { useFinanceiroList } from '@/features/financeiro/hooks'
 import { financeiroKeys } from '@/features/financeiro/queries'
 import { scoreCobranca } from '@/lib/financeiro-prioridade'
+import type { FirestoreCursor } from '@/lib/firestore-client'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   pendente: { label: 'Pendente', variant: 'outline' },
@@ -45,9 +46,23 @@ function FinanceiroContent() {
   const { clienteId, competenciaId } = parsed
   const [tipo, setTipo] = useState(() => searchParams.get('tipo') ?? '')
   const [status, setStatus] = useState(() => searchParams.get('status') ?? '')
-  const [page, setPage] = useState(1)
-  const { lancamentos, filteredLancamentos, total, totalPages, somaAReceber, somaRecebidoMes, somaEmAtraso, isLoading } =
-    useFinanceiroList({ clienteId, competenciaId, tipo, status, page })
+  const filterKey = useMemo(
+    () => JSON.stringify({ clienteId, competenciaId, tipo, status }),
+    [clienteId, competenciaId, tipo, status]
+  )
+  const [pagination, setPagination] = useState<{
+    filterKey: string
+    page: number
+    cursorStack: Array<FirestoreCursor | null>
+  }>({ filterKey, page: 1, cursorStack: [null] })
+  const activePagination = pagination.filterKey === filterKey
+    ? pagination
+    : { filterKey, page: 1, cursorStack: [null] as Array<FirestoreCursor | null> }
+  const page = activePagination.page
+  const cursor = activePagination.cursorStack[page - 1] ?? null
+  const cursorKey = cursor?.id ?? 'first-page'
+  const { lancamentos, filteredLancamentos, total, totalPages, hasMore, lastCursor, somaAReceber, somaRecebidoMes, somaEmAtraso, isLoading } =
+    useFinanceiroList({ clienteId, competenciaId, tipo, status, page, cursor, cursorKey })
   const agora = new Date()
   const filaCobranca = [...filteredLancamentos]
     .filter((l) => l.tipo === 'receita' && l.status === 'pendente')
@@ -87,6 +102,36 @@ function FinanceiroContent() {
     )
   }
 
+  function exportarLancamentos() {
+    exportToExcel(
+      'financeiro-lancamentos',
+      filteredLancamentos.map((l) => {
+        const vencimento = tsToDate(l.dataVencimento)
+        const pagamento = tsToDate(l.dataPagamento)
+        return {
+          descricao: l.descricao ?? '',
+          cliente: l.clienteNome ?? '',
+          tipo: TIPO_MAP[l.tipo as string]?.label ?? l.tipo ?? '',
+          status: STATUS_MAP[l.status as string]?.label ?? l.status ?? '',
+          valor: formatCurrency(l.valor as number),
+          vencimento: vencimento ? formatDate(vencimento) : '',
+          pagamento: pagamento ? formatDate(pagamento) : '',
+          competencia: l.competencia ?? '',
+        }
+      }),
+      [
+        { key: 'descricao', label: 'Descricao' },
+        { key: 'cliente', label: 'Cliente' },
+        { key: 'tipo', label: 'Tipo' },
+        { key: 'status', label: 'Status' },
+        { key: 'valor', label: 'Valor' },
+        { key: 'vencimento', label: 'Vencimento' },
+        { key: 'pagamento', label: 'Pagamento' },
+        { key: 'competencia', label: 'Competencia' },
+      ]
+    )
+  }
+
   return (
     <div className="space-y-5">
       <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
@@ -97,6 +142,10 @@ function FinanceiroContent() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" className="h-10 rounded-xl" onClick={exportarLancamentos}>
+            <Download className="w-4 h-4 mr-1" />
+            Exportar lista
+          </Button>
           <Button variant="outline" size="sm" className="h-10 rounded-xl" onClick={exportarInadimplencia}>
             <Download className="w-4 h-4 mr-1" />
             Inadimplência
@@ -119,7 +168,7 @@ function FinanceiroContent() {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="kpi-value">{formatCurrency(somaAReceber)}</p>
+            <p className="kpi-value tabular-nums">{formatCurrency(somaAReceber)}</p>
           </CardContent>
         </Card>
 
@@ -133,7 +182,7 @@ function FinanceiroContent() {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="kpi-value text-success">{formatCurrency(somaRecebidoMes)}</p>
+            <p className="kpi-value text-success tabular-nums">{formatCurrency(somaRecebidoMes)}</p>
           </CardContent>
         </Card>
 
@@ -145,7 +194,7 @@ function FinanceiroContent() {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="kpi-value text-destructive">{formatCurrency(somaEmAtraso)}</p>
+            <p className="kpi-value text-destructive tabular-nums">{formatCurrency(somaEmAtraso)}</p>
           </CardContent>
         </Card>
       </div>
@@ -153,14 +202,14 @@ function FinanceiroContent() {
       <div className="surface-subtle flex flex-wrap items-center gap-3 border px-3 py-2.5">
         <div className="flex items-center gap-1">
           {(['', 'receita', 'despesa'] as const).map((t) => (
-            <FilterBtn key={t} onClick={() => { setTipo(t); setPage(1) }} active={tipo === t}>
+            <FilterBtn key={t} onClick={() => { setTipo(t); setPagination({ filterKey, page: 1, cursorStack: [null] }) }} active={tipo === t}>
               {t === '' ? 'Todos' : TIPO_MAP[t]?.label ?? t}
             </FilterBtn>
           ))}
         </div>
         <div className="flex items-center gap-1">
           {(['', 'pendente', 'atrasado', 'pago', 'cancelado', 'estornado'] as const).map((s) => (
-            <FilterBtn key={s} onClick={() => { setStatus(s); setPage(1) }} active={status === s}>
+            <FilterBtn key={s} onClick={() => { setStatus(s); setPagination({ filterKey, page: 1, cursorStack: [null] }) }} active={status === s}>
               {s === '' ? 'Qualquer' : STATUS_MAP[s]?.label ?? s}
             </FilterBtn>
           ))}
@@ -176,7 +225,7 @@ function FinanceiroContent() {
                 Ordenada por atraso, proximidade do vencimento e impacto de caixa.
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => { setTipo('receita'); setStatus('pendente'); setPage(1) }}>
+            <Button variant="outline" size="sm" onClick={() => { setTipo('receita'); setStatus('pendente'); setPagination({ filterKey, page: 1, cursorStack: [null] }) }}>
               Ver receitas pendentes
             </Button>
           </div>
@@ -198,7 +247,8 @@ function FinanceiroContent() {
       ) : null}
 
       <div className="overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="min-w-[920px] w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
               <th className="px-4 py-3 text-left section-label">Descrição</th>
@@ -250,7 +300,7 @@ function FinanceiroContent() {
                         {dataVenc ? formatDate(dataVenc) : '—'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right font-medium">
+                    <td className="px-4 py-3 text-right font-medium tabular-nums">
                       {formatCurrency(l.valor as number)}
                     </td>
                     <td className="px-4 py-3">
@@ -277,6 +327,7 @@ function FinanceiroContent() {
               })}
           </tbody>
         </table>
+        </div>
       </div>
 
       {totalPages > 1 ? (
@@ -286,12 +337,35 @@ function FinanceiroContent() {
           </p>
           <div className="flex gap-2">
             {page > 1 ? (
-              <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.max(1, prev - 1))}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setPagination({
+                    ...activePagination,
+                    page: Math.max(1, page - 1),
+                  })
+                }}
+              >
                 Anterior
               </Button>
             ) : null}
-            {page < totalPages ? (
-              <Button variant="outline" size="sm" onClick={() => setPage((prev) => prev + 1)}>
+            {hasMore ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (!lastCursor) return
+                  setPagination((prev) => {
+                    const base = prev.filterKey === filterKey ? prev : activePagination
+                    return {
+                      ...base,
+                      page: page + 1,
+                      cursorStack: base.cursorStack[page] ? base.cursorStack : [...base.cursorStack, lastCursor],
+                    }
+                  })
+                }}
+              >
                 Próxima
               </Button>
             ) : null}

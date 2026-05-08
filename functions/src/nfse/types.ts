@@ -52,6 +52,7 @@ export interface CertificadoA1 {
 // ─── Configuração fiscal do cliente ──────────────────────────────────────────
 export interface ConfigFiscalCliente {
   clienteId: string
+  tenantId?: string
   municipioEmissor: string   // nome do município
   municipioIbge: string      // código IBGE 7 dígitos
   inscricaoMunicipal: string

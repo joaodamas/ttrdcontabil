@@ -1,5 +1,5 @@
 import { limit, orderBy, Timestamp, where, type QueryConstraint } from 'firebase/firestore'
-import { getClientesByIds, listDocuments } from '@/lib/firestore-client'
+import { getClientesByIds, listDocuments, listDocumentsPage } from '@/lib/firestore-client'
 import type { FinanceiroListFilters, FinanceiroSnapshot, LancamentoRecord } from './types'
 
 const DEFAULT_PAGE_SIZE = 20
@@ -10,9 +10,8 @@ export async function fetchFinanceiroSnapshot(filters: FinanceiroListFilters): P
   const hojeTs = Timestamp.fromDate(hoje)
   const inicioMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
   const fimMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0, 23, 59, 59))
-  const page = Math.max(1, filters.page ?? 1)
   const pageSize = Math.max(1, filters.pageSize ?? DEFAULT_PAGE_SIZE)
-  const fetchLimit = Math.min(page * pageSize + 1, MAX_FETCHED_ROWS)
+  const fetchLimit = Math.min(pageSize + 1, MAX_FETCHED_ROWS)
 
   const constraints: QueryConstraint[] = [
     ...(filters.clienteId ? [where('clienteId', '==', filters.clienteId)] : []),
@@ -24,11 +23,10 @@ export async function fetchFinanceiroSnapshot(filters: FinanceiroListFilters): P
         ? [where('status', '==', filters.status)]
         : []),
     orderBy('dataVencimento', 'desc'),
-    limit(fetchLimit),
   ]
 
-  const [mainData, aReceberData, recebidoMesData, emAtrasoData] = await Promise.all([
-    listDocuments('lancamentos', constraints),
+  const [mainPage, aReceberData, recebidoMesData, emAtrasoData] = await Promise.all([
+    listDocumentsPage<LancamentoRecord>('lancamentos', constraints, filters.cursor, fetchLimit),
     listDocuments('lancamentos', [
       where('tipo', '==', 'receita'),
       where('status', '==', 'pendente'),
@@ -52,9 +50,9 @@ export async function fetchFinanceiroSnapshot(filters: FinanceiroListFilters): P
     ]),
   ])
 
-  const rows = mainData as LancamentoRecord[]
-  const hasMore = rows.length > page * pageSize
-  const lancamentosRaw = rows.slice(0, page * pageSize)
+  const rows = mainPage.rows
+  const hasMore = rows.length > pageSize
+  const lancamentosRaw = rows.slice(0, pageSize)
   const clientesSemNome = [
     ...new Set(
       lancamentosRaw
@@ -83,6 +81,7 @@ export async function fetchFinanceiroSnapshot(filters: FinanceiroListFilters): P
   return {
     allLancamentos,
     hasMore,
+    lastCursor: hasMore ? (mainPage.cursors[pageSize - 1] ?? null) : null,
     somaAReceber: (aReceberData as LancamentoRecord[]).reduce((acc, d) => acc + (d.valor ?? 0), 0),
     somaRecebidoMes: (recebidoMesData as LancamentoRecord[]).reduce((acc, d) => acc + (d.valor ?? 0), 0),
     somaEmAtraso: (emAtrasoData as LancamentoRecord[]).reduce((acc, d) => acc + (d.valor ?? 0), 0),

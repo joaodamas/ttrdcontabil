@@ -13,6 +13,7 @@
     "test:e2e": "playwright test",
     "smoke:prod": "node scripts/smoke-prod.mjs",
     "backfill:tenant": "node scripts/backfill-tenant.mjs",
+    "seed:single-tenant": "node scripts/seed-single-tenant.mjs",
     "seed:connectors": "node scripts/seed-fiscal-connectors.mjs",
     "reset:clientes": "node scripts/reset-clientes-lista-cnpj.mjs",
     "storybook": "storybook dev -p 6006",

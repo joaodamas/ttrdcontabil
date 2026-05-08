@@ -15,12 +15,14 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { Timestamp } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { rotearEmissao } from './municipios/router'
-import { decrypt } from './encrypt'
+import { decrypt, isEncrypted } from './encrypt'
 import { credentialSecrets } from './secrets'
 import { isProducaoLiberadaPorConfigOuConector } from './conectores'
 import { pfxBase64FromStorageBuffer } from './certificado'
 import { assertCanAccessCliente } from '../authz'
 import { validarPayloadFiscal } from './validacao'
+import { requireEnvironmentTenant } from '../tenant'
+import { writeAuditLog } from '../audit'
 import type {
   EmitirNfseInput, ConfigFiscalCliente, Prestador, CertificadoA1, ResultadoEmissao,
 } from './types'
@@ -62,13 +64,27 @@ async function getConfigFiscal(clienteId: string): Promise<ConfigFiscalCliente> 
   const snap = await db().collection('clientes_fiscal')
     .where('clienteId', '==', clienteId).limit(1).get()
   if (snap.empty) throw new Error(`Configuração fiscal não encontrada para cliente ${clienteId}.`)
-  return { clienteId, ...snap.docs[0].data() } as ConfigFiscalCliente
+  const data = snap.docs[0].data()
+  return { clienteId, ...data, tenantId: requireEnvironmentTenant(data.tenantId, 'Configuração fiscal') } as ConfigFiscalCliente
 }
 
 async function getCliente(clienteId: string): Promise<Record<string, unknown>> {
   const doc = await db().collection('clientes').doc(clienteId).get()
   if (!doc.exists) throw new Error(`Cliente ${clienteId} não encontrado.`)
   return { id: doc.id, ...doc.data() } as Record<string, unknown>
+}
+
+function decryptSenhaCertificado(senhaRaw: string | undefined): string {
+  if (!senhaRaw) return ''
+  if (!isEncrypted(senhaRaw)) {
+    throw new Error('Senha do certificado em formato legado não criptografado. Reenvie o certificado A1 para salvar a credencial com criptografia.')
+  }
+
+  const senha = decrypt(senhaRaw)
+  if (!senha) {
+    throw new Error('Não foi possível descriptografar a senha do certificado. Verifique o secret CREDENTIAL_KEY e reenvie o certificado A1.')
+  }
+  return senha
 }
 
 async function getCertificado(config: ConfigFiscalCliente): Promise<CertificadoA1 | undefined> {
@@ -78,10 +94,9 @@ async function getCertificado(config: ConfigFiscalCliente): Promise<CertificadoA
   const [exists] = await file.exists()
   if (!exists) return undefined
   const [buffer] = await file.download()
-  const senhaRaw = config.credenciais?.certificadoSenha as string | undefined
   return {
     pfxBase64: pfxBase64FromStorageBuffer(buffer),
-    senha:     senhaRaw ? (decrypt(senhaRaw) ?? senhaRaw) : '',
+    senha:     decryptSenhaCertificado(config.credenciais?.certificadoSenha as string | undefined),
   }
 }
 
@@ -144,6 +159,7 @@ export const emitirNfseLote = onCall(
           configCache.set(input.clienteId, await getConfigFiscal(input.clienteId))
         }
         const config = configCache.get(input.clienteId)!
+        const tenantId = requireEnvironmentTenant(config.tenantId, 'Configuração fiscal')
         if (config.ambienteEmissao === 'producao' && !(await isProducaoLiberadaPorConfigOuConector(config, 'emissao'))) {
           throw new Error('Município/configuração fiscal ainda não liberado para emissão em produção.')
         }
@@ -176,6 +192,7 @@ export const emitirNfseLote = onCall(
 
         if (resultado.sucesso) {
           await db().collection('nfse_emitidas').add({
+            tenantId:          config.tenantId,
             clienteId:         input.clienteId,
             clienteNome:       cliente.razaoSocial as string,
             competenciaId:     input.competenciaId ?? null,
@@ -206,8 +223,24 @@ export const emitirNfseLote = onCall(
               status: 'emitida', atualizadoEm: now,
             })
           }
+          await writeAuditLog({
+            tenantId,
+            actor: { id: request.auth!.uid, nome: 'Usuário autenticado' },
+            entidade: 'nfse_emitidas',
+            entidadeId: resultado.numeroNfse ?? input.rascunhoId ?? null,
+            acao: 'emissao_nfse_lote_sucesso',
+            dadosDepois: {
+              ...resumoNfseInput(input),
+              loteIndex: i,
+              numeroNfse: resultado.numeroNfse ?? null,
+              municipioIbge: config.municipioIbge,
+              ambienteEmissao: config.ambienteEmissao,
+            },
+            origem: 'cloud_function',
+          })
         } else {
-          await db().collection('nfse_erros').add({
+          const erroRef = await db().collection('nfse_erros').add({
+            tenantId:    config.tenantId,
             clienteId:   input.clienteId,
             clienteNome: cliente.razaoSocial as string,
             erro:        resultado.erro,
@@ -216,6 +249,33 @@ export const emitirNfseLote = onCall(
             criadoEm:    now,
             criadoPorId: request.auth!.uid,
             loteIndex:   i,
+          })
+
+          if (input.rascunhoId) {
+            await db().collection('nfse_rascunhos').doc(input.rascunhoId).update({
+              status: 'erro_integracao',
+              erroId: erroRef.id,
+              erroUltimaTentativa: resultado.erro ?? 'Erro não informado pelo conector.',
+              codigoErroUltimaTentativa: resultado.codigoErro ?? null,
+              atualizadoEm: Timestamp.now(),
+              atualizadoPorId: request.auth!.uid,
+            })
+          }
+          await writeAuditLog({
+            tenantId,
+            actor: { id: request.auth!.uid, nome: 'Usuário autenticado' },
+            entidade: 'nfse_erros',
+            entidadeId: erroRef.id,
+            acao: 'emissao_nfse_lote_erro',
+            dadosDepois: {
+              ...resumoNfseInput(input),
+              loteIndex: i,
+              erro: resultado.erro ?? 'Erro não informado pelo conector.',
+              codigoErro: resultado.codigoErro ?? null,
+              municipioIbge: config.municipioIbge,
+              ambienteEmissao: config.ambienteEmissao,
+            },
+            origem: 'cloud_function',
           })
         }
 
@@ -228,6 +288,17 @@ export const emitirNfseLote = onCall(
         })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
+        if (input?.rascunhoId) {
+          await db().collection('nfse_rascunhos').doc(input.rascunhoId).update({
+            status: 'erro_integracao',
+            erroUltimaTentativa: msg,
+            codigoErroUltimaTentativa: null,
+            atualizadoEm: Timestamp.now(),
+            atualizadoPorId: request.auth!.uid,
+          }).catch((updateErr) => {
+            console.error('[emitir-lote] Falha ao destravar rascunho com erro:', updateErr)
+          })
+        }
         resultados.push({ index: i, clienteId: input.clienteId ?? '?', sucesso: false, erro: msg })
       }
     }

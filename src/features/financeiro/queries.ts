@@ -17,6 +17,7 @@ export const financeiroKeys = {
       filters.status || 'todos-status',
       filters.page ?? 1,
       filters.pageSize ?? 20,
+      filters.cursorKey ?? 'first-page',
     ] as const,
 }
 

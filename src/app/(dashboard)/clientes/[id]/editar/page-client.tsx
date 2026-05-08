@@ -1,15 +1,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { getDocument } from '@/lib/firestore-client'
 import { ClienteForm } from '@/components/clientes/cliente-form'
 import { buttonVariants } from '@/components/ui/button'
 import { Loader2, AlertTriangle } from 'lucide-react'
+import { getPathSegmentAfter } from '@/lib/route-params'
 
 export default function Page() {
-  const { id } = useParams<{ id: string }>()
+  const pathname = usePathname()
+  const id = getPathSegmentAfter(pathname, 'clientes')
   const [data, setData] = useState<(Record<string, unknown> & { id: string }) | null>(null)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState<string | null>(null)

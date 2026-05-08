@@ -14,6 +14,7 @@ import * as admin from 'firebase-admin'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { Timestamp } from 'firebase-admin/firestore'
 import { DEFAULT_TENANT_ID } from '../tenant'
+import { SYSTEM_ACTOR, writeAuditLog } from '../audit'
 
 const db = () => admin.firestore()
 
@@ -98,6 +99,8 @@ export const criarCompetenciasMensais = onSchedule(
           observacoes:       '',
           criadoEm:          Timestamp.now(),
           atualizadoEm:      Timestamp.now(),
+          criadoPorId:       SYSTEM_ACTOR.id,
+          criadoPorNome:     SYSTEM_ACTOR.nome,
           criadoAutomaticamente: true,
         })
 
@@ -115,6 +118,8 @@ export const criarCompetenciasMensais = onSchedule(
           dataPrazo:        Timestamp.fromDate(prazo),
           criadoEm:         Timestamp.now(),
           atualizadoEm:     Timestamp.now(),
+          criadoPorId:      SYSTEM_ACTOR.id,
+          criadoPorNome:    SYSTEM_ACTOR.nome,
           criadoAutomaticamente: true,
         })
 
@@ -131,6 +136,22 @@ export const criarCompetenciasMensais = onSchedule(
     }
 
     if (batchOps > 0) await batch.commit()
+    await writeAuditLog({
+      tenantId: DEFAULT_TENANT_ID,
+      actor: SYSTEM_ACTOR,
+      entidade: 'competencias',
+      entidadeId: `${ano}_${String(mes).padStart(2, '0')}`,
+      acao: 'scheduler_batch_create',
+      dadosAntes: null,
+      dadosDepois: {
+        mes,
+        ano,
+        criadas,
+        ignoradas,
+        totalServicosAtivos: servicosSnap.size,
+      },
+      origem: 'scheduler',
+    })
     console.log(`[competencias] Criadas: ${criadas} | Ignoradas (já existiam ou inativo): ${ignoradas}`)
   }
 )

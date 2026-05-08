@@ -6,6 +6,7 @@ const db = () => admin.firestore()
 type EventTipo = 'tarefa' | 'lancamento' | 'competencia' | 'nfse' | 'fiscal' | 'manual'
 
 async function registrarEvento(params: {
+  tenantId?: string
   clienteId?: string
   tipo: EventTipo
   titulo: string
@@ -19,6 +20,7 @@ async function registrarEvento(params: {
   const actorId = (md.actorId as string | undefined) ?? 'system'
   const actorNome = (md.actorNome as string | undefined) ?? 'Sistema'
   await db().collection('events').add({
+    tenantId: params.tenantId,
     clienteId: params.clienteId,
     tipo: params.tipo,
     titulo: params.titulo,
@@ -51,6 +53,7 @@ export const eventoTarefaCriada = onDocumentCreated(
     const d = event.data?.data()
     if (!d) return
     await registrarEvento({
+      tenantId: d.tenantId as string | undefined,
       clienteId: d.clienteId as string | undefined,
       tipo: 'tarefa',
       titulo: `Tarefa criada: ${(d.titulo as string) ?? 'Sem título'}`,
@@ -76,6 +79,7 @@ export const eventoTarefaAtualizada = onDocumentUpdated(
     const statusDepois = after.status as string | undefined
     if (statusAntes === statusDepois) return
     await registrarEvento({
+      tenantId: after.tenantId as string | undefined,
       clienteId: after.clienteId as string | undefined,
       tipo: 'tarefa',
       titulo: `Tarefa alterada: ${(after.titulo as string) ?? 'Sem título'}`,
@@ -97,6 +101,7 @@ export const eventoLancamentoCriado = onDocumentCreated(
     const d = event.data?.data()
     if (!d) return
     await registrarEvento({
+      tenantId: d.tenantId as string | undefined,
       clienteId: d.clienteId as string | undefined,
       tipo: 'lancamento',
       titulo: `Lançamento criado: ${(d.descricao as string) ?? 'Sem descrição'}`,
@@ -122,6 +127,7 @@ export const eventoLancamentoAtualizado = onDocumentUpdated(
     const statusDepois = after.status as string | undefined
     if (statusAntes === statusDepois) return
     await registrarEvento({
+      tenantId: after.tenantId as string | undefined,
       clienteId: after.clienteId as string | undefined,
       tipo: 'lancamento',
       titulo: `Lançamento atualizado: ${(after.descricao as string) ?? 'Sem descrição'}`,
@@ -143,6 +149,7 @@ export const eventoCompetenciaCriada = onDocumentCreated(
     const d = event.data?.data()
     if (!d) return
     await registrarEvento({
+      tenantId: d.tenantId as string | undefined,
       clienteId: d.clienteId as string | undefined,
       tipo: 'competencia',
       titulo: `Competência criada: ${String(d.mes ?? '—')}/${String(d.ano ?? '—')}`,
@@ -164,6 +171,7 @@ export const eventoNfseEmitidaCriada = onDocumentCreated(
     const d = event.data?.data()
     if (!d) return
     await registrarEvento({
+      tenantId: d.tenantId as string | undefined,
       clienteId: d.clienteId as string | undefined,
       tipo: 'nfse',
       titulo: `NFS-e emitida: ${(d.numeroNfse as string) ?? 'Sem número'}`,
@@ -191,6 +199,7 @@ export const eventoFiscalAtualizado = onDocumentUpdated(
     const munDepois = after.municipioIbge as string | undefined
     if (ambAntes === ambDepois && munAntes === munDepois) return
     await registrarEvento({
+      tenantId: after.tenantId as string | undefined,
       clienteId: after.clienteId as string | undefined,
       tipo: 'fiscal',
       titulo: 'Configuração fiscal atualizada',

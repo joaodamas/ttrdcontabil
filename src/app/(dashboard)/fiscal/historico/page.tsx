@@ -1,13 +1,13 @@
 'use client'
 
-import { useCallback, useState, useEffect, Suspense } from 'react'
+import { useCallback, useMemo, useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { limit, where, orderBy, Timestamp, type QueryConstraint } from 'firebase/firestore'
+import { where, orderBy, Timestamp, type QueryConstraint } from 'firebase/firestore'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { toast } from 'sonner'
 
-import { listDocuments } from '@/lib/firestore-client'
+import { listDocumentsPage, type FirestoreCursor } from '@/lib/firestore-client'
 import { formatDate, formatCurrency , tsToDate } from '@/lib/utils'
 import { exportToCsv } from '@/lib/export-csv'
 import { exportToExcel } from '@/lib/export-excel'
@@ -37,16 +37,34 @@ function FiscalHistoricoContent() {
   const status = searchParams.get('status') ?? ''
   const mes = searchParams.get('mes') ? parseInt(searchParams.get('mes')!) : undefined
   const ano = searchParams.get('ano') ? parseInt(searchParams.get('ano')!) : undefined
-  const page = parseInt(searchParams.get('page') ?? '1')
 
-  const [allNotas, setAllNotas] = useState<Array<Record<string, unknown>>>([])
+  const [notas, setNotas] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(true)
+  const [hasMore, setHasMore] = useState(false)
+  const [lastCursor, setLastCursor] = useState<FirestoreCursor | null>(null)
+  const filterKey = useMemo(
+    () => JSON.stringify({ clienteId, status, mes, ano }),
+    [ano, clienteId, mes, status]
+  )
+  const [pagination, setPagination] = useState<{
+    filterKey: string
+    page: number
+    cursorStack: Array<FirestoreCursor | null>
+  }>({ filterKey, page: 1, cursorStack: [null] })
+  const activePagination = useMemo(
+    () => pagination.filterKey === filterKey
+      ? pagination
+      : { filterKey, page: 1, cursorStack: [null] as Array<FirestoreCursor | null> },
+    [filterKey, pagination]
+  )
+  const page = activePagination.page
   const [cancelamentoId, setCancelamentoId] = useState<string | null>(null)
   const [motivoCancelamento, setMotivoCancelamento] = useState('')
   const [cancelando, setCancelando] = useState(false)
 
   const loadNotas = useCallback(() => {
     setLoading(true)
+    const cursor = activePagination.cursorStack[page - 1] ?? null
     const hasDateWindow = Boolean(ano && (!mes || (mes >= 1 && mes <= 12)))
     const inicioPeriodo = hasDateWindow
       ? Timestamp.fromDate(new Date(ano!, mes ? mes - 1 : 0, 1))
@@ -61,10 +79,9 @@ function FiscalHistoricoContent() {
       ...(inicioPeriodo && fimPeriodo
         ? [where('dataEmissao', '>=', inicioPeriodo), where('dataEmissao', '<=', fimPeriodo), orderBy('dataEmissao', 'desc')]
         : [orderBy('criadoEm', 'desc')]),
-      limit(page * PAGE_SIZE + 1),
     ]
-    listDocuments('nfse_emitidas', constraints).then((data) => {
-      let filtered = data as Array<Record<string, unknown>>
+    listDocumentsPage<Record<string, unknown>>('nfse_emitidas', constraints, cursor, PAGE_SIZE + 1).then((data) => {
+      let filtered = data.rows
       if ((mes || ano) && !hasDateWindow) {
         filtered = filtered.filter((n) => {
           const dataEmissao = n.dataEmissao as Timestamp | undefined
@@ -76,12 +93,17 @@ function FiscalHistoricoContent() {
           return true
         })
       }
-      setAllNotas(filtered)
+      const pageRows = filtered.slice(0, PAGE_SIZE)
+      setNotas(pageRows)
+      setHasMore(filtered.length > PAGE_SIZE)
+      setLastCursor(filtered.length > PAGE_SIZE ? (data.cursors[PAGE_SIZE - 1] ?? null) : null)
     }).catch((err) => {
       toast.error(getErrorMessage(err, 'Nao foi possivel carregar o historico de NFS-e. Verifique os filtros e tente novamente.'))
-      setAllNotas([])
+      setNotas([])
+      setHasMore(false)
+      setLastCursor(null)
     }).finally(() => setLoading(false))
-  }, [ano, clienteId, mes, page, status])
+  }, [activePagination, ano, clienteId, mes, page, status])
 
   useEffect(() => {
     queueMicrotask(loadNotas)
@@ -106,7 +128,7 @@ function FiscalHistoricoContent() {
   ]
 
   function montarLinhasExportacao() {
-    return allNotas.map((n) => ({
+    return notas.map((n) => ({
       cliente: n.clienteNome,
       numero: n.numeroNfse,
       tomador: n.tomadorNome,
@@ -174,7 +196,6 @@ function FiscalHistoricoContent() {
       ...(status && { status }),
       ...(mes && { mes: String(mes) }),
       ...(ano && { ano: String(ano) }),
-      page: String(page),
       ...Object.fromEntries(Object.entries(overrides).map(([k, v]) => [k, String(v)])),
     })
     return `/fiscal/historico?${params.toString()}`
@@ -188,10 +209,8 @@ function FiscalHistoricoContent() {
     )
   }
 
-  const hasMore = allNotas.length > page * PAGE_SIZE
-  const total = Math.min(allNotas.length, page * PAGE_SIZE)
-  const totalPages = hasMore ? page + 1 : Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const notas = allNotas.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const total = notas.length
+  const totalPages = hasMore ? page + 1 : page
 
   return (
     <div className="space-y-5">
@@ -220,7 +239,7 @@ function FiscalHistoricoContent() {
       <div className="surface-subtle flex flex-wrap items-center gap-2 border px-3 py-2.5">
         {['', 'emitida', 'pendente_processamento', 'cancelamento_pendente', 'rejeitada', 'cancelada', 'erro_integracao'].map(
           (s) => (
-            <Link key={s} href={buildUrl({ status: s, page: 1 })}>
+            <Link key={s} href={buildUrl({ status: s })}>
               <Button
                 variant={status === s ? 'default' : 'outline'}
                 size="sm"
@@ -323,18 +342,39 @@ function FiscalHistoricoContent() {
           </p>
           <div className="flex gap-2">
             {page > 1 ? (
-              <Link href={buildUrl({ page: page - 1 })}>
-                <Button variant="outline" size="sm" className="h-9 rounded-xl">
-                  Anterior
-                </Button>
-              </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 rounded-xl"
+                onClick={() => {
+                  setPagination({
+                    ...activePagination,
+                    page: Math.max(1, page - 1),
+                  })
+                }}
+              >
+                Anterior
+              </Button>
             ) : null}
-            {page < totalPages ? (
-              <Link href={buildUrl({ page: page + 1 })}>
-                <Button variant="outline" size="sm" className="h-9 rounded-xl">
-                  Próxima
-                </Button>
-              </Link>
+            {hasMore ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 rounded-xl"
+                onClick={() => {
+                  if (!lastCursor) return
+                  setPagination((prev) => {
+                    const base = prev.filterKey === filterKey ? prev : activePagination
+                    return {
+                      ...base,
+                      page: page + 1,
+                      cursorStack: base.cursorStack[page] ? base.cursorStack : [...base.cursorStack, lastCursor],
+                    }
+                  })
+                }}
+              >
+                Próxima
+              </Button>
             ) : null}
           </div>
         </div>

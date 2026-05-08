@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCpfCnpj, formatPhone, formatCep, UFS } from '@/lib/utils'
-import { Loader2, CheckCircle2, Bell } from 'lucide-react'
+import { Loader2, CheckCircle2, Bell, KeyRound } from 'lucide-react'
 import { createDocument, updateDocument, getNextClienteCodigo } from '@/lib/firestore-client'
 import { getErrorMessage } from '@/lib/error-message'
 import { SELECT_NONE_VALUE } from '@/lib/select-values'
@@ -34,6 +34,7 @@ const clienteSchema = z.object({
   bairro: z.string().optional(),
   cidade: z.string().optional(),
   uf: z.string().optional(),
+  regimeTributario: z.enum(['simples_nacional', 'lucro_presumido', 'lucro_real', 'mei', 'isento']).optional().nullable(),
   inscricaoEstadual: z.string().optional(),
   inscricaoMunicipal: z.string().optional(),
   nire: z.string().optional(),
@@ -50,7 +51,6 @@ const clienteSchema = z.object({
   loginPostoFiscal: z.string().optional(),
   mensalidade: z.string().optional(),
   vencimento: z.string().optional(),
-  regimeTributario: z.enum(['simples_nacional', 'lucro_presumido', 'lucro_real', 'mei', 'isento']).optional().nullable(),
   responsavelNome: z.string().optional(),
   responsavelEmail: z.string().optional(),
   responsavelTelefone: z.string().optional(),
@@ -83,10 +83,7 @@ const clienteSchema = z.object({
   responsavelSenhaPinCertificadoDigitalCpf: z.string().optional(),
   observacoes: z.string().optional(),
   status: z.enum(['ativo', 'inativo', 'suspenso']).default('ativo'),
-  diaEmissaoNFSe: z.preprocess(
-    (value) => value === '' || value == null ? null : value,
-    z.coerce.number().int().min(1).max(31).optional().nullable()
-  ),
+  diaEmissaoNFSe: z.coerce.number().int().min(1).max(31).optional().nullable(),
 })
 
 type ClienteFormData = z.input<typeof clienteSchema>
@@ -179,6 +176,16 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
     }
   }
 
+  async function buscarCepResponsavel(cepRaw: string) {
+    const resultado = await buscarCepHook(cepRaw)
+    if (resultado) {
+      if (resultado.logradouro) setValue('responsavelEndereco', resultado.logradouro)
+      if (resultado.bairro)     setValue('responsavelBairro',   resultado.bairro)
+      if (resultado.cidade)     setValue('responsavelCidade',   resultado.cidade)
+      if (resultado.uf)         setValue('responsavelUf',       resultado.uf)
+    }
+  }
+
   async function buscarCnpj(cnpjRaw: string) {
     const digits = cnpjRaw.replace(/\D/g, '')
     if (digits.length !== 14) return
@@ -230,7 +237,6 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
           onSuccess(initialData!.id!)
         } else {
           router.push(`/clientes/${initialData!.id}`)
-          router.refresh()
         }
       } else {
         const codigo = await getNextClienteCodigo()
@@ -244,7 +250,6 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
           onSuccess(id)
         } else {
           router.push(`/clientes/${id}`)
-          router.refresh()
         }
       }
     } catch (err) {
@@ -261,7 +266,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
           <CardTitle className="text-base">Dados Gerais</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Tipo de Pessoa</Label>
               <Select
@@ -297,7 +302,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
           </div>
 
           {/* CNPJ — with auto-fill */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="cpfCnpj">
                 {tipoPessoa === 'pj' ? 'CNPJ' : 'CPF'} *
@@ -368,7 +373,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="email">E-mail</Label>
               <Input id="email" type="email" {...register('email')} />
@@ -436,7 +441,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid gap-4 md:grid-cols-3">
             <div className="col-span-2 space-y-2">
               <Label htmlFor="logradouro">Logradouro</Label>
               <Input id="logradouro" {...register('logradouro')} />
@@ -447,7 +452,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="complemento">Complemento</Label>
               <Input id="complemento" {...register('complemento')} />
@@ -458,7 +463,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid gap-4 md:grid-cols-3">
             <div className="col-span-2 space-y-2">
               <Label htmlFor="cidade">Cidade</Label>
               <Input id="cidade" {...register('cidade')} />
@@ -501,15 +506,26 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
       {/* Credenciais da empresa */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Credenciais da Empresa</CardTitle>
+          <div className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-primary" />
+            <CardTitle className="text-base">Credenciais da Empresa</CardTitle>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Exceção operacional para controle interno do contador. O acesso a estes dados deve ficar restrito a usuários autorizados.
+          </p>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {EMPRESA_CREDENCIAIS_FIELDS.map((field) => (
-            <div key={field.name} className="space-y-2">
-              <Label htmlFor={field.name}>{field.label}</Label>
-              <Input id={field.name} type={field.type ?? 'text'} {...register(field.name)} />
-            </div>
-          ))}
+        <CardContent className="space-y-4">
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            Senhas ficam mascaradas no formulário. Revise permissões, auditoria e exportações antes de liberar clientes reais neste ambiente.
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {EMPRESA_CREDENCIAIS_FIELDS.map((field) => (
+              <div key={field.name} className="space-y-2">
+                <Label htmlFor={field.name}>{field.label}</Label>
+                <Input id={field.name} type={field.type ?? 'text'} {...register(field.name)} />
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
@@ -519,7 +535,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
           <CardTitle className="text-base">Dados do Representante</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="responsavelNome">Nome do representante legal</Label>
               <Input id="responsavelNome" {...register('responsavelNome')} />
@@ -581,6 +597,9 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
                   const formatted = formatCep(e.target.value)
                   e.target.value = formatted
                   setValue('responsavelCep', formatted)
+                  if (formatted.replace(/\D/g, '').length === 8) {
+                    buscarCepResponsavel(formatted)
+                  }
                 }}
               />
             </div>
@@ -638,7 +657,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
           </p>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="diaEmissaoNFSe">Dia de emissão mensal</Label>
               <Input

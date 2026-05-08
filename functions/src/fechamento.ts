@@ -1,7 +1,8 @@
 import * as admin from 'firebase-admin'
-import { FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { Timestamp } from 'firebase-admin/firestore'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { requireEnvironmentTenant } from './tenant'
+import { writeAuditLog } from './audit'
 
 const db = () => admin.firestore()
 
@@ -135,10 +136,9 @@ export const gerarFechamentoMensal = onCall(
 
     if (ops > 0) await batch.commit()
 
-    await db().collection('logs_auditoria').add({
+    await writeAuditLog({
       tenantId: usuario.tenantId,
-      usuarioId: usuario.id,
-      usuarioNome: usuario.nome,
+      actor: { id: usuario.id, nome: usuario.nome },
       entidade: 'fechamentos',
       entidadeId: `${input.ano}_${String(input.mes).padStart(2, '0')}`,
       acao: 'batch_create',
@@ -152,7 +152,6 @@ export const gerarFechamentoMensal = onCall(
         totalClientes: clientesSnap.size,
       },
       origem: 'cloud_function',
-      criadoEm: FieldValue.serverTimestamp(),
     })
 
     return { criados, ignorados, totalClientes: clientesSnap.size }

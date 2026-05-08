@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { where, orderBy, limit } from 'firebase/firestore'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 import { getDocument, listDocuments } from '@/lib/firestore-client'
-import { cn, formatCpfCnpj, formatDate, formatCurrency, formatMesAno, tsToDate } from '@/lib/utils'
+import { formatCpfCnpj, formatDate, formatCurrency, formatMesAno, tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { ClienteStatusBadge, CompetenciaStatusBadge, PagamentoStatusBadge, NfseStatusBadge, AmbienteBadge } from '@/components/ui/status-badge'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -27,6 +28,12 @@ import {
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 
+const TAB_CONTENT_CLASS = 'mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1'
+const MODAL_TAB_TRIGGER_CLASS = 'h-8 min-w-0 overflow-hidden gap-1 rounded-lg px-1 text-[11px] sm:px-2 sm:text-xs'
+const MODAL_CARD_CLASS = 'min-h-[320px] border-border/70 shadow-none'
+const MODAL_CARD_HEADER_CLASS = 'flex flex-row items-center justify-between px-4 py-3'
+const MODAL_CARD_CONTENT_CLASS = 'px-4 pb-4'
+
 const REGIME_LABELS: Record<string, string> = {
   simples_nacional: 'Simples Nacional',
   lucro_presumido:  'Lucro Presumido',
@@ -42,7 +49,21 @@ interface ClienteModalProps {
   onOpenChange: (open: boolean) => void
 }
 
+function TabCount({ count }: { count?: number }) {
+  const hasCount = typeof count === 'number' && count > 0
+
+  return (
+    <span
+      aria-hidden={!hasCount}
+      className={`w-[4ch] shrink-0 text-right text-[10px] leading-none opacity-60 tabular-nums ${hasCount ? '' : 'invisible'}`}
+    >
+      ({hasCount ? count : 0})
+    </span>
+  )
+}
+
 export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: ClienteModalProps) {
+  const router = useRouter()
   const [loading,     setLoading]     = useState(false)
   const [cliente,     setCliente]     = useState<Record<string, unknown> | null>(null)
   const [servicos,    setServicos]    = useState<Array<Record<string, unknown>>>([])
@@ -66,7 +87,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
 
     Promise.allSettled([
       getDocument('clientes', clienteId),
-      listDocuments('clientes_servicos', [where('clienteId', '==', clienteId), orderBy('dataInicio', 'desc'), limit(50)]),
+      listDocuments('clientes_servicos', [where('clienteId', '==', clienteId), limit(50)]),
       listDocuments('competencias', [where('clienteId', '==', clienteId), orderBy('ano', 'desc'), orderBy('mes', 'desc'), limit(12)]),
       listDocuments('lancamentos', [where('clienteId', '==', clienteId), orderBy('dataVencimento', 'desc'), limit(10)]),
       listDocuments('nfse_emitidas', [where('clienteId', '==', clienteId), orderBy('criadoEm', 'desc'), limit(20)]),
@@ -78,7 +99,15 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
         setCliente(null)
         setLoadError('Cliente não encontrado ou sem permissão de acesso.')
       }
-      if (servicosR.status === 'fulfilled') setServicos(servicosR.value as Array<Record<string, unknown>>)
+      if (servicosR.status === 'fulfilled') {
+        setServicos(
+          (servicosR.value as Array<Record<string, unknown>>).sort((a, b) => {
+            const aDate = tsToDate(a.dataInicio)?.getTime() ?? 0
+            const bDate = tsToDate(b.dataInicio)?.getTime() ?? 0
+            return bDate - aDate
+          })
+        )
+      }
       if (competenciasR.status === 'fulfilled') setCompetencias(competenciasR.value as Array<Record<string, unknown>>)
       if (lancamentosR.status === 'fulfilled') setLancamentos(lancamentosR.value as Array<Record<string, unknown>>)
       if (fiscalR.status === 'fulfilled') {
@@ -96,6 +125,11 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
     queueMicrotask(() => { void load() })
   }, [open, load])
 
+  function navigateTo(path: string) {
+    onOpenChange(false)
+    router.push(path)
+  }
+
   const valorMensalAtivo = servicos
     .filter((s) => s.status === 'ativo')
     .reduce((acc, s) => acc + ((s.valor as number) ?? 0), 0)
@@ -104,15 +138,14 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton
-        className="w-full max-h-[88vh] flex flex-col overflow-hidden p-0"
-        style={{ maxWidth: '740px' }}
+        className="h-[min(780px,calc(100dvh-1rem))] max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none flex flex-col overflow-hidden gap-0 p-0 sm:h-[min(780px,88dvh)] sm:max-h-[88dvh] sm:w-[min(920px,calc(100vw-2rem))]"
       >
         {/* ── Header ─────────────────────────────────────────────── */}
-        <DialogHeader className="px-5 pt-5 pb-4 border-b shrink-0">
+        <DialogHeader className="shrink-0 border-b bg-background px-5 py-4">
           <div className="flex items-start justify-between gap-3 pr-6">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <DialogTitle className="text-base font-semibold">
+                <DialogTitle className="truncate text-base font-semibold leading-tight">
                   {cliente ? (cliente.razaoSocial as string) : clienteNome}
                 </DialogTitle>
                 {cliente?.status ? (
@@ -123,28 +156,25 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                 <p className="text-xs text-muted-foreground mt-0.5">{cliente.nomeFantasia as string}</p>
               ) : null}
             </div>
-            <div className="flex items-center gap-2 shrink-0 mt-0.5">
-              <Link
-                href={`/clientes/${clienteId}`}
-                onClick={() => onOpenChange(false)}
-                className={cn(buttonVariants({ size: 'sm', variant: 'ghost' }), 'gap-1.5 text-muted-foreground')}
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 gap-1.5 text-muted-foreground"
+                onClick={() => navigateTo(`/clientes/${clienteId}`)}
               >
                 <ExternalLink className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Ver completo</span>
-              </Link>
-              <Link
-                href={`/clientes/${clienteId}/editar`}
-                onClick={() => onOpenChange(false)}
-                className={buttonVariants({ size: 'sm', variant: 'outline' })}
-              >
+              </Button>
+              <Button size="sm" variant="outline" className="h-8" onClick={() => navigateTo(`/clientes/${clienteId}/editar`)}>
                 Editar
-              </Link>
+              </Button>
             </div>
           </div>
         </DialogHeader>
 
         {/* ── Body ───────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-hidden">
           {loading ? (
             <div className="px-5 py-5 space-y-4">
               <div className="grid grid-cols-3 gap-4">
@@ -178,10 +208,10 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
               </Link>
             </div>
           ) : (
-            <div>
+            <div className="flex h-full min-h-0 flex-col">
               {/* Info strip */}
-              <div className="px-5 py-4 border-b bg-muted/30">
-                <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+              <div className="shrink-0 border-b bg-muted/25 px-5 py-3">
+                <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
                   <div>
                     <dt className="text-xs text-muted-foreground">CPF / CNPJ</dt>
                     <dd className="text-sm font-medium font-mono mt-0.5">{formatCpfCnpj(cliente.cpfCnpj as string)}</dd>
@@ -216,7 +246,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                   ) : null}
                   <div className="col-span-2 sm:col-span-1">
                     <dt className="text-xs text-muted-foreground flex items-center gap-1"><DollarSign className="h-3 w-3" />Valor Mensal</dt>
-                    <dd className={`text-base font-bold mt-0.5 ${valorMensalAtivo > 0 ? 'text-primary' : 'text-muted-foreground'}`}>
+                    <dd className={`text-base font-bold tabular-nums mt-0.5 ${valorMensalAtivo > 0 ? 'text-primary' : 'text-muted-foreground'}`}>
                       {valorMensalAtivo > 0 ? formatCurrency(valorMensalAtivo) : '—'}
                     </dd>
                   </div>
@@ -224,46 +254,41 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
               </div>
 
               {/* 4 tabs */}
-              <div className="px-5 py-4">
-                <Tabs defaultValue="servicos">
-                  <TabsList className="w-full grid grid-cols-4">
-                    <TabsTrigger value="servicos" className="gap-1.5">
+              <div className="flex min-h-0 flex-1 flex-col px-5 py-4">
+                <Tabs defaultValue="servicos" className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                  <TabsList className="grid h-10 w-full shrink-0 grid-cols-4 rounded-xl bg-muted/70 p-1">
+                    <TabsTrigger value="servicos" className={MODAL_TAB_TRIGGER_CLASS}>
                       <Briefcase className="h-3.5 w-3.5" />
-                      Serviços
-                      {servicos.length > 0 && (
-                        <span className="text-[10px] opacity-60">({servicos.length})</span>
-                      )}
+                      <span className="min-w-0 truncate">Serviços</span>
+                      <TabCount count={servicos.length} />
                     </TabsTrigger>
-                    <TabsTrigger value="operacional" className="gap-1.5">
+                    <TabsTrigger value="operacional" className={MODAL_TAB_TRIGGER_CLASS}>
                       <CalendarDays className="h-3.5 w-3.5" />
-                      Operacional
-                      {competencias.length > 0 && (
-                        <span className="text-[10px] opacity-60">({competencias.length})</span>
-                      )}
+                      <span className="min-w-0 truncate">Operacional</span>
+                      <TabCount count={competencias.length} />
                     </TabsTrigger>
-                    <TabsTrigger value="financeiro" className="gap-1.5">
+                    <TabsTrigger value="financeiro" className={MODAL_TAB_TRIGGER_CLASS}>
                       <DollarSign className="h-3.5 w-3.5" />
-                      Financeiro
-                      {lancamentos.length > 0 && (
-                        <span className="text-[10px] opacity-60">({lancamentos.length})</span>
-                      )}
+                      <span className="min-w-0 truncate">Financeiro</span>
+                      <TabCount count={lancamentos.length} />
                     </TabsTrigger>
-                    <TabsTrigger value="fiscal" className="gap-1.5">
+                    <TabsTrigger value="fiscal" className={MODAL_TAB_TRIGGER_CLASS}>
                       <Receipt className="h-3.5 w-3.5" />
-                      Fiscal
+                      <span className="min-w-0 truncate">Fiscal</span>
+                      <TabCount count={nfses.length} />
                     </TabsTrigger>
                   </TabsList>
 
                   {/* ── Serviços ─────────────────────────────────── */}
-                  <TabsContent value="servicos" className="mt-3">
-                    <Card>
-                      <CardHeader className="flex flex-row items-center justify-between pb-3">
+                  <TabsContent value="servicos" className={TAB_CONTENT_CLASS}>
+                    <Card className={MODAL_CARD_CLASS}>
+                      <CardHeader className={MODAL_CARD_HEADER_CLASS}>
                         <CardTitle className="text-sm">Serviços Vinculados</CardTitle>
-                        <Link href={`/clientes/${clienteId}/servicos/novo`}>
-                          <Button size="sm">+ Serviço</Button>
-                        </Link>
+                        <Button size="sm" className="h-8" onClick={() => navigateTo(`/clientes/${clienteId}/servicos/novo`)}>
+                          + Serviço
+                        </Button>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className={MODAL_CARD_CONTENT_CLASS}>
                         {servicos.length === 0 ? (
                           <EmptyState
                             icon={Briefcase}
@@ -275,15 +300,15 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                           <>
                             <div className="divide-y">
                               {servicos.map((s) => (
-                                <div key={s.id as string} className="py-3 flex items-center justify-between">
-                                  <div>
+                                <div key={s.id as string} className="flex items-center justify-between gap-4 py-3">
+                                  <div className="min-w-0">
                                     <p className="text-sm font-medium">{s.servicoNome as string}</p>
                                     <p className="text-xs text-muted-foreground">
                                       {s.dataInicio ? `Desde ${formatDate(tsToDate(s.dataInicio))}` : ''}
                                     </p>
                                   </div>
-                                  <div className="flex items-center gap-3">
-                                    <span className="text-sm font-bold">{formatCurrency((s.valor as number) ?? 0)}</span>
+                                  <div className="flex shrink-0 items-center gap-3">
+                                    <span className="text-sm font-bold tabular-nums">{formatCurrency((s.valor as number) ?? 0)}</span>
                                     <Badge variant={s.status === 'ativo' ? 'success' : 'secondary'}>
                                       {s.status === 'ativo' ? 'Ativo' : String(s.status)}
                                     </Badge>
@@ -293,7 +318,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                             </div>
                             <div className="mt-3 pt-3 border-t flex justify-between text-sm">
                               <span className="text-muted-foreground">Total mensal (ativos)</span>
-                              <span className="font-bold text-primary">{formatCurrency(valorMensalAtivo)}</span>
+                              <span className="font-bold text-primary tabular-nums">{formatCurrency(valorMensalAtivo)}</span>
                             </div>
                           </>
                         )}
@@ -302,15 +327,15 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                   </TabsContent>
 
                   {/* ── Operacional (Competências) ────────────────── */}
-                  <TabsContent value="operacional" className="mt-3">
-                    <Card>
-                      <CardHeader className="flex flex-row items-center justify-between pb-3">
+                  <TabsContent value="operacional" className={TAB_CONTENT_CLASS}>
+                    <Card className={MODAL_CARD_CLASS}>
+                      <CardHeader className={MODAL_CARD_HEADER_CLASS}>
                         <CardTitle className="text-sm">Competências Recentes</CardTitle>
-                        <Link href={`/competencias?clienteId=${clienteId}`}>
-                          <Button size="sm" variant="outline">Ver todas</Button>
-                        </Link>
+                        <Button size="sm" variant="outline" className="h-8" onClick={() => navigateTo(`/competencias?clienteId=${clienteId}`)}>
+                          Ver todas
+                        </Button>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className={MODAL_CARD_CONTENT_CLASS}>
                         {competencias.length === 0 ? (
                           <EmptyState
                             icon={CalendarDays}
@@ -320,10 +345,11 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                         ) : (
                           <div className="divide-y">
                             {competencias.map((c) => (
-                              <Link
+                              <button
+                                type="button"
                                 key={c.id as string}
-                                href={`/competencias/${c.id}`}
-                                className="py-3 flex items-center justify-between hover:bg-muted/30 px-2 -mx-2 rounded transition-colors"
+                                onClick={() => navigateTo(`/competencias/${c.id}`)}
+                                className="flex w-full items-center justify-between rounded px-2 py-3 text-left transition-colors hover:bg-muted/30 -mx-2"
                               >
                                 <div>
                                   <p className="text-sm font-medium">
@@ -334,7 +360,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                                   ) : null}
                                 </div>
                                 <CompetenciaStatusBadge status={c.status as string} />
-                              </Link>
+                              </button>
                             ))}
                           </div>
                         )}
@@ -343,15 +369,15 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                   </TabsContent>
 
                   {/* ── Financeiro ───────────────────────────────── */}
-                  <TabsContent value="financeiro" className="mt-3">
-                    <Card>
-                      <CardHeader className="flex flex-row items-center justify-between pb-3">
+                  <TabsContent value="financeiro" className={TAB_CONTENT_CLASS}>
+                    <Card className={MODAL_CARD_CLASS}>
+                      <CardHeader className={MODAL_CARD_HEADER_CLASS}>
                         <CardTitle className="text-sm">Lançamentos Recentes</CardTitle>
-                        <Link href={`/financeiro?clienteId=${clienteId}`}>
-                          <Button size="sm" variant="outline">Ver todos</Button>
-                        </Link>
+                        <Button size="sm" variant="outline" className="h-8" onClick={() => navigateTo(`/financeiro?clienteId=${clienteId}`)}>
+                          Ver todos
+                        </Button>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className={MODAL_CARD_CONTENT_CLASS}>
                         {lancamentos.length === 0 ? (
                           <EmptyState
                             icon={DollarSign}
@@ -369,7 +395,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                                   </p>
                                 </div>
                                 <div className="text-right">
-                                  <p className="text-sm font-bold">{formatCurrency((l.valor as number) ?? 0)}</p>
+                                  <p className="text-sm font-bold tabular-nums">{formatCurrency((l.valor as number) ?? 0)}</p>
                                   <PagamentoStatusBadge status={l.status as string} />
                                 </div>
                               </div>
@@ -381,7 +407,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                   </TabsContent>
 
                   {/* ── Fiscal (config + NFS-e) ───────────────────── */}
-                  <TabsContent value="fiscal" className="mt-3 space-y-3">
+                  <TabsContent value="fiscal" className={`${TAB_CONTENT_CLASS} space-y-3`}>
                     {(() => {
                       const creds      = (fiscal?.credenciais ?? {}) as Record<string, unknown>
                       const ibge       = fiscal?.municipioIbge as string | undefined
@@ -399,18 +425,18 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                       return (
                         <>
                           {/* Config card */}
-                          <Card>
-                            <CardHeader className="flex flex-row items-center justify-between pb-3">
+                          <Card className="border-border/70 shadow-none">
+                            <CardHeader className={MODAL_CARD_HEADER_CLASS}>
                               <CardTitle className="text-sm flex items-center gap-2">
                                 <Settings className="w-4 h-4 text-muted-foreground" />
                                 Configuração NFS-e
                               </CardTitle>
-                              <Button size="sm" variant="outline" onClick={() => setConfigOpen(true)}>
+                              <Button size="sm" variant="outline" className="h-8" onClick={() => setConfigOpen(true)}>
                                 <Pencil className="w-3.5 h-3.5 mr-1.5" />
                                 {fiscal ? 'Editar' : 'Configurar'}
                               </Button>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className={MODAL_CARD_CONTENT_CLASS}>
                               {!fiscal ? (
                                 <EmptyState
                                   title="Sem configuração fiscal"
@@ -450,8 +476,8 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
 
                           {/* Certificado A1 */}
                           {fiscal && (tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
-                            <Card>
-                              <CardHeader className="flex flex-row items-center gap-2 pb-3">
+                            <Card className="border-border/70 shadow-none">
+                              <CardHeader className="flex flex-row items-center gap-2 px-4 py-3">
                                 {certInfo
                                   ? certInfo.valido
                                     ? <ShieldCheck className="w-4 h-4 text-success" />
@@ -459,15 +485,15 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                                   : <ShieldOff className="w-4 h-4 text-muted-foreground" />}
                                 <CardTitle className="text-sm">Certificado Digital A1</CardTitle>
                               </CardHeader>
-                              <CardContent>
+                              <CardContent className={MODAL_CARD_CONTENT_CLASS}>
                                 <CertificadoUpload clienteId={clienteId} certInfo={certInfo} onUploaded={() => load()} />
                               </CardContent>
                             </Card>
                           )}
 
                           {/* Histórico NFS-e */}
-                          <Card>
-                            <CardHeader className="flex flex-row items-center justify-between pb-3">
+                          <Card className="border-border/70 shadow-none">
+                            <CardHeader className={MODAL_CARD_HEADER_CLASS}>
                               <CardTitle className="text-sm flex items-center gap-2">
                                 <Receipt className="w-4 h-4 text-muted-foreground" />
                                 Histórico NFS-e
@@ -476,12 +502,12 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                                 )}
                               </CardTitle>
                               {fiscal && (
-                                <Link href={`/fiscal/emitir?clienteId=${clienteId}`}>
-                                  <Button size="sm">+ Emitir</Button>
-                                </Link>
+                                <Button size="sm" className="h-8" onClick={() => navigateTo(`/fiscal/emitir?clienteId=${clienteId}`)}>
+                                  + Emitir
+                                </Button>
                               )}
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className={MODAL_CARD_CONTENT_CLASS}>
                               {nfses.length === 0 ? (
                                 <EmptyState
                                   icon={Receipt}
@@ -505,7 +531,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                                         <td className="py-2.5 text-muted-foreground">
                                           {n.dataEmissao ? formatDate(tsToDate(n.dataEmissao)) : '—'}
                                         </td>
-                                        <td className="py-2.5 text-right font-medium">{formatCurrency((n.valorServico as number) ?? 0)}</td>
+                                        <td className="py-2.5 text-right font-medium tabular-nums">{formatCurrency((n.valorServico as number) ?? 0)}</td>
                                         <td className="py-2.5 pl-4"><NfseStatusBadge status={n.status as string} /></td>
                                       </tr>
                                     ))}
@@ -532,9 +558,12 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                         optanteSimples:       (fiscal.optanteSimples     as boolean) ?? true,
                         incentivadorCultural: (fiscal.incentivadorCultural as boolean) ?? false,
                         naturezaOperacao:     (fiscal.naturezaOperacao   as string) ?? '1',
+                        codigoServicoPadrao:  fiscal.codigoServicoPadrao as string,
+                        descricaoServicoPadrao: fiscal.descricaoServicoPadrao as string,
                         itemListaServico:     fiscal.itemListaServico    as string,
                         cnae:                 fiscal.cnae                as string,
                         aliquotaPadrao:       fiscal.aliquotaPadrao      as number,
+                        issRetidoPadrao:      (fiscal.issRetidoPadrao    as boolean) ?? false,
                         credenciais:          (fiscal.credenciais        as Record<string, unknown>) ?? {},
                       } : undefined}
                       onSaved={load}

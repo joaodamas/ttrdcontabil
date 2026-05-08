@@ -17,6 +17,7 @@ import * as admin from 'firebase-admin'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { Timestamp } from 'firebase-admin/firestore'
 import { DEFAULT_TENANT_ID } from '../tenant'
+import { SYSTEM_ACTOR, writeAuditLog } from '../audit'
 
 const db = () => admin.firestore()
 
@@ -130,6 +131,8 @@ export const criarLancamentosMensais = onSchedule(
         ano,
         competencia: `${String(mes).padStart(2, '0')}/${ano}`,
         criadoEm: Timestamp.now(),
+        criadoPorId: SYSTEM_ACTOR.id,
+        criadoPorNome: SYSTEM_ACTOR.nome,
         criadoAutomaticamente: true,
         dataBaixa: null,
         contaBancaria: null,
@@ -147,6 +150,23 @@ export const criarLancamentosMensais = onSchedule(
     }
 
     if (ops > 0) await batch.commit()
+
+    await writeAuditLog({
+      tenantId: DEFAULT_TENANT_ID,
+      actor: SYSTEM_ACTOR,
+      entidade: 'lancamentos',
+      entidadeId: `${ano}_${String(mes).padStart(2, '0')}`,
+      acao: 'scheduler_batch_create',
+      dadosAntes: null,
+      dadosDepois: {
+        mes,
+        ano,
+        criados,
+        ignorados,
+        totalServicosAtivos: servicosSnap.size,
+      },
+      origem: 'scheduler',
+    })
 
     console.log(`[lancamentos] Criados: ${criados} | Ignorados (duplicado/inativo): ${ignorados}`)
   }

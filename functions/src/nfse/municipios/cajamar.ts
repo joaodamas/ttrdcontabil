@@ -6,6 +6,7 @@
  */
 import { extractSoapBody, extractTag, soapCall } from '../xml/soap'
 import { extrairChaveDoPfx } from '../xml/signer'
+import { sanitizeAuditString } from '../../audit'
 import {
   CancelarNfseInput,
   CertificadoA1,
@@ -233,13 +234,14 @@ export class CajamarConector {
         console.warn('[Cajamar/GeisWeb] retorno com erro', {
           codigoErro,
           erro: textoErro,
-          retorno: mensagem.slice(0, 1500),
+          retorno: sanitizeAuditString(mensagem).slice(0, 500),
         })
-        return { sucesso: false, erro: textoErro, codigoErro, detalhes: mensagem }
+        return { sucesso: false, erro: textoErro, codigoErro, detalhes: sanitizeAuditString(mensagem) }
       }
 
       if (!numeroNfse && /usu[aá]rio n[aã]o liberado/i.test(mensagem)) {
-        return { sucesso: false, codigoErro: 'GEISWEB_USUARIO_NAO_LIBERADO', erro: mensagem, detalhes: mensagem }
+        const mensagemSanitizada = sanitizeAuditString(mensagem)
+        return { sucesso: false, codigoErro: 'GEISWEB_USUARIO_NAO_LIBERADO', erro: mensagemSanitizada, detalhes: mensagemSanitizada }
       }
 
       return {
@@ -248,7 +250,7 @@ export class CajamarConector {
         codigoVerificacao,
         xmlNfse: mensagem,
         erro: numeroNfse ? undefined : textoErroGeisWeb(mensagem),
-        detalhes: numeroNfse ? undefined : mensagem,
+        detalhes: numeroNfse ? undefined : sanitizeAuditString(mensagem),
       }
     } catch (err) {
       return { sucesso: false, erro: err instanceof Error ? err.message : String(err) }

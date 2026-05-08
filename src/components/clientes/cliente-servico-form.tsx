@@ -85,7 +85,6 @@ export function ClienteServicoForm({ clienteId, clienteNome, servicos }: Cliente
       })
       toast.success('Serviço adicionado!')
       router.push(`/clientes/${clienteId}`)
-      router.refresh()
     } catch (err) {
       toast.error(getErrorMessage(err, 'Não foi possível vincular o serviço. Verifique valor, datas e permissões.'))
     }

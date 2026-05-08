@@ -19,10 +19,8 @@ export function useFinanceiroList(
   }, [query.data?.allLancamentos, filters.tipo, filters.status])
 
   const total = filteredLancamentos.length
-  const totalPages = query.data?.hasMore
-    ? filters.page + 1
-    : Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const lancamentos = filteredLancamentos.slice((filters.page - 1) * PAGE_SIZE, filters.page * PAGE_SIZE)
+  const totalPages = query.data?.hasMore ? filters.page + 1 : filters.page
+  const lancamentos = filteredLancamentos
 
   return {
     ...query,
@@ -30,6 +28,8 @@ export function useFinanceiroList(
     filteredLancamentos,
     total,
     totalPages,
+    hasMore: query.data?.hasMore ?? false,
+    lastCursor: query.data?.lastCursor ?? null,
     somaAReceber: query.data?.somaAReceber ?? 0,
     somaRecebidoMes: query.data?.somaRecebidoMes ?? 0,
     somaEmAtraso: query.data?.somaEmAtraso ?? 0,

@@ -86,6 +86,7 @@ function FechamentoContent() {
   const [revisaoNota, setRevisaoNota] = useState('')
   const [revisaoSalva, setRevisaoSalva] = useState<RevisaoRecord | null>(null)
   const [revisaoLoading, setRevisaoLoading] = useState(false)
+  const [confirmRevisaoOpen, setConfirmRevisaoOpen] = useState(false)
 
   useEffect(() => {
     setRevisaoLoading(true)
@@ -150,11 +151,6 @@ function FechamentoContent() {
   }, [parsed, queryClient])
 
   async function registrarRevisaoMes() {
-    const confirmado = window.confirm(
-      `Encerrar a revisão de ${mesLabel}/${ano}? Este registro será usado como evidência de auditoria do mês.`
-    )
-    if (!confirmado) return
-
     try {
       await salvarRevisao(
         ano,
@@ -177,6 +173,7 @@ function FechamentoContent() {
       return
     }
     setRevisaoDialogOpen(false)
+    setConfirmRevisaoOpen(false)
     setRevisaoNota('')
   }
 
@@ -195,6 +192,13 @@ function FechamentoContent() {
     }
     return acc
   }, {})
+  const statusComPendencia = new Set(['pendente', 'guia', 'parcial'])
+  const fechamentosComPendencia = fechamentos.filter((f) =>
+    [f.dasStatus, f.esocialStatus, f.reinfStatus, f.fgtsStatus].some((status) => statusComPendencia.has(status))
+  )
+  const totalObrigacoesPendentes = fechamentos.reduce((acc, f) =>
+    acc + [f.dasStatus, f.esocialStatus, f.reinfStatus, f.fgtsStatus].filter((status) => statusComPendencia.has(status)).length
+  , 0)
 
   return (
     <div className="stack-6">
@@ -248,12 +252,31 @@ function FechamentoContent() {
             <Button type="button" variant="outline" onClick={() => setRevisaoDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button type="button" onClick={registrarRevisaoMes}>
-              Confirmar encerramento
+            <Button type="button" onClick={() => setConfirmRevisaoOpen(true)}>
+              Revisar e confirmar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmRevisaoOpen}
+        onOpenChange={setConfirmRevisaoOpen}
+        title={
+          fechamentosComPendencia.length > 0
+            ? `Encerrar ${mesLabel}/${ano} com pendências?`
+            : `Encerrar revisão de ${mesLabel}/${ano}?`
+        }
+        description={
+          fechamentosComPendencia.length > 0
+            ? `${fechamentosComPendencia.length} cliente(s) ainda têm ${totalObrigacoesPendentes} obrigação(ões) pendente(s), com guia ou parcial. O encerramento será salvo como evidência de auditoria mesmo com essas pendências. Confirme somente se elas foram justificadas ou assumidas fora do fluxo.`
+            : 'O registro fica salvo no Firestore com usuário, data e observação para auditoria do fechamento.'
+        }
+        confirmLabel={fechamentosComPendencia.length > 0 ? 'Encerrar mesmo assim' : 'Registrar revisão'}
+        cancelLabel="Voltar para revisão"
+        destructive={fechamentosComPendencia.length > 0}
+        onConfirm={registrarRevisaoMes}
+      />
 
       <ConfirmDialog
         open={confirmGeracaoOpen}

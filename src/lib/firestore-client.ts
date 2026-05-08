@@ -5,6 +5,9 @@
 import {
   collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, limit, serverTimestamp, Timestamp, documentId, setDoc,
+  startAfter,
+  type DocumentData,
+  type QueryDocumentSnapshot,
   type QueryConstraint,
 } from 'firebase/firestore'
 import { getClientDb, getClientAuth } from './firebase'
@@ -75,6 +78,18 @@ const SENSITIVE_KEYS = new Set([
   'respostaIntegracao',
 ])
 
+const SENSITIVE_KEY_PARTS = [
+  'senha',
+  'password',
+  'token',
+  'credential',
+  'credencial',
+  'cert',
+  'chave',
+  'private',
+  'secret',
+]
+
 let _actorCache: { uid: string; nome: string; email: string; tenantId?: string } | null = null
 
 async function getAuditActor() {
@@ -119,7 +134,9 @@ function redactAuditData(value: unknown): unknown {
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
       key,
-      SENSITIVE_KEYS.has(key) || key.toLowerCase().includes('senha') ? '[REDACTED]' : redactAuditData(nested),
+      SENSITIVE_KEYS.has(key) || SENSITIVE_KEY_PARTS.some((part) => key.toLowerCase().includes(part))
+        ? '[REDACTED]'
+        : redactAuditData(nested),
     ])
   )
 }
@@ -194,6 +211,30 @@ export async function listDocuments<T>(
   const q = query(collection(getClientDb(), col), ...tenantConstraint, ...constraints)
   const snap = await getDocs(q)
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as T) }))
+}
+
+export type FirestoreCursor = QueryDocumentSnapshot<DocumentData>
+
+export async function listDocumentsPage<T>(
+  col: string,
+  constraints: QueryConstraint[] = [],
+  cursor?: FirestoreCursor | null,
+  pageSize = 20
+): Promise<{
+  rows: Array<T & { id: string }>
+  lastCursor: FirestoreCursor | null
+  cursors: FirestoreCursor[]
+}> {
+  const actor = TENANT_SCOPED_COLLECTIONS.has(col) ? await getAuditActor() : null
+  const tenantConstraint = actor?.tenantId ? [where('tenantId', '==', actor.tenantId)] : []
+  const cursorConstraint = cursor ? [startAfter(cursor)] : []
+  const q = query(collection(getClientDb(), col), ...tenantConstraint, ...constraints, ...cursorConstraint, limit(pageSize))
+  const snap = await getDocs(q)
+  return {
+    rows: snap.docs.map((d) => ({ id: d.id, ...(d.data() as T) })),
+    lastCursor: snap.docs.at(-1) ?? null,
+    cursors: snap.docs,
+  }
 }
 
 function stripUndefined(data: Record<string, unknown>): Record<string, unknown> {
@@ -348,10 +389,15 @@ export async function getNextServicoCodigo(): Promise<string> {
 }
 
 export async function getClienteServicos(clienteId: string) {
-  return listDocuments('clientes_servicos', [
+  const rows = await listDocuments('clientes_servicos', [
     where('clienteId', '==', clienteId),
-    orderBy('dataInicio', 'desc'),
   ])
+  return rows.sort((a, b) => {
+    const aDate = (a as Record<string, { toMillis?: () => number } | unknown>).dataInicio
+    const bDate = (b as Record<string, { toMillis?: () => number } | unknown>).dataInicio
+    return ((bDate as { toMillis?: () => number } | undefined)?.toMillis?.() ?? 0) -
+      ((aDate as { toMillis?: () => number } | undefined)?.toMillis?.() ?? 0)
+  })
 }
 
 export async function getCompetencias(opts: { clienteId?: string; limit?: number } = {}) {

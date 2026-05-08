@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
 
@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowLeft, Loader2, Pencil, Plus, ShieldCheck, ShieldAlert, ShieldOff } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
+import { getPathSegmentAfter } from '@/lib/route-params'
 
 const REGIME_LABELS: Record<string, string> = {
   simples_nacional: 'Simples Nacional',
@@ -30,7 +31,8 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
 }
 
 export default function ClienteFiscalPage() {
-  const { id } = useParams<{ id: string }>()
+  const pathname = usePathname()
+  const id = getPathSegmentAfter(pathname, 'clientes')
   const router  = useRouter()
 
   const [cliente,   setCliente]   = useState<Record<string, unknown> | null>(null)
@@ -92,9 +94,12 @@ export default function ClienteFiscalPage() {
         optanteSimples:      (fiscal.optanteSimples     as boolean) ?? true,
         incentivadorCultural:(fiscal.incentivadorCultural as boolean) ?? false,
         naturezaOperacao:    (fiscal.naturezaOperacao   as string) ?? '1',
+        codigoServicoPadrao: fiscal.codigoServicoPadrao as string,
+        descricaoServicoPadrao: fiscal.descricaoServicoPadrao as string,
         itemListaServico:    fiscal.itemListaServico    as string,
         cnae:                fiscal.cnae                as string,
         aliquotaPadrao:      fiscal.aliquotaPadrao      as number,
+        issRetidoPadrao:     (fiscal.issRetidoPadrao    as boolean) ?? false,
         credenciais:         creds,
       }
     : undefined

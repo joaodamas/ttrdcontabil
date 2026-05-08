@@ -28,7 +28,7 @@ export async function fetchClienteDetail(id: string): Promise<ClienteDetalheData
   const [clienteData, servicosData, competenciasData, lancamentosData, fiscalData] =
     await Promise.all([
       safe(getDocument('clientes', id)),
-      safe(listDocuments('clientes_servicos', [where('clienteId', '==', id), orderBy('dataInicio', 'desc'), limit(50)])),
+      safe(listDocuments('clientes_servicos', [where('clienteId', '==', id), limit(50)])),
       safe(listDocuments('competencias',      [where('clienteId', '==', id), orderBy('ano', 'desc'), orderBy('mes', 'desc'), limit(20)])),
       safe(listDocuments('lancamentos',       [where('clienteId', '==', id), orderBy('dataVencimento', 'desc'), limit(20)])),
       safe(listDocuments('clientes_fiscal',   [where('clienteId', '==', id), limit(1)])),
@@ -38,7 +38,11 @@ export async function fetchClienteDetail(id: string): Promise<ClienteDetalheData
 
   return {
     cliente:      clienteData  as ClienteDetalheData['cliente'],
-    servicos:     (servicosData    ?? []) as ClienteDetalheData['servicos'],
+    servicos:     ((servicosData ?? []) as ClienteDetalheData['servicos']).sort((a, b) => {
+      const aDate = a.dataInicio?.toMillis?.() ?? 0
+      const bDate = b.dataInicio?.toMillis?.() ?? 0
+      return bDate - aDate
+    }),
     competencias: (competenciasData ?? []) as ClienteDetalheData['competencias'],
     lancamentos:  (lancamentosData  ?? []) as ClienteDetalheData['lancamentos'],
     fiscal: fiscalData && fiscalData.length > 0

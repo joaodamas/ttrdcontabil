@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { where, orderBy, limit } from 'firebase/firestore'
 import { Timestamp } from 'firebase/firestore'
@@ -24,6 +24,7 @@ import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fisca
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 import { useAuth } from '@/contexts/auth-context'
 import { canAccessTela } from '@/lib/permissions'
+import { getPathSegmentAfter } from '@/lib/route-params'
 
 const STATUS_LABELS: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   ativo:     { label: 'Ativo',     variant: 'default' },
@@ -327,7 +328,8 @@ function DataList({ data, fields, sensitive = false }: {
 }
 
 export default function ClienteDetailPage() {
-  const { id } = useParams<{ id: string }>()
+  const pathname = usePathname()
+  const id = useMemo(() => getPathSegmentAfter(pathname, 'clientes'), [pathname])
   const router  = useRouter()
   const { usuario } = useAuth()
   const podeAcessarFiscal = canAccessTela(usuario, 'fiscal')
@@ -354,7 +356,7 @@ export default function ClienteDetailPage() {
     function get<T>(p: Promise<T>): Promise<T | null> { return p.catch(() => null) }
     Promise.all([
       get(getDocument('clientes', id)),
-      get(listDocuments('clientes_servicos', [where('clienteId', '==', id), orderBy('dataInicio', 'desc'), limit(50)])),
+      get(listDocuments('clientes_servicos', [where('clienteId', '==', id), limit(50)])),
       get(listDocuments('competencias',      [where('clienteId', '==', id), orderBy('ano', 'desc'), orderBy('mes', 'desc'), limit(20)])),
       get(listDocuments('lancamentos',       [where('clienteId', '==', id), orderBy('dataVencimento', 'desc'), limit(20)])),
       get(listDocuments('tarefas',           [where('clienteId', '==', id), limit(30)])),
@@ -363,7 +365,11 @@ export default function ClienteDetailPage() {
     ]).then(([clienteData, servicosData, competenciasData, lancamentosData, tarefasData, rascunhosData, fiscalData]) => {
       if (!clienteData) { router.push('/clientes'); return }
       setCliente(clienteData as Record<string, unknown>)
-      setServicos((servicosData ?? []) as Array<Record<string, unknown>>)
+      setServicos(((servicosData ?? []) as Array<Record<string, unknown>>).sort((a, b) => {
+        const aDate = tsToDate(a.dataInicio)?.getTime() ?? 0
+        const bDate = tsToDate(b.dataInicio)?.getTime() ?? 0
+        return bDate - aDate
+      }))
       setCompetencias((competenciasData ?? []) as Array<Record<string, unknown>>)
       setLancamentos((lancamentosData ?? []) as Array<Record<string, unknown>>)
       setTarefas((tarefasData ?? []) as Array<Record<string, unknown>>)
@@ -798,9 +804,12 @@ export default function ClienteDetailPage() {
           optanteSimples:       (fiscal.optanteSimples     as boolean) ?? true,
           incentivadorCultural: (fiscal.incentivadorCultural as boolean) ?? false,
           naturezaOperacao:     (fiscal.naturezaOperacao   as string) ?? '1',
+          codigoServicoPadrao:  fiscal.codigoServicoPadrao as string,
+          descricaoServicoPadrao: fiscal.descricaoServicoPadrao as string,
           itemListaServico:     fiscal.itemListaServico    as string,
           cnae:                 fiscal.cnae                as string,
           aliquotaPadrao:       fiscal.aliquotaPadrao      as number,
+          issRetidoPadrao:      (fiscal.issRetidoPadrao    as boolean) ?? false,
           credenciais:          (fiscal.credenciais        as Record<string, unknown>) ?? {},
         } : undefined}
         onSaved={loadFiscal}

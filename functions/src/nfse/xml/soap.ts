@@ -4,6 +4,7 @@
  */
 import axios, { AxiosRequestConfig } from 'axios'
 import * as https from 'https'
+import { sanitizeAuditString } from '../../audit'
 
 export interface SoapOptions {
   endpoint: string
@@ -61,11 +62,11 @@ export async function soapCall(opts: SoapOptions, bodyXml: string): Promise<stri
       const status = err.response?.status
       const data = err.response?.data
       const body = typeof data === 'string'
-        ? data.slice(0, 1500)
+        ? sanitizeAuditString(data).slice(0, 500)
         : data != null
-          ? JSON.stringify(data).slice(0, 1500)
+          ? sanitizeAuditString(JSON.stringify(data)).slice(0, 500)
           : err.message
-      throw new Error(`SOAP HTTP ${status ?? 'sem_status'} em ${opts.endpoint}: ${body}`)
+      throw new Error(`SOAP HTTP ${status ?? 'sem_status'} em provedor municipal: ${body}`)
     }
     throw err
   }
