@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowLeft, Loader2, Pencil, Plus, ShieldCheck, ShieldAlert, ShieldOff } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
+import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
 import { getPathSegmentAfter } from '@/lib/route-params'
 
 const REGIME_LABELS: Record<string, string> = {
@@ -40,6 +41,7 @@ export default function ClienteFiscalPage() {
   const [notas,     setNotas]     = useState<Array<Record<string, unknown>>>([])
   const [loading,   setLoading]   = useState(true)
   const [configOpen, setConfigOpen] = useState(false)
+  const [emitirOpen, setEmitirOpen] = useState(false)
 
   const load = useCallback(() => {
     if (!id) return
@@ -120,12 +122,10 @@ export default function ClienteFiscalPage() {
             <p className="text-sm text-muted-foreground">Configurações fiscais e NFS-e emitidas</p>
           </div>
         </div>
-        <Link href={`/fiscal/emitir?clienteId=${id}`}>
-          <Button size="sm">
-            <Plus className="w-4 h-4 mr-1" />
-            Emitir NFS-e
-          </Button>
-        </Link>
+        <Button size="sm" onClick={() => setEmitirOpen(true)}>
+          <Plus className="w-4 h-4 mr-1" />
+          Emitir NFS-e
+        </Button>
       </div>
 
       {/* Dados Fiscais */}
@@ -284,6 +284,15 @@ export default function ClienteFiscalPage() {
         docId={fiscal?.id as string | undefined}
         defaultValues={fiscalDefaults}
         onSaved={load}
+      />
+      <EmitirNfseModal
+        open={emitirOpen}
+        onOpenChange={setEmitirOpen}
+        clienteId={id}
+        onFinished={async () => {
+          setEmitirOpen(false)
+          load()
+        }}
       />
     </div>
   )

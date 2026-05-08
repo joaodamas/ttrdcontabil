@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
+import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
 import { useAuth } from '@/contexts/auth-context'
 import { canAccessTela } from '@/lib/permissions'
 import { getPathSegmentAfter } from '@/lib/route-params'
@@ -345,6 +346,7 @@ export default function ClienteDetailPage() {
   const [loading,      setLoading]      = useState(true)
   const [configOpen,   setConfigOpen]   = useState(false)
   const [servicoDialogOpen, setServicoDialogOpen] = useState(false)
+  const [emitirOpen, setEmitirOpen] = useState(false)
 
   const loadClienteContext = useCallback(() => {
     if (!id) return Promise.resolve()
@@ -689,7 +691,7 @@ export default function ClienteDetailPage() {
 
             {fiscal && podeAcessarFiscal && (
               <div className="flex justify-end">
-                <Link href={`/fiscal/emitir?clienteId=${id}`} className={buttonVariants({ size: 'sm' })}><Receipt className="h-3.5 w-3.5" />Emitir NFS-e</Link>
+                <Button size="sm" onClick={() => setEmitirOpen(true)}><Receipt className="h-3.5 w-3.5" />Emitir NFS-e</Button>
               </div>
             )}
           </TabsContent>
@@ -778,10 +780,10 @@ export default function ClienteDetailPage() {
                   <span className="text-xs font-medium leading-tight">Nova Competência</span>
                 </Link>
                 {fiscal && podeAcessarFiscal && (
-                  <Link href={`/fiscal/emitir?clienteId=${id}`} className="aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
+                  <button type="button" onClick={() => setEmitirOpen(true)} className="aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
                     <Receipt className="h-5 w-5 text-primary" />
                     <span className="text-xs font-medium leading-tight">Emitir NFS-e</span>
-                  </Link>
+                  </button>
                 )}
                 <Link href={`/financeiro?clienteId=${id}`} className="aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
                   <Wallet className="h-5 w-5 text-muted-foreground" />
@@ -827,6 +829,15 @@ export default function ClienteDetailPage() {
         onOpenChange={setServicoDialogOpen}
         clienteId={id}
         onSaved={() => { void loadClienteContext() }}
+      />
+      <EmitirNfseModal
+        open={emitirOpen}
+        onOpenChange={setEmitirOpen}
+        clienteId={id}
+        onFinished={async () => {
+          setEmitirOpen(false)
+          await loadClienteContext()
+        }}
       />
     </div>
   )

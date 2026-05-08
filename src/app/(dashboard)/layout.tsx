@@ -30,7 +30,7 @@ function TopBar() {
       </button>
       {usuario && (
         <Link
-          href="/fiscal/emitir"
+          href="/fiscal?emitir=1"
           className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-foreground text-background text-sm font-semibold hover:bg-foreground/90 transition-colors"
         >
           <Plus size={13} strokeWidth={2.5} />

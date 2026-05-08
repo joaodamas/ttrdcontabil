@@ -36,7 +36,7 @@ const QUICK_ACTIONS = [
   { label: 'Nova tarefa', href: '/tarefas/nova', icon: CheckSquare },
   { label: 'Nova competência', href: '/competencias/nova', icon: Layers },
   { label: 'Novo lançamento', href: '/financeiro/novo', icon: DollarSign },
-  { label: 'Emitir NFS-e', href: '/fiscal/emitir', icon: Receipt },
+  { label: 'Emitir NFS-e', href: '/fiscal?emitir=1', icon: Receipt },
 ]
 
 export function CommandPalette() {

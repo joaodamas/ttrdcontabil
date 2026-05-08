@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
+import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
 import { ClienteServicoDialog } from '@/components/clientes/cliente-servico-dialog'
 import { clientesKeys } from '@/features/clientes/queries'
 
@@ -77,6 +78,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
   const [fiscal,      setFiscal]      = useState<Record<string, unknown> | null>(null)
   const [configOpen,  setConfigOpen]  = useState(false)
   const [servicoDialogOpen, setServicoDialogOpen] = useState(false)
+  const [emitirOpen, setEmitirOpen] = useState(false)
   const [loadError,   setLoadError]   = useState<string | null>(null)
 
   const load = useCallback(() => {
@@ -515,7 +517,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                                 )}
                               </CardTitle>
                               {fiscal && (
-                                <Button size="sm" className="h-8" onClick={() => navigateTo(`/fiscal/emitir?clienteId=${clienteId}`)}>
+                                <Button size="sm" className="h-8" onClick={() => setEmitirOpen(true)}>
                                   + Emitir
                                 </Button>
                               )}
@@ -525,7 +527,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                                 <EmptyState
                                   icon={Receipt}
                                   title="Nenhuma NFS-e emitida"
-                                  {...(fiscal ? { action: { label: 'Emitir NFS-e', href: `/fiscal/emitir?clienteId=${clienteId}` } } : {})}
+                                  {...(fiscal ? { action: { label: 'Emitir NFS-e', onClick: () => setEmitirOpen(true) } } : {})}
                                 />
                               ) : (
                                 <table className="w-full text-sm">
@@ -592,6 +594,15 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
             credenciais: (fiscal.credenciais as Record<string, unknown>) ?? {},
           } : undefined}
           onSaved={() => { void syncClienteAfterMutation() }}
+        />
+        <EmitirNfseModal
+          open={emitirOpen}
+          onOpenChange={setEmitirOpen}
+          clienteId={clienteId}
+          onFinished={async () => {
+            setEmitirOpen(false)
+            await syncClienteAfterMutation()
+          }}
         />
       </DialogContent>
     </Dialog>

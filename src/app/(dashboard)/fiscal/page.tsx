@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Timestamp } from 'firebase/firestore'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { EmitirLoteModal } from '@/components/fiscal/emitir-lote-modal'
+import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { gerarRascunhosNfseMensais, removeRascunho } from '@/features/fiscal/services'
 import { getErrorMessage } from '@/lib/error-message'
@@ -43,11 +45,16 @@ function StatusPill({ status }: { status: string }) {
 }
 
 export default function FiscalPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const queryClient = useQueryClient()
   const [loteOpen, setLoteOpen] = useState(false)
   const [rascunhoParaRemover, setRascunhoParaRemover] = useState<string | null>(null)
   const [gerarRascunhosOpen, setGerarRascunhosOpen] = useState(false)
   const [notaErroOpen, setNotaErroOpen] = useState<Record<string, unknown> | null>(null)
+  const emissaoModalOpen = searchParams.get('emitir') === '1'
+  const modalClienteId = searchParams.get('clienteId') ?? undefined
+  const modalRascunhoId = searchParams.get('rascunhoId') ?? undefined
   const { isLoading: loading, emitidaMesCount, somaEmitidaMes, pendenteCount, erroCount, canceladaCount, notas } = useFiscalDashboard()
   const {
     isLoading: readinessLoading,
@@ -110,6 +117,25 @@ export default function FiscalPage() {
     )
   }
 
+  function openEmissaoModal(params?: { clienteId?: string; rascunhoId?: string }) {
+    const next = new URLSearchParams(searchParams.toString())
+    next.set('emitir', '1')
+    if (params?.clienteId) next.set('clienteId', params.clienteId)
+    else next.delete('clienteId')
+    if (params?.rascunhoId) next.set('rascunhoId', params.rascunhoId)
+    else next.delete('rascunhoId')
+    router.push(`/fiscal?${next.toString()}`)
+  }
+
+  function closeEmissaoModal() {
+    const next = new URLSearchParams(searchParams.toString())
+    next.delete('emitir')
+    next.delete('clienteId')
+    next.delete('rascunhoId')
+    const query = next.toString()
+    router.replace(query ? `/fiscal?${query}` : '/fiscal')
+  }
+
   return (
     <div className="space-y-5">
 
@@ -147,13 +173,14 @@ export default function FiscalPage() {
             <FileText size={13} />
             Preparar mês
           </button>
-          <Link
-            href="/fiscal/emitir"
+          <button
+            type="button"
+            onClick={() => openEmissaoModal()}
             className={cn(buttonVariants({ size: 'sm' }), 'gap-1.5')}
           >
             <Plus size={13} />
             Nova NFS-e
-          </Link>
+          </button>
         </div>
       </div>
 
@@ -313,9 +340,13 @@ export default function FiscalPage() {
                     <div className="flex flex-col items-center gap-2">
                       <Receipt size={28} className="text-muted-foreground/30" />
                       <p className="text-sm text-muted-foreground">Nenhuma NFS-e emitida ainda</p>
-                      <Link href="/fiscal/emitir" className={cn(buttonVariants({ size: 'sm' }), 'mt-1 gap-1.5')}>
+                      <button
+                        type="button"
+                        onClick={() => openEmissaoModal()}
+                        className={cn(buttonVariants({ size: 'sm' }), 'mt-1 gap-1.5')}
+                      >
                         <Plus size={13} /> Emitir primeira nota
-                      </Link>
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -360,13 +391,14 @@ export default function FiscalPage() {
                           ) : null}
                           {isRascunho && (
                             <>
-                            <Link
-                              href={`/fiscal/emitir?rascunhoId=${n.id as string}`}
+                            <button
+                              type="button"
+                              onClick={() => openEmissaoModal({ rascunhoId: n.id as string })}
                               className="text-muted-foreground hover:text-primary transition-colors"
                               title="Revisar rascunho"
                             >
                               <Pencil size={13} />
-                            </Link>
+                            </button>
                             <button
                               type="button"
                               onClick={() => setRascunhoParaRemover(n.id as string)}
@@ -394,6 +426,21 @@ export default function FiscalPage() {
         onSuccess={() => {
           setLoteOpen(false)
           void queryClient.invalidateQueries({ queryKey: fiscalKeys.snapshot() })
+        }}
+      />
+      <EmitirNfseModal
+        open={emissaoModalOpen}
+        onOpenChange={(open) => {
+          if (!open) closeEmissaoModal()
+        }}
+        clienteId={modalClienteId}
+        rascunhoId={modalRascunhoId}
+        onFinished={async () => {
+          closeEmissaoModal()
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: fiscalKeys.snapshot() }),
+            queryClient.invalidateQueries({ queryKey: fiscalKeys.readiness() }),
+          ])
         }}
       />
 

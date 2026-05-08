@@ -274,7 +274,7 @@ export default function DashboardPage() {
                   }
                 </span>
                 <Link
-                  href={`/fiscal/emitir?clienteId=${a.id}`}
+                  href={`/fiscal?emitir=1&clienteId=${a.id}`}
                   className="shrink-0 rounded-md border border-warning/30 bg-warning/10 px-2 py-1 text-[11px] font-semibold text-amber-800 dark:text-warning hover:bg-warning/20 transition-colors"
                 >
                   Emitir

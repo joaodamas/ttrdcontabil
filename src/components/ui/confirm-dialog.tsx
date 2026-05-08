@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,7 +18,7 @@ interface ConfirmDialogProps {
   open: boolean
   onOpenChange: (v: boolean) => void
   title?: string
-  description?: string
+  description?: ReactNode
   /** Texto do botão de confirmação. Padrão: "Confirmar" */
   confirmLabel?: string
   /** Texto do botão de cancelamento. Padrão: "Cancelar" */

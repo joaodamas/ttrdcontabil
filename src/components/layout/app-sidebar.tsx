@@ -248,7 +248,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <div className="px-2 pb-2 shrink-0">
         <Separator className="mb-2" />
         <Link
-          href="/fiscal/emitir"
+          href="/fiscal?emitir=1"
           onClick={onNavigate}
           className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
         >

@@ -276,7 +276,7 @@ function FiscalHistoricoContent() {
                   : 'Crie um rascunho revisado e emita em homologação antes de liberar produção.'}
                 action={clienteId || status || mes || ano
                   ? { label: 'Limpar filtros', href: '/fiscal/historico' }
-                  : { label: 'Emitir NFS-e', href: '/fiscal/emitir' }}
+                  : { label: 'Emitir NFS-e', href: '/fiscal?emitir=1' }}
               />
             ) : (
               notas.map((n) => {

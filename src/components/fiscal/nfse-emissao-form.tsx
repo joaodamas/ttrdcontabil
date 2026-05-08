@@ -52,11 +52,30 @@ type RascunhoNfse = {
   dados?: Record<string, unknown>
 }
 
-export function NfseEmissaoForm() {
+interface NfseEmissaoFormProps {
+  initialClienteId?: string
+  initialRascunhoId?: string
+  layout?: 'page' | 'modal'
+  onCancel?: () => void
+  onFinished?: () => void | Promise<void>
+}
+
+const cardClassByLayout: Record<'page' | 'modal', string> = {
+  page: '',
+  modal: 'border-border/70 bg-card/95 shadow-none',
+}
+
+export function NfseEmissaoForm({
+  initialClienteId,
+  initialRascunhoId,
+  layout = 'page',
+  onCancel,
+  onFinished,
+}: NfseEmissaoFormProps = {}) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const clienteIdParam = searchParams.get('clienteId') ?? ''
-  const rascunhoIdParam = searchParams.get('rascunhoId') ?? ''
+  const clienteIdParam = initialClienteId ?? searchParams.get('clienteId') ?? ''
+  const rascunhoIdParam = initialRascunhoId ?? searchParams.get('rascunhoId') ?? ''
 
   const [clientes,           setClientes]           = useState<Cliente[]>([])
   const [competencias,       setCompetencias]       = useState<Competencia[]>([])
@@ -172,7 +191,7 @@ export function NfseEmissaoForm() {
         await createDocument('nfse_rascunhos', payload)
         toast.success('Rascunho salvo com sucesso!')
       }
-      router.push('/fiscal')
+      await finishFlow()
     } catch (err) {
       toast.error(getErrorMessage(err, 'Não foi possível salvar o rascunho. Verifique cliente, serviço e permissão fiscal.'))
     } finally {
@@ -222,7 +241,7 @@ export function NfseEmissaoForm() {
           ? `NFS-e emitida com sucesso! Número: ${res.numeroNfse}`
           : 'NFS-e emitida com sucesso!'
         toast.success(msg)
-        router.push('/fiscal')
+        await finishFlow()
       } else {
         const mensagem = [
           res.codigoErro ? `Código: ${res.codigoErro}` : null,
@@ -248,16 +267,35 @@ export function NfseEmissaoForm() {
   const previewCodigo = watch('codigoServico')
   const previewAliquota = watch('aliquota')
   const previewIssRetido = watch('issRetido')
+  const isModal = layout === 'modal'
+
+  async function finishFlow() {
+    if (onFinished) await onFinished()
+    if (onCancel) {
+      onCancel()
+      return
+    }
+    router.push('/fiscal')
+  }
+
+  function cancelFlow() {
+    if (onCancel) {
+      onCancel()
+      return
+    }
+    router.back()
+  }
 
   return (
-    <form className="space-y-5">
+    <form className={isModal ? 'grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]' : 'space-y-5'}>
+      <div className={isModal ? 'space-y-5' : undefined}>
       {loadingRascunho ? (
         <div className="flex items-center justify-center rounded-xl border py-10">
           <Loader2 className="h-5 w-5 animate-spin" />
         </div>
       ) : null}
       {/* Vínculo */}
-      <Card className={loadingRascunho ? 'pointer-events-none opacity-60' : undefined}>
+      <Card className={[cardClassByLayout[layout], loadingRascunho ? 'pointer-events-none opacity-60' : undefined].filter(Boolean).join(' ')}>
         <CardHeader><CardTitle className="text-sm">Vínculo</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
@@ -323,7 +361,7 @@ export function NfseEmissaoForm() {
       </Card>
 
       {/* Tomador */}
-      <Card>
+      <Card className={cardClassByLayout[layout]}>
         <CardHeader><CardTitle className="text-sm">Dados do Tomador</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
@@ -332,7 +370,7 @@ export function NfseEmissaoForm() {
             {errors.tomadorNome && <p className="text-xs text-destructive">{errors.tomadorNome.message}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="tomadorCpfCnpj">CPF / CNPJ <span className="text-destructive">*</span></Label>
               <Input id="tomadorCpfCnpj" {...register('tomadorCpfCnpj')} placeholder="000.000.000-00" />
@@ -348,7 +386,7 @@ export function NfseEmissaoForm() {
       </Card>
 
       {/* Serviço */}
-      <Card>
+      <Card className={cardClassByLayout[layout]}>
         <CardHeader><CardTitle className="text-sm">Serviço</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
@@ -357,7 +395,7 @@ export function NfseEmissaoForm() {
             {errors.descricaoServico && <p className="text-xs text-destructive">{errors.descricaoServico.message}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="codigoServico">Código do Serviço <span className="text-destructive">*</span></Label>
               <Input id="codigoServico" {...register('codigoServico')} placeholder="Ex: 17.19" />
@@ -370,7 +408,7 @@ export function NfseEmissaoForm() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="aliquota">Alíquota ISS (%)</Label>
               <Input id="aliquota" type="number" step="0.01" min="0" max="100" placeholder="Ex: 5" {...register('aliquota', { valueAsNumber: true })} />
@@ -395,34 +433,43 @@ export function NfseEmissaoForm() {
           </div>
         </CardContent>
       </Card>
+      </div>
 
-      <Card className="border-warning/30 bg-warning/5">
-        <CardHeader><CardTitle className="text-sm">Checklist antes da emissão</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
-          <div><span className="text-muted-foreground">Ambiente:</span> Validado na configuração fiscal do cliente</div>
-          <div><span className="text-muted-foreground">Prestador:</span> {previewCliente?.razaoSocial ?? 'Selecione o cliente'}</div>
-          <div><span className="text-muted-foreground">Competência:</span> {previewCompetencia ? `${String(previewCompetencia.mes).padStart(2, '0')}/${previewCompetencia.ano}` : 'Não vinculada'}</div>
-          <div><span className="text-muted-foreground">Serviço:</span> {previewCodigo || 'Informe o código'}</div>
-          <div><span className="text-muted-foreground">Valor:</span> {Number.isFinite(previewValor) ? `R$ ${Number(previewValor).toFixed(2)}` : 'Informe o valor'}</div>
-          <div><span className="text-muted-foreground">Alíquota:</span> {Number.isFinite(previewAliquota) ? `${Number(previewAliquota)}%` : 'Padrão da configuração'}</div>
-          <div><span className="text-muted-foreground">ISS retido:</span> {previewIssRetido ? 'Sim' : 'Não'}</div>
-          <div><span className="text-muted-foreground">Credencial/certificado:</span> Validado pela Cloud Function fiscal</div>
-        </CardContent>
-      </Card>
+      <div className={isModal ? 'space-y-5 lg:sticky lg:top-0 lg:self-start' : 'space-y-5'}>
+        <Card className={isModal ? 'border-primary/15 bg-gradient-to-b from-primary/[0.06] to-background shadow-none' : 'border-warning/30 bg-warning/5'}>
+          <CardHeader>
+            <CardTitle className="text-sm">{isModal ? 'Resumo da emissão' : 'Checklist antes da emissão'}</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-1">
+            <div><span className="text-muted-foreground">Ambiente:</span> Validado na configuração fiscal do cliente</div>
+            <div><span className="text-muted-foreground">Prestador:</span> {previewCliente?.razaoSocial ?? 'Selecione o cliente'}</div>
+            <div><span className="text-muted-foreground">Competência:</span> {previewCompetencia ? `${String(previewCompetencia.mes).padStart(2, '0')}/${previewCompetencia.ano}` : 'Não vinculada'}</div>
+            <div><span className="text-muted-foreground">Serviço:</span> {previewCodigo || 'Informe o código'}</div>
+            <div><span className="text-muted-foreground">Valor:</span> {Number.isFinite(previewValor) ? `R$ ${Number(previewValor).toFixed(2)}` : 'Informe o valor'}</div>
+            <div><span className="text-muted-foreground">Alíquota:</span> {Number.isFinite(previewAliquota) ? `${Number(previewAliquota)}%` : 'Padrão da configuração'}</div>
+            <div><span className="text-muted-foreground">ISS retido:</span> {previewIssRetido ? 'Sim' : 'Não'}</div>
+            <div><span className="text-muted-foreground">Credencial/certificado:</span> Validado pela Cloud Function fiscal</div>
+          </CardContent>
+        </Card>
 
-      {/* Ações */}
-      <div className="flex items-center gap-3">
-        <Button type="button" disabled={isLoading || loadingRascunho} onClick={handleSubmit(solicitarEmissao)}>
-          {emitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-          Emitir (Assistida)
-        </Button>
-        <Button type="button" variant="outline" disabled={isLoading || loadingRascunho} onClick={handleSubmit(handleSaveRascunho)}>
-          {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-          {isEditingRascunho ? 'Liberar para lote' : 'Salvar Rascunho'}
-        </Button>
-        <Button type="button" variant="ghost" disabled={isLoading} onClick={() => router.back()}>
-          Cancelar
-        </Button>
+        <Card className={cardClassByLayout[layout]}>
+          <CardHeader>
+            <CardTitle className="text-sm">Ações</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button type="button" className="w-full justify-center" disabled={isLoading || loadingRascunho} onClick={handleSubmit(solicitarEmissao)}>
+              {emitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+              Emitir NFS-e
+            </Button>
+            <Button type="button" variant="outline" className="w-full justify-center" disabled={isLoading || loadingRascunho} onClick={handleSubmit(handleSaveRascunho)}>
+              {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              {isEditingRascunho ? 'Liberar para lote' : 'Salvar rascunho'}
+            </Button>
+            <Button type="button" variant="ghost" className="w-full justify-center" disabled={isLoading} onClick={cancelFlow}>
+              Cancelar
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
       <ConfirmDialog
@@ -433,15 +480,43 @@ export function NfseEmissaoForm() {
         title="Confirmar emissão de NFS-e?"
         description={
           emissaoPendente
-            ? [
-                `Cliente: ${clientes.find((c) => c.id === emissaoPendente.clienteId)?.razaoSocial ?? emissaoPendente.clienteId}.`,
-                `Tomador: ${emissaoPendente.tomadorNome}.`,
-                `CPF/CNPJ: ${emissaoPendente.tomadorCpfCnpj}.`,
-                `Serviço: ${emissaoPendente.codigoServico}.`,
-                `Valor: R$ ${Number(emissaoPendente.valorServico).toFixed(2)}.`,
-                `ISS retido: ${emissaoPendente.issRetido ? 'Sim' : 'Não'}.`,
-                'Após confirmar, a solicitação será enviada para a prefeitura e poderá gerar documento fiscal.',
-              ].join(' ')
+            ? (
+                <div className="space-y-4">
+                  <div className="grid gap-3 rounded-lg border border-border bg-muted/25 p-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Cliente</p>
+                      <p className="mt-1 text-sm font-medium">
+                        {clientes.find((c) => c.id === emissaoPendente.clienteId)?.razaoSocial ?? emissaoPendente.clienteId}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tomador</p>
+                      <p className="mt-1 text-sm font-medium">{emissaoPendente.tomadorNome}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">CPF / CNPJ</p>
+                      <p className="mt-1 font-mono text-sm">{emissaoPendente.tomadorCpfCnpj}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Código do serviço</p>
+                      <p className="mt-1 text-sm font-medium">{emissaoPendente.codigoServico}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Valor</p>
+                      <p className="mt-1 text-sm font-semibold tabular-nums">
+                        R$ {Number(emissaoPendente.valorServico).toFixed(2)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">ISS retido</p>
+                      <p className="mt-1 text-sm font-medium">{emissaoPendente.issRetido ? 'Sim' : 'Não'}</p>
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Após confirmar, a solicitação será enviada para a prefeitura e poderá gerar documento fiscal.
+                  </p>
+                </div>
+              )
             : undefined
         }
         confirmLabel="Emitir NFS-e"
