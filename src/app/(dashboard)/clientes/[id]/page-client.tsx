@@ -20,7 +20,7 @@ import { ClienteServicoDialog } from '@/components/clientes/cliente-servico-dial
 import {
   ArrowLeft, Mail, MapPin, Pencil, ShieldCheck, ShieldAlert, ShieldOff,
   AlertTriangle, Plus, Receipt, Wallet, AlertCircle, Bell, FileDown,
-  CheckSquare, DollarSign, BookOpen, Loader2, Save, Send,
+  CheckSquare, DollarSign, BookOpen, Loader2, Save, Send, MessageSquarePlus,
 } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
@@ -362,6 +362,9 @@ export default function ClienteDetailPage() {
   const [popGeral,       setPopGeral]       = useState('')
   const [popSaving,      setPopSaving]      = useState(false)
   const [popDirty,       setPopDirty]       = useState(false)
+  const [popNotas,       setPopNotas]       = useState<Array<Record<string, unknown>>>([])
+  const [notaTexto,      setNotaTexto]      = useState('')
+  const [notaSaving,     setNotaSaving]     = useState(false)
 
   const loadClienteContext = useCallback(() => {
     if (!id) return Promise.resolve()
@@ -377,7 +380,8 @@ export default function ClienteDetailPage() {
       get(listDocuments('clientes_fiscal', [where('clienteId', '==', id), limit(1)])),
       get(listDocuments('clientes_pop', [where('clienteId', '==', id), limit(1)])),
       get(listDocuments('clientes_comentarios', [where('clienteId', '==', id), orderBy('criadoEm', 'desc'), limit(30)])),
-    ]).then(([clienteData, servicosData, competenciasData, lancamentosData, tarefasData, rascunhosData, fiscalData, popData, comentariosData]) => {
+      get(listDocuments('clientes_pop_notas', [where('clienteId', '==', id), orderBy('criadoEm', 'desc'), limit(50)])),
+    ]).then(([clienteData, servicosData, competenciasData, lancamentosData, tarefasData, rascunhosData, fiscalData, popData, comentariosData, popNotasData]) => {
       if (!clienteData) { router.push('/clientes'); return }
       setCliente(clienteData as Record<string, unknown>)
       setServicos(((servicosData ?? []) as Array<Record<string, unknown>>).sort((a, b) => {
@@ -399,6 +403,7 @@ export default function ClienteDetailPage() {
         setPopGeral((pop.geral as string) ?? '')
       }
       setComentarios((comentariosData ?? []) as Array<Record<string, unknown>>)
+      setPopNotas((popNotasData ?? []) as Array<Record<string, unknown>>)
       setPopDirty(false)
     }).finally(() => setLoading(false))
   }, [id, router])
@@ -437,6 +442,25 @@ export default function ClienteDetailPage() {
       toast.success('Comentário adicionado.')
     } catch { toast.error('Não foi possível salvar o comentário.') }
     finally { setCommentSaving(false) }
+  }
+
+  async function saveNota() {
+    if (!id || !notaTexto.trim()) return
+    setNotaSaving(true)
+    try {
+      const payload = {
+        clienteId: id,
+        texto: notaTexto.trim(),
+        autorNome: usuario?.nome ?? usuario?.email ?? 'Sistema',
+        autorId: usuario?.uid ?? '',
+        criadoEm: new Date(),
+      }
+      const newId = await createDocument('clientes_pop_notas', payload)
+      setPopNotas(prev => [{ id: newId as string, ...payload } as Record<string, unknown>, ...prev])
+      setNotaTexto('')
+      toast.success('Nota interna registrada.')
+    } catch { toast.error('Não foi possível salvar a nota.') }
+    finally { setNotaSaving(false) }
   }
 
   function loadFiscal() {
@@ -928,6 +952,46 @@ export default function ClienteDetailPage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Notas internas versionadas */}
+            <Card>
+              <CardHeader className="flex flex-row items-center gap-2 py-3 px-4">
+                <MessageSquarePlus className="h-4 w-4 text-primary" />
+                <CardTitle className="text-sm">Notas internas</CardTitle>
+                <span className="ml-auto text-xs text-muted-foreground">append-only · histórico completo</span>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-3">
+                <div className="flex gap-2 items-end">
+                  <textarea
+                    value={notaTexto}
+                    onChange={e => setNotaTexto(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void saveNota() } }}
+                    placeholder="Registrar nota interna… (Enter para salvar)"
+                    rows={2}
+                    className="flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <Button size="sm" variant="outline" disabled={!notaTexto.trim() || notaSaving} onClick={() => void saveNota()} className="shrink-0">
+                    {notaSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                  </Button>
+                </div>
+                {popNotas.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Nenhuma nota registrada.</p>
+                ) : (
+                  <ol className="space-y-2 max-h-64 overflow-y-auto">
+                    {popNotas.map(n => (
+                      <li key={n.id as string} className="rounded-md border border-border/60 bg-muted/25 px-3 py-2">
+                        <p className="text-sm whitespace-pre-wrap">{n.texto as string}</p>
+                        <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground/70">
+                          <span>{n.autorNome as string}</span>
+                          <span>·</span>
+                          <span>{tsToDate(n.criadoEm as Parameters<typeof tsToDate>[0])?.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) ?? '—'}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
 
@@ -954,6 +1018,55 @@ export default function ClienteDetailPage() {
               ))}
             </CardContent>
           </Card>
+
+          {/* Tendência histórica de competências */}
+          {competencias.length >= 3 && (() => {
+            const sorted = [...competencias].sort((a, b) => {
+              const aDate = (a.ano as number) * 100 + (a.mes as number)
+              const bDate = (b.ano as number) * 100 + (b.mes as number)
+              return aDate - bDate
+            }).slice(-6)
+            const W = 220, H = 48, PAD = 4
+            const total = sorted.length
+            return (
+              <Card>
+                <CardHeader className="py-3 px-4">
+                  <CardTitle className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Tendência (últ. 6 meses)</CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-3 space-y-1">
+                  <svg viewBox={`0 0 ${W} ${H}`} className="w-full" aria-hidden>
+                    {sorted.map((c, i) => {
+                      const status = c.status as string
+                      const x = PAD + (i / Math.max(total - 1, 1)) * (W - PAD * 2)
+                      const y = H - PAD - (status === 'concluida' ? H - PAD * 2 : status === 'em_andamento' ? (H - PAD * 2) * 0.5 : (H - PAD * 2) * 0.15)
+                      const color = status === 'concluida' ? '#22c55e' : status === 'em_andamento' ? '#f59e0b' : '#ef4444'
+                      return <circle key={c.id as string} cx={x} cy={y} r="4" fill={color} />
+                    })}
+                    {sorted.length > 1 && sorted.slice(0, -1).map((c, i) => {
+                      const s1 = c.status as string, s2 = sorted[i + 1].status as string
+                      const x1 = PAD + (i / Math.max(total - 1, 1)) * (W - PAD * 2)
+                      const x2 = PAD + ((i + 1) / Math.max(total - 1, 1)) * (W - PAD * 2)
+                      const y1 = H - PAD - (s1 === 'concluida' ? H - PAD * 2 : s1 === 'em_andamento' ? (H - PAD * 2) * 0.5 : (H - PAD * 2) * 0.15)
+                      const y2 = H - PAD - (s2 === 'concluida' ? H - PAD * 2 : s2 === 'em_andamento' ? (H - PAD * 2) * 0.5 : (H - PAD * 2) * 0.15)
+                      return <line key={`l${i}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#e2e8f0" strokeWidth="1.5" />
+                    })}
+                  </svg>
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>{formatMesAno(sorted[0].mes as number, sorted[0].ano as number)}</span>
+                    <span>{formatMesAno(sorted[sorted.length - 1].mes as number, sorted[sorted.length - 1].ano as number)}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-[10px]">
+                    {[['concluida', '#22c55e', 'Concluída'], ['em_andamento', '#f59e0b', 'Em andamento'], ['aberta', '#ef4444', 'Aberta']].map(([s, c, l]) => (
+                      <span key={s} className="flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-full inline-block" style={{ background: c }} />
+                        {l}
+                      </span>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })()}
 
           {/* Insights automáticos */}
           {insightsCliente.length > 0 && (

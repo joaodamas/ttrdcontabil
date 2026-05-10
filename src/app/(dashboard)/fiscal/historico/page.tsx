@@ -20,7 +20,8 @@ import { AppModal } from '@/components/ui/app-modal'
 import { FilterBtn } from '@/components/ui/filter-btn'
 import { DataTableShell } from '@/components/ui/data-table-shell'
 import { Textarea } from '@/components/ui/textarea'
-import { ArrowLeft, Download, Eye, FileText, Loader2, RefreshCw, XCircle } from 'lucide-react'
+import { ArrowLeft, Download, Eye, FileText, Loader2, RefreshCw, XCircle, History } from 'lucide-react'
+import { LogsNfseModal } from '@/components/fiscal/logs-nfse-modal'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   emitida: { label: 'Emitida', variant: 'default' },
@@ -79,6 +80,7 @@ function FiscalHistoricoContent() {
   const [cancelamentoId, setCancelamentoId] = useState<string | null>(null)
   const [motivoCancelamento, setMotivoCancelamento] = useState('')
   const [cancelando, setCancelando] = useState(false)
+  const [logNota, setLogNota] = useState<Record<string, unknown> | null>(null)
 
   const loadNotas = useCallback(() => {
     setLoading(true)
@@ -353,6 +355,9 @@ function FiscalHistoricoContent() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-1.5">
+                            <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Ver logs de emissão" onClick={() => setLogNota(n)}>
+                              <History className="h-3.5 w-3.5" />
+                            </Button>
                             <Link href={`/fiscal/${n.id as string}`}>
                               <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Ver detalhe">
                                 <Eye className="h-3.5 w-3.5" />
@@ -448,6 +453,12 @@ function FiscalHistoricoContent() {
       >
         <Textarea value={motivoCancelamento} onChange={(e) => setMotivoCancelamento(e.target.value)} placeholder="Informe o motivo fiscal do cancelamento (mínimo 10 caracteres)" className="min-h-28" />
       </AppModal>
+
+      <LogsNfseModal
+        nota={logNota}
+        open={logNota !== null}
+        onOpenChange={open => { if (!open) setLogNota(null) }}
+      />
     </div>
   )
 }

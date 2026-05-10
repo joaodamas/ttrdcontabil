@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Loader2, Save, Send, ArrowLeft, CheckCircle2, ChevronRight, RotateCcw } from 'lucide-react'
 import { formatCurrency, formatCpfCnpj } from '@/lib/utils'
@@ -110,6 +111,7 @@ export function NfseEmissaoForm({
   const [showResume,         setShowResume]         = useState(false)
   const [ultimoRascunho,     setUltimoRascunho]     = useState<RascunhoNfse | null>(null)
   const [loadingUltimoRasc,  setLoadingUltimoRasc]  = useState(false)
+  const [templates,          setTemplates]          = useState<RascunhoNfse[]>([])
 
   const {
     register,
@@ -176,28 +178,34 @@ export function NfseEmissaoForm({
       .finally(() => setLoadingRascunho(false))
   }, [rascunhoIdParam, reset, router])
 
-  // Load last rascunho for auto-fill suggestion
+  // Load last rascunhos for auto-fill + templates
   useEffect(() => {
-    if (!selectedClienteId || rascunhoIdParam) { setUltimoRascunho(null); return }
+    if (!selectedClienteId || rascunhoIdParam) { setUltimoRascunho(null); setTemplates([]); return }
     setLoadingUltimoRasc(true)
     listDocuments<RascunhoNfse>('nfse_rascunhos', [
       where('clienteId', '==', selectedClienteId),
-      where('status', 'in', ['rascunho', 'aguardando_emissao', 'emitida']),
       orderBy('criadoEm', 'desc'),
-      limit(1),
-    ]).then(results => setUltimoRascunho(results.length > 0 ? results[0] : null))
-      .catch(() => setUltimoRascunho(null))
+      limit(5),
+    ]).then(results => {
+      setUltimoRascunho(results.length > 0 ? results[0] : null)
+      setTemplates(results)
+    })
+      .catch(() => { setUltimoRascunho(null); setTemplates([]) })
       .finally(() => setLoadingUltimoRasc(false))
   }, [selectedClienteId, rascunhoIdParam])
 
-  function applyUltimoRascunho() {
-    if (!ultimoRascunho) return
-    const dados = ultimoRascunho.dados ?? {}
+  function applyRascunhoData(r: RascunhoNfse) {
+    const dados = r.dados ?? {}
     if (dados.descricaoServico) setValue('descricaoServico', dados.descricaoServico as string)
     if (dados.codigoServico)    setValue('codigoServico',    dados.codigoServico as string)
     if (dados.valorServico)     setValue('valorServico',     Number(dados.valorServico))
     if (dados.aliquota != null) setValue('aliquota',         Number(dados.aliquota))
     if (dados.issRetido != null) setValue('issRetido',       Boolean(dados.issRetido))
+  }
+
+  function applyUltimoRascunho() {
+    if (!ultimoRascunho) return
+    applyRascunhoData(ultimoRascunho)
     toast.success('Dados do último rascunho aplicados.')
   }
 
@@ -502,17 +510,42 @@ export function NfseEmissaoForm({
       <Card className={cardClassByLayout[layout]}>
         <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
           <CardTitle className="text-sm">Serviço</CardTitle>
-          {(ultimoRascunho || loadingUltimoRasc) && (
-            <button
-              type="button"
-              disabled={loadingUltimoRasc}
-              onClick={applyUltimoRascunho}
-              className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
-            >
-              {loadingUltimoRasc ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
-              Reutilizar último
-            </button>
-          )}
+          <div className="flex items-center gap-1.5">
+            {(ultimoRascunho || loadingUltimoRasc) && (
+              <button
+                type="button"
+                disabled={loadingUltimoRasc}
+                onClick={applyUltimoRascunho}
+                className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+              >
+                {loadingUltimoRasc ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                Último
+              </button>
+            )}
+            {templates.length > 1 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                  Templates ({templates.length})
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="max-w-[280px]">
+                  {templates.map((t, i) => {
+                    const desc = (t.dados?.descricaoServico as string | undefined) ?? `Rascunho ${i + 1}`
+                    const valor = t.dados?.valorServico ? `R$ ${Number(t.dados.valorServico).toFixed(2)}` : ''
+                    return (
+                      <DropdownMenuItem
+                        key={t.id}
+                        onClick={() => { applyRascunhoData(t); toast.success('Template aplicado.') }}
+                        className="flex-col items-start gap-0.5"
+                      >
+                        <span className="line-clamp-1 text-xs font-medium">{desc.slice(0, 60)}{desc.length > 60 ? '…' : ''}</span>
+                        {valor && <span className="text-[11px] text-muted-foreground">{valor}</span>}
+                      </DropdownMenuItem>
+                    )
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">

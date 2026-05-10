@@ -1,11 +1,11 @@
 # Roadmap de Evolução — Plataforma TTRD Contábil
 
-Atualizado em: 2026-05-10 (sessão 7)  
+Atualizado em: 2026-05-10 (sessão 8)  
 Base: arquitetura e funcionalidades atuais documentadas em `docs_dev/documentacao-tecnica-telas-fluxos-modais.md`.
 
 ## 0. Acompanhamento da execução
 
-Status atualizado em: 2026-05-10 (sessão 7).
+Status atualizado em: 2026-05-10 (sessão 8).
 
 ### Prioridade da sessão 6
 
@@ -152,6 +152,14 @@ Status atualizado em: 2026-05-10 (sessão 7).
 - [x] FilterSheet aplicado na página de Clientes — trigger mobile com badge de filtros ativos, sheet com status e regime tributário.
 - [x] Validações avançadas no wizard NFS-e — CPF/CNPJ com checagem de dígitos, código de serviço com regex ABRASF, descrição mínima 10 chars, painel de avisos não-bloqueantes para alíquota < 2% e valor > R$ 50k.
 - [x] Lint e TypeScript validados limpos (round 10).
+- [x] Kanban DnD: `@dnd-kit/core + sortable` — arrastar card entre colunas ajusta `dataPrazo` automaticamente; `GripVertical` handle por card; `DragOverlay` com preview do card.
+- [x] Kanban swimlanes: toggle "Swimlanes" agrupa cards por responsável dentro de cada coluna usando `groupBySwimlane`.
+- [x] Templates NFS-e: carrega até 5 rascunhos anteriores do cliente; botão "Último" + dropdown "Templates (N)" preenche descrição, código, valor, alíquota e ISS retido.
+- [x] Logs visuais NFS-e: componente `LogsNfseModal` com timeline de criação, envio, tentativas, erros, emissão e cancelamento; botão de histórico por linha na tabela de histórico.
+- [x] Notas internas versionadas no POP do cliente: textarea append-only, salvo em `clientes_pop_notas`, exibido em lista com autor e timestamp.
+- [x] FilterSheet aplicado em Competências (mobile).
+- [x] Indicadores históricos Cliente 360: mini gráfico SVG de tendência (últimas 6 competências) com pontos coloridos por status e legenda.
+- [x] Lint e TypeScript validados limpos (round 11).
 
 ### Em andamento
 

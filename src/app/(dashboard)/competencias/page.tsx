@@ -14,6 +14,8 @@ import { DataTableShell } from '@/components/ui/data-table-shell'
 import { competenciasFiltroSchema } from '@/features/competencias/schemas'
 import { useCompetenciasList } from '@/features/competencias/hooks'
 import type { CompetenciaRecord, CompetenciasFilters } from '@/features/competencias/types'
+import { FilterSheet, FilterSheetTrigger } from '@/components/ui/filter-sheet'
+import { useRouter } from 'next/navigation'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   aberta: { label: 'Aberta', variant: 'outline' },
@@ -38,7 +40,9 @@ function CompetenciasContent() {
   })
   const { mes, ano, status, clienteId, page } = parsed
   const { competencias, total, totalPages, isLoading } = useCompetenciasList(parsed)
+  const router = useRouter()
   const [groupBy, setGroupBy] = useState<'none' | 'status' | 'responsavel'>('none')
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
 
   type GroupedRows = Array<{ groupKey: string; groupLabel: string; rows: CompetenciaRecord[] }>
 
@@ -87,15 +91,39 @@ function CompetenciasContent() {
             {total} competência{total !== 1 ? 's' : ''} — {formatMesAno(mes, ano)}
           </p>
         </div>
-        <Link href="/competencias/nova">
-          <Button size="sm" className="h-10 rounded-xl">
-            <Plus className="w-4 h-4 mr-1" />
-            Nova Competência
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <FilterSheetTrigger
+            onClick={() => setFilterSheetOpen(true)}
+            activeCount={status ? 1 : 0}
+          />
+          <Link href="/competencias/nova">
+            <Button size="sm" className="h-10 rounded-xl">
+              <Plus className="w-4 h-4 mr-1" />
+              Nova Competência
+            </Button>
+          </Link>
+        </div>
       </div>
 
-      <div className="surface-subtle flex flex-wrap items-center gap-3 border px-3 py-2.5">
+      <FilterSheet
+        open={filterSheetOpen}
+        onOpenChange={setFilterSheetOpen}
+        activeCount={status ? 1 : 0}
+        onReset={() => router.push(buildUrl({ status: '', page: 1 }))}
+      >
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</p>
+          <div className="flex flex-wrap gap-2">
+            {(['', 'aberta', 'em_andamento', 'concluida', 'cancelada'] as const).map(s => (
+              <FilterBtn key={s} href={buildUrl({ status: s, page: 1 })} active={status === s}>
+                {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+              </FilterBtn>
+            ))}
+          </div>
+        </div>
+      </FilterSheet>
+
+      <div className="surface-subtle hidden sm:flex flex-wrap items-center gap-3 border px-3 py-2.5">
         <div className="flex items-center gap-1">
           <Link
             href={buildUrl(

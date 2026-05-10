@@ -34,6 +34,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { bulkAlterarPrazo, bulkConcluirTarefas, bulkReatribuirTarefas } from '@/features/hoje/services'
 import { updateDocument } from '@/lib/firestore-client'
 import { Timestamp } from 'firebase/firestore'
+import { KanbanBoard } from '@/components/hoje/kanban-board'
 import { hojeKeys } from '@/features/hoje/queries'
 import { useHojeData } from '@/features/hoje/hooks'
 import type { HojeTask, HojeUsuario } from '@/features/hoje/types'
@@ -326,7 +327,8 @@ export default function HojePage() {
   const [responsavelId, setResponsavelId] = useState('todos')
   const [prioridadeFiltro, setPrioridadeFiltro] = useState<string>('todos')
   const [modoFoco, setModoFoco] = useState(false)
-  const [modoView, setModoView] = useState<'lista' | 'kanban'>('lista')
+  const [modoView,   setModoView]   = useState<'lista' | 'kanban'>('lista')
+  const [swimlanes,  setSwimlanes]  = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkResponsavelId, setBulkResponsavelId] = useState('')
   const [bulkDate, setBulkDate] = useState('')
@@ -448,6 +450,16 @@ export default function HojePage() {
               <Columns2 className="h-3.5 w-3.5" />Kanban
             </button>
           </div>
+          {modoView === 'kanban' && (
+            <Button
+              variant={swimlanes ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSwimlanes(v => !v)}
+            >
+              <Users className="h-3.5 w-3.5" />
+              Swimlanes
+            </Button>
+          )}
           <Button
             variant={modoFoco ? 'default' : 'outline'}
             size="sm"
@@ -579,59 +591,14 @@ export default function HojePage() {
 
       {/* Kanban view */}
       {modoView === 'kanban' && (
-        <div className="grid gap-4 sm:grid-cols-3">
-          {([
-            { grupo: 'atrasada' as const, label: 'Atrasadas',   cor: 'border-destructive/30 bg-destructive/5', header: 'text-destructive' },
-            { grupo: 'hoje'    as const, label: 'Para hoje',    cor: 'border-warning/30 bg-warning/5',         header: 'text-warning'     },
-            { grupo: 'proximos' as const, label: 'Próximos 7d', cor: 'border-border bg-muted/20',               header: 'text-muted-foreground' },
-          ] as const).map(col => {
-            const colItems = fila.filter(i => i.grupo === col.grupo)
-            return (
-              <div key={col.grupo} className={`rounded-xl border overflow-hidden ${col.cor}`}>
-                <div className={`flex items-center justify-between px-4 py-2.5 border-b ${col.cor}`}>
-                  <span className={`text-xs font-semibold uppercase tracking-wide ${col.header}`}>{col.label}</span>
-                  <span className={`text-xs font-bold tabular-nums ${col.header}`}>{colItems.length}</span>
-                </div>
-                <div className="divide-y divide-border/50 max-h-[520px] overflow-y-auto">
-                  {colItems.length === 0 ? (
-                    <p className="px-4 py-6 text-center text-xs text-muted-foreground">Nenhuma tarefa</p>
-                  ) : colItems.map(item => {
-                    const pr = tsToDate(item.dataPrazo)
-                    const atr = diasAtraso(pr)
-                    return (
-                      <div key={item.id} className="flex items-start gap-2 px-3 py-2.5 hover:bg-muted/40 transition-colors">
-                        <Checkbox
-                          checked={selected.has(item.id)}
-                          onCheckedChange={() => toggle(item.id)}
-                          className="mt-0.5 shrink-0"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <Link href={`/tarefas/${item.id}`} className="text-xs font-medium hover:underline leading-tight line-clamp-2">
-                            {item.titulo ?? 'Tarefa'}
-                          </Link>
-                          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{item.clienteNome ?? '—'}</p>
-                          {atr > 0 && <p className="text-[11px] font-medium text-destructive">{atr}d atraso</p>}
-                          {!item.responsavelId && usuariosData.length > 0 && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger className="mt-1 text-[10px] text-destructive border border-destructive/30 rounded px-1.5 py-0.5 hover:bg-destructive/10">atribuir</DropdownMenuTrigger>
-                              <DropdownMenuContent>
-                                {usuariosData.map(u => (
-                                  <DropdownMenuItem key={u.id} onClick={() => void quickAssign(item.id, u.id, u.nome ?? u.id)}>
-                                    {u.nome ?? u.id}
-                                  </DropdownMenuItem>
-                                ))}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+        <KanbanBoard
+          fila={fila}
+          selected={selected}
+          toggle={toggle}
+          usuarios={usuariosData}
+          quickAssign={quickAssign}
+          swimlanes={swimlanes}
+        />
       )}
 
       {modoView === 'lista' && (
