@@ -22,6 +22,7 @@ export { exportarFirestoreSemanal } from './backup'
 export { criarCompetenciasMensais } from './scheduler/competencias'
 export { criarLancamentosMensais  } from './scheduler/lancamentos'
 export { enviarAlertasDiarios, alertasPrazoCritico, detectarInadimplencia } from './scheduler/alertas'
+export { agendarCobrancasWhatsapp, processarFilaWhatsapp } from './whatsapp/scheduler'
 
 // ── Triggers ──────────────────────────────────────────────────────────────────
 export { propagarRazaoSocial } from './triggers/cliente-update'
@@ -35,3 +36,13 @@ export {
   eventoNfseEmitidaCriada,
   eventoFiscalAtualizado,
 } from './triggers/cliente-events'
+
+// ── WhatsApp ──────────────────────────────────────────────────────────────────
+export {
+  inicializarConfiguracaoWhatsapp,
+  dispararCobrancaWhatsappAgora,
+  pausarCobrancaWhatsappLancamento,
+  retomarCobrancaWhatsappLancamento,
+  reagendarCobrancaWhatsappLancamento,
+} from './whatsapp/callables'
+export { webhookWhatsapp } from './whatsapp/webhook'
