@@ -37,6 +37,14 @@ export type ConectorFiscalAdmin = {
   cancelamento?: boolean
 }
 
+export type UiFeatureFlags = {
+  premiumUiEnabled: boolean
+  dashboardV2Enabled: boolean
+  tableV2Enabled: boolean
+  modalV2Enabled: boolean
+  sidebarV2Enabled: boolean
+}
+
 export type ParametrosEscritorio = {
   nomeEscritorio: string
   cnpjEscritorio: string
@@ -44,4 +52,12 @@ export type ParametrosEscritorio = {
   tenantId: string
   diaVencimentoPadrao: number
   ambienteFiscalPadrao: 'homologacao' | 'producao'
+  whatsappCloudApiEnabled: boolean
+  whatsappBusinessAccountId: string
+  whatsappPhoneNumberId: string
+  whatsappWebhookVerifyToken: string
+  whatsappJanelaHoraMinima: string
+  whatsappJanelaHoraMaxima: string
+  whatsappUsaDiasUteis: boolean
+  uiFeatureFlags: UiFeatureFlags
 }

@@ -16,6 +16,7 @@ import type {
   UsuarioAdmin,
 } from './types'
 import { appConfig } from '@/lib/app-config'
+import { DEFAULT_UI_FEATURE_FLAGS, normalizeUiFeatureFlags } from '@/lib/feature-flags'
 
 export const DEFAULT_PARAMETROS_ESCRITORIO: ParametrosEscritorio = {
   nomeEscritorio: appConfig.name,
@@ -24,6 +25,14 @@ export const DEFAULT_PARAMETROS_ESCRITORIO: ParametrosEscritorio = {
   tenantId: appConfig.tenantId,
   diaVencimentoPadrao: 10,
   ambienteFiscalPadrao: 'homologacao',
+  whatsappCloudApiEnabled: false,
+  whatsappBusinessAccountId: '',
+  whatsappPhoneNumberId: '',
+  whatsappWebhookVerifyToken: '',
+  whatsappJanelaHoraMinima: '08:00',
+  whatsappJanelaHoraMaxima: '18:00',
+  whatsappUsaDiasUteis: true,
+  uiFeatureFlags: DEFAULT_UI_FEATURE_FLAGS,
 }
 
 export async function fetchUsuariosAdmin() {
@@ -104,6 +113,9 @@ export async function fetchParametrosEscritorio(tenantId?: string) {
       tenantId: tenantId ?? DEFAULT_PARAMETROS_ESCRITORIO.tenantId,
       ...data,
       diaVencimentoPadrao: Number(data.diaVencimentoPadrao ?? DEFAULT_PARAMETROS_ESCRITORIO.diaVencimentoPadrao),
+      whatsappCloudApiEnabled: Boolean(data.whatsappCloudApiEnabled),
+      whatsappUsaDiasUteis: data.whatsappUsaDiasUteis ?? DEFAULT_PARAMETROS_ESCRITORIO.whatsappUsaDiasUteis,
+      uiFeatureFlags: normalizeUiFeatureFlags(data.uiFeatureFlags),
     },
   }
 }
@@ -112,6 +124,11 @@ export async function saveParametrosEscritorio(exists: boolean, form: Parametros
   const payload = {
     ...form,
     diaVencimentoPadrao: Math.min(28, Math.max(1, Number(form.diaVencimentoPadrao) || 10)),
+    whatsappJanelaHoraMinima: form.whatsappJanelaHoraMinima || '08:00',
+    whatsappJanelaHoraMaxima: form.whatsappJanelaHoraMaxima || '18:00',
+    whatsappCloudApiEnabled: Boolean(form.whatsappCloudApiEnabled),
+    whatsappUsaDiasUteis: Boolean(form.whatsappUsaDiasUteis),
+    uiFeatureFlags: normalizeUiFeatureFlags(form.uiFeatureFlags),
   }
   if (exists) {
     await updateDocument('configuracoes', 'escritorio', payload)

@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2 } from 'lucide-react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Briefcase, Loader2 } from 'lucide-react'
+import { AppModal } from '@/components/ui/app-modal'
 import { ClienteServicoForm } from '@/components/clientes/cliente-servico-form'
 import { getCliente, getServicos } from '@/lib/firestore-client'
 import { getErrorMessage } from '@/lib/error-message'
@@ -60,34 +60,35 @@ export function ClienteServicoDialog({
   }, [open, clienteId])
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Vincular serviço ao cliente</DialogTitle>
-        </DialogHeader>
-
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-5 w-5 animate-spin" />
-          </div>
-        ) : error ? (
-          <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">
-            {error}
-          </div>
-        ) : (
-          <ClienteServicoForm
-            clienteId={clienteId}
-            clienteNome={clienteNome}
-            servicos={servicos}
-            mode="modal"
-            onCancel={() => onOpenChange(false)}
-            onSaved={() => {
-              onOpenChange(false)
-              onSaved?.()
-            }}
-          />
-        )}
-      </DialogContent>
-    </Dialog>
+    <AppModal
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Vincular serviço ao cliente"
+      description={clienteNome ? `Cliente: ${clienteNome}` : undefined}
+      icon={<Briefcase className="size-4" />}
+      size="lg"
+    >
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-5 w-5 animate-spin" />
+        </div>
+      ) : error ? (
+        <div className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">
+          {error}
+        </div>
+      ) : (
+        <ClienteServicoForm
+          clienteId={clienteId}
+          clienteNome={clienteNome}
+          servicos={servicos}
+          mode="modal"
+          onCancel={() => onOpenChange(false)}
+          onSaved={() => {
+            onOpenChange(false)
+            onSaved?.()
+          }}
+        />
+      )}
+    </AppModal>
   )
 }

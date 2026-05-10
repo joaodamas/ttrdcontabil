@@ -7,7 +7,7 @@ import { where, orderBy, limit } from 'firebase/firestore'
 import { Timestamp } from 'firebase/firestore'
 import { toast } from 'sonner'
 
-import { getDocument, listDocuments } from '@/lib/firestore-client'
+import { getDocument, listDocuments, updateDocument, createDocument } from '@/lib/firestore-client'
 import { formatCpfCnpj, formatDate, formatCurrency, formatMesAno, tsToDate, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -15,12 +15,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Timeline, type TimelineEvent } from '@/components/clientes/timeline'
+import { Timeline, type TimelineEvent, type TimelineEventType } from '@/components/clientes/timeline'
 import { ClienteServicoDialog } from '@/components/clientes/cliente-servico-dialog'
 import {
   ArrowLeft, Mail, MapPin, Pencil, ShieldCheck, ShieldAlert, ShieldOff,
   AlertTriangle, Plus, Receipt, Wallet, AlertCircle, Bell, FileDown,
+  CheckSquare, DollarSign, BookOpen, Loader2, Save, Send,
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
@@ -346,7 +348,20 @@ export default function ClienteDetailPage() {
   const [loading,      setLoading]      = useState(true)
   const [configOpen,   setConfigOpen]   = useState(false)
   const [servicoDialogOpen, setServicoDialogOpen] = useState(false)
+  const [comentarios,  setComentarios]  = useState<Array<Record<string, unknown>>>([])
+  const [commentText,  setCommentText]  = useState('')
+  const [commentSaving, setCommentSaving] = useState(false)
   const [emitirOpen, setEmitirOpen] = useState(false)
+  const [timelineFilter, setTimelineFilter] = useState<TimelineEventType | 'todos'>('todos')
+
+  // POP — Procedimento Operacional do Cliente
+  const [popDocId, setPopDocId] = useState<string | null>(null)
+  const [popFiscal,      setPopFiscal]      = useState('')
+  const [popFinanceiro,  setPopFinanceiro]  = useState('')
+  const [popOperacional, setPopOperacional] = useState('')
+  const [popGeral,       setPopGeral]       = useState('')
+  const [popSaving,      setPopSaving]      = useState(false)
+  const [popDirty,       setPopDirty]       = useState(false)
 
   const loadClienteContext = useCallback(() => {
     if (!id) return Promise.resolve()
@@ -360,7 +375,9 @@ export default function ClienteDetailPage() {
       get(listDocuments('tarefas', [where('clienteId', '==', id), limit(30)])),
       get(listDocuments('nfse_rascunhos', [where('clienteId', '==', id), limit(20)])),
       get(listDocuments('clientes_fiscal', [where('clienteId', '==', id), limit(1)])),
-    ]).then(([clienteData, servicosData, competenciasData, lancamentosData, tarefasData, rascunhosData, fiscalData]) => {
+      get(listDocuments('clientes_pop', [where('clienteId', '==', id), limit(1)])),
+      get(listDocuments('clientes_comentarios', [where('clienteId', '==', id), orderBy('criadoEm', 'desc'), limit(30)])),
+    ]).then(([clienteData, servicosData, competenciasData, lancamentosData, tarefasData, rascunhosData, fiscalData, popData, comentariosData]) => {
       if (!clienteData) { router.push('/clientes'); return }
       setCliente(clienteData as Record<string, unknown>)
       setServicos(((servicosData ?? []) as Array<Record<string, unknown>>).sort((a, b) => {
@@ -373,8 +390,54 @@ export default function ClienteDetailPage() {
       setTarefas((tarefasData ?? []) as Array<Record<string, unknown>>)
       setRascunhos((rascunhosData ?? []) as Array<Record<string, unknown>>)
       setFiscal(fiscalData && fiscalData.length > 0 ? fiscalData[0] as Record<string, unknown> : null)
+      const pop = popData && popData.length > 0 ? popData[0] as Record<string, unknown> : null
+      if (pop) {
+        setPopDocId(pop.id as string)
+        setPopFiscal((pop.fiscal as string) ?? '')
+        setPopFinanceiro((pop.financeiro as string) ?? '')
+        setPopOperacional((pop.operacional as string) ?? '')
+        setPopGeral((pop.geral as string) ?? '')
+      }
+      setComentarios((comentariosData ?? []) as Array<Record<string, unknown>>)
+      setPopDirty(false)
     }).finally(() => setLoading(false))
   }, [id, router])
+
+  async function savePop() {
+    if (!id) return
+    setPopSaving(true)
+    try {
+      const payload = { clienteId: id, fiscal: popFiscal, financeiro: popFinanceiro, operacional: popOperacional, geral: popGeral }
+      if (popDocId) {
+        await updateDocument('clientes_pop', popDocId, payload)
+      } else {
+        const newId = await createDocument('clientes_pop', payload)
+        setPopDocId(newId as string)
+      }
+      setPopDirty(false)
+      toast.success('POP salvo.')
+    } catch { toast.error('Não foi possível salvar o POP.') }
+    finally { setPopSaving(false) }
+  }
+
+  async function saveComment() {
+    if (!id || !commentText.trim()) return
+    setCommentSaving(true)
+    try {
+      const payload = {
+        clienteId: id,
+        texto: commentText.trim(),
+        autorNome: usuario?.nome ?? usuario?.email ?? 'Sistema',
+        autorId: usuario?.uid ?? '',
+        criadoEm: new Date(),
+      }
+      const newId = await createDocument('clientes_comentarios', payload)
+      setComentarios(prev => [{ id: newId as string, ...payload } as Record<string, unknown>, ...prev])
+      setCommentText('')
+      toast.success('Comentário adicionado.')
+    } catch { toast.error('Não foi possível salvar o comentário.') }
+    finally { setCommentSaving(false) }
+  }
 
   function loadFiscal() {
     if (!id) return
@@ -389,7 +452,7 @@ export default function ClienteDetailPage() {
   }, [id, loadClienteContext])
 
   /* ── timeline events ──────────────────────────────────── */
-  const timelineEvents = useMemo((): TimelineEvent[] => {
+  const timelineEventsAll = useMemo((): TimelineEvent[] => {
     const hoje = new Date()
     const events: TimelineEvent[] = []
 
@@ -420,8 +483,58 @@ export default function ClienteDetailPage() {
         metadata:  formatCurrency(l.valor as number),
       })
     }
-    return events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, 15)
-  }, [competencias, lancamentos])
+    for (const t of tarefas) {
+      const ts = tsToDate((t.updatedAt ?? t.createdAt) as Timestamp | undefined) ?? new Date()
+      const status = t.status as string
+      const prazo = tsToDate(t.dataPrazo as Timestamp | undefined)
+      const vencida = prazo ? prazo < hoje && ['pendente', 'em_andamento'].includes(status) : false
+      events.push({
+        id:          `tarefa-${t.id as string}`,
+        type:        'tarefa',
+        title:       (t.titulo as string) ?? 'Tarefa',
+        description: t.responsavelNome as string | undefined,
+        timestamp:   ts,
+        variant:     status === 'concluida' ? 'success' : vencida ? 'destructive' : status === 'em_andamento' ? 'default' : 'neutral',
+        href:        `/tarefas/${t.id as string}`,
+        metadata:    status,
+      })
+    }
+    // WhatsApp: sintetizar evento a partir dos lançamentos com cobrança enviada
+    for (const l of lancamentos) {
+      const ultimoEnvio = tsToDate(l.ultimoEnvioWhatsappEm as Timestamp | undefined)
+      if (!ultimoEnvio) continue
+      const whatsStatus = (l.statusWhatsappCobranca as string | undefined) ?? ''
+      events.push({
+        id:          `wa-${l.id as string}`,
+        type:        'comentario',
+        title:       `Cobrança WhatsApp — ${(l.descricao as string) ?? 'lançamento'}`,
+        description: `Status: ${whatsStatus || 'enviado'}`,
+        timestamp:   ultimoEnvio,
+        variant:     whatsStatus === 'lido' || whatsStatus === 'respondido' ? 'success' : whatsStatus === 'falhou' ? 'destructive' : 'neutral',
+        metadata:    whatsStatus || undefined,
+        source:      'auto',
+      })
+    }
+    // Comentários manuais
+    for (const c of comentarios) {
+      const ts = tsToDate(c.criadoEm as Timestamp | undefined) ?? new Date()
+      events.push({
+        id:          `comentario-${c.id as string}`,
+        type:        'comentario',
+        title:       (c.texto as string) ?? 'Comentário',
+        description: `por ${(c.autorNome as string) ?? 'usuário'}`,
+        timestamp:   ts,
+        variant:     'neutral',
+        source:      'manual',
+      })
+    }
+    return events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+  }, [competencias, lancamentos, tarefas, comentarios])
+
+  const timelineEvents = useMemo(() =>
+    (timelineFilter === 'todos' ? timelineEventsAll : timelineEventsAll.filter(e => e.type === timelineFilter)).slice(0, 20),
+    [timelineEventsAll, timelineFilter]
+  )
 
   const fiscalCredenciais = useMemo(
     () => (fiscal?.credenciais ?? {}) as Record<string, unknown>,
@@ -456,11 +569,41 @@ export default function ClienteDetailPage() {
 
   const competenciaAberta   = competencias.find(c => (c.status as string) === 'aberta')
   const lancamentoAtrasado  = lancamentos.find(l => { const v = tsToDate(l.dataVencimento); return (l.status as string) === 'pendente' && !!v && v < new Date() })
+  const tarefaAtrasada      = tarefas.find(t => { if (!['pendente', 'em_andamento'].includes((t.status as string) ?? '')) return false; const v = tsToDate(t.dataPrazo); return !!v && v < new Date() })
+  const rascunhoCritico     = rascunhos.find(r => ['erro_integracao', 'aguardando_emissao'].includes((r.status as string) ?? ''))
 
-  const healthScore = (servicos.length > 0 ? 1 : 0) + (fiscal ? 1 : 0) + (!competenciaAberta ? 1 : 0) + (!lancamentoAtrasado ? 1 : 0)
+  const HEALTH_DIMS = 6
+  const healthScore = (servicos.length > 0 ? 1 : 0) + (fiscal ? 1 : 0) + (!competenciaAberta ? 1 : 0) + (!lancamentoAtrasado ? 1 : 0) + (!tarefaAtrasada ? 1 : 0) + (!rascunhoCritico ? 1 : 0)
+  const healthPct   = Math.round((healthScore / HEALTH_DIMS) * 100)
+  const healthTone  = healthPct >= 83 ? 'text-success' : healthPct >= 50 ? 'text-warning' : 'text-destructive'
+
+  /* ── financial KPIs (right panel) ────────────────────── */
+  const hoje2 = new Date()
+  const receitaTotal   = lancamentos.filter(l => (l.tipo as string) === 'receita' || l.tipo == null).reduce((s, l) => s + ((l.valor as number) ?? 0), 0)
+  const receitaAtrasada = lancamentos.filter(l => { if ((l.status as string) !== 'pendente') return false; const v = tsToDate(l.dataVencimento); return !!v && v < hoje2 }).reduce((s, l) => s + ((l.valor as number) ?? 0), 0)
+  const tarefasAbertas = tarefas.filter(t => ['pendente', 'em_andamento'].includes((t.status as string) ?? '')).length
 
   // Alerta de emissão NFS-e
   const diaEmissaoNFSe = cliente ? (cliente.diaEmissaoNFSe as number | undefined) : undefined
+
+  /* ── insights automáticos ─────────────────────────── */
+  const insightsCliente = useMemo(() => {
+    const agora = new Date()
+    const list: Array<{ tipo: 'success' | 'warning' | 'info'; texto: string }> = []
+    const totalComp = competencias.length
+    const concluidasComp = competencias.filter(c => (c.status as string) === 'concluida').length
+    if (totalComp >= 3) {
+      const pct = Math.round((concluidasComp / totalComp) * 100)
+      if (pct >= 80) list.push({ tipo: 'success', texto: `${pct}% das competências concluídas no histórico.` })
+      else if (pct < 50) list.push({ tipo: 'warning', texto: `Apenas ${pct}% das competências concluídas — possível gargalo.` })
+    }
+    const semPrazo = tarefas.filter(t => !t.dataPrazo && ['pendente', 'em_andamento'].includes((t.status as string) ?? '')).length
+    if (semPrazo > 0) list.push({ tipo: 'warning', texto: `${semPrazo} tarefa${semPrazo !== 1 ? 's' : ''} sem prazo definido.` })
+    const atrasosCount = lancamentos.filter(l => { const v = tsToDate(l.dataVencimento); return (l.status as string) === 'pendente' && !!v && v < agora }).length
+    if (atrasosCount >= 2) list.push({ tipo: 'warning', texto: `${atrasosCount} cobranças vencidas — padrão de inadimplência.` })
+    if (diaEmissaoNFSe != null) list.push({ tipo: 'info', texto: `Emite NFS-e todo dia ${diaEmissaoNFSe} do mês.` })
+    return list
+  }, [competencias, tarefas, lancamentos, diaEmissaoNFSe])
   const nfseAlerta = diaEmissaoNFSe != null ? (() => {
     const hoje = new Date()
     const diasRestantes = diaEmissaoNFSe - hoje.getDate()
@@ -543,10 +686,56 @@ export default function ClienteDetailPage() {
                 Fiscal
               </TabsTrigger>
             )}
+            <TabsTrigger value="pop" className="rounded-md px-3 py-1.5 text-sm data-[state=active]:bg-muted data-[state=active]:font-semibold">
+              <BookOpen className="h-3.5 w-3.5 mr-1.5" />POP
+            </TabsTrigger>
           </TabsList>
 
           {/* Atividade */}
           <TabsContent value="atividade">
+            {/* Quick comment input */}
+            <div className="mb-4 flex gap-2 items-end">
+              <textarea
+                value={commentText}
+                onChange={e => setCommentText(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void saveComment() } }}
+                placeholder="Adicionar comentário rápido… (Enter para salvar)"
+                rows={2}
+                className="flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!commentText.trim() || commentSaving}
+                onClick={() => void saveComment()}
+                className="shrink-0"
+              >
+                {commentSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              </Button>
+            </div>
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {([
+                ['todos',       'Todos'],
+                ['tarefa',      'Tarefas'],
+                ['competencia', 'Competências'],
+                ['lancamento',  'Financeiro'],
+                ['comentario',  'Comentários'],
+              ] as const).map(([f, label]) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setTimelineFilter(f)}
+                  className={cn(
+                    'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                    timelineFilter === f
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <Timeline events={timelineEvents} />
           </TabsContent>
 
@@ -602,7 +791,7 @@ export default function ClienteDetailPage() {
               </CardHeader>
               <CardContent className="px-4 pb-4">
                 {competencias.length === 0
-                  ? <p className="text-sm text-muted-foreground">Nenhuma competência.</p>
+                  ? <EmptyState size="sm" title="Nenhuma competência" description="Crie uma competência para este cliente." action={{ label: 'Nova competência', href: `/competencias/nova?clienteId=${id}` }} />
                   : <div className="divide-y">
                       {competencias.map(c => (
                         <Link key={c.id as string} href={`/competencias/${c.id as string}`}
@@ -631,7 +820,7 @@ export default function ClienteDetailPage() {
               </CardHeader>
               <CardContent className="px-4 pb-4">
                 {servicos.length === 0
-                  ? <p className="text-sm text-muted-foreground">Nenhum serviço vinculado.</p>
+                  ? <EmptyState size="sm" title="Nenhum serviço vinculado" description="Vincule um serviço para gerar competências e honorários." action={{ label: 'Vincular serviço', onClick: () => setServicoDialogOpen(true) }} />
                   : <div className="divide-y">
                       {servicos.map(s => (
                         <div key={s.id as string} className="flex items-center justify-between py-2.5">
@@ -662,7 +851,7 @@ export default function ClienteDetailPage() {
               <CardContent className="px-4 pb-4">
                 {!fiscal
                   ? <div className="text-center py-6 space-y-3">
-                      <p className="text-sm text-muted-foreground">Nenhuma configuração fiscal cadastrada.</p>
+                      <EmptyState size="sm" title="Sem configuração fiscal" description="Configure os dados de NFS-e deste cliente." />
                       <Button size="sm" onClick={() => setConfigOpen(true)}>Configurar NFS-e</Button>
                     </div>
                   : <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
@@ -695,14 +884,125 @@ export default function ClienteDetailPage() {
               </div>
             )}
           </TabsContent>
+
+          {/* POP — Procedimento Operacional */}
+          <TabsContent value="pop" className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 text-primary" />
+                  <CardTitle className="text-sm">Procedimento Operacional do Cliente</CardTitle>
+                </div>
+                <Button size="sm" onClick={() => void savePop()} disabled={popSaving || !popDirty}>
+                  {popSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  {popSaving ? 'Salvando…' : 'Salvar'}
+                </Button>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-4">
+                <p className="text-xs text-muted-foreground">Notas operacionais internas — visíveis apenas pela equipe. Não são enviadas ao cliente.</p>
+                {([
+                  ['fiscal',      'Procedimento Fiscal',      'Ex: Emitir NFS-e todo dia 5. Código de serviço: 1401. ISS retido na fonte.'],
+                  ['financeiro',  'Procedimento Financeiro',  'Ex: Boleto enviado automaticamente. Responsável: João. Aceita PIX.'],
+                  ['operacional', 'Procedimento Operacional', 'Ex: Extrato enviado pelo portal X até o dia 3. Contato: Maria (11 9xxxx).'],
+                  ['geral',       'Notas Gerais',             'Ex: Cliente prefere contato por e-mail. Reunião mensal toda última terça.'],
+                ] as const).map(([field, label, placeholder]) => {
+                  const value = field === 'fiscal' ? popFiscal : field === 'financeiro' ? popFinanceiro : field === 'operacional' ? popOperacional : popGeral
+                  const setter = field === 'fiscal' ? setPopFiscal : field === 'financeiro' ? setPopFinanceiro : field === 'operacional' ? setPopOperacional : setPopGeral
+                  return (
+                    <div key={field} className="space-y-1.5">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</label>
+                      <textarea
+                        className="w-full min-h-[80px] rounded-lg border border-border bg-background px-3 py-2 text-sm resize-y focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/60"
+                        placeholder={placeholder}
+                        value={value}
+                        onChange={e => { setter(e.target.value); setPopDirty(true) }}
+                      />
+                    </div>
+                  )
+                })}
+                {popDirty && (
+                  <div className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/8 px-3 py-2 text-xs text-warning">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    Alterações não salvas — clique em Salvar para confirmar.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
 
         {/* ── Right: sticky aside ─────────────────────────── */}
         <div className="sticky top-20 space-y-4">
 
-          {/* Saúde do cliente */}
+          {/* Resumo executivo */}
           <Card>
-            <CardHeader className="py-3 px-4"><CardTitle className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Saúde do Cliente</CardTitle></CardHeader>
+            <CardHeader className="py-3 px-4">
+              <CardTitle className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Resumo Executivo</CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-2">
+              {[
+                ['Serviços ativos',       String(servicos.filter(s => (s.status as string) === 'ativo').length),         ''],
+                ['Competências (hist.)',  String(competencias.length),                                                    ''],
+                ['Tarefas abertas',       String(tarefasAbertas),                                                        tarefasAbertas > 0 ? 'text-warning font-semibold' : ''],
+                ['Atraso financeiro',     formatCurrency(receitaAtrasada),                                               receitaAtrasada > 0 ? 'text-destructive font-semibold' : ''],
+                ...(diaEmissaoNFSe != null ? [['Dia emissão NFS-e', `Dia ${diaEmissaoNFSe}`, 'text-primary']] : []),
+              ].map(([label, value, cls]) => (
+                <div key={label} className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">{label}</span>
+                  <span className={cn('text-xs tabular-nums', cls)}>{value}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* Insights automáticos */}
+          {insightsCliente.length > 0 && (
+            <Card>
+              <CardHeader className="py-3 px-4">
+                <CardTitle className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Insights</CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-2">
+                {insightsCliente.map((ins, i) => (
+                  <div key={i} className={cn(
+                    'flex items-start gap-2 rounded-md px-2.5 py-2 text-xs',
+                    ins.tipo === 'success' ? 'bg-success/8 text-success' :
+                    ins.tipo === 'warning' ? 'bg-warning/8 text-warning' :
+                    'bg-primary/8 text-primary'
+                  )}>
+                    <span className="mt-0.5 shrink-0">
+                      {ins.tipo === 'success' ? '✓' : ins.tipo === 'warning' ? '⚠' : 'ℹ'}
+                    </span>
+                    <span>{ins.texto}</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* KPIs executivos */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-lg border border-border bg-card px-3 py-2.5 text-center">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Honorários</p>
+              <p className="mt-1 text-base font-bold tabular-nums">{formatCurrency(receitaTotal)}</p>
+            </div>
+            <div className={cn('rounded-lg border px-3 py-2.5 text-center', receitaAtrasada > 0 ? 'border-destructive/30 bg-destructive/5' : 'border-border bg-card')}>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Atraso</p>
+              <p className={cn('mt-1 text-base font-bold tabular-nums', receitaAtrasada > 0 ? 'text-destructive' : 'text-muted-foreground')}>{formatCurrency(receitaAtrasada)}</p>
+            </div>
+            <div className={cn('rounded-lg border px-3 py-2.5 text-center', tarefasAbertas > 0 ? 'border-warning/30 bg-warning/5' : 'border-border bg-card')}>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Tarefas</p>
+              <p className={cn('mt-1 text-base font-bold tabular-nums', tarefasAbertas > 0 ? 'text-warning' : 'text-muted-foreground')}>{tarefasAbertas}</p>
+            </div>
+          </div>
+
+          {/* Saúde do cliente — 6 dimensões */}
+          <Card>
+            <CardHeader className="py-3 px-4">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Saúde do Cliente</CardTitle>
+                <span className={cn('text-sm font-bold tabular-nums', healthTone)}>{healthPct}%</span>
+              </div>
+            </CardHeader>
             <CardContent className="px-4 pb-4 space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-sm"><Plus className="h-3.5 w-3.5 text-muted-foreground" />Serviços</span>
@@ -719,6 +1019,14 @@ export default function ClienteDetailPage() {
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-sm"><Wallet className="h-3.5 w-3.5 text-muted-foreground" />Financeiro</span>
                 <Badge variant={lancamentoAtrasado ? 'destructive' : 'success'}>{lancamentoAtrasado ? 'Inadimplente' : 'Em dia'}</Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-sm"><CheckSquare className="h-3.5 w-3.5 text-muted-foreground" />Tarefas</span>
+                <Badge variant={tarefaAtrasada ? 'destructive' : 'success'}>{tarefaAtrasada ? 'Atrasada' : 'Em dia'}</Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-sm"><DollarSign className="h-3.5 w-3.5 text-muted-foreground" />NFS-e rascunho</span>
+                <Badge variant={rascunhoCritico ? 'warning' : 'success'}>{rascunhoCritico ? 'Pendente' : 'OK'}</Badge>
               </div>
               {/* Alerta emissão NFS-e */}
               {nfseAlerta && (
@@ -740,9 +1048,9 @@ export default function ClienteDetailPage() {
               <div className="pt-2 border-t border-border/50">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs text-muted-foreground">Saúde geral</span>
-                  <span className="text-xs font-semibold tabular-nums">{healthScore}/4</span>
+                  <span className="text-xs font-semibold tabular-nums">{healthScore}/{HEALTH_DIMS}</span>
                 </div>
-                <Progress value={(healthScore / 4) * 100} className="h-1.5" />
+                <Progress value={healthPct} className="h-1.5" />
               </div>
             </CardContent>
           </Card>

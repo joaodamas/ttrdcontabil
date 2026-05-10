@@ -114,7 +114,7 @@ export async function removeRascunho(id: string) {
 
 export async function fetchFiscalReadiness(): Promise<FiscalReadiness> {
   const [clientes, clientesServicos, fiscais] = await Promise.all([
-    listDocuments<Record<string, unknown>>('clientes', [where('status', '==', 'ativo'), orderBy('razaoSocial'), limit(500)]),
+    listDocuments<Record<string, unknown>>('clientes', [where('status', '==', 'ativo'), limit(500)]),
     listDocuments<Record<string, unknown>>('clientes_servicos', [limit(1000)]),
     listDocuments<Record<string, unknown>>('clientes_fiscal', [limit(500)]),
   ])
@@ -176,6 +176,7 @@ export async function fetchFiscalReadiness(): Promise<FiscalReadiness> {
         prontoEmissao: bloqueiosRascunho.length === 0 && bloqueiosEmissao.length === 0,
       }
     })
+    .sort((a, b) => a.clienteNome.localeCompare(b.clienteNome, 'pt-BR'))
 
   return {
     totalClientesAtivos: rows.length,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState, useEffect, Suspense } from 'react'
+import { useCallback, useMemo, useState, useEffect, Suspense, Fragment } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { where, orderBy, Timestamp, type QueryConstraint } from 'firebase/firestore'
@@ -8,7 +8,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions'
 import { toast } from 'sonner'
 
 import { listDocumentsPage, type FirestoreCursor } from '@/lib/firestore-client'
-import { formatDate, formatCurrency , tsToDate } from '@/lib/utils'
+import { formatDate, formatCurrency, tsToDate, cn } from '@/lib/utils'
 import { exportToCsv } from '@/lib/export-csv'
 import { exportToExcel } from '@/lib/export-excel'
 import { getFirebaseApp } from '@/lib/firebase'
@@ -16,7 +16,9 @@ import { getErrorMessage } from '@/lib/error-message'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TableEmptyState } from '@/components/ui/empty-state'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { AppModal } from '@/components/ui/app-modal'
+import { FilterBtn } from '@/components/ui/filter-btn'
+import { DataTableShell } from '@/components/ui/data-table-shell'
 import { Textarea } from '@/components/ui/textarea'
 import { ArrowLeft, Download, Eye, FileText, Loader2, RefreshCw, XCircle } from 'lucide-react'
 
@@ -30,6 +32,8 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
 }
 
 const PAGE_SIZE = 20
+
+type NotaGroup = { label: string; notas: Array<Record<string, unknown>>; valorTotal: number }
 
 function FiscalHistoricoContent() {
   const searchParams = useSearchParams()
@@ -58,6 +62,20 @@ function FiscalHistoricoContent() {
     [filterKey, pagination]
   )
   const page = activePagination.page
+  const grouped = useMemo((): NotaGroup[] => {
+    const map = new Map<string, NotaGroup>()
+    for (const n of notas) {
+      const dt = tsToDate(n.dataEmissao as Timestamp | undefined)
+      const key = dt ? `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}` : 'sem-data'
+      const label = dt ? dt.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : 'Sem data'
+      const existing = map.get(key) ?? { label, notas: [], valorTotal: 0 }
+      existing.notas.push(n)
+      existing.valorTotal += Number(n.valorServico) || 0
+      map.set(key, existing)
+    }
+    return Array.from(map.values())
+  }, [notas])
+
   const [cancelamentoId, setCancelamentoId] = useState<string | null>(null)
   const [motivoCancelamento, setMotivoCancelamento] = useState('')
   const [cancelando, setCancelando] = useState(false)
@@ -211,6 +229,9 @@ function FiscalHistoricoContent() {
 
   const total = notas.length
   const totalPages = hasMore ? page + 1 : page
+  const totalEmitidas = notas.filter(n => n.status === 'emitida').length
+  const totalRejeitadas = notas.filter(n => ['rejeitada', 'erro_integracao'].includes(n.status as string)).length
+  const valorTotal = notas.reduce((s, n) => s + (Number(n.valorServico) || 0), 0)
 
   return (
     <div className="space-y-5">
@@ -236,23 +257,43 @@ function FiscalHistoricoContent() {
         </Button>
       </div>
 
-      <div className="surface-subtle flex flex-wrap items-center gap-2 border px-3 py-2.5">
-        {['', 'emitida', 'pendente_processamento', 'cancelamento_pendente', 'rejeitada', 'cancelada', 'erro_integracao'].map(
-          (s) => (
-            <Link key={s} href={buildUrl({ status: s })}>
-              <Button
-                variant={status === s ? 'default' : 'outline'}
-                size="sm"
-                className="h-8 text-xs"
-              >
-                {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
-              </Button>
-            </Link>
-          )
-        )}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-xl border border-border/70 bg-card/95 px-4 py-3 card-shadow">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Emitidas</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-success">{totalEmitidas}</p>
+        </div>
+        <div className="rounded-xl border border-border/70 bg-card/95 px-4 py-3 card-shadow">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Erros/Rejeitadas</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-destructive">{totalRejeitadas}</p>
+        </div>
+        <div className="rounded-xl border border-border/70 bg-card/95 px-4 py-3 card-shadow">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Valor total</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums">{formatCurrency(valorTotal)}</p>
+        </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-border/65 bg-card/95 card-shadow">
+      {totalRejeitadas > 0 && (
+        <div className="rounded-xl border border-destructive/25 bg-destructive/5 flex items-center gap-3 px-4 py-3">
+          <XCircle className="h-4 w-4 text-destructive shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-destructive">{totalRejeitadas} nota{totalRejeitadas !== 1 ? 's' : ''} com erro ou rejeição</p>
+            <p className="text-xs text-muted-foreground">Revise o detalhe de cada nota para corrigir e reenviar.</p>
+          </div>
+          <Link href={buildUrl({ status: 'rejeitada' })} className="shrink-0 text-xs font-medium text-destructive border border-destructive/25 rounded-lg px-2.5 py-1.5 hover:bg-destructive/10 transition-colors">
+            Ver rejeições
+          </Link>
+        </div>
+      )}
+
+      <div className="surface-subtle flex flex-wrap items-center gap-2 border px-3 py-2.5">
+        {['', 'emitida', 'pendente_processamento', 'cancelamento_pendente', 'rejeitada', 'cancelada', 'erro_integracao'].map(s => (
+          <FilterBtn key={s} href={buildUrl({ status: s })} active={status === s}>
+            {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+          </FilterBtn>
+        ))}
+      </div>
+
+      <DataTableShell density="compact">
         <table className="min-w-[920px] w-full text-sm">
           <thead className="bg-muted/50 text-muted-foreground">
             <tr>
@@ -279,61 +320,70 @@ function FiscalHistoricoContent() {
                   : { label: 'Emitir NFS-e', href: '/fiscal?emitir=1' }}
               />
             ) : (
-              notas.map((n) => {
-                const st = STATUS_MAP[n.status as string] ?? {
-                  label: n.status as string,
-                  variant: 'outline' as const,
-                }
-                const dataEmissao = n.dataEmissao as Timestamp | undefined
-                return (
-                  <tr key={n.id as string} className="transition-colors hover:bg-muted/35">
-                    <td className="px-4 py-3 font-medium">{(n.clienteNome as string) ?? '—'}</td>
-                    <td className="px-4 py-3 font-mono text-xs">
-                      {(n.numeroNfse as string) ?? '—'}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs">
-                      {(n.tomadorNome as string) ?? '—'}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {dataEmissao ? formatDate(tsToDate(dataEmissao)) : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium">
-                      {formatCurrency(n.valorServico as number)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant={st.variant}>{st.label}</Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-1.5">
-                        <Link href={`/fiscal/${n.id as string}`}>
-                          <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Ver detalhe">
-                            <Eye className="h-3.5 w-3.5" />
-                          </Button>
-                        </Link>
-                        <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Consultar status" onClick={() => consultarStatus(n.id as string)}>
-                          <RefreshCw className="h-3.5 w-3.5" />
-                        </Button>
-                        {n.pdfUrl ? (
-                          <a href={n.pdfUrl as string} target="_blank" rel="noreferrer">
-                            <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Baixar PDF">
-                              <Download className="h-3.5 w-3.5" />
-                            </Button>
-                          </a>
-                        ) : null}
-                        {n.status === 'emitida' ? (
-                          <Button variant="outline" size="sm" className="h-8 w-8 p-0 text-destructive" title="Solicitar cancelamento" onClick={() => abrirCancelamento(n.id as string)}>
-                            <XCircle className="h-3.5 w-3.5" />
-                          </Button>
-                        ) : null}
-                      </div>
+              grouped.map((group) => (
+                <Fragment key={group.label}>
+                  <tr>
+                    <td colSpan={7} className="bg-muted/30 px-4 py-2 text-xs font-semibold text-muted-foreground">
+                      {group.label} — {group.notas.length} nota{group.notas.length !== 1 ? 's' : ''} — {formatCurrency(group.valorTotal)}
                     </td>
                   </tr>
-                )
-              })
+                  {group.notas.map((n) => {
+                    const st = STATUS_MAP[n.status as string] ?? {
+                      label: n.status as string,
+                      variant: 'outline' as const,
+                    }
+                    const dataEmissao = n.dataEmissao as Timestamp | undefined
+                    return (
+                      <tr key={n.id as string} className={cn('transition-colors hover:bg-muted/35', (n.status === 'rejeitada' || n.status === 'erro_integracao') && 'bg-destructive/[0.03] border-l-2 border-l-destructive')}>
+                        <td className="px-4 py-3 font-medium">{(n.clienteNome as string) ?? '—'}</td>
+                        <td className="px-4 py-3 font-mono text-xs">
+                          {(n.numeroNfse as string) ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
+                          {(n.tomadorNome as string) ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {dataEmissao ? formatDate(tsToDate(dataEmissao)) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium">
+                          {formatCurrency(n.valorServico as number)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge variant={st.variant}>{st.label}</Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-1.5">
+                            <Link href={`/fiscal/${n.id as string}`}>
+                              <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Ver detalhe">
+                                <Eye className="h-3.5 w-3.5" />
+                              </Button>
+                            </Link>
+                            <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Consultar status" onClick={() => consultarStatus(n.id as string)}>
+                              <RefreshCw className="h-3.5 w-3.5" />
+                            </Button>
+                            {n.pdfUrl ? (
+                              <a href={n.pdfUrl as string} target="_blank" rel="noreferrer">
+                                <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Baixar PDF">
+                                  <Download className="h-3.5 w-3.5" />
+                                </Button>
+                              </a>
+                            ) : null}
+                            {n.status === 'emitida' ? (
+                              <Button variant="outline" size="sm" className="h-8 w-8 p-0 text-destructive" title="Solicitar cancelamento" onClick={() => abrirCancelamento(n.id as string)}>
+                                <XCircle className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </Fragment>
+              ))
             )}
           </tbody>
         </table>
-      </div>
+      </DataTableShell>
 
       {totalPages > 1 ? (
         <div className="surface-subtle flex items-center justify-between border px-3 py-2.5 text-sm">
@@ -380,30 +430,24 @@ function FiscalHistoricoContent() {
         </div>
       ) : null}
 
-      <Dialog open={Boolean(cancelamentoId)} onOpenChange={(open) => !open && setCancelamentoId(null)}>
-        <DialogContent className="max-w-md" showCloseButton>
-          <DialogHeader>
-            <DialogTitle>Solicitar cancelamento</DialogTitle>
-            <DialogDescription>
-              A solicitação será registrada com auditoria e ficará pendente de processamento fiscal.
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            value={motivoCancelamento}
-            onChange={(event) => setMotivoCancelamento(event.target.value)}
-            placeholder="Informe o motivo fiscal do cancelamento"
-            className="min-h-28"
-          />
-          <DialogFooter className="flex-row justify-end border-0 bg-transparent p-0">
-            <Button type="button" variant="outline" onClick={() => setCancelamentoId(null)} disabled={cancelando}>
-              Cancelar
+      <AppModal
+        open={Boolean(cancelamentoId)}
+        onOpenChange={(open) => !open && setCancelamentoId(null)}
+        title="Solicitar cancelamento de NFS-e"
+        description="A solicitação será registrada com auditoria e ficará pendente de processamento fiscal."
+        icon={<XCircle className="size-4 text-destructive" />}
+        size="md"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <Button type="button" variant="outline" onClick={() => setCancelamentoId(null)} disabled={cancelando}>Cancelar</Button>
+            <Button type="button" variant="destructive" onClick={confirmarCancelamento} disabled={cancelando}>
+              {cancelando ? 'Registrando...' : 'Confirmar cancelamento'}
             </Button>
-            <Button type="button" onClick={confirmarCancelamento} disabled={cancelando}>
-              {cancelando ? 'Registrando...' : 'Confirmar'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        }
+      >
+        <Textarea value={motivoCancelamento} onChange={(e) => setMotivoCancelamento(e.target.value)} placeholder="Informe o motivo fiscal do cancelamento (mínimo 10 caracteres)" className="min-h-28" />
+      </AppModal>
     </div>
   )
 }

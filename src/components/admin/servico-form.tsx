@@ -16,26 +16,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogClose,
-} from '@/components/ui/dialog'
-import { Loader2, Plus, Pencil } from 'lucide-react'
+import { AppModal } from '@/components/ui/app-modal'
+import { Loader2, Plus, Pencil, Package2 } from 'lucide-react'
 import { getErrorMessage } from '@/lib/error-message'
 import { createServicoAdmin, updateServicoAdmin } from '@/features/admin/services'
 
-// COB pricing table: COB01 = R$50, COB02 = R$100, ..., COB20 = R$1000
-const COB_TABLE = Array.from({ length: 20 }, (_, i) => ({
-  codigo: `COB${String(i + 1).padStart(2, '0')}`,
-  valor:  (i + 1) * 50,
-  numero: i + 1,
-}))
-
 const servicoSchema = z.object({
-  codigo:      z.string().min(1, 'Código é obrigatório').max(20),
+  codigo:      z.string().min(1, 'Código é obrigatório').max(30).toUpperCase(),
   nome:        z.string().min(2, 'Nome é obrigatório').max(100),
   descricao:   z.string().optional().nullable(),
   frequencia:  z.enum(['mensal', 'avulso', 'anual', 'trimestral']).default('mensal'),
@@ -59,7 +46,6 @@ export function ServicoForm({ servico, onSaved }: ServicoFormProps) {
     handleSubmit,
     control,
     reset,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm<ServicoFormData>({
     resolver: zodResolver(servicoSchema),
@@ -78,13 +64,6 @@ export function ServicoForm({ servico, onSaved }: ServicoFormProps) {
           ativo:      true,
         },
   })
-
-  function handleCodigoChange(codigo: string | null) {
-    if (!codigo) return
-    setValue('codigo', codigo)
-    const entry = COB_TABLE.find((c) => c.codigo === codigo)
-    if (entry) setValue('valorPadrao', entry.valor)
-  }
 
   async function onSubmit(data: ServicoFormData) {
     try {
@@ -126,60 +105,46 @@ export function ServicoForm({ servico, onSaved }: ServicoFormProps) {
         </Button>
       )}
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {isEditing ? 'Editar Serviço' : 'Novo Tipo de Serviço'}
-            </DialogTitle>
-          </DialogHeader>
-
+      <AppModal
+        open={open}
+        onOpenChange={setOpen}
+        title={isEditing ? 'Editar Serviço' : 'Novo Tipo de Serviço'}
+        description="Defina um código único, nome, valor padrão e frequência de cobrança."
+        icon={<Package2 className="size-4" />}
+        size="md"
+      >
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            {/* Código + Nome */}
-            <div className="grid grid-cols-[140px_1fr] gap-3">
-              <div className="space-y-1.5">
-                <Label>
-                  Código <span className="text-destructive">*</span>
-                </Label>
-                <Controller
-                  name="codigo"
-                  control={control}
-                  render={({ field }) => (
-                    <Select
-                      value={field.value ?? ''}
-                      onValueChange={handleCodigoChange}
-                      disabled={isEditing}
-                    >
-                      <SelectTrigger className="font-mono">
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {COB_TABLE.map((c) => (
-                          <SelectItem key={c.codigo} value={c.codigo} className="font-mono">
-                            {c.codigo} — R${c.valor.toFixed(2).replace('.', ',')}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-                {errors.codigo && (
-                  <p className="text-xs text-destructive">{errors.codigo.message}</p>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="nome">
-                  Nome <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="nome"
-                  {...register('nome')}
-                  placeholder="Ex: Contabilidade Mensal, IRPJ..."
-                />
-                {errors.nome && (
-                  <p className="text-xs text-destructive">{errors.nome.message}</p>
-                )}
-              </div>
+            {/* Nome */}
+            <div className="space-y-1.5">
+              <Label htmlFor="nome">
+                Nome <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="nome"
+                {...register('nome')}
+                placeholder="Ex: Contabilidade Mensal, IRPJ, Folha de Pagamento..."
+              />
+              {errors.nome && (
+                <p className="text-xs text-destructive">{errors.nome.message}</p>
+              )}
+            </div>
+
+            {/* Código */}
+            <div className="space-y-1.5">
+              <Label htmlFor="codigo">
+                Código interno <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="codigo"
+                {...register('codigo')}
+                disabled={isEditing}
+                placeholder="Ex: CONT-MENSAL, IRPJ, FP-SIMPLES"
+                className="font-mono uppercase"
+              />
+              <p className="text-[11px] text-muted-foreground">Identificador único, sem espaços. Não pode ser alterado após salvar.</p>
+              {errors.codigo && (
+                <p className="text-xs text-destructive">{errors.codigo.message}</p>
+              )}
             </div>
 
             {/* Descrição */}
@@ -223,7 +188,6 @@ export function ServicoForm({ servico, onSaved }: ServicoFormProps) {
                   type="number"
                   step="0.01"
                   min="0"
-                  max="1000"
                   placeholder="0,00"
                   {...register('valorPadrao', {
                     setValueAs: (v) => (v === '' || v === null ? null : Number(v)),
@@ -261,15 +225,14 @@ export function ServicoForm({ servico, onSaved }: ServicoFormProps) {
             )}
 
             <div className="flex items-center justify-end gap-3 pt-2">
-              <DialogClose render={<Button type="button" variant="outline" size="sm">Cancelar</Button>} />
+              <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>Cancelar</Button>
               <Button type="submit" size="sm" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 {isEditing ? 'Salvar Alterações' : 'Criar Serviço'}
               </Button>
             </div>
           </form>
-        </DialogContent>
-      </Dialog>
+      </AppModal>
     </>
   )
 }

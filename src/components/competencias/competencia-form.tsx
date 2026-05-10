@@ -58,10 +58,12 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
   const isEditing = !!initialData?.id
 
   const [clientes, setClientes]             = useState<ClienteItem[]>([])
-  const [servicos, setServicos]             = useState<ServicoItem[]>([])
+  const [servicosState, setServicosState]   = useState<{ clienteId: string; items: ServicoItem[] }>({
+    clienteId: '',
+    items: [],
+  })
   const [usuarios, setUsuarios]             = useState<UsuarioItem[]>([])
   const [loadingClientes, setLoadingClientes] = useState(true)
-  const [loadingServicos, setLoadingServicos] = useState(false)
 
   const hoje = new Date()
 
@@ -82,6 +84,8 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
   })
 
   const clienteId = useWatch({ control, name: 'clienteId' })
+  const servicos = clienteId && servicosState.clienteId === clienteId ? servicosState.items : []
+  const loadingServicos = Boolean(clienteId) && servicosState.clienteId !== clienteId
 
   useEffect(() => {
     Promise.allSettled([
@@ -96,14 +100,16 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
 
   useEffect(() => {
     if (!clienteId) {
-      setServicos([])
       return
     }
-    setLoadingServicos(true)
+
+    let mounted = true
     Promise.allSettled([
       getClienteServicos(clienteId),
       getServicos(),
     ]).then(([rcs, rs]) => {
+      if (!mounted) return
+
       if (rcs.status === 'fulfilled' && rs.status === 'fulfilled') {
         const allServicos = rs.value as Array<{ id: string; nome?: string; codigo?: string | null }>
         const joined: ServicoItem[] = (rcs.value as Array<Record<string, unknown>>)
@@ -126,11 +132,14 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
               servicoCodigo: (cs.servicoCodigo as string | undefined) ?? catalog?.codigo ?? null,
             }
           })
-        setServicos(joined)
+        setServicosState({ clienteId, items: joined })
       }
       setValue('clienteServicoId', '')
-      setLoadingServicos(false)
     })
+
+    return () => {
+      mounted = false
+    }
   }, [clienteId, setValue])
 
   async function onSubmit(data: CompetenciaFormData) {

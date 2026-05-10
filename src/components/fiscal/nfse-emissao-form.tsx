@@ -19,8 +19,10 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { Loader2, Save, Send } from 'lucide-react'
-import { getClientes, getCompetencias, createDocument, getDocument, updateDocument } from '@/lib/firestore-client'
+import { Loader2, Save, Send, ArrowLeft, CheckCircle2, ChevronRight, RotateCcw } from 'lucide-react'
+import { formatCurrency, formatCpfCnpj } from '@/lib/utils'
+import { getClientes, getCompetencias, createDocument, getDocument, updateDocument, listDocuments } from '@/lib/firestore-client'
+import { where, orderBy, limit } from 'firebase/firestore'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { getFirebaseApp } from '@/lib/firebase'
 import { getErrorMessage } from '@/lib/error-message'
@@ -58,6 +60,7 @@ interface NfseEmissaoFormProps {
   layout?: 'page' | 'modal'
   onCancel?: () => void
   onFinished?: () => void | Promise<void>
+  onStepChange?: (step: number) => void
 }
 
 const cardClassByLayout: Record<'page' | 'modal', string> = {
@@ -71,6 +74,7 @@ export function NfseEmissaoForm({
   layout = 'page',
   onCancel,
   onFinished,
+  onStepChange,
 }: NfseEmissaoFormProps = {}) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -83,9 +87,12 @@ export function NfseEmissaoForm({
   const [loadingCompetencias,setLoadingCompetencias]= useState(false)
   const [loadingRascunho, setLoadingRascunho] = useState(Boolean(rascunhoIdParam))
   const [rascunhoAtual, setRascunhoAtual] = useState<RascunhoNfse | null>(null)
-  const [saving,   setSaving]   = useState(false)
-  const [emitting, setEmitting] = useState(false)
-  const [emissaoPendente, setEmissaoPendente] = useState<NfseFormData | null>(null)
+  const [saving,             setSaving]             = useState(false)
+  const [emitting,           setEmitting]           = useState(false)
+  const [emissaoPendente,    setEmissaoPendente]    = useState<NfseFormData | null>(null)
+  const [showResume,         setShowResume]         = useState(false)
+  const [ultimoRascunho,     setUltimoRascunho]     = useState<RascunhoNfse | null>(null)
+  const [loadingUltimoRasc,  setLoadingUltimoRasc]  = useState(false)
 
   const {
     register,
@@ -101,6 +108,19 @@ export function NfseEmissaoForm({
   })
 
   const selectedClienteId = watch('clienteId')
+  const watchedValues = watch()
+
+  // Compute active wizard step based on filled fields
+  useEffect(() => {
+    if (!onStepChange) return
+    if (showResume) { onStepChange(4); return }
+    const { clienteId, tomadorNome, tomadorCpfCnpj, descricaoServico, codigoServico, valorServico } = watchedValues
+    if (!clienteId) { onStepChange(0); return }
+    if (!tomadorNome || !tomadorCpfCnpj) { onStepChange(1); return }
+    if (!descricaoServico || !codigoServico || !valorServico) { onStepChange(2); return }
+    onStepChange(3)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedValues.clienteId, watchedValues.tomadorNome, watchedValues.tomadorCpfCnpj, watchedValues.descricaoServico, watchedValues.codigoServico, watchedValues.valorServico, onStepChange, showResume])
 
   // Load clients on mount
   useEffect(() => {
@@ -138,6 +158,31 @@ export function NfseEmissaoForm({
       .catch((err) => toast.error(getErrorMessage(err, 'Não foi possível carregar o rascunho NFS-e para revisão.')))
       .finally(() => setLoadingRascunho(false))
   }, [rascunhoIdParam, reset, router])
+
+  // Load last rascunho for auto-fill suggestion
+  useEffect(() => {
+    if (!selectedClienteId || rascunhoIdParam) { setUltimoRascunho(null); return }
+    setLoadingUltimoRasc(true)
+    listDocuments<RascunhoNfse>('nfse_rascunhos', [
+      where('clienteId', '==', selectedClienteId),
+      where('status', 'in', ['rascunho', 'aguardando_emissao', 'emitida']),
+      orderBy('criadoEm', 'desc'),
+      limit(1),
+    ]).then(results => setUltimoRascunho(results.length > 0 ? results[0] : null))
+      .catch(() => setUltimoRascunho(null))
+      .finally(() => setLoadingUltimoRasc(false))
+  }, [selectedClienteId, rascunhoIdParam])
+
+  function applyUltimoRascunho() {
+    if (!ultimoRascunho) return
+    const dados = ultimoRascunho.dados ?? {}
+    if (dados.descricaoServico) setValue('descricaoServico', dados.descricaoServico as string)
+    if (dados.codigoServico)    setValue('codigoServico',    dados.codigoServico as string)
+    if (dados.valorServico)     setValue('valorServico',     Number(dados.valorServico))
+    if (dados.aliquota != null) setValue('aliquota',         Number(dados.aliquota))
+    if (dados.issRetido != null) setValue('issRetido',       Boolean(dados.issRetido))
+    toast.success('Dados do último rascunho aplicados.')
+  }
 
   // When client selected: auto-fill tomador + load competencias
   useEffect(() => {
@@ -267,7 +312,15 @@ export function NfseEmissaoForm({
   const previewCodigo = watch('codigoServico')
   const previewAliquota = watch('aliquota')
   const previewIssRetido = watch('issRetido')
+  const previewTomadorNome = watch('tomadorNome')
+  const previewTomadorCpf = watch('tomadorCpfCnpj')
+  const previewTomadorEmail = watch('tomadorEmail')
+  const previewDescricao = watch('descricaoServico')
+  const allFieldsFilled = Boolean(selectedClienteId && previewTomadorNome && previewTomadorCpf && previewDescricao && previewCodigo && previewValor)
   const isModal = layout === 'modal'
+
+  function handleShowResume() { setShowResume(true) }
+  function handleBackFromResume() { setShowResume(false) }
 
   async function finishFlow() {
     if (onFinished) await onFinished()
@@ -294,7 +347,50 @@ export function NfseEmissaoForm({
           <Loader2 className="h-5 w-5 animate-spin" />
         </div>
       ) : null}
-      {/* Vínculo */}
+
+      {/* Resumo — step 4 */}
+      {showResume && !loadingRascunho && (
+        <Card className={cardClassByLayout[layout]}>
+          <CardHeader className="flex flex-row items-center gap-3 pb-3">
+            <button type="button" onClick={handleBackFromResume} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Voltar e editar
+            </button>
+            <CardTitle className="text-sm flex items-center gap-2 ml-auto">
+              <CheckCircle2 className="h-4 w-4 text-success" />
+              Resumo da nota
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <section className="space-y-2">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Prestador / Tomador</h3>
+              <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-sm">
+                <div><dt className="text-xs text-muted-foreground">Prestador</dt><dd className="font-medium">{previewCliente?.razaoSocial ?? '—'}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Tomador</dt><dd className="font-medium">{previewTomadorNome || '—'}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">CPF / CNPJ tomador</dt><dd className="font-mono">{previewTomadorCpf ? formatCpfCnpj(previewTomadorCpf) : '—'}</dd></div>
+                {previewTomadorEmail && <div><dt className="text-xs text-muted-foreground">E-mail tomador</dt><dd>{previewTomadorEmail}</dd></div>}
+                {previewCompetencia && <div><dt className="text-xs text-muted-foreground">Competência</dt><dd>{String(previewCompetencia.mes).padStart(2, '0')}/{previewCompetencia.ano}</dd></div>}
+              </dl>
+            </section>
+            <section className="space-y-2">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Serviço</h3>
+              <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-sm">
+                <div className="sm:col-span-2"><dt className="text-xs text-muted-foreground">Descrição</dt><dd className="whitespace-pre-wrap">{previewDescricao || '—'}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Código</dt><dd className="font-mono">{previewCodigo || '—'}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Valor</dt><dd className="font-semibold tabular-nums">{Number.isFinite(previewValor) ? formatCurrency(Number(previewValor)) : '—'}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Alíquota ISS</dt><dd>{Number.isFinite(previewAliquota) ? `${Number(previewAliquota)}%` : 'Padrão configuração'}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">ISS retido</dt><dd>{previewIssRetido ? 'Sim' : 'Não'}</dd></div>
+              </dl>
+            </section>
+            <div className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2.5 text-xs text-warning-foreground">
+              Revise os dados acima. Após emitir, a nota é registrada na prefeitura e não pode ser cancelada automaticamente.
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Vínculo + Tomador + Serviço — hidden when resume is shown */}
+      {!showResume && (<>
       <Card className={[cardClassByLayout[layout], loadingRascunho ? 'pointer-events-none opacity-60' : undefined].filter(Boolean).join(' ')}>
         <CardHeader><CardTitle className="text-sm">Vínculo</CardTitle></CardHeader>
         <CardContent className="space-y-4">
@@ -387,7 +483,20 @@ export function NfseEmissaoForm({
 
       {/* Serviço */}
       <Card className={cardClassByLayout[layout]}>
-        <CardHeader><CardTitle className="text-sm">Serviço</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+          <CardTitle className="text-sm">Serviço</CardTitle>
+          {(ultimoRascunho || loadingUltimoRasc) && (
+            <button
+              type="button"
+              disabled={loadingUltimoRasc}
+              onClick={applyUltimoRascunho}
+              className="flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+            >
+              {loadingUltimoRasc ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+              Reutilizar último
+            </button>
+          )}
+        </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="descricaoServico">Descrição do Serviço <span className="text-destructive">*</span></Label>
@@ -433,6 +542,7 @@ export function NfseEmissaoForm({
           </div>
         </CardContent>
       </Card>
+      </>)}
       </div>
 
       <div className={isModal ? 'space-y-5 lg:sticky lg:top-0 lg:self-start' : 'space-y-5'}>
@@ -457,10 +567,18 @@ export function NfseEmissaoForm({
             <CardTitle className="text-sm">Ações</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button type="button" className="w-full justify-center" disabled={isLoading || loadingRascunho} onClick={handleSubmit(solicitarEmissao)}>
-              {emitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-              Emitir NFS-e
-            </Button>
+            {!showResume && allFieldsFilled && (
+              <Button type="button" className="w-full justify-center" onClick={handleShowResume}>
+                <ChevronRight className="w-4 h-4 mr-2" />
+                Revisar antes de emitir
+              </Button>
+            )}
+            {showResume && (
+              <Button type="button" className="w-full justify-center" disabled={isLoading} onClick={handleSubmit(solicitarEmissao)}>
+                {emitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                Emitir NFS-e
+              </Button>
+            )}
             <Button type="button" variant="outline" className="w-full justify-center" disabled={isLoading || loadingRascunho} onClick={handleSubmit(handleSaveRascunho)}>
               {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
               {isEditingRascunho ? 'Liberar para lote' : 'Salvar rascunho'}

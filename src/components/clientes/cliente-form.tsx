@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatCpfCnpj, formatPhone, formatCep, UFS } from '@/lib/utils'
+import { formatCpfCnpj, formatPhone, formatCep, formatWhatsApp, normalizeWhatsApp, UFS } from '@/lib/utils'
 import { Loader2, CheckCircle2, Bell, KeyRound } from 'lucide-react'
 import { createDocument, updateDocument, getNextClienteCodigo } from '@/lib/firestore-client'
 import { getErrorMessage } from '@/lib/error-message'
@@ -83,6 +83,21 @@ const clienteSchema = z.object({
   responsavelSenhaEcacPf: z.string().optional(),
   responsavelSenhaWebPrefeitura: z.string().optional(),
   responsavelSenhaPinCertificadoDigitalCpf: z.string().optional(),
+  whatsapp: z.string().optional(),
+  whatsappFinanceiro: z.string().optional(),
+  aceiteWhatsAppCobranca: z.boolean().default(false),
+  aceiteWhatsAppCobrancaEm: z.string().optional(),
+  aceiteWhatsAppCobrancaOrigem: z.string().optional(),
+  responsavelFinanceiroNome: z.string().optional(),
+  responsavelFinanceiroCargo: z.string().optional(),
+  responsavelFinanceiroEmail: z.string().email('E-mail inválido').optional().or(z.literal('')),
+  responsavelFinanceiroTelefone: z.string().optional(),
+  responsavelFinanceiroWhatsapp: z.string().optional(),
+  responsavelFinanceiroPreferencial: z.boolean().default(false),
+  whatsappCobrancaPausado: z.boolean().default(false),
+  whatsappCobrancaPausadoMotivo: z.string().optional(),
+  whatsappCobrancaPausadoEm: z.string().optional(),
+  whatsappCobrancaPausadoPor: z.string().optional(),
   observacoes: z.string().optional(),
   status: z.enum(['ativo', 'inativo', 'suspenso']).default('ativo'),
   diaEmissaoNFSe: z.coerce.number().int().min(1).max(31).optional().nullable(),
@@ -163,11 +178,16 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
     defaultValues: {
       tipoPessoa: 'pj',
       status: 'ativo',
+      aceiteWhatsAppCobranca: false,
+      responsavelFinanceiroPreferencial: false,
+      whatsappCobrancaPausado: false,
       ...initialData,
     },
   })
 
   const tipoPessoa = watch('tipoPessoa')
+  const aceiteWhatsAppCobranca = watch('aceiteWhatsAppCobranca')
+  const whatsappCobrancaPausado = watch('whatsappCobrancaPausado')
 
   async function buscarCep(cepRaw: string) {
     const resultado = await buscarCepHook(cepRaw)
@@ -230,10 +250,23 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
 
   async function onSubmit(data: ClienteFormData) {
     try {
+      const payload = {
+        ...data,
+        whatsapp: normalizeWhatsApp(data.whatsapp),
+        whatsappFinanceiro: normalizeWhatsApp(data.whatsappFinanceiro),
+        responsavelFinanceiroTelefone: data.responsavelFinanceiroTelefone ? formatPhone(data.responsavelFinanceiroTelefone) : '',
+        responsavelFinanceiroWhatsapp: normalizeWhatsApp(data.responsavelFinanceiroWhatsapp),
+        aceiteWhatsAppCobrancaEm: data.aceiteWhatsAppCobranca
+          ? (data.aceiteWhatsAppCobrancaEm || new Date().toISOString())
+          : '',
+        whatsappCobrancaPausadoEm: data.whatsappCobrancaPausado
+          ? (data.whatsappCobrancaPausadoEm || new Date().toISOString())
+          : '',
+        regimeTributario: data.regimeTributario ?? null,
+      }
       if (isEditing) {
         await updateDocument('clientes', initialData!.id!, {
-          ...data,
-          regimeTributario: data.regimeTributario ?? null,
+          ...payload,
         })
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: clientesKeys.all }),
@@ -248,9 +281,8 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
       } else {
         const codigo = await getNextClienteCodigo()
         const id = await createDocument('clientes', {
-          ...data,
+          ...payload,
           codigo,
-          regimeTributario: data.regimeTributario ?? null,
         })
         await queryClient.invalidateQueries({ queryKey: clientesKeys.all })
         toast.success('Cliente cadastrado com sucesso!')
@@ -411,6 +443,155 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
               }}
               className="max-w-56"
             />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Cobrança por WhatsApp</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="whatsapp">WhatsApp principal</Label>
+              <Input
+                id="whatsapp"
+                {...register('whatsapp')}
+                onChange={(e) => {
+                  e.target.value = formatWhatsApp(e.target.value)
+                  setValue('whatsapp', e.target.value)
+                }}
+                placeholder="(11) 99999-9999"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="whatsappFinanceiro">WhatsApp financeiro</Label>
+              <Input
+                id="whatsappFinanceiro"
+                {...register('whatsappFinanceiro')}
+                onChange={(e) => {
+                  e.target.value = formatWhatsApp(e.target.value)
+                  setValue('whatsappFinanceiro', e.target.value)
+                }}
+                placeholder="(11) 99999-9999"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label>Consentimento para cobrança</Label>
+              <Select
+                defaultValue={initialData?.aceiteWhatsAppCobranca ? 'sim' : 'nao'}
+                onValueChange={(value) => setValue('aceiteWhatsAppCobranca', value === 'sim')}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sim">Sim</SelectItem>
+                  <SelectItem value="nao">Não</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="aceiteWhatsAppCobrancaOrigem">Origem do consentimento</Label>
+              <Input id="aceiteWhatsAppCobrancaOrigem" {...register('aceiteWhatsAppCobrancaOrigem')} placeholder="Contrato, WhatsApp, e-mail..." />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="aceiteWhatsAppCobrancaEm">Data do consentimento</Label>
+              <Input id="aceiteWhatsAppCobrancaEm" type="date" {...register('aceiteWhatsAppCobrancaEm')} disabled={!aceiteWhatsAppCobranca} />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="responsavelFinanceiroNome">Responsável financeiro</Label>
+              <Input id="responsavelFinanceiroNome" {...register('responsavelFinanceiroNome')} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="responsavelFinanceiroCargo">Cargo</Label>
+              <Input id="responsavelFinanceiroCargo" {...register('responsavelFinanceiroCargo')} />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="responsavelFinanceiroEmail">E-mail financeiro</Label>
+              <Input id="responsavelFinanceiroEmail" type="email" {...register('responsavelFinanceiroEmail')} />
+              {errors.responsavelFinanceiroEmail && <p className="text-xs text-destructive">{errors.responsavelFinanceiroEmail.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="responsavelFinanceiroTelefone">Telefone financeiro</Label>
+              <Input
+                id="responsavelFinanceiroTelefone"
+                {...register('responsavelFinanceiroTelefone')}
+                onChange={(e) => {
+                  e.target.value = formatPhone(e.target.value)
+                  setValue('responsavelFinanceiroTelefone', e.target.value)
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="responsavelFinanceiroWhatsapp">WhatsApp do financeiro</Label>
+              <Input
+                id="responsavelFinanceiroWhatsapp"
+                {...register('responsavelFinanceiroWhatsapp')}
+                onChange={(e) => {
+                  e.target.value = formatWhatsApp(e.target.value)
+                  setValue('responsavelFinanceiroWhatsapp', e.target.value)
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label>Contato financeiro preferencial</Label>
+              <Select
+                defaultValue={initialData?.responsavelFinanceiroPreferencial ? 'sim' : 'nao'}
+                onValueChange={(value) => setValue('responsavelFinanceiroPreferencial', value === 'sim')}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sim">Sim</SelectItem>
+                  <SelectItem value="nao">Não</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Pausar régua automática</Label>
+              <Select
+                defaultValue={initialData?.whatsappCobrancaPausado ? 'sim' : 'nao'}
+                onValueChange={(value) => setValue('whatsappCobrancaPausado', value === 'sim')}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="nao">Não</SelectItem>
+                  <SelectItem value="sim">Sim</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="whatsappCobrancaPausadoEm">Data da pausa</Label>
+              <Input id="whatsappCobrancaPausadoEm" type="date" {...register('whatsappCobrancaPausadoEm')} disabled={!whatsappCobrancaPausado} />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="whatsappCobrancaPausadoMotivo">Motivo da pausa</Label>
+              <Input id="whatsappCobrancaPausadoMotivo" {...register('whatsappCobrancaPausadoMotivo')} disabled={!whatsappCobrancaPausado} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="whatsappCobrancaPausadoPor">Pausado por</Label>
+              <Input id="whatsappCobrancaPausadoPor" {...register('whatsappCobrancaPausadoPor')} disabled={!whatsappCobrancaPausado} />
+            </div>
           </div>
         </CardContent>
       </Card>

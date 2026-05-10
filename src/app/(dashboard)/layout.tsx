@@ -4,10 +4,12 @@ import { AuthProvider } from '@/contexts/auth-context'
 import { AuthGuard } from '@/components/auth/auth-guard'
 import { AppSidebar, MobileSidebarTrigger } from '@/components/layout/app-sidebar'
 import { CommandPalette } from '@/components/layout/command-palette'
+import { MobileFab } from '@/components/layout/mobile-fab'
 import { Toaster } from '@/components/ui/sonner'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { QueryProvider } from '@/components/providers/query-provider'
 import { useAuth } from '@/contexts/auth-context'
+import { FeatureFlagsProvider, useFeatureFlags } from '@/contexts/feature-flags-context'
 import { Search, Plus } from 'lucide-react'
 import Link from 'next/link'
 
@@ -41,26 +43,46 @@ function TopBar() {
   )
 }
 
+function DashboardChrome({ children }: { children: React.ReactNode }) {
+  const { isEnabled } = useFeatureFlags()
+
+  return (
+    <div
+      className="flex h-screen overflow-hidden bg-background"
+      data-premium-ui={isEnabled('premiumUiEnabled') ? 'on' : 'off'}
+      data-dashboard-v2={isEnabled('dashboardV2Enabled') ? 'on' : 'off'}
+      data-table-v2={isEnabled('tableV2Enabled') ? 'on' : 'off'}
+      data-modal-v2={isEnabled('modalV2Enabled') ? 'on' : 'off'}
+      data-sidebar-v2={isEnabled('sidebarV2Enabled') ? 'on' : 'off'}
+    >
+      <AppSidebar />
+      <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
+        <TopBar />
+        <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-[1280px]">
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
+          </div>
+        </main>
+      </div>
+    </div>
+  )
+}
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <QueryProvider>
       <AuthProvider>
         <AuthGuard>
-          <div className="flex h-screen overflow-hidden bg-background">
-            <AppSidebar />
-            <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
-              <TopBar />
-              <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
-                <div className="mx-auto max-w-[1280px]">
-                  <ErrorBoundary>
-                    {children}
-                  </ErrorBoundary>
-                </div>
-              </main>
-            </div>
-          </div>
-          <CommandPalette />
-          <Toaster richColors position="top-right" />
+          <FeatureFlagsProvider>
+            <DashboardChrome>
+              {children}
+            </DashboardChrome>
+            <CommandPalette />
+            <MobileFab />
+            <Toaster richColors position="top-right" />
+          </FeatureFlagsProvider>
         </AuthGuard>
       </AuthProvider>
     </QueryProvider>

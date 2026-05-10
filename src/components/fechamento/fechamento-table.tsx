@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, ClipboardList } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { DataTableShell } from '@/components/ui/data-table-shell'
+import { EmptyState } from '@/components/ui/empty-state'
 
 type StatusObrigacao = 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
 
@@ -114,14 +116,17 @@ const REGIME_COLOR: Record<string, string> = {
 export function FechamentoTable({ fechamentos, onUpdate }: FechamentoTableProps) {
   if (fechamentos.length === 0) {
     return (
-      <div className="text-center py-12 text-muted-foreground text-sm">
-        Nenhum cliente neste filtro. Clique em <strong>Gerar Fechamento</strong> para criar os registros do mês.
-      </div>
+      <EmptyState
+        icon={ClipboardList}
+        title="Nenhum fechamento neste filtro"
+        description="Clique em Gerar Fechamento para criar os registros do mês para os clientes ativos."
+        size="md"
+      />
     )
   }
 
   return (
-    <div className="overflow-x-auto rounded-md border">
+    <DataTableShell storageKey="fechamento-table-density">
       <table className="w-full min-w-[860px] text-sm">
         <thead className="bg-muted/50 border-b">
           <tr>
@@ -204,6 +209,6 @@ export function FechamentoTable({ fechamentos, onUpdate }: FechamentoTableProps)
           ))}
         </tbody>
       </table>
-    </div>
+    </DataTableShell>
   )
 }

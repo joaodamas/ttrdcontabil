@@ -4,6 +4,10 @@ Status inicial em 2026-05-04.
 
 Objetivo: transformar o TTRD Contabil de MVP interno em ferramenta operacional pronta para uso real por escritorio contabil, reduzindo risco fiscal, vazamento de dados, inconsistencias operacionais e retrabalho.
 
+Documento complementar criado em 2026-05-08:
+
+- `docs_dev/checklist-whatsapp-cobranca.md`: plano tecnico e checklist de implantacao da regua automatica de cobranca por WhatsApp.
+
 Decisao de arquitetura em 2026-05-05:
 
 - A plataforma TTRD Contabil sera tratada como **single-tenant por ambiente Firebase**.

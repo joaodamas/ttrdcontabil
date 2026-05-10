@@ -8,12 +8,14 @@ import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { getFirebaseApp } from '@/lib/firebase'
 import { appConfig } from '@/lib/app-config'
 import { useAuth } from '@/contexts/auth-context'
+import { useFeatureFlags } from '@/contexts/feature-flags-context'
 import { formatCurrency, formatDate, formatMesAno, tsToDate, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
+import { buttonVariants } from '@/components/ui/button'
 import {
   Users, ClipboardList, CheckSquare, TrendingUp,
   AlertTriangle, ArrowRight, CheckCircle2, DollarSign,
-  Receipt, Bell,
+  Receipt, Bell, CalendarClock, WalletCards, Gauge, BarChart2, Sparkles,
 } from 'lucide-react'
 
 /* ─── Skeleton ──────────────────────────────────────────────────────────── */
@@ -98,9 +100,455 @@ async function recalcularDashboardKpis(params: { mes: number; ano: number }) {
   return data
 }
 
+type ClienteRisco = {
+  id: string
+  razaoSocial: string
+  motivos: string[]
+  score: number
+}
+
+type DashboardV2Props = {
+  hoje: Date
+  mesAtual: number
+  anoAtual: number
+  mesAnterior: number
+  anoAnterior: number
+  totalClientesAtivos: number
+  compCounts: Record<string, number>
+  tarefasPendentes: number
+  somaVencendo: number
+  vencendoCount: number
+  somaAtrasados: number
+  atrasadosCount: number
+  tarefasVencidas: Array<{ id: string; titulo: string; clienteNome?: string; dataPrazo?: Timestamp }>
+  competenciasAbertas: Array<{ id: string; clienteNome?: string; mes: number; ano: number }>
+  lancamentosVencidos: Array<{ id: string; descricao: string; clienteNome?: string; valor: number; dataVencimento: Timestamp }>
+  alertasNFSe: Array<{ id: string; razaoSocial: string; diaEmissaoNFSe: number; diasRestantes: number }>
+  clientesEmRisco: ClienteRisco[]
+  completedByDay: Record<number, number>
+  totalFechamentos: number
+}
+
+function CurvaSFechamento({
+  completedByDay,
+  totalFechamentos,
+  hoje,
+}: {
+  completedByDay: Record<number, number>
+  totalFechamentos: number
+  hoje: Date
+}) {
+  if (totalFechamentos === 0) return null
+  const diaAtual = hoje.getDate()
+  const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate()
+  const W = 240, H = 80
+  const PAD = 4
+
+  // Build cumulative actual line
+  let cumul = 0
+  const actualPoints: Array<[number, number]> = [[0, H - PAD]]
+  for (let d = 1; d <= diaAtual; d++) {
+    cumul += completedByDay[d] ?? 0
+    const x = PAD + ((d / diasNoMes) * (W - PAD * 2))
+    const y = H - PAD - (cumul / totalFechamentos) * (H - PAD * 2)
+    actualPoints.push([x, y])
+  }
+
+  // Expected: diagonal from (0,H) to (diaAtual/diasNoMes * W, y_expected)
+  const expectedEndX = PAD + ((diaAtual / diasNoMes) * (W - PAD * 2))
+  const expectedEndY = H - PAD - (diaAtual / diasNoMes) * (H - PAD * 2)
+
+  const toPath = (pts: Array<[number, number]>) =>
+    pts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`).join(' ')
+
+  const pctAtual = totalFechamentos > 0 ? Math.round((cumul / totalFechamentos) * 100) : 0
+  const pctEsperado = Math.round((diaAtual / diasNoMes) * 100)
+  const delta = pctAtual - pctEsperado
+
+  return (
+    <div className="rounded-2xl border border-border/70 bg-card/95 p-4 card-shadow">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold">Curva-S · Fechamento</h2>
+        <span className={cn(
+          'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+          delta >= 0 ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
+        )}>
+          {delta >= 0 ? `+${delta}%` : `${delta}%`} vs meta
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" aria-hidden="true">
+        {/* Grid lines */}
+        {[0, 25, 50, 75, 100].map(pct => {
+          const y = H - PAD - (pct / 100) * (H - PAD * 2)
+          return <line key={pct} x1={PAD} y1={y} x2={W - PAD} y2={y} stroke="currentColor" strokeWidth="0.5" className="text-border/50" strokeDasharray="2,3" />
+        })}
+        {/* Expected line (dashed) */}
+        <line x1={PAD} y1={H - PAD} x2={expectedEndX} y2={expectedEndY} stroke="currentColor" strokeWidth="1.5" className="text-muted-foreground/40" strokeDasharray="3,3" />
+        {/* Actual line */}
+        <path d={toPath(actualPoints)} fill="none" stroke="currentColor" strokeWidth="2" className="text-primary" strokeLinecap="round" strokeLinejoin="round" />
+        {/* Today marker */}
+        {actualPoints.length > 1 && (
+          <circle cx={actualPoints[actualPoints.length - 1][0]} cy={actualPoints[actualPoints.length - 1][1]} r="3" fill="currentColor" className="text-primary" />
+        )}
+      </svg>
+      <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+        <span>{cumul} / {totalFechamentos} concluídos</span>
+        <span>Dia {diaAtual}/{diasNoMes}</span>
+      </div>
+      <Link
+        href={`/fechamento?mes=${hoje.getMonth() + 1}&ano=${hoje.getFullYear()}`}
+        className="mt-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+      >
+        Ver fechamento <ArrowRight className="size-3" />
+      </Link>
+    </div>
+  )
+}
+
+function InsightCard({
+  title,
+  value,
+  description,
+  href,
+  icon: Icon,
+  tone = 'neutral',
+}: {
+  title: string
+  value: string | number
+  description: string
+  href: string
+  icon: React.ComponentType<{ className?: string }>
+  tone?: 'neutral' | 'danger' | 'warning' | 'success'
+}) {
+  const toneClass = {
+    neutral: 'bg-muted/55 text-foreground',
+    danger: 'bg-destructive/10 text-destructive',
+    warning: 'bg-warning/15 text-warning',
+    success: 'bg-success/10 text-success',
+  }[tone]
+
+  return (
+    <Link
+      href={href}
+      className="group block rounded-2xl border border-border/70 bg-card/95 p-4 card-shadow transition-all hover:border-primary/35 hover:shadow-md"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+          <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight">{value}</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
+        </div>
+        <div className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl', toneClass)}>
+          <Icon className="size-4" />
+        </div>
+      </div>
+      <div className="mt-4 flex items-center gap-1 text-xs font-medium text-muted-foreground group-hover:text-primary">
+        Abrir área <ArrowRight className="size-3" />
+      </div>
+    </Link>
+  )
+}
+
+function DashboardV2(props: DashboardV2Props) {
+  const totalUrgente = props.tarefasVencidas.length + props.lancamentosVencidos.length + props.alertasNFSe.length
+  const competenciasAbertasMes = props.compCounts.aberta ?? 0
+  const tarefasCriticas = props.tarefasVencidas.slice(0, 4)
+  const financeiroCritico = props.lancamentosVencidos.slice(0, 4)
+  const fiscalCritico = props.alertasNFSe.slice(0, 4)
+  const totalComp = (props.compCounts.aberta ?? 0) + (props.compCounts.em_andamento ?? 0) + (props.compCounts.concluida ?? 0)
+  const pctConcluida = totalComp > 0 ? Math.round(((props.compCounts.concluida ?? 0) / totalComp) * 100) : 0
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cockpit executivo</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">O que precisa acontecer hoje</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {props.hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/hoje" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+            <CalendarClock className="size-3.5" /> Hoje
+          </Link>
+          <Link href="/fiscal?emitir=1" className={buttonVariants({ size: 'sm' })}>
+            <Receipt className="size-3.5" /> Emitir NFS-e
+          </Link>
+        </div>
+      </div>
+
+      <section className="rounded-2xl border border-border/70 bg-card/95 p-4 card-shadow">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-3">
+            <div className={cn(
+              'flex size-11 shrink-0 items-center justify-center rounded-xl',
+              totalUrgente > 0 ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success'
+            )}>
+              {totalUrgente > 0 ? <AlertTriangle className="size-5" /> : <CheckCircle2 className="size-5" />}
+            </div>
+            <div>
+              <h2 className="text-base font-semibold">
+                {totalUrgente > 0 ? `${totalUrgente} ponto(s) pedem ação` : 'Operação sem alerta crítico imediato'}
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Prioridade calculada por tarefas vencidas, cobranças atrasadas e emissão fiscal próxima.
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
+            <Link href="/tarefas" className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2 hover:bg-muted/45">
+              <p className="text-lg font-bold tabular-nums text-destructive">{props.tarefasVencidas.length}</p>
+              <p className="text-[11px] text-muted-foreground">tarefas</p>
+            </Link>
+            <Link href="/financeiro?status=pendente" className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2 hover:bg-muted/45">
+              <p className="text-lg font-bold tabular-nums text-destructive">{props.lancamentosVencidos.length}</p>
+              <p className="text-[11px] text-muted-foreground">cobranças</p>
+            </Link>
+            <Link href="/fiscal" className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2 hover:bg-muted/45">
+              <p className="text-lg font-bold tabular-nums text-warning">{props.alertasNFSe.length}</p>
+              <p className="text-[11px] text-muted-foreground">NFS-e</p>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {(props.tarefasVencidas.length > 0 || props.somaAtrasados > 0 || props.alertasNFSe.length > 0) && (
+        <div className="flex items-center gap-2 rounded-xl bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          <Sparkles className="size-3.5 shrink-0" />
+          <span>
+            Hoje:
+            {props.tarefasVencidas.length > 0 && ` ${props.tarefasVencidas.length} tarefa(s) vencida(s)`}
+            {props.tarefasVencidas.length > 0 && (props.somaAtrasados > 0 || props.alertasNFSe.length > 0) && ' ·'}
+            {props.somaAtrasados > 0 && ` ${formatCurrency(props.somaAtrasados)} em cobrança`}
+            {props.somaAtrasados > 0 && props.alertasNFSe.length > 0 && ' ·'}
+            {props.alertasNFSe.length > 0 && ` ${props.alertasNFSe.length} NFS-e a emitir`}
+          </span>
+        </div>
+      )}
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <InsightCard
+          title="Clientes ativos"
+          value={props.totalClientesAtivos}
+          description="Carteira operacional disponível para rotinas mensais."
+          href="/clientes?status=ativo"
+          icon={Users}
+        />
+        <InsightCard
+          title="Tarefas abertas"
+          value={props.tarefasPendentes}
+          description={`${props.tarefasVencidas.length} vencida(s) exigem tratamento primeiro.`}
+          href="/tarefas?status=pendente"
+          icon={CheckSquare}
+          tone={props.tarefasVencidas.length > 0 ? 'danger' : 'success'}
+        />
+        <InsightCard
+          title="Recebíveis 7 dias"
+          value={formatCurrency(props.somaVencendo)}
+          description={`${props.vencendoCount} lançamento(s) previstos para recebimento.`}
+          href="/financeiro?status=pendente"
+          icon={WalletCards}
+          tone="success"
+        />
+        <InsightCard
+          title="Atraso financeiro"
+          value={formatCurrency(props.somaAtrasados)}
+          description={`${props.atrasadosCount} lançamento(s) já passaram do vencimento.`}
+          href="/financeiro?status=atrasado"
+          icon={DollarSign}
+          tone={props.atrasadosCount > 0 ? 'danger' : 'neutral'}
+        />
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-border/70 bg-card/95 card-shadow">
+            <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
+              <div>
+                <h2 className="text-sm font-semibold">Fila crítica</h2>
+                <p className="text-xs text-muted-foreground">Itens ordenados por impacto operacional imediato.</p>
+              </div>
+              <Link href="/hoje" className={buttonVariants({ variant: 'outline', size: 'sm' })}>Abrir Hoje</Link>
+            </div>
+            <div className="divide-y divide-border/70">
+              {tarefasCriticas.length === 0 && financeiroCritico.length === 0 && fiscalCritico.length === 0 ? (
+                <div className="px-4 py-8 text-center text-sm text-muted-foreground">Nenhuma ação crítica no momento.</div>
+              ) : (
+                <>
+                  {tarefasCriticas.map((item) => (
+                    <Link key={`t-${item.id}`} href={`/tarefas/${item.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/35">
+                      <Badge variant="destructive">Tarefa</Badge>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{item.titulo}</p>
+                        <p className="truncate text-xs text-muted-foreground">{item.clienteNome ?? 'Sem cliente'}</p>
+                      </div>
+                      <span className="text-xs text-destructive">{formatDate(tsToDate(item.dataPrazo))}</span>
+                    </Link>
+                  ))}
+                  {financeiroCritico.map((item) => (
+                    <Link key={`f-${item.id}`} href="/financeiro?status=pendente" className="flex items-center gap-3 px-4 py-3 hover:bg-muted/35">
+                      <Badge variant="destructive">Cobrança</Badge>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{item.descricao}</p>
+                        <p className="truncate text-xs text-muted-foreground">{item.clienteNome ?? 'Sem cliente'}</p>
+                      </div>
+                      <span className="text-xs font-semibold text-destructive">{formatCurrency(item.valor)}</span>
+                    </Link>
+                  ))}
+                  {fiscalCritico.map((item) => (
+                    <Link key={`n-${item.id}`} href={`/fiscal?emitir=1&clienteId=${item.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/35">
+                      <Badge variant="warning">Fiscal</Badge>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{item.razaoSocial}</p>
+                        <p className="truncate text-xs text-muted-foreground">Dia de emissão {item.diaEmissaoNFSe}</p>
+                      </div>
+                      <span className="text-xs text-warning">{item.diasRestantes <= 0 ? 'emitir hoje' : `${item.diasRestantes}d`}</span>
+                    </Link>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <aside className="space-y-4">
+          <div className="rounded-2xl border border-border/70 bg-card/95 p-4 card-shadow">
+            <div className="mb-4 flex items-center gap-2">
+              <Gauge className="size-4 text-primary" />
+              <h2 className="text-sm font-semibold">Saúde do mês</h2>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <div className="mb-1 flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Abertas</span>
+                  <span className="font-semibold tabular-nums">{competenciasAbertasMes}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-warning" style={{ width: `${Math.min(100, competenciasAbertasMes * 8)}%` }} />
+                </div>
+              </div>
+              <div>
+                <div className="mb-1 flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Concluídas</span>
+                  <span className="font-semibold tabular-nums">{props.compCounts.concluida ?? 0}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-success" style={{ width: `${pctConcluida}%` }} />
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs pt-1 border-t border-border/50">
+                <span className="text-muted-foreground">Execução do mês</span>
+                <span className={cn('font-bold tabular-nums', pctConcluida >= 80 ? 'text-success' : pctConcluida >= 50 ? 'text-warning' : 'text-destructive')}>{pctConcluida}%</span>
+              </div>
+            </div>
+            <Link
+              href={`/competencias?mes=${props.mesAtual}&ano=${props.anoAtual}`}
+              className={buttonVariants({ variant: 'outline', size: 'sm', className: 'mt-4 w-full' })}
+            >
+              Ver competências
+            </Link>
+          </div>
+
+          {/* Ranking clientes em risco */}
+          {props.clientesEmRisco.length > 0 && (
+            <div className="rounded-2xl border border-border/70 bg-card/95 card-shadow overflow-hidden">
+              <div className="flex items-center gap-2 border-b border-border/70 px-4 py-3">
+                <BarChart2 className="size-4 text-destructive" />
+                <h2 className="text-sm font-semibold">Clientes em risco</h2>
+                <span className="ml-auto rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">{props.clientesEmRisco.length}</span>
+              </div>
+              <div className="divide-y divide-border/70">
+                {props.clientesEmRisco.map((c, i) => (
+                  <Link key={c.id} href={`/clientes/${c.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/35">
+                    <span className="text-xs font-bold tabular-nums text-muted-foreground w-4">{i + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-medium">{c.razaoSocial}</p>
+                      <p className="truncate text-[10px] text-muted-foreground">{c.motivos.join(' · ')}</p>
+                    </div>
+                    <span className={cn(
+                      'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums',
+                      c.score >= 3 ? 'bg-destructive/10 text-destructive' : 'bg-warning/15 text-warning'
+                    )}>{c.score}</span>
+                  </Link>
+                ))}
+              </div>
+              <div className="border-t border-border/70 px-4 py-2">
+                <Link href="/clientes" className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1">
+                  Ver todos os clientes <ArrowRight className="size-3" />
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {totalComp > 0 && (
+            <div className="rounded-2xl border border-border/70 bg-card/95 p-4 card-shadow">
+              <div className="mb-4 flex items-center gap-2">
+                <BarChart2 className="size-4 text-primary" />
+                <h2 className="text-sm font-semibold">Produtividade do mês</h2>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center mb-4">
+                <div className="rounded-xl border border-border/70 bg-muted/25 px-2 py-2">
+                  <p className="text-lg font-bold tabular-nums text-success">{props.compCounts.concluida ?? 0}</p>
+                  <p className="text-[11px] text-muted-foreground">Concluídas</p>
+                </div>
+                <div className="rounded-xl border border-border/70 bg-muted/25 px-2 py-2">
+                  <p className="text-lg font-bold tabular-nums text-warning">{props.compCounts.em_andamento ?? 0}</p>
+                  <p className="text-[11px] text-muted-foreground">Em andamento</p>
+                </div>
+                <div className="rounded-xl border border-border/70 bg-muted/25 px-2 py-2">
+                  <p className="text-lg font-bold tabular-nums">{props.compCounts.aberta ?? 0}</p>
+                  <p className="text-[11px] text-muted-foreground">Abertas</p>
+                </div>
+              </div>
+              <div>
+                <div className="mb-1 flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Progresso</span>
+                  <span className={cn('font-bold tabular-nums', pctConcluida >= 80 ? 'text-success' : pctConcluida >= 50 ? 'text-warning' : 'text-destructive')}>{pctConcluida}%</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-success" style={{ width: `${pctConcluida}%` }} />
+                </div>
+              </div>
+              <Link
+                href={`/competencias?mes=${props.mesAtual}&ano=${props.anoAtual}`}
+                className={buttonVariants({ variant: 'outline', size: 'sm', className: 'mt-4 w-full' })}
+              >
+                Ver competências
+              </Link>
+            </div>
+          )}
+
+          <CurvaSFechamento
+            completedByDay={props.completedByDay}
+            totalFechamentos={props.totalFechamentos}
+            hoje={props.hoje}
+          />
+
+          <div className="rounded-2xl border border-border/70 bg-card/95 p-4 card-shadow">
+            <h2 className="text-sm font-semibold">Atalhos executivos</h2>
+            <div className="mt-3 grid gap-2">
+              <Link href="/clientes/novo" className={buttonVariants({ variant: 'outline', className: 'justify-start' })}>
+                <Users className="size-4" /> Novo cliente
+              </Link>
+              <Link href="/financeiro/novo" className={buttonVariants({ variant: 'outline', className: 'justify-start' })}>
+                <TrendingUp className="size-4" /> Novo lançamento
+              </Link>
+              <Link href="/tarefas/nova" className={buttonVariants({ variant: 'outline', className: 'justify-start' })}>
+                <CheckSquare className="size-4" /> Nova tarefa
+              </Link>
+            </div>
+          </div>
+        </aside>
+      </section>
+    </div>
+  )
+}
+
 /* ─── Page ──────────────────────────────────────────────────────────────── */
 export default function DashboardPage() {
   const { usuario } = useAuth()
+  const { isEnabled } = useFeatureFlags()
   const hoje = new Date()
   const mesAtual    = hoje.getMonth() + 1
   const anoAtual    = hoje.getFullYear()
@@ -119,6 +567,9 @@ export default function DashboardPage() {
   const [competenciasAbertas,  setCompetenciasAbertas]  = useState<Array<{ id: string; clienteNome?: string; mes: number; ano: number }>>([])
   const [lancamentosVencidos,  setLancamentosVencidos]  = useState<Array<{ id: string; descricao: string; clienteNome?: string; valor: number; dataVencimento: Timestamp }>>([])
   const [alertasNFSe,          setAlertasNFSe]          = useState<Array<{ id: string; razaoSocial: string; diaEmissaoNFSe: number; diasRestantes: number }>>([])
+  const [clientesEmRisco,      setClientesEmRisco]      = useState<ClienteRisco[]>([])
+  const [completedByDay,       setCompletedByDay]       = useState<Record<number, number>>({})
+  const [totalFechamentos,     setTotalFechamentos]     = useState(0)
 
   const AVISO_DIAS = 5 // janela de alerta em dias
 
@@ -152,6 +603,7 @@ export default function DashboardPage() {
         listDocuments('tarefas',      [where('status', 'in', ['pendente', 'em_andamento']), orderBy('dataPrazo', 'asc'), limit(300)]),
         listDocuments('competencias', [where('mes', '==', mesAnterior), where('ano', '==', anoAnterior), where('status', '==', 'aberta'), limit(5)]),
         listDocuments('lancamentos',  [where('tipo', '==', 'receita'), where('status', '==', 'pendente'), where('dataVencimento', '<', hojeTs), orderBy('dataVencimento', 'asc'), limit(5)]),
+        listDocuments('fechamentos',  [where('mes', '==', mesAtual), where('ano', '==', anoAtual), limit(300)]),
       ])
     }
 
@@ -164,6 +616,20 @@ export default function DashboardPage() {
       const tarefasData      = get<Record<string, unknown>>(1)
       const compAbertasData  = get<Record<string, unknown>>(2)
       const lancVencidosData = get<Record<string, unknown>>(3)
+      const fechamentosData  = get<Record<string, unknown>>(4)
+
+      // Curva-S: group completions by day of month
+      const DONE_STATUS = new Set(['enviado', 'ok', 'sm'])
+      const byDay: Record<number, number> = {}
+      for (const f of fechamentosData) {
+        if (!DONE_STATUS.has(f.dasStatus as string)) continue
+        const updatedAt = tsToDate(f.updatedAt as Parameters<typeof tsToDate>[0])
+        if (!updatedAt) continue
+        const day = updatedAt.getDate()
+        byDay[day] = (byDay[day] ?? 0) + 1
+      }
+      setCompletedByDay(byDay)
+      setTotalFechamentos(fechamentosData.length)
 
       const vencidas = tarefasData.filter((t) => {
         if (!t.dataPrazo) return false
@@ -192,6 +658,31 @@ export default function DashboardPage() {
         .filter(a => a.diasRestantes >= -2 && a.diasRestantes <= AVISO_DIAS) // -2 = 2 dias de carência
         .sort((a, b) => a.diasRestantes - b.diasRestantes)
       setAlertasNFSe(alertas)
+
+      // Ranking de clientes em risco: cruza cobranças vencidas + tarefas vencidas
+      const riscoMap = new Map<string, ClienteRisco>()
+      for (const l of lancVencidosData) {
+        const cId = l.clienteId as string | undefined
+        const cNome = (l.clienteNome as string | undefined) ?? '—'
+        if (!cId) continue
+        const entry = riscoMap.get(cId) ?? { id: cId, razaoSocial: cNome, motivos: [], score: 0 }
+        if (!entry.motivos.includes('Cobrança vencida')) entry.motivos.push('Cobrança vencida')
+        entry.score += 2
+        riscoMap.set(cId, entry)
+      }
+      for (const t of tarefasData) {
+        const cId = t.clienteId as string | undefined
+        const cNome = (t.clienteNome as string | undefined) ?? '—'
+        if (!cId) continue
+        const prazo = tsToDate(t.dataPrazo)
+        if (!prazo || prazo >= hoje) continue
+        const entry = riscoMap.get(cId) ?? { id: cId, razaoSocial: cNome, motivos: [], score: 0 }
+        if (!entry.motivos.includes('Tarefa atrasada')) entry.motivos.push('Tarefa atrasada')
+        entry.score += 1
+        riscoMap.set(cId, entry)
+      }
+      const risco = Array.from(riscoMap.values()).sort((a, b) => b.score - a.score).slice(0, 5)
+      setClientesEmRisco(risco)
     }).finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usuario?.tenantId])
@@ -219,6 +710,32 @@ export default function DashboardPage() {
   }
 
   const totalUrgente = tarefasVencidas.length + lancamentosVencidos.length
+
+  if (isEnabled('dashboardV2Enabled')) {
+    return (
+      <DashboardV2
+        hoje={hoje}
+        mesAtual={mesAtual}
+        anoAtual={anoAtual}
+        mesAnterior={mesAnterior}
+        anoAnterior={anoAnterior}
+        totalClientesAtivos={totalClientesAtivos}
+        compCounts={compCounts}
+        tarefasPendentes={tarefasPendentes}
+        somaVencendo={somaVencendo}
+        vencendoCount={vencendoCount}
+        somaAtrasados={somaAtrasados}
+        atrasadosCount={atrasadosCount}
+        tarefasVencidas={tarefasVencidas}
+        competenciasAbertas={competenciasAbertas}
+        lancamentosVencidos={lancamentosVencidos}
+        alertasNFSe={alertasNFSe}
+        clientesEmRisco={clientesEmRisco}
+        completedByDay={completedByDay}
+        totalFechamentos={totalFechamentos}
+      />
+    )
+  }
 
   /* ─── Render ──────────────────────────────────────────────────────────── */
   return (

@@ -22,11 +22,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
 import { getClientes, createDocument, updateDocument } from '@/lib/firestore-client'
 import { SELECT_NONE_VALUE } from '@/lib/select-values'
+import { formatWhatsApp, normalizeWhatsApp } from '@/lib/utils'
 
 const lancamentoSchema = z.object({
   clienteId:        z.string().optional().nullable(),
   competenciaId:    z.string().optional().nullable(),
   clienteServicoId: z.string().optional().nullable(),
+  servicoId:        z.string().optional().nullable(),
   tipo:             z.enum(['receita', 'despesa']),
   descricao:        z.string().min(1, 'Descrição é obrigatória').max(200),
   valor:            z.number().positive('Valor deve ser positivo'),
@@ -34,6 +36,14 @@ const lancamentoSchema = z.object({
   dataPagamento:    z.string().optional().nullable(),
   status:           z.enum(['pendente', 'pago', 'atrasado', 'cancelado', 'estornado']).default('pendente'),
   formaPagamento:   z.string().max(50).optional().nullable(),
+  pagadorNome:      z.string().optional().nullable(),
+  pagadorWhatsapp:  z.string().optional().nullable(),
+  cobrancaWhatsappEnabled: z.boolean().default(true),
+  statusWhatsappCobranca: z.enum(['nao_agendado', 'agendado', 'enviado', 'entregue', 'lido', 'respondido', 'falhou', 'pausado']).default('nao_agendado'),
+  whatsappCobrancaPausada: z.boolean().default(false),
+  whatsappCobrancaPausadaMotivo: z.string().optional().nullable(),
+  whatsappCobrancaIgnorada: z.boolean().default(false),
+  whatsappCobrancaExigeAprovacao: z.boolean().default(false),
   observacoes:      z.string().optional().nullable(),
 }).superRefine((data, ctx) => {
   if (data.tipo === 'receita' && !data.clienteId) {
@@ -74,7 +84,16 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
     formState: { errors, isSubmitting },
   } = useForm<LancamentoFormData>({
     resolver: zodResolver(lancamentoSchema),
-    defaultValues: { tipo: 'receita', status: 'pendente', ...initialData },
+    defaultValues: {
+      tipo: 'receita',
+      status: 'pendente',
+      cobrancaWhatsappEnabled: true,
+      statusWhatsappCobranca: 'nao_agendado',
+      whatsappCobrancaPausada: false,
+      whatsappCobrancaIgnorada: false,
+      whatsappCobrancaExigeAprovacao: false,
+      ...initialData,
+    },
   })
   const tipo = useWatch({ control, name: 'tipo' })
 
@@ -91,6 +110,8 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
       ...data,
       clienteId: data.clienteId || null,
       clienteNome: cliente?.razaoSocial ?? null,
+      pagadorNome: data.pagadorNome || cliente?.razaoSocial || null,
+      pagadorWhatsapp: normalizeWhatsApp(data.pagadorWhatsapp),
       dataVencimento: Timestamp.fromDate(new Date(`${data.dataVencimento}T12:00:00`)),
       dataPagamento: data.dataPagamento ? Timestamp.fromDate(new Date(`${data.dataPagamento}T12:00:00`)) : null,
     }
@@ -215,6 +236,98 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
               )}
             />
             {errors.clienteId && <p className="text-xs text-destructive">{errors.clienteId.message}</p>}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="pagadorNome">Pagador</Label>
+              <Input id="pagadorNome" {...register('pagadorNome')} placeholder="Nome do pagador / responsável financeiro" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="pagadorWhatsapp">WhatsApp do pagador</Label>
+              <Input
+                id="pagadorWhatsapp"
+                {...register('pagadorWhatsapp')}
+                placeholder="(11) 99999-9999"
+                onChange={(e) => {
+                  e.target.value = formatWhatsApp(e.target.value)
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div className="space-y-1.5">
+              <Label>Cobrança WhatsApp</Label>
+              <Controller
+                name="cobrancaWhatsappEnabled"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value ? 'sim' : 'nao'} onValueChange={(v) => field.onChange(v === 'sim')}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sim">Ativa</SelectItem>
+                      <SelectItem value="nao">Desligada</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Status WhatsApp</Label>
+              <Controller
+                name="statusWhatsappCobranca"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nao_agendado">Não agendado</SelectItem>
+                      <SelectItem value="agendado">Agendado</SelectItem>
+                      <SelectItem value="pausado">Pausado</SelectItem>
+                      <SelectItem value="falhou">Falhou</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Pausa manual</Label>
+              <Controller
+                name="whatsappCobrancaPausada"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value ? 'sim' : 'nao'} onValueChange={(v) => field.onChange(v === 'sim')}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nao">Não</SelectItem>
+                      <SelectItem value="sim">Sim</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Exige aprovação</Label>
+              <Controller
+                name="whatsappCobrancaExigeAprovacao"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value ? 'sim' : 'nao'} onValueChange={(v) => field.onChange(v === 'sim')}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nao">Não</SelectItem>
+                      <SelectItem value="sim">Sim</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="whatsappCobrancaPausadaMotivo">Motivo da pausa / exceção</Label>
+            <Input id="whatsappCobrancaPausadaMotivo" {...register('whatsappCobrancaPausadaMotivo')} placeholder="Negociação, exceção, cliente sem consentimento..." />
           </div>
 
           <div className="space-y-1.5">

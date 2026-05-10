@@ -12,19 +12,14 @@ import { Badge } from '@/components/ui/badge'
 import { ClienteStatusBadge, CompetenciaStatusBadge, PagamentoStatusBadge, NfseStatusBadge, AmbienteBadge } from '@/components/ui/status-badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { AppModal } from '@/components/ui/app-modal'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/ui/empty-state'
 import {
   Mail, MapPin, Phone, DollarSign, Pencil,
   ShieldCheck, ShieldAlert, ShieldOff, ExternalLink,
-  Briefcase, CalendarDays, Receipt, Settings, AlertTriangle,
+  Briefcase, CalendarDays, Receipt, Settings, AlertTriangle, Users,
 } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
@@ -150,45 +145,25 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
     .reduce((acc, s) => acc + ((s.valor as number) ?? 0), 0)
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        showCloseButton
-        className="!w-[min(900px,calc(100vw-2rem))] !max-w-[min(900px,calc(100vw-2rem))] max-h-[calc(100dvh-2rem)] grid grid-rows-[auto_minmax(0,1fr)] overflow-hidden gap-0 p-0 sm:min-h-[560px]"
-      >
-        {/* ── Header ─────────────────────────────────────────────── */}
-        <DialogHeader className="shrink-0 border-b bg-background px-5 py-4">
-          <div className="flex items-start justify-between gap-3 pr-6">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <DialogTitle className="truncate text-base font-semibold leading-tight">
-                  {cliente ? (cliente.razaoSocial as string) : clienteNome}
-                </DialogTitle>
-                {cliente?.status ? (
-                  <ClienteStatusBadge status={cliente.status as string} />
-                ) : null}
-              </div>
-              {cliente?.nomeFantasia ? (
-                <p className="text-xs text-muted-foreground mt-0.5">{cliente.nomeFantasia as string}</p>
-              ) : null}
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 gap-1.5 text-muted-foreground"
-                onClick={() => navigateTo(`/clientes/${clienteId}`)}
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Ver completo</span>
-              </Button>
-              <Button size="sm" variant="outline" className="h-8" onClick={() => navigateTo(`/clientes/${clienteId}/editar`)}>
-                Editar
-              </Button>
-            </div>
-          </div>
-        </DialogHeader>
-
-        {/* ── Body ───────────────────────────────────────────────── */}
+    <AppModal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={cliente ? (cliente.razaoSocial as string) : clienteNome}
+      description={cliente?.nomeFantasia ? (cliente.nomeFantasia as string) : undefined}
+      icon={<Users className="size-4" />}
+      badge={cliente?.status ? <ClienteStatusBadge status={cliente.status as string} /> : undefined}
+      size="wide"
+      footer={
+        <div className="flex gap-2">
+          <Button size="sm" variant="ghost" className="gap-1.5" onClick={() => navigateTo(`/clientes/${clienteId}`)}>
+            <ExternalLink className="w-3.5 h-3.5" />Ver completo
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => navigateTo(`/clientes/${clienteId}/editar`)}>
+            <Pencil className="w-3.5 h-3.5" />Editar
+          </Button>
+        </div>
+      }
+    >
         <div className="min-h-0 overflow-hidden">
           {loading ? (
             <div className="px-5 py-5 space-y-4">
@@ -604,7 +579,6 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
             await syncClienteAfterMutation()
           }}
         />
-      </DialogContent>
-    </Dialog>
+    </AppModal>
   )
 }

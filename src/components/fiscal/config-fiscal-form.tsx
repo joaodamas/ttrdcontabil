@@ -5,7 +5,8 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { AppModal } from '@/components/ui/app-modal'
+import { Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -176,12 +177,14 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent style={{ maxWidth: '640px' }} className="w-full max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Configuração Fiscal — NFS-e</DialogTitle>
-        </DialogHeader>
-
+    <AppModal
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Configuração Fiscal — NFS-e"
+      description="Defina município, regime tributário, credenciais e dados padrão da emissão."
+      icon={<Settings2 className="size-4" />}
+      size="lg"
+    >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-1">
 
           {/* Município + Ambiente */}
@@ -386,7 +389,6 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
             </Button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
+    </AppModal>
   )
 }

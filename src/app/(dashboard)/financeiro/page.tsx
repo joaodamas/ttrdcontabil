@@ -7,26 +7,33 @@ import { Timestamp } from 'firebase/firestore'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
-import { formatDate, formatCurrency, tsToDate } from '@/lib/utils'
+import { formatDate, formatCurrency, formatDateTime, tsToDate } from '@/lib/utils'
 import { exportToExcel } from '@/lib/export-excel'
 import { deleteDocument } from '@/lib/firestore-client'
 import { getErrorMessage } from '@/lib/error-message'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { KpiCard } from '@/components/ui/kpi-card'
 import { LancamentoBaixar } from '@/components/financeiro/lancamento-baixar'
 import { FilaCobrancaItem } from '@/components/financeiro/fila-cobranca'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useAuth } from '@/contexts/auth-context'
-import { Download, Plus, TrendingUp, CheckCircle, AlertTriangle, Receipt, Trash2 } from 'lucide-react'
+import { Download, Plus, TrendingUp, CheckCircle, AlertTriangle, Receipt, Trash2, Clock } from 'lucide-react'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { FilterBtn } from '@/components/ui/filter-btn'
+import { AppModal } from '@/components/ui/app-modal'
+import { DataTableShell } from '@/components/ui/data-table-shell'
 import { financeiroBaseFiltroSchema } from '@/features/financeiro/schemas'
 import { useFinanceiroList } from '@/features/financeiro/hooks'
 import { financeiroKeys } from '@/features/financeiro/queries'
-import { scoreCobranca } from '@/lib/financeiro-prioridade'
+import { scoreCobranca, motivoPrioridade } from '@/lib/financeiro-prioridade'
+import { CentralCobranca } from '@/components/financeiro/central-cobranca'
+import { AlertasFinanceiros } from '@/components/financeiro/alertas-financeiros'
+import { TimelineFinanceiraModal } from '@/components/financeiro/timeline-financeira'
 import type { FirestoreCursor } from '@/lib/firestore-client'
+import { fetchWhatsappHistory, pauseWhatsappRuleForLancamento, rescheduleWhatsappRuleForLancamento, resumeWhatsappRuleForLancamento, sendWhatsappNow } from '@/features/whatsapp/services'
+import { WHATSAPP_STATUS_LABELS } from '@/features/whatsapp/types'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   pendente: { label: 'Pendente', variant: 'outline' },
@@ -39,6 +46,17 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
 const TIPO_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   receita: { label: 'Receita', variant: 'default' },
   despesa: { label: 'Despesa', variant: 'secondary' },
+}
+
+const WHATSAPP_VARIANT_MAP: Record<string, 'default' | 'secondary' | 'outline' | 'destructive'> = {
+  nao_agendado: 'outline',
+  agendado: 'secondary',
+  enviado: 'default',
+  entregue: 'default',
+  lido: 'default',
+  respondido: 'default',
+  falhou: 'destructive',
+  pausado: 'secondary',
 }
 
 function FinanceiroContent() {
@@ -75,6 +93,10 @@ function FinanceiroContent() {
     .sort((a, b) => scoreCobranca(b, agora) - scoreCobranca(a, agora))
     .slice(0, 5)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [historyLancamentoId, setHistoryLancamentoId] = useState<string | null>(null)
+  const [historyItems, setHistoryItems] = useState<Array<Record<string, unknown>>>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [timelineLancamento, setTimelineLancamento] = useState<Record<string, unknown> | null>(null)
 
   async function refreshFinanceiro() {
     await queryClient.invalidateQueries({
@@ -88,6 +110,36 @@ function FinanceiroContent() {
     toast.success('Lançamento excluído.')
     await refreshFinanceiro()
     setDeleteId(null)
+  }
+
+  async function openWhatsappHistory(lancamentoId: string) {
+    setHistoryLancamentoId(lancamentoId)
+    setHistoryLoading(true)
+    try {
+      const rows = await fetchWhatsappHistory(lancamentoId)
+      setHistoryItems(rows as Array<Record<string, unknown>>)
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Não foi possível carregar o histórico do WhatsApp.'))
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  async function handleWhatsappAction(
+    action: 'send' | 'pause' | 'resume' | 'reschedule',
+    lancamentoId: string,
+    motivo?: string
+  ) {
+    try {
+      if (action === 'send') await sendWhatsappNow(lancamentoId)
+      if (action === 'pause') await pauseWhatsappRuleForLancamento(lancamentoId, motivo ?? 'Pausado manualmente')
+      if (action === 'resume') await resumeWhatsappRuleForLancamento(lancamentoId)
+      if (action === 'reschedule') await rescheduleWhatsappRuleForLancamento(lancamentoId)
+      toast.success('Ação de WhatsApp executada.')
+      await refreshFinanceiro()
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Não foi possível executar a ação de WhatsApp.'))
+    }
   }
 
   function exportarInadimplencia() {
@@ -181,44 +233,13 @@ function FinanceiroContent() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card className="border-border/65 bg-card/95 card-shadow">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">A Receber</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="kpi-value tabular-nums">{formatCurrency(somaAReceber)}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/65 bg-card/95 card-shadow">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Recebido no Mês
-              </CardTitle>
-              <CheckCircle className="h-4 w-4 text-muted-foreground" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="kpi-value text-success tabular-nums">{formatCurrency(somaRecebidoMes)}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/65 bg-card/95 card-shadow">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Em Atraso</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-destructive" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="kpi-value text-destructive tabular-nums">{formatCurrency(somaEmAtraso)}</p>
-          </CardContent>
-        </Card>
+        <KpiCard label="A Receber" value={formatCurrency(somaAReceber)} icon={TrendingUp} />
+        <KpiCard label="Recebido no Mês" value={formatCurrency(somaRecebidoMes)} icon={CheckCircle} tone="success" />
+        <KpiCard label="Em Atraso" value={formatCurrency(somaEmAtraso)} icon={AlertTriangle} tone="danger" />
       </div>
+
+      <CentralCobranca lancamentos={filteredLancamentos as Record<string, unknown>[]} agora={agora} />
+      <AlertasFinanceiros lancamentos={filteredLancamentos as Record<string, unknown>[]} agora={agora} />
 
       <div className="surface-subtle flex flex-wrap items-center gap-3 border px-3 py-2.5">
         <div className="flex items-center gap-1">
@@ -267,26 +288,29 @@ function FinanceiroContent() {
         </div>
       ) : null}
 
-      <div className="overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
-        <div className="overflow-x-auto">
-        <table className="min-w-[1120px] w-full text-sm">
+      <DataTableShell density="compact">
+        <table className="min-w-[1480px] w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
               <th className="px-4 py-3 text-left section-label">Pagador</th>
+              <th className="px-4 py-3 text-left section-label">WhatsApp</th>
               <th className="px-4 py-3 text-left section-label">Serviço / Referência</th>
               <th className="px-4 py-3 text-left section-label">Vencimento</th>
               <th className="px-4 py-3 text-left section-label">Pagamento</th>
               <th className="px-4 py-3 text-right section-label">Valor</th>
               <th className="px-4 py-3 text-left section-label">Status</th>
+              <th className="px-4 py-3 text-left section-label">Status WhatsApp</th>
+              <th className="px-4 py-3 text-left section-label">Última ação</th>
+              <th className="px-4 py-3 text-left section-label">Próxima ação</th>
               <th className="px-4 py-3 text-left section-label">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {isLoading ? (
-              <TableRowSkeleton cols={7} rows={8} />
+              <TableRowSkeleton cols={11} rows={8} />
             ) : lancamentos.length === 0 ? (
               <TableEmptyState
-                colSpan={7}
+                colSpan={11}
                 icon={Receipt}
                 title="Nenhum lançamento encontrado"
                 description={tipo || status ? 'Tente ajustar os filtros.' : 'Clique em "Novo Lançamento" para começar.'}
@@ -311,15 +335,24 @@ function FinanceiroContent() {
                       : atrasado
                         ? 'Atrasado'
                         : 'Em dia'
+                const riscoScore = scoreCobranca(l as Record<string, unknown>, agora)
+                const riscoMotivo = riscoScore >= 100 ? motivoPrioridade(l as Record<string, unknown>, agora) : null
+                const whatsappStatus = (l.statusWhatsappCobranca as string | undefined) ?? 'nao_agendado'
+                const ultimaAcao = tsToDate(l.ultimoEnvioWhatsappEm)
+                const proximaAcao = tsToDate(l.proximaAcaoWhatsappEm)
+                const whatsappPausado = Boolean(l.whatsappCobrancaPausada)
+                const pagadorNome = (l.pagadorNome as string | undefined) ?? (l.clienteNome as string | undefined) ?? '—'
+                const pagadorWhatsapp = (l.pagadorWhatsapp as string | undefined) ?? '—'
 
                 return (
-                  <tr key={l.id as string} className="transition-colors hover:bg-muted/35">
+                  <tr key={l.id as string} className={`transition-colors hover:bg-muted/35${riscoMotivo ? ' border-l-2 border-l-destructive' : ''}`}>
                     <td className="px-4 py-3">
                       <div className="min-w-0">
-                        <p className="font-medium">{(l.clienteNome as string) ?? '—'}</p>
+                        <p className="font-medium">{pagadorNome}</p>
                         <p className="text-xs text-muted-foreground">{TIPO_MAP[l.tipo as string]?.label ?? (l.tipo as string) ?? '—'}</p>
                       </div>
                     </td>
+                    <td className="px-4 py-3 text-muted-foreground">{pagadorWhatsapp}</td>
                     <td className="px-4 py-3">
                       <div className="min-w-0">
                         <p className="font-medium">{(l.descricao as string) ?? '—'}</p>
@@ -342,13 +375,31 @@ function FinanceiroContent() {
                     <td className="px-4 py-3">
                       <div className="flex flex-col items-start gap-1">
                         <Badge variant={st.variant}>{st.label}</Badge>
-                        <span className={`text-xs ${atrasado ? 'text-destructive' : 'text-muted-foreground'}`}>
-                          {statusOperacional}
-                        </span>
+                        {riscoMotivo
+                          ? <span className="text-[11px] font-medium text-destructive leading-tight">{riscoMotivo}</span>
+                          : <span className={`text-xs ${atrasado ? 'text-destructive' : 'text-muted-foreground'}`}>{statusOperacional}</span>
+                        }
                       </div>
                     </td>
                     <td className="px-4 py-3">
+                      <div className="flex flex-col items-start gap-1">
+                        <Badge variant={WHATSAPP_VARIANT_MAP[whatsappStatus] ?? 'outline'}>
+                          {WHATSAPP_STATUS_LABELS[whatsappStatus] ?? whatsappStatus}
+                        </Badge>
+                        {whatsappPausado ? <span className="text-xs text-muted-foreground">Pausado manualmente</span> : null}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {ultimaAcao ? formatDateTime(ultimaAcao) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {proximaAcao ? formatDateTime(proximaAcao) : '—'}
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
+                        <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" title="Ver timeline" onClick={() => setTimelineLancamento(l as Record<string, unknown>)}>
+                          <Clock className="h-3 w-3" />
+                        </Button>
                         {l.status === 'pendente' ? (
                           <LancamentoBaixar
                             lancamentoId={l.id as string}
@@ -358,6 +409,22 @@ function FinanceiroContent() {
                             dataVencimento={l.dataVencimento as Timestamp | undefined}
                             onBaixado={() => void refreshFinanceiro()}
                           />
+                        ) : null}
+                        {l.tipo === 'receita' ? (
+                          <>
+                            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => void handleWhatsappAction('send', l.id as string)}>
+                              Enviar agora
+                            </Button>
+                            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => void handleWhatsappAction(whatsappPausado ? 'resume' : 'pause', l.id as string)}>
+                              {whatsappPausado ? 'Retomar régua' : 'Pausar régua'}
+                            </Button>
+                            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => void handleWhatsappAction('reschedule', l.id as string)}>
+                              Reagendar
+                            </Button>
+                            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => void openWhatsappHistory(l.id as string)}>
+                              Histórico
+                            </Button>
+                          </>
                         ) : null}
                         {usuario?.perfil === 'admin' ? (
                           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setDeleteId(l.id as string)}>
@@ -372,8 +439,7 @@ function FinanceiroContent() {
               })}
           </tbody>
         </table>
-        </div>
-      </div>
+      </DataTableShell>
 
       {totalPages > 1 ? (
         <div className="flex items-center justify-between text-sm">
@@ -432,6 +498,50 @@ function FinanceiroContent() {
             toast.error(getErrorMessage(err, 'Não foi possível excluir o lançamento.'))
           }
         }}
+      />
+
+      <AppModal
+        open={!!historyLancamentoId}
+        onOpenChange={(open) => !open && setHistoryLancamentoId(null)}
+        title="Histórico de cobrança por WhatsApp"
+        description="Eventos registrados para a régua de cobrança deste lançamento."
+        icon={<Receipt className="size-4" />}
+        size="lg"
+      >
+        <div className="space-y-3">
+          {historyLoading ? (
+            <div className="text-sm text-muted-foreground">Carregando histórico...</div>
+          ) : historyItems.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border/80 bg-muted/25 p-4 text-sm text-muted-foreground">
+              Nenhum evento de WhatsApp para este lançamento.
+            </div>
+          ) : historyItems.map((item) => {
+            const createdAt = tsToDate(item.criadoEm)
+            const statusLabel = WHATSAPP_STATUS_LABELS[String(item.status ?? '')] ?? String(item.status ?? '—')
+            return (
+              <div key={String(item.id)} className="rounded-xl border border-border/75 bg-card p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">{String(item.etapa ?? 'etapa_manual')}</p>
+                    <p className="text-xs text-muted-foreground">{createdAt ? formatDateTime(createdAt) : '—'}</p>
+                  </div>
+                  <Badge variant={WHATSAPP_VARIANT_MAP[String(item.status ?? 'nao_agendado')] ?? 'outline'}>
+                    {statusLabel}
+                  </Badge>
+                </div>
+                {item.contatoDestino ? <p className="mt-2 text-sm">Destino: {String(item.contatoDestino)}</p> : null}
+                {item.erro ? <p className="mt-2 text-sm text-destructive">Erro: {String(item.erro)}</p> : null}
+                {item.detalhes ? <p className="mt-1 text-xs text-muted-foreground">{String(item.detalhes)}</p> : null}
+              </div>
+            )
+          })}
+        </div>
+      </AppModal>
+
+      <TimelineFinanceiraModal
+        lancamento={timelineLancamento}
+        open={!!timelineLancamento}
+        onOpenChange={(open) => !open && setTimelineLancamento(null)}
       />
     </div>
   )

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { CheckSquare, Receipt, Layers, DollarSign, MessageCircle, Info } from 'lucide-react'
+import { CheckSquare, Receipt, Layers, DollarSign, MessageCircle, Info, User, Bot } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDate } from '@/lib/utils'
 
@@ -22,6 +22,7 @@ export type TimelineEvent = {
   variant?: 'success' | 'warning' | 'destructive' | 'neutral' | 'default'
   href?: string
   metadata?: string
+  source?: 'manual' | 'auto'
 }
 
 type TimelineProps = {
@@ -123,13 +124,25 @@ export function Timeline({ events }: TimelineProps) {
                 <p className="text-xs text-muted-foreground leading-relaxed">{event.description}</p>
               )}
 
-              {/* Timestamp */}
-              <time
-                dateTime={event.timestamp.toISOString()}
-                className="block text-[10px] text-muted-foreground/70 tabular-nums"
-              >
-                {relativeOrAbsolute(event.timestamp)}
-              </time>
+              {/* Timestamp + source badge */}
+              <div className="flex items-center gap-2">
+                <time
+                  dateTime={event.timestamp.toISOString()}
+                  className="block text-[10px] text-muted-foreground/70 tabular-nums"
+                >
+                  {relativeOrAbsolute(event.timestamp)}
+                </time>
+                {event.source === 'manual' && (
+                  <span className="inline-flex items-center gap-0.5 rounded bg-primary/8 px-1 py-0.5 text-[9px] font-medium text-primary/70">
+                    <User className="h-2.5 w-2.5" />manual
+                  </span>
+                )}
+                {event.source === 'auto' && (
+                  <span className="inline-flex items-center gap-0.5 rounded bg-muted px-1 py-0.5 text-[9px] font-medium text-muted-foreground/60">
+                    <Bot className="h-2.5 w-2.5" />auto
+                  </span>
+                )}
+              </div>
             </div>
           </li>
         )

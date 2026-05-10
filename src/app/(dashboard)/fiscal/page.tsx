@@ -9,7 +9,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import { formatDate, formatCurrency, tsToDate, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { AppModal } from '@/components/ui/app-modal'
+import { KpiCard } from '@/components/ui/kpi-card'
+import { DataTableShell } from '@/components/ui/data-table-shell'
 import {
   FileText, CheckCircle2, XCircle, AlertTriangle,
   Plus, Loader2, Trash2, Layers, History, Receipt,
@@ -186,25 +188,10 @@ export default function FiscalPage() {
 
       {/* KPI strip — horizontal, compacto */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'Emitidas no mês', value: emitidaMesCount, sub: formatCurrency(somaEmitidaMes), icon: Receipt, color: 'text-success', bg: 'bg-success/8' },
-          { label: 'Pendentes',       value: pendenteCount,   sub: 'aguardando envio',              icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/8' },
-          { label: 'Com erro',        value: erroCount,       sub: 'requer atenção',                icon: XCircle, color: 'text-destructive', bg: 'bg-destructive/8' },
-          { label: 'Canceladas',      value: canceladaCount,  sub: 'neste mês',                     icon: CheckCircle2, color: 'text-muted-foreground', bg: 'bg-muted/50' },
-        ].map(({ label, value, sub, icon: Icon, color, bg }) => (
-          <div key={label} className="rounded-xl border border-border bg-card p-4 card-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-muted-foreground">{label}</span>
-              <div className={cn('h-7 w-7 rounded-lg flex items-center justify-center', bg)}>
-                <Icon size={13} className={color} />
-              </div>
-            </div>
-            <p className={cn('text-2xl font-bold tabular-nums tracking-tight', color === 'text-destructive' && value > 0 ? 'text-destructive' : 'text-foreground')}>
-              {value}
-            </p>
-            <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
-          </div>
-        ))}
+        <KpiCard label="Emitidas no mês" value={emitidaMesCount} description={formatCurrency(somaEmitidaMes)} icon={Receipt} tone="success" />
+        <KpiCard label="Pendentes" value={pendenteCount} description="aguardando envio" icon={AlertTriangle} tone="warning" />
+        <KpiCard label="Com erro" value={erroCount} description="requer atenção" icon={XCircle} tone={erroCount > 0 ? 'danger' : 'neutral'} />
+        <KpiCard label="Canceladas" value={canceladaCount} description="neste mês" icon={CheckCircle2} />
       </div>
 
       <div className="rounded-xl border border-border bg-card card-shadow overflow-hidden">
@@ -230,7 +217,7 @@ export default function FiscalPage() {
             </div>
           ))}
         </div>
-        <div className="border-t border-border overflow-x-auto">
+        <DataTableShell className="rounded-none border-x-0 border-b-0 shadow-none" density="compact">
           <table className="w-full min-w-[760px] text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
@@ -290,7 +277,7 @@ export default function FiscalPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </DataTableShell>
         {readinessClientes.length > 8 && (
           <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
             Exibindo os 8 primeiros clientes. Use a página do cliente para corrigir serviço, dia de emissão, configuração fiscal e credenciais.
@@ -461,14 +448,14 @@ export default function FiscalPage() {
         confirmLabel="Gerar rascunhos"
         onConfirm={prepararRascunhosMensais}
       />
-      <Dialog open={Boolean(notaErroOpen)} onOpenChange={(open) => !open && setNotaErroOpen(null)}>
-        <DialogContent className="max-w-2xl" showCloseButton>
-          <DialogHeader>
-            <DialogTitle>Erro técnico da emissão</DialogTitle>
-            <DialogDescription>
-              Diagnóstico da última tentativa registrada para esta emissão ou rascunho fiscal.
-            </DialogDescription>
-          </DialogHeader>
+      <AppModal
+        open={Boolean(notaErroOpen)}
+        onOpenChange={(open) => !open && setNotaErroOpen(null)}
+        title="Erro técnico da emissão"
+        description="Diagnóstico da última tentativa registrada para esta emissão ou rascunho fiscal."
+        icon={<XCircle className="size-4" />}
+        size="lg"
+      >
           {notaErroOpen ? (
             <div className="space-y-4 text-sm">
               <div className="grid gap-3 sm:grid-cols-2">
@@ -511,8 +498,7 @@ export default function FiscalPage() {
               </div>
             </div>
           ) : null}
-        </DialogContent>
-      </Dialog>
+      </AppModal>
     </div>
   )
 }

@@ -14,6 +14,11 @@ import {
   saveParametrosEscritorio,
 } from '@/features/admin/services'
 import type { ParametrosEscritorio } from '@/features/admin/types'
+import {
+  UI_FEATURE_FLAG_KEYS,
+  UI_FEATURE_FLAG_META,
+  type UiFeatureFlagKey,
+} from '@/lib/feature-flags'
 
 export default function AdminParametrosPage() {
   const { usuario } = useAuth()
@@ -40,6 +45,16 @@ export default function AdminParametrosPage() {
 
   function update<K extends keyof ParametrosEscritorio>(key: K, value: ParametrosEscritorio[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  function updateFeatureFlag(key: UiFeatureFlagKey, value: boolean) {
+    setForm((prev) => ({
+      ...prev,
+      uiFeatureFlags: {
+        ...prev.uiFeatureFlags,
+        [key]: value,
+      },
+    }))
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -132,6 +147,129 @@ export default function AdminParametrosPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-1.5 sm:col-span-2 pt-2">
+              <h3 className="text-sm font-semibold">Cobrança por WhatsApp</h3>
+              <p className="text-xs text-muted-foreground">
+                Configuração base da régua automática e do canal oficial da Cloud API.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Cloud API habilitada</Label>
+              <Select
+                value={form.whatsappCloudApiEnabled ? 'sim' : 'nao'}
+                onValueChange={(value) => update('whatsappCloudApiEnabled', value === 'sim')}
+                disabled={loading}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sim">Sim</SelectItem>
+                  <SelectItem value="nao">Não</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Usar dias úteis</Label>
+              <Select
+                value={form.whatsappUsaDiasUteis ? 'sim' : 'nao'}
+                onValueChange={(value) => update('whatsappUsaDiasUteis', value === 'sim')}
+                disabled={loading}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sim">Sim</SelectItem>
+                  <SelectItem value="nao">Não</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="whatsappBusinessAccountId">Business Account ID</Label>
+              <Input
+                id="whatsappBusinessAccountId"
+                value={form.whatsappBusinessAccountId}
+                disabled={loading}
+                onChange={(event) => update('whatsappBusinessAccountId', event.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="whatsappPhoneNumberId">Phone Number ID</Label>
+              <Input
+                id="whatsappPhoneNumberId"
+                value={form.whatsappPhoneNumberId}
+                disabled={loading}
+                onChange={(event) => update('whatsappPhoneNumberId', event.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="whatsappWebhookVerifyToken">Webhook verify token</Label>
+              <Input
+                id="whatsappWebhookVerifyToken"
+                value={form.whatsappWebhookVerifyToken}
+                disabled={loading}
+                onChange={(event) => update('whatsappWebhookVerifyToken', event.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="whatsappJanelaHoraMinima">Janela mínima</Label>
+              <Input
+                id="whatsappJanelaHoraMinima"
+                type="time"
+                value={form.whatsappJanelaHoraMinima}
+                disabled={loading}
+                onChange={(event) => update('whatsappJanelaHoraMinima', event.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="whatsappJanelaHoraMaxima">Janela máxima</Label>
+              <Input
+                id="whatsappJanelaHoraMaxima"
+                type="time"
+                value={form.whatsappJanelaHoraMaxima}
+                disabled={loading}
+                onChange={(event) => update('whatsappJanelaHoraMaxima', event.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1.5 sm:col-span-2 border-t border-border/70 pt-4">
+              <h3 className="text-sm font-semibold">Rollout de UI premium</h3>
+              <p className="text-xs text-muted-foreground">
+                Flags por tenant para liberar o redesign em etapas, mantendo a interface atual como padrão seguro.
+              </p>
+            </div>
+
+            {UI_FEATURE_FLAG_KEYS.map((key) => {
+              const meta = UI_FEATURE_FLAG_META[key]
+              return (
+                <div className="space-y-1.5" key={key}>
+                  <Label>{meta.label}</Label>
+                  <Select
+                    value={form.uiFeatureFlags[key] ? 'sim' : 'nao'}
+                    onValueChange={(value) => updateFeatureFlag(key, value === 'sim')}
+                    disabled={loading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sim">Sim</SelectItem>
+                      <SelectItem value="nao">Não</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">{meta.description}</p>
+                </div>
+              )
+            })}
 
             <div className="flex justify-end sm:col-span-2">
               <Button type="submit" loading={saving || loading}>

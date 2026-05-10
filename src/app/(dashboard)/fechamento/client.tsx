@@ -417,13 +417,13 @@ function FechamentoContent() {
         />
       ) : null}
 
-      {/* Loading state */}
+      {/* Table */}
       <div ref={tabelaRef} id="fechamento-tabela">
         {loading ? (
-          <div className="rounded-lg border bg-card overflow-hidden">
+          <div className="overflow-hidden rounded-2xl border border-border/65 bg-card/95">
             <table className="w-full text-sm">
               <tbody className="divide-y divide-border">
-                <TableRowSkeleton cols={6} rows={8} />
+                <TableRowSkeleton cols={10} rows={8} />
               </tbody>
             </table>
           </div>

@@ -12,6 +12,21 @@ export type ClienteRecord = Record<string, unknown> & {
   riscoInadimplencia?: boolean
   /** Dia do mês (1–31) para emissão mensal da NFS-e */
   diaEmissaoNFSe?: number
+  whatsapp?: string
+  whatsappFinanceiro?: string
+  aceiteWhatsAppCobranca?: boolean
+  aceiteWhatsAppCobrancaEm?: Timestamp
+  aceiteWhatsAppCobrancaOrigem?: string
+  responsavelFinanceiroNome?: string
+  responsavelFinanceiroCargo?: string
+  responsavelFinanceiroEmail?: string
+  responsavelFinanceiroTelefone?: string
+  responsavelFinanceiroWhatsapp?: string
+  responsavelFinanceiroPreferencial?: boolean
+  whatsappCobrancaPausado?: boolean
+  whatsappCobrancaPausadoMotivo?: string
+  whatsappCobrancaPausadoEm?: Timestamp
+  whatsappCobrancaPausadoPor?: string
 }
 
 export type ClienteServicoRecord = Record<string, unknown> & {
@@ -41,6 +56,14 @@ export type LancamentoRecord = Record<string, unknown> & {
   valor?: number
   status?: string
   dataVencimento?: Timestamp
+  pagadorNome?: string
+  pagadorWhatsapp?: string
+  cobrancaWhatsappEnabled?: boolean
+  statusWhatsappCobranca?: string
+  ultimoEnvioWhatsappEm?: Timestamp
+  proximaAcaoWhatsappEm?: Timestamp
+  ultimaMensagemWhatsappId?: string
+  etapaWhatsappAtual?: string
 }
 
 export type ClienteFiscalRecord = Record<string, unknown> & {

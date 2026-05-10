@@ -29,6 +29,20 @@ export function formatPhone(value: string): string {
   return digits.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3')
 }
 
+export function normalizeWhatsApp(value?: string | null): string {
+  if (!value) return ''
+  const digits = value.replace(/\D/g, '')
+  if (!digits) return ''
+  const withCountry = digits.startsWith('55') ? digits : `55${digits}`
+  return `+${withCountry}`
+}
+
+export function formatWhatsApp(value?: string | null): string {
+  const normalized = normalizeWhatsApp(value)
+  if (!normalized) return ''
+  return formatPhone(normalized.replace(/^\+55/, ''))
+}
+
 export function formatCep(value: string): string {
   const digits = value.replace(/\D/g, '')
   return digits.replace(/(\d{5})(\d{0,3})/, '$1-$2')

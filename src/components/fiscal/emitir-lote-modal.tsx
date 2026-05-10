@@ -17,14 +17,7 @@ import { where } from 'firebase/firestore'
 import { listDocuments } from '@/lib/firestore-client'
 import { formatCurrency } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog'
+import { AppModal } from '@/components/ui/app-modal'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, CheckCircle2, AlertCircle, SendHorizonal } from 'lucide-react'
@@ -178,20 +171,37 @@ export function EmitirLoteModal({ open, onOpenChange, onSuccess }: EmitirLoteMod
 
   const allSelected = rascunhos.length > 0 && selected.size === Math.min(rascunhos.length, LOTE_MAX)
   const totalSelecionado = rascunhos.filter((r) => selected.has(r.id)).reduce((s, r) => s + r.valorServico, 0)
+  const footer = step === 'select' ? (
+    <>
+      <span className="mr-auto text-xs text-muted-foreground">
+        {selected.size} selecionada(s) · {formatCurrency(totalSelecionado)}
+      </span>
+      <Button variant="outline" onClick={() => onOpenChange(false)}>
+        Cancelar
+      </Button>
+      <Button disabled={selected.size === 0} onClick={handleEmitir}>
+        <SendHorizonal className="w-4 h-4 mr-1.5" />
+        Emitir {selected.size > 0 ? `(${selected.size})` : ''}
+      </Button>
+    </>
+  ) : step === 'done' ? (
+    <Button onClick={() => onOpenChange(false)}>Fechar</Button>
+  ) : undefined
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Emitir NFS-e em Lote</DialogTitle>
-          <DialogDescription>
-            Selecione os rascunhos para emitir. Máximo de {LOTE_MAX} por vez.
-          </DialogDescription>
-        </DialogHeader>
+    <AppModal
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Emitir NFS-e em Lote"
+      description={`Selecione os rascunhos para emitir. Máximo de ${LOTE_MAX} por vez.`}
+      icon={<SendHorizonal className="size-4" />}
+      size="lg"
+      footer={footer}
+    >
 
         {/* ── Etapa: seleção ─────────────────────────────────────────────── */}
         {step === 'select' && (
-          <>
+          <div>
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
@@ -201,9 +211,9 @@ export function EmitirLoteModal({ open, onOpenChange, onSuccess }: EmitirLoteMod
                 Nenhum rascunho aguardando emissão.
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto -mx-6 px-6">
+              <div className="-mx-5">
                 {/* Cabeçalho tabela */}
-                <div className="flex items-center gap-3 py-2 border-b text-xs text-muted-foreground font-medium sticky top-0 bg-background">
+                <div className="flex items-center gap-3 border-b bg-background px-5 py-2 text-xs font-medium text-muted-foreground sticky top-0">
                   <Checkbox
                     checked={allSelected}
                     onCheckedChange={toggleAll}
@@ -216,7 +226,7 @@ export function EmitirLoteModal({ open, onOpenChange, onSuccess }: EmitirLoteMod
                 {rascunhos.map((r) => (
                   <div
                     key={r.id}
-                    className="flex items-center gap-3 py-2.5 border-b last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                    className="flex cursor-pointer items-center gap-3 border-b px-5 py-2.5 transition-colors last:border-0 hover:bg-muted/30"
                     onClick={() => toggle(r.id)}
                   >
                     <Checkbox
@@ -233,25 +243,7 @@ export function EmitirLoteModal({ open, onOpenChange, onSuccess }: EmitirLoteMod
                 ))}
               </div>
             )}
-
-            <DialogFooter className="flex items-center justify-between gap-2 pt-2">
-              <span className="text-xs text-muted-foreground">
-                {selected.size} selecionada(s) · {formatCurrency(totalSelecionado)}
-              </span>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => onOpenChange(false)}>
-                  Cancelar
-                </Button>
-                <Button
-                  disabled={selected.size === 0}
-                  onClick={handleEmitir}
-                >
-                  <SendHorizonal className="w-4 h-4 mr-1.5" />
-                  Emitir {selected.size > 0 ? `(${selected.size})` : ''}
-                </Button>
-              </div>
-            </DialogFooter>
-          </>
+          </div>
         )}
 
         {/* ── Etapa: processando ─────────────────────────────────────────── */}
@@ -266,8 +258,7 @@ export function EmitirLoteModal({ open, onOpenChange, onSuccess }: EmitirLoteMod
 
         {/* ── Etapa: resultado ───────────────────────────────────────────── */}
         {step === 'done' && (
-          <>
-            <div className="flex-1 overflow-y-auto -mx-6 px-6">
+          <div className="-mx-5 px-5">
               <div className="flex gap-3 mb-4 text-sm">
                 <Badge variant="default">
                   {resultados.filter((r) => r.sucesso).length} emitidas
@@ -307,13 +298,7 @@ export function EmitirLoteModal({ open, onOpenChange, onSuccess }: EmitirLoteMod
                 })}
               </div>
             </div>
-
-            <DialogFooter className="pt-2">
-              <Button onClick={() => onOpenChange(false)}>Fechar</Button>
-            </DialogFooter>
-          </>
         )}
-      </DialogContent>
-    </Dialog>
+    </AppModal>
   )
 }

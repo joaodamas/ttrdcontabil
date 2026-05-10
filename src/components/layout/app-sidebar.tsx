@@ -15,7 +15,9 @@ import {
   Receipt, FileText, Wallet, Settings, LogOut,
   Building2, ChevronDown, Menu, History, UserCog,
   Package2, CheckSquare, Plus, CalendarClock, Plug, SlidersHorizontal,
+  AlertTriangle,
 } from 'lucide-react'
+import { useHojeData } from '@/features/hoje/hooks'
 
 // ── Types ─────────────────────────────────────────────────────
 type NavItem = {
@@ -33,6 +35,8 @@ type NavSection = {
   telaKey?: TelaKey
   items?: NavItem[]
 }
+
+type QuickAction = NavItem
 
 // ── Navigation structure ───────────────────────────────────────
 const NAV_SECTIONS: NavSection[] = [
@@ -99,6 +103,47 @@ const NAV_SECTIONS: NavSection[] = [
   },
 ]
 
+const QUICK_ACTIONS: QuickAction[] = [
+  { href: '/clientes/novo', label: 'Cliente', icon: Users, telaKey: 'clientes' },
+  { href: '/tarefas/nova', label: 'Tarefa', icon: CheckSquare, telaKey: 'tarefas' },
+  { href: '/financeiro/novo', label: 'Lançamento', icon: Wallet, telaKey: 'financeiro' },
+  { href: '/fiscal?emitir=1', label: 'NFS-e', icon: Receipt, telaKey: 'fiscal' },
+]
+
+// ── Hoje summary widget ────────────────────────────────────────
+function HojeSummary() {
+  const { cockpit } = useHojeData()
+  const data = cockpit.data
+  if (!data) return null
+  const atrasadas = data.atrasadas.length
+  const hoje = data.hoje.length
+  const total = atrasadas + hoje
+  if (total === 0) return null
+
+  return (
+    <Link href="/hoje" className="mx-2 mb-1 block rounded-lg border border-border/70 bg-muted/35 px-3 py-2 transition-colors hover:bg-muted/60">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Hoje</span>
+        {atrasadas > 0 && <AlertTriangle size={11} className="text-destructive" />}
+      </div>
+      <div className="flex items-center gap-3">
+        {atrasadas > 0 && (
+          <div className="text-center">
+            <p className="text-sm font-bold tabular-nums text-destructive">{atrasadas}</p>
+            <p className="text-[9px] text-muted-foreground">atrasadas</p>
+          </div>
+        )}
+        {hoje > 0 && (
+          <div className="text-center">
+            <p className="text-sm font-bold tabular-nums text-warning">{hoje}</p>
+            <p className="text-[9px] text-muted-foreground">para hoje</p>
+          </div>
+        )}
+      </div>
+    </Link>
+  )
+}
+
 // ── Sidebar content (shared between desktop + mobile Sheet) ───
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
@@ -158,6 +203,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           <p className="text-[10px] text-muted-foreground mt-0.5">{appConfig.tagline}</p>
         </div>
       </div>
+
+      {/* Hoje — indicadores contextuais */}
+      <HojeSummary />
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
@@ -244,17 +292,31 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         })}
       </nav>
 
-      {/* Quick action */}
+      {/* Quick actions */}
       <div className="px-2 pb-2 shrink-0">
         <Separator className="mb-2" />
-        <Link
-          href="/fiscal?emitir=1"
-          onClick={onNavigate}
-          className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
-        >
-          <Plus size={14} />
-          Emitir NFS-e
-        </Link>
+        <div className="mb-2 flex items-center justify-between px-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Ações rápidas
+          </span>
+          <Plus size={11} className="text-muted-foreground" />
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          {QUICK_ACTIONS.filter(canSeeItem).map((action) => {
+            const ActionIcon = action.icon
+            return (
+              <Link
+                key={action.href}
+                href={action.href}
+                onClick={onNavigate}
+                className="flex min-h-10 flex-col items-center justify-center gap-1 rounded-lg border border-border/70 bg-muted/35 px-2 py-2 text-center text-[11px] font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+              >
+                <ActionIcon size={13} />
+                <span className="max-w-full truncate">{action.label}</span>
+              </Link>
+            )
+          })}
+        </div>
       </div>
 
       {/* User footer */}

@@ -30,6 +30,11 @@ const AUDITED_COLLECTIONS = new Set([
   'ir_checklist',
   'usuarios',
   'configuracoes',
+  'whatsapp_templates',
+  'whatsapp_campaign_rules',
+  'whatsapp_jobs',
+  'whatsapp_messages',
+  'whatsapp_webhook_events',
 ])
 
 const TENANT_SCOPED_COLLECTIONS = new Set([
@@ -57,6 +62,11 @@ const TENANT_SCOPED_COLLECTIONS = new Set([
   'ir_declaracoes',
   'ir_checklist',
   'usuarios',
+  'whatsapp_templates',
+  'whatsapp_campaign_rules',
+  'whatsapp_jobs',
+  'whatsapp_messages',
+  'whatsapp_webhook_events',
 ])
 
 const SENSITIVE_KEYS = new Set([
@@ -369,9 +379,12 @@ export async function getClientesByIds(ids: string[]) {
 }
 
 export async function getNextClienteCodigo(): Promise<number> {
-  const rows = await listDocuments<{ codigo?: number }>('clientes', [orderBy('codigo', 'desc'), limit(1)])
-  if (rows.length === 0) return 1
-  return (rows[0].codigo ?? 0) + 1
+  const rows = await listDocuments<{ codigo?: number }>('clientes', [limit(500)])
+  const maxCodigo = rows.reduce((max, row) => {
+    const codigo = typeof row.codigo === 'number' ? row.codigo : Number(row.codigo ?? 0)
+    return Number.isFinite(codigo) && codigo > max ? codigo : max
+  }, 0)
+  return maxCodigo + 1
 }
 
 export async function getServicos() {
@@ -383,8 +396,11 @@ export async function getServicos() {
 }
 
 export async function getNextServicoCodigo(): Promise<string> {
-  const rows = await listDocuments<{ codigoNumero?: number }>('servicos', [orderBy('codigoNumero', 'desc'), limit(1)])
-  const next = rows.length === 0 ? 1 : (rows[0].codigoNumero ?? 0) + 1
+  const rows = await listDocuments<{ codigoNumero?: number }>('servicos', [limit(500)])
+  const next = rows.reduce((max, row) => {
+    const codigo = typeof row.codigoNumero === 'number' ? row.codigoNumero : Number(row.codigoNumero ?? 0)
+    return Number.isFinite(codigo) && codigo > max ? codigo : max
+  }, 0) + 1
   return `COB${String(next).padStart(2, '0')}`
 }
 

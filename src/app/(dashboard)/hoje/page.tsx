@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import {
@@ -12,6 +12,11 @@ import {
   Loader2,
   RefreshCw,
   UserRound,
+  Users,
+  Zap,
+  ShieldAlert,
+  LayoutList,
+  Columns2,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -20,8 +25,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatDate, tsToDate, cn } from '@/lib/utils'
+import { TaskTimer } from '@/components/tarefas/task-timer'
+import { useAuth } from '@/contexts/auth-context'
 import { bulkAlterarPrazo, bulkConcluirTarefas, bulkReatribuirTarefas } from '@/features/hoje/services'
 import { hojeKeys } from '@/features/hoje/queries'
 import { useHojeData } from '@/features/hoje/hooks'
@@ -79,11 +87,18 @@ function buildFila(data: ReturnType<typeof useHojeData>['cockpit']['data']): Fil
   ].sort((a, b) => b.score - a.score)
 }
 
-function grupoLabel(grupo: FilaItem['grupo']) {
-  if (grupo === 'atrasada') return 'Atrasada'
-  if (grupo === 'hoje') return 'Hoje'
-  return 'Proximos 7 dias'
+const GRUPO_LABEL: Record<FilaItem['grupo'], string> = {
+  atrasada: 'Atrasadas',
+  hoje:     'Para hoje',
+  proximos: 'Próximos 7 dias',
 }
+
+const GRUPO_COLOR: Record<FilaItem['grupo'], string> = {
+  atrasada: 'text-destructive',
+  hoje:     'text-warning',
+  proximos: 'text-muted-foreground',
+}
+
 
 function EmptyCockpit() {
   return (
@@ -114,23 +129,26 @@ function EmptyCockpit() {
 }
 
 function TaskRow({
-  item,
-  checked,
-  onToggle,
+  item, checked, onToggle, usuarios, onAssign, usuarioId, usuarioNome,
 }: {
   item: FilaItem
   checked: boolean
   onToggle: () => void
+  usuarios: HojeUsuario[]
+  onAssign: (tarefaId: string, userId: string, userName: string) => void
+  usuarioId: string
+  usuarioNome: string
 }) {
   const prazo = tsToDate(item.dataPrazo)
   const atraso = diasAtraso(prazo)
   const badge = PRIORIDADE_BADGE[item.prioridade ?? 'normal'] ?? 'outline'
+  const semResponsavel = !item.responsavelId
 
   return (
     <div
       className={cn(
-        'grid grid-cols-[auto_1fr_auto] gap-3 border-b px-4 py-3 last:border-0 hover:bg-muted/35',
-        item.grupo === 'atrasada' && 'border-l-4 border-l-destructive',
+        'grid grid-cols-[auto_1fr_auto] gap-3 border-b px-4 py-3 last:border-0 hover:bg-muted/35 transition-colors',
+        item.grupo === 'atrasada' && 'border-l-4 border-l-destructive bg-destructive/2',
         item.grupo === 'hoje' && 'border-l-4 border-l-warning',
         item.grupo === 'proximos' && 'border-l-4 border-l-border'
       )}
@@ -141,20 +159,41 @@ function TaskRow({
           <Link href={`/tarefas/${item.id}`} className="font-medium hover:underline">
             {item.titulo ?? 'Tarefa sem titulo'}
           </Link>
-          <Badge variant={item.grupo === 'atrasada' ? 'destructive' : item.grupo === 'hoje' ? 'warning' : 'outline'}>
-            {grupoLabel(item.grupo)}
-          </Badge>
           <Badge variant={badge}>{PRIORIDADE_LABEL[item.prioridade ?? 'normal'] ?? item.prioridade ?? 'Normal'}</Badge>
+          {semResponsavel && usuarios.length > 0 ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/5 px-2 py-0.5 text-[11px] font-medium text-destructive hover:bg-destructive/10 transition-colors">
+                <Users className="h-2.5 w-2.5" />atribuir
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                {usuarios.map(u => (
+                  <DropdownMenuItem key={u.id} onClick={() => onAssign(item.id, u.id, u.nome ?? u.id)}>
+                    {u.nome ?? u.id}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : semResponsavel ? (
+            <Badge variant="outline" className="border-destructive/40 text-destructive">
+              <Users className="h-2.5 w-2.5 mr-1" />sem responsável
+            </Badge>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span>{item.clienteNome ?? 'Sem cliente'}</span>
-          <span>{item.responsavelNome ?? 'Sem responsavel'}</span>
+          {!semResponsavel && <span>{item.responsavelNome}</span>}
           <span>{prazo ? formatDate(prazo) : 'Sem prazo'}</span>
           {atraso > 0 ? <span className="font-medium text-destructive">{atraso} dia(s) em atraso</span> : null}
         </div>
       </div>
-      <div className="hidden text-right text-xs text-muted-foreground sm:block">
-        <span className="font-mono">SLA {item.score}</span>
+      <div className="flex flex-col items-end gap-1">
+        <span className="hidden font-mono text-[10px] tabular-nums text-muted-foreground/60 sm:inline">#{item.score}</span>
+        <TaskTimer
+          tarefaId={item.id}
+          tarefaTitulo={item.titulo ?? ''}
+          usuarioId={usuarioId}
+          usuarioNome={usuarioNome}
+        />
       </div>
     </div>
   )
@@ -162,16 +201,36 @@ function TaskRow({
 
 export default function HojePage() {
   const queryClient = useQueryClient()
+  const { usuario } = useAuth()
   const [responsavelId, setResponsavelId] = useState('todos')
+  const [prioridadeFiltro, setPrioridadeFiltro] = useState<string>('todos')
+  const [modoFoco, setModoFoco] = useState(false)
+  const [modoView, setModoView] = useState<'lista' | 'kanban'>('lista')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkResponsavelId, setBulkResponsavelId] = useState('')
   const [bulkDate, setBulkDate] = useState('')
   const [saving, setSaving] = useState(false)
 
   const { cockpit, usuarios, isLoading } = useHojeData(responsavelId === 'todos' ? undefined : responsavelId)
-  const fila = useMemo(() => buildFila(cockpit.data), [cockpit.data])
+  const filaBase = useMemo(() => buildFila(cockpit.data), [cockpit.data])
+  const fila = useMemo(() => {
+    let result = filaBase
+    if (prioridadeFiltro !== 'todos') result = result.filter(i => (i.prioridade ?? 'normal') === prioridadeFiltro)
+    if (modoFoco) result = result.filter(i => i.grupo === 'atrasada' || i.grupo === 'hoje')
+    return result
+  }, [filaBase, prioridadeFiltro, modoFoco])
   const usuariosData = (usuarios.data ?? []) as HojeUsuario[]
   const selectedIds = Array.from(selected)
+  const semResponsavelCount = filaBase.filter(i => !i.responsavelId).length
+
+  // Gargalos operacionais
+  const semPrazo     = filaBase.filter(i => !i.dataPrazo && i.grupo !== 'atrasada').length
+  const riscoSla     = filaBase.filter(i => i.grupo === 'hoje' && i.score >= 55).length
+  const gargalos = [
+    semResponsavelCount > 0 && { id: 'sem-resp',  icon: Users,       cor: 'text-destructive', texto: `${semResponsavelCount} tarefa${semResponsavelCount !== 1 ? 's' : ''} sem responsável`,      acao: 'Atribuir' },
+    semPrazo > 0            && { id: 'sem-prazo', icon: CalendarClock, cor: 'text-warning',    texto: `${semPrazo} tarefa${semPrazo !== 1 ? 's' : ''} sem prazo definido`,                         acao: 'Definir prazo' },
+    riscoSla > 0            && { id: 'sla',        icon: ShieldAlert,  cor: 'text-warning',    texto: `${riscoSla} tarefa${riscoSla !== 1 ? 's' : ''} com SLA em risco hoje`,                       acao: 'Ver fila' },
+  ].filter(Boolean) as Array<{ id: string; icon: React.ComponentType<{className?: string}>; cor: string; texto: string; acao: string }>
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -192,6 +251,16 @@ export default function HojePage() {
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: hojeKeys.all })
+  }
+
+  async function quickAssign(tarefaId: string, userId: string, userName: string) {
+    try {
+      await bulkReatribuirTarefas([tarefaId], userId, userName)
+      toast.success(`Tarefa atribuída a ${userName}.`)
+      await refresh()
+    } catch {
+      toast.error('Não foi possível atribuir a tarefa.')
+    }
   }
 
   async function runBulk(action: 'concluir' | 'reatribuir' | 'prazo') {
@@ -242,6 +311,30 @@ export default function HojePage() {
           <p className="text-sm text-muted-foreground">Fila operacional priorizada por prazo, prioridade e responsavel.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <div className="flex rounded-lg border border-border overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setModoView('lista')}
+              className={cn('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', modoView === 'lista' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}
+            >
+              <LayoutList className="h-3.5 w-3.5" />Lista
+            </button>
+            <button
+              type="button"
+              onClick={() => setModoView('kanban')}
+              className={cn('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', modoView === 'kanban' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}
+            >
+              <Columns2 className="h-3.5 w-3.5" />Kanban
+            </button>
+          </div>
+          <Button
+            variant={modoFoco ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setModoFoco(v => !v)}
+          >
+            <Zap className="h-3.5 w-3.5" />
+            {modoFoco ? 'Modo foco ativo' : 'Modo foco'}
+          </Button>
           <Select value={responsavelId} onValueChange={(value) => setResponsavelId(value ?? 'todos')}>
             <SelectTrigger className="w-52">
               <SelectValue />
@@ -253,11 +346,35 @@ export default function HojePage() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={() => void refresh()} disabled={isLoading}>
+          <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={isLoading}>
             <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
             Atualizar
           </Button>
         </div>
+      </div>
+
+      {/* Filtros de prioridade */}
+      <div className="flex flex-wrap gap-1.5">
+        {(['todos', 'urgente', 'alta', 'normal', 'baixa'] as const).map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => setPrioridadeFiltro(p)}
+            className={cn(
+              'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+              prioridadeFiltro === p
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border bg-background text-muted-foreground hover:bg-muted'
+            )}
+          >
+            {p === 'todos' ? 'Todas' : PRIORIDADE_LABEL[p] ?? p}
+          </button>
+        ))}
+        {semResponsavelCount > 0 && (
+          <span className="flex items-center gap-1 rounded-full border border-destructive/30 bg-destructive/8 px-3 py-1 text-xs font-medium text-destructive">
+            <Users className="h-3 w-3" />{semResponsavelCount} sem responsável
+          </span>
+        )}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-4">
@@ -317,6 +434,86 @@ export default function HojePage() {
         </Card>
       ) : null}
 
+      {/* Gargalos operacionais */}
+      {gargalos.length > 0 && (
+        <div className="rounded-xl border border-destructive/20 bg-destructive/5 overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-destructive/15 px-4 py-2.5">
+            <ShieldAlert className="h-3.5 w-3.5 text-destructive shrink-0" />
+            <span className="text-xs font-semibold text-destructive">Gargalos operacionais</span>
+          </div>
+          <div className="divide-y divide-destructive/10">
+            {gargalos.map(g => {
+              const Icon = g.icon
+              return (
+                <div key={g.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <Icon className={`h-4 w-4 shrink-0 ${g.cor}`} />
+                  <p className="flex-1 text-xs text-muted-foreground">{g.texto}</p>
+                  <Link href="/hoje" className="text-[11px] font-medium text-primary hover:underline shrink-0">{g.acao}</Link>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Kanban view */}
+      {modoView === 'kanban' && (
+        <div className="grid gap-4 sm:grid-cols-3">
+          {([
+            { grupo: 'atrasada' as const, label: 'Atrasadas',   cor: 'border-destructive/30 bg-destructive/5', header: 'text-destructive' },
+            { grupo: 'hoje'    as const, label: 'Para hoje',    cor: 'border-warning/30 bg-warning/5',         header: 'text-warning'     },
+            { grupo: 'proximos' as const, label: 'Próximos 7d', cor: 'border-border bg-muted/20',               header: 'text-muted-foreground' },
+          ] as const).map(col => {
+            const colItems = fila.filter(i => i.grupo === col.grupo)
+            return (
+              <div key={col.grupo} className={`rounded-xl border overflow-hidden ${col.cor}`}>
+                <div className={`flex items-center justify-between px-4 py-2.5 border-b ${col.cor}`}>
+                  <span className={`text-xs font-semibold uppercase tracking-wide ${col.header}`}>{col.label}</span>
+                  <span className={`text-xs font-bold tabular-nums ${col.header}`}>{colItems.length}</span>
+                </div>
+                <div className="divide-y divide-border/50 max-h-[520px] overflow-y-auto">
+                  {colItems.length === 0 ? (
+                    <p className="px-4 py-6 text-center text-xs text-muted-foreground">Nenhuma tarefa</p>
+                  ) : colItems.map(item => {
+                    const pr = tsToDate(item.dataPrazo)
+                    const atr = diasAtraso(pr)
+                    return (
+                      <div key={item.id} className="flex items-start gap-2 px-3 py-2.5 hover:bg-muted/40 transition-colors">
+                        <Checkbox
+                          checked={selected.has(item.id)}
+                          onCheckedChange={() => toggle(item.id)}
+                          className="mt-0.5 shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <Link href={`/tarefas/${item.id}`} className="text-xs font-medium hover:underline leading-tight line-clamp-2">
+                            {item.titulo ?? 'Tarefa'}
+                          </Link>
+                          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{item.clienteNome ?? '—'}</p>
+                          {atr > 0 && <p className="text-[11px] font-medium text-destructive">{atr}d atraso</p>}
+                          {!item.responsavelId && usuariosData.length > 0 && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger className="mt-1 text-[10px] text-destructive border border-destructive/30 rounded px-1.5 py-0.5 hover:bg-destructive/10">atribuir</DropdownMenuTrigger>
+                              <DropdownMenuContent>
+                                {usuariosData.map(u => (
+                                  <DropdownMenuItem key={u.id} onClick={() => void quickAssign(item.id, u.id, u.nome ?? u.id)}>
+                                    {u.nome ?? u.id}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {modoView === 'lista' && (
       <Card>
         <CardHeader className="gap-3 border-b pb-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -374,18 +571,41 @@ export default function HojePage() {
             <EmptyCockpit />
           ) : (
             <div>
-              {fila.map((item) => (
-                <TaskRow
-                  key={item.id}
-                  item={item}
-                  checked={selected.has(item.id)}
-                  onToggle={() => toggle(item.id)}
-                />
-              ))}
+              {fila.map((item, idx) => {
+                const prevGrupo = idx > 0 ? fila[idx - 1].grupo : null
+                const showGroupHeader = prevGrupo !== item.grupo
+                return (
+                  <div key={item.id}>
+                    {showGroupHeader && (
+                      <div className={cn(
+                        'flex items-center gap-2 border-b bg-muted/30 px-4 py-2',
+                        idx > 0 && 'border-t'
+                      )}>
+                        <span className={cn('text-xs font-semibold uppercase tracking-wide', GRUPO_COLOR[item.grupo])}>
+                          {GRUPO_LABEL[item.grupo]}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          — {fila.filter(f => f.grupo === item.grupo).length} tarefa(s)
+                        </span>
+                      </div>
+                    )}
+                    <TaskRow
+                      item={item}
+                      checked={selected.has(item.id)}
+                      onToggle={() => toggle(item.id)}
+                      usuarios={usuariosData}
+                      onAssign={(id, uid, uname) => void quickAssign(id, uid, uname)}
+                      usuarioId={usuario?.uid ?? ''}
+                      usuarioNome={usuario?.nome ?? usuario?.email ?? ''}
+                    />
+                  </div>
+                )
+              })}
             </div>
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, Suspense, Fragment } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Timestamp } from 'firebase/firestore'
@@ -10,11 +10,13 @@ import { formatDate , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { Plus, Loader2, ClipboardList, CheckCheck, UserX, ClockAlert, MoreHorizontal, Eye, UserCog, CalendarClock } from 'lucide-react'
+import { Plus, Loader2, ClipboardList, CheckCheck, UserX, ClockAlert, MoreHorizontal, Eye, UserCog, CalendarClock, Search } from 'lucide-react'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { FilterBtn } from '@/components/ui/filter-btn'
+import { FilterSheet, FilterSheetTrigger } from '@/components/ui/filter-sheet'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { DataTableShell } from '@/components/ui/data-table-shell'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -59,8 +61,20 @@ function TarefasContent() {
 
   const [concluding, setConcluding] = useState<string | null>(null)
   const [confirmUrgente, setConfirmUrgente] = useState<{ id: string; titulo: string } | null>(null)
+  const [localSearch, setLocalSearch] = useState('')
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
 
   const hoje = new Date()
+  const tarefasFiltradas = localSearch.trim()
+    ? tarefas.filter(t => {
+        const q = localSearch.toLowerCase()
+        return (
+          String(t.titulo ?? '').toLowerCase().includes(q) ||
+          String(t.clienteNome ?? '').toLowerCase().includes(q) ||
+          String(t.responsavelNome ?? '').toLowerCase().includes(q)
+        )
+      })
+    : tarefas
 
   async function handleConcluir(id: string, titulo: string) {
     setConcluding(id)
@@ -127,15 +141,49 @@ function TarefasContent() {
             {total} tarefa{total !== 1 ? 's' : ''} encontrada{total !== 1 ? 's' : ''}
           </p>
         </div>
-        <Link href="/tarefas/nova">
-          <Button size="sm" className="h-10 rounded-xl">
-            <Plus className="w-4 h-4 mr-1" />
-            Nova Tarefa
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <FilterSheetTrigger
+            onClick={() => setFilterSheetOpen(true)}
+            activeCount={(status ? 1 : 0) + (prioridade ? 1 : 0)}
+          />
+          <Link href="/tarefas/nova">
+            <Button size="sm" className="h-10 rounded-xl">
+              <Plus className="w-4 h-4 mr-1" />
+              Nova Tarefa
+            </Button>
+          </Link>
+        </div>
       </div>
 
-      <div className="surface-subtle flex flex-wrap items-center gap-3 border px-3 py-2.5">
+      <FilterSheet
+        open={filterSheetOpen}
+        onOpenChange={setFilterSheetOpen}
+        activeCount={(status ? 1 : 0) + (prioridade ? 1 : 0)}
+        onReset={() => router.push('/tarefas')}
+      >
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</p>
+          <div className="flex flex-wrap gap-2">
+            {(['', 'pendente', 'em_andamento', 'concluida', 'cancelada'] as const).map((s) => (
+              <FilterBtn key={s} href={buildUrl({ status: s, page: 1 })} active={status === s}>
+                {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+              </FilterBtn>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prioridade</p>
+          <div className="flex flex-wrap gap-2">
+            {(['', 'baixa', 'normal', 'alta', 'urgente'] as const).map((p) => (
+              <FilterBtn key={p} href={buildUrl({ prioridade: p, page: 1 })} active={prioridade === p}>
+                {p === '' ? 'Qualquer' : PRIORIDADE_MAP[p]?.label ?? p}
+              </FilterBtn>
+            ))}
+          </div>
+        </div>
+      </FilterSheet>
+
+      <div className="surface-subtle hidden sm:flex flex-wrap items-center gap-3 border px-3 py-2.5">
         <div className="flex items-center gap-1">
           {(['', 'pendente', 'em_andamento', 'concluida', 'cancelada'] as const).map((s) => (
             <FilterBtn key={s} href={buildUrl({ status: s, page: 1 })} active={status === s}>
@@ -150,10 +198,19 @@ function TarefasContent() {
             </FilterBtn>
           ))}
         </div>
+        <div className="relative ml-auto">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Buscar na página..."
+            value={localSearch}
+            onChange={e => setLocalSearch(e.target.value)}
+            className="h-8 w-48 rounded-lg border border-border bg-background pl-8 pr-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary/50"
+          />
+        </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
-        <div className="overflow-x-auto">
+      <DataTableShell density="compact">
         <table className="min-w-[940px] w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
@@ -177,7 +234,7 @@ function TarefasContent() {
                 description={status || prioridade ? 'Tente ajustar os filtros.' : 'Clique em "Nova Tarefa" para começar.'}
                 action={!status && !prioridade ? { label: 'Nova Tarefa', href: '/tarefas/nova' } : undefined}
               />
-            ) : tarefas.map((t) => {
+            ) : tarefasFiltradas.map((t) => {
                 const st = STATUS_MAP[t.status as string] ?? {
                   label: t.status as string,
                   variant: 'outline' as const,
@@ -193,7 +250,8 @@ function TarefasContent() {
                   !['concluida', 'cancelada'].includes(t.status as string)
 
                 return (
-                  <tr key={t.id as string} className="transition-colors hover:bg-muted/35">
+                  <Fragment key={t.id as string}>
+                  <tr className="transition-colors hover:bg-muted/35 hidden sm:table-row">
                     <td className="px-3 py-1.5">
                       <Link
                         href={`/tarefas/${t.id}`}
@@ -286,12 +344,51 @@ function TarefasContent() {
                       </DropdownMenu>
                     </td>
                   </tr>
+                  <tr className="sm:hidden">
+                    <td colSpan={7} className="px-3 py-2 sm:hidden">
+                      <div className="flex items-start gap-3">
+                        <div className="min-w-0 flex-1">
+                          <Link href={`/tarefas/${t.id as string}`} className="font-medium text-sm hover:underline">
+                            {t.titulo as string}
+                          </Link>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {(t.clienteNome as string) ?? '—'}
+                            {t.responsavelNome ? ` · ${t.responsavelNome as string}` : ''}
+                            {dataPrazo ? ` · ${formatDate(tsToDate(dataPrazo))}` : ''}
+                          </p>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            <Badge variant={st.variant}>{st.label}</Badge>
+                            {t.prioridade && (
+                              <Badge variant={pr.variant} className={pr.className}>
+                                {pr.pulse && (
+                                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-current mr-1 animate-pulse" />
+                                )}
+                                {pr.label}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        {!['concluida', 'cancelada'].includes(t.status as string) && (
+                          <button
+                            onClick={() => handleConcluirClick(t)}
+                            disabled={concluding === (t.id as string)}
+                            className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-xs font-medium text-success hover:bg-success/10 transition-colors disabled:opacity-50 cursor-pointer shrink-0"
+                            title="Concluir tarefa"
+                          >
+                            {concluding === (t.id as string)
+                              ? <Loader2 className="w-3 h-3 animate-spin" />
+                              : <CheckCheck className="w-3.5 h-3.5" />}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  </Fragment>
                 )
               })}
           </tbody>
         </table>
-        </div>
-      </div>
+      </DataTableShell>
 
       {totalPages > 1 ? (
         <div className="surface-subtle flex items-center justify-between border px-3 py-2.5 text-sm">

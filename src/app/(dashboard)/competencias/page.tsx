@@ -1,15 +1,16 @@
 'use client'
 
-import { Suspense } from 'react'
+import { Suspense, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { formatMesAno } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Plus, ChevronLeft, ChevronRight, Layers } from 'lucide-react'
+import { Plus, ChevronLeft, ChevronRight, Layers, LayoutList, Group } from 'lucide-react'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { FilterBtn } from '@/components/ui/filter-btn'
+import { DataTableShell } from '@/components/ui/data-table-shell'
 import { competenciasFiltroSchema } from '@/features/competencias/schemas'
 import { useCompetenciasList } from '@/features/competencias/hooks'
 import type { CompetenciaRecord, CompetenciasFilters } from '@/features/competencias/types'
@@ -37,6 +38,33 @@ function CompetenciasContent() {
   })
   const { mes, ano, status, clienteId, page } = parsed
   const { competencias, total, totalPages, isLoading } = useCompetenciasList(parsed)
+  const [groupBy, setGroupBy] = useState<'none' | 'status' | 'responsavel'>('none')
+
+  type GroupedRows = Array<{ groupKey: string; groupLabel: string; rows: CompetenciaRecord[] }>
+
+  const groupedRows = useMemo((): GroupedRows => {
+    if (groupBy === 'none') return [{ groupKey: 'all', groupLabel: '', rows: competencias }]
+    const map = new Map<string, CompetenciaRecord[]>()
+    for (const c of competencias) {
+      const key = groupBy === 'status'
+        ? (c.status as string) ?? 'sem_status'
+        : (c.responsavelNome as string | undefined) ?? 'Sem responsável'
+      const arr = map.get(key) ?? []
+      arr.push(c)
+      map.set(key, arr)
+    }
+    const statusOrder = ['aberta', 'em_andamento', 'concluida', 'cancelada']
+    return Array.from(map.entries())
+      .sort(([a], [b]) => {
+        if (groupBy === 'status') return statusOrder.indexOf(a) - statusOrder.indexOf(b)
+        return a.localeCompare(b)
+      })
+      .map(([key, rows]) => ({
+        groupKey: key,
+        groupLabel: groupBy === 'status' ? (STATUS_MAP[key]?.label ?? key) : key,
+        rows,
+      }))
+  }, [competencias, groupBy])
 
   function buildUrl(overrides: Record<string, string | number>) {
     const params = new URLSearchParams({
@@ -97,9 +125,27 @@ function CompetenciasContent() {
             </FilterBtn>
           ))}
         </div>
+
+        <div className="ml-auto flex items-center gap-1">
+          <span className="text-xs text-muted-foreground mr-1">Agrupar:</span>
+          {([
+            ['none',       'Lista',         LayoutList],
+            ['status',     'Por status',    Group],
+            ['responsavel','Por responsável',Group],
+          ] as const).map(([val, label, Icon]) => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => setGroupBy(val)}
+              className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${groupBy === val ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background text-muted-foreground hover:bg-muted'}`}
+            >
+              <Icon className="h-3 w-3" />{label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
+      <DataTableShell density="compact">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
@@ -122,40 +168,38 @@ function CompetenciasContent() {
                 action={!status ? { label: 'Nova Competência', href: '/competencias/nova' } : undefined}
               />
             ) : (
-              competencias.map((c: CompetenciaRecord) => {
-                const s = STATUS_MAP[c.status as string] ?? {
-                  label: c.status as string,
-                  variant: 'outline' as const,
-                }
-                return (
-                  <tr key={c.id as string} className="transition-colors hover:bg-muted/35">
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/competencias/${c.id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {(c.clienteNome as string) ?? '—'}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {(c.servicoNome as string) ?? '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      {formatMesAno(c.mes as number, c.ano as number)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant={s.variant}>{s.label}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {(c.responsavelNome as string) ?? '—'}
+              groupedRows.flatMap(({ groupKey, groupLabel, rows }) => [
+                groupBy !== 'none' && (
+                  <tr key={`group-${groupKey}`}>
+                    <td colSpan={5} className="bg-muted/40 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground border-t">
+                      {groupLabel} <span className="ml-2 font-normal normal-case tracking-normal">({rows.length})</span>
                     </td>
                   </tr>
-                )
-              })
+                ),
+                ...rows.map((c: CompetenciaRecord) => {
+                  const s = STATUS_MAP[c.status as string] ?? {
+                    label: c.status as string,
+                    variant: 'outline' as const,
+                  }
+                  return (
+                    <tr key={c.id as string} className="transition-colors hover:bg-muted/35">
+                      <td className="px-4 py-3">
+                        <Link href={`/competencias/${c.id}`} className="font-medium hover:underline">
+                          {(c.clienteNome as string) ?? '—'}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{(c.servicoNome as string) ?? '—'}</td>
+                      <td className="px-4 py-3">{formatMesAno(c.mes as number, c.ano as number)}</td>
+                      <td className="px-4 py-3"><Badge variant={s.variant}>{s.label}</Badge></td>
+                      <td className="px-4 py-3 text-muted-foreground">{(c.responsavelNome as string) ?? '—'}</td>
+                    </tr>
+                  )
+                }),
+              ])
             )}
           </tbody>
         </table>
-      </div>
+      </DataTableShell>
 
       {totalPages > 1 ? (
         <div className="surface-subtle flex items-center justify-between border px-3 py-2.5 text-sm">

@@ -6,12 +6,26 @@ export type LancamentoRecord = Record<string, unknown> & {
   clienteId?: string
   clienteNome?: string
   competenciaId?: string
+  servicoId?: string
+  clienteServicoId?: string
   tipo?: string
   status?: string
   descricao?: string
   valor?: number
   dataVencimento?: Timestamp
   dataPagamento?: Timestamp
+  pagadorNome?: string
+  pagadorWhatsapp?: string
+  cobrancaWhatsappEnabled?: boolean
+  statusWhatsappCobranca?: string
+  ultimoEnvioWhatsappEm?: Timestamp
+  proximaAcaoWhatsappEm?: Timestamp
+  ultimaMensagemWhatsappId?: string
+  etapaWhatsappAtual?: string
+  whatsappCobrancaPausada?: boolean
+  whatsappCobrancaPausadaMotivo?: string
+  whatsappCobrancaIgnorada?: boolean
+  whatsappCobrancaExigeAprovacao?: boolean
 }
 
 export type FinanceiroBaseFilters = {

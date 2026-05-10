@@ -6,14 +6,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
+import { AppModal } from '@/components/ui/app-modal'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -108,22 +101,31 @@ export function LancamentoBaixar({ lancamentoId, onBaixado, valor, clienteNome, 
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger
-        render={
-          <Button variant="outline" size="sm" className="h-7 text-xs">
-            <ArrowDownCircle className="w-3 h-3 mr-1" />
-            Baixar
-          </Button>
-        }
-      />
+    <>
+      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setOpen(true)}>
+        <ArrowDownCircle className="w-3 h-3 mr-1" />
+        Baixar
+      </Button>
 
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Baixar Lançamento</DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-4 pt-2">
+      <AppModal
+        open={open}
+        onOpenChange={setOpen}
+        title="Baixar Lançamento"
+        icon={<ArrowDownCircle className="size-4" />}
+        size="sm"
+        footer={(
+          <>
+            <Button variant="outline" size="sm" disabled={salvando} onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <Button size="sm" onClick={handleConfirmarClick} disabled={salvando}>
+              {salvando && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Confirmar baixa
+            </Button>
+          </>
+        )}
+      >
+        <div className="space-y-4">
           {/* Resumo do lançamento */}
           {(descricao || clienteNome || valor != null) && (
             <div className={`rounded-xl px-4 py-3 space-y-1 ${altaValor ? 'bg-warning/8 border border-warning/25' : 'bg-muted/60'}`}>
@@ -172,18 +174,8 @@ export function LancamentoBaixar({ lancamentoId, onBaixado, valor, clienteNome, 
               </SelectContent>
             </Select>
           </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <DialogClose render={<Button variant="outline" size="sm" disabled={salvando} />}>
-              Cancelar
-            </DialogClose>
-            <Button size="sm" onClick={handleConfirmarClick} disabled={salvando}>
-              {salvando && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Confirmar baixa
-            </Button>
-          </div>
         </div>
-      </DialogContent>
+      </AppModal>
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -213,6 +205,6 @@ export function LancamentoBaixar({ lancamentoId, onBaixado, valor, clienteNome, 
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Dialog>
+    </>
   )
 }

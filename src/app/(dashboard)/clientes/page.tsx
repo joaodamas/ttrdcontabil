@@ -1,18 +1,27 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, Suspense, Fragment } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
-import { formatCpfCnpj } from '@/lib/utils'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { formatCpfCnpj, formatCurrency } from '@/lib/utils'
+import { buttonVariants } from '@/components/ui/button'
 import { ClienteStatusBadge } from '@/components/ui/status-badge'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
+import { DataTableShell } from '@/components/ui/data-table-shell'
 import { PageHeader } from '@/components/layout/page-header'
 import { ClientesFiltros } from '@/components/clientes/clientes-filtros'
 import { ClienteModal } from '@/components/clientes/cliente-modal'
-import { Plus, Users } from 'lucide-react'
+import { FilterBtn } from '@/components/ui/filter-btn'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Plus, Users, MoreHorizontal, CheckSquare, Layers, Receipt, Pencil,
+  ShieldCheck, ShieldAlert, AlertTriangle, MessageCircle,
+} from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { useClientesList } from '@/features/clientes/hooks'
 import { clientesFiltroSchema } from '@/features/clientes/schemas'
 import type { ClienteRecord } from '@/features/clientes/types'
@@ -33,10 +42,11 @@ const REGIME_BADGE: Record<string, string> = {
   isento:           'bg-muted text-muted-foreground border-border',
 }
 
-function clientesPageHref(params: { busca: string; status: string; page: number }) {
+function clientesPageHref(params: { busca: string; status: string; regime?: string; page: number }) {
   const search = new URLSearchParams()
   if (params.busca) search.set('busca', params.busca)
   if (params.status) search.set('status', params.status)
+  if (params.regime) search.set('regime', params.regime)
   search.set('page', String(params.page))
   return `/clientes?${search.toString()}`
 }
@@ -47,65 +57,38 @@ function clienteInitials(razaoSocial: string): string {
   return (words[0][0] + words[1][0]).toUpperCase()
 }
 
-function saudeCliente(c: ClienteRecord): {
-  score: 0 | 1 | 2 | 3
-  label: 'crítica' | 'atenção' | 'estável'
-  reason: string
-  areas: {
-    operacional: string
-    fiscal: string
-    financeiro: string
-  }
-} {
-  if ((c.status as string) === 'suspenso') {
-    return {
-      score: 0,
-      label: 'crítica',
-      reason: 'Cliente suspenso',
-      areas: {
-        operacional: 'Bloqueado por suspensão cadastral',
-        fiscal: 'Validar pendências antes de executar',
-        financeiro: 'Validar cobrança antes de retomar',
-      },
-    }
-  }
-  if ((c.riscoInadimplencia as boolean) === true) {
-    return {
-      score: 1,
-      label: 'atenção',
-      reason: 'Risco de inadimplência acima de R$ 500',
-      areas: {
-        operacional: 'Sem bloqueio operacional informado',
-        fiscal: 'Sem bloqueio fiscal informado',
-        financeiro: 'Risco de inadimplência ativo',
-      },
-    }
-  }
-  if ((c.status as string) === 'inativo') {
-    return {
-      score: 2,
-      label: 'atenção',
-      reason: 'Cliente inativo',
-      areas: {
-        operacional: 'Cliente inativo',
-        fiscal: 'Sem execução fiscal recorrente',
-        financeiro: 'Sem cobrança recorrente esperada',
-      },
-    }
-  }
-  return {
-    score: 3,
-    label: 'estável',
-    reason: 'Sem alertas ativos',
-    areas: {
-      operacional: 'Sem alertas ativos',
-      fiscal: 'Sem alertas ativos',
-      financeiro: 'Sem alertas ativos',
-    },
-  }
+type SaudeNivel = 'critica' | 'atencao' | 'estavel'
+
+function saudeCliente(c: ClienteRecord): { nivel: SaudeNivel; motivo: string } {
+  if ((c.status as string) === 'suspenso')
+    return { nivel: 'critica', motivo: 'Suspenso' }
+  if ((c.riscoInadimplencia as boolean) === true)
+    return { nivel: 'atencao', motivo: 'Inadimplência' }
+  if ((c.status as string) === 'inativo')
+    return { nivel: 'atencao', motivo: 'Inativo' }
+  return { nivel: 'estavel', motivo: 'Sem alertas' }
+}
+
+function SaudeBadge({ nivel, motivo }: { nivel: SaudeNivel; motivo: string }) {
+  if (nivel === 'critica') return (
+    <span title={motivo} className="inline-flex items-center gap-1 rounded-full border border-destructive/25 bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">
+      <AlertTriangle className="h-2.5 w-2.5" />{motivo}
+    </span>
+  )
+  if (nivel === 'atencao') return (
+    <span title={motivo} className="inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[11px] font-semibold text-warning">
+      <ShieldAlert className="h-2.5 w-2.5" />{motivo}
+    </span>
+  )
+  return (
+    <span title={motivo} className="inline-flex items-center gap-1 rounded-full border border-success/25 bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
+      <ShieldCheck className="h-2.5 w-2.5" />Estável
+    </span>
+  )
 }
 
 function ClientesContent() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const result = clientesFiltroSchema.safeParse({
     busca: searchParams.get('busca') ?? '',
@@ -115,9 +98,14 @@ function ClientesContent() {
   const { busca, status, page } = result.success
     ? result.data
     : { busca: '', status: '', page: 1 }
+  const regime = searchParams.get('regime') ?? ''
   const { paginados, total, totalPages, isLoading, isError } = useClientesList({ busca, status, page })
   const [modalClienteId,   setModalClienteId]   = useState<string | null>(null)
   const [modalClienteNome, setModalClienteNome] = useState('')
+
+  const paginadosFiltrados = regime
+    ? paginados.filter(c => (c.regimeTributario as string | undefined) === regime)
+    : paginados
 
   return (
     <div>
@@ -132,24 +120,42 @@ function ClientesContent() {
         }
       />
 
-      <div className="surface-subtle border px-3 py-2.5">
+      <div className="surface-subtle border px-3 py-2.5 space-y-2.5">
         <Suspense>
           <ClientesFiltros busca={busca} status={status} />
         </Suspense>
+        {/* Filtros rápidos de regime */}
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-xs text-muted-foreground mr-1">Regime:</span>
+          {([
+            ['', 'Todos'],
+            ['simples_nacional', 'Simples'],
+            ['lucro_presumido',  'L. Presumido'],
+            ['lucro_real',       'L. Real'],
+            ['mei',              'MEI'],
+          ] as const).map(([val, label]) => (
+            <FilterBtn
+              key={val}
+              href={clientesPageHref({ busca, status, regime: val, page: 1 })}
+              active={regime === val}
+            >
+              {label}
+            </FilterBtn>
+          ))}
+        </div>
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
-        <div className="overflow-x-auto">
-        <table className="min-w-[860px] w-full text-sm">
+      <DataTableShell className="mt-4" density="compact">
+        <table className="min-w-[900px] w-full text-sm">
           <thead className="border-b bg-muted/50">
             <tr>
-              <th className="text-left px-3 py-2 section-label">Nome / Razão Social</th>
-              <th className="text-left px-3 py-2 section-label">CPF / CNPJ</th>
-              <th className="text-left px-3 py-2 section-label hidden md:table-cell">Regime</th>
-              <th className="text-left px-3 py-2 section-label hidden lg:table-cell">Cidade / UF</th>
-              <th className="text-left px-3 py-2 section-label">Status</th>
-              <th className="text-left px-3 py-2 section-label">Saúde</th>
-              <th className="px-3 py-2" />
+              <th className="text-left px-3 py-2.5 section-label">Nome / Razão Social</th>
+              <th className="text-left px-3 py-2.5 section-label hidden sm:table-cell">CPF / CNPJ</th>
+              <th className="text-left px-3 py-2.5 section-label hidden md:table-cell">Regime</th>
+              <th className="text-right px-3 py-2.5 section-label hidden lg:table-cell">Mensalidade</th>
+              <th className="text-left px-3 py-2.5 section-label">Status</th>
+              <th className="text-left px-3 py-2.5 section-label">Saúde</th>
+              <th className="px-3 py-2.5 w-10" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -162,111 +168,162 @@ function ClientesContent() {
                 title="Não foi possível carregar clientes"
                 description="Atualize a página. Se continuar, valide regras e índices do Firestore."
               />
-            ) : paginados.length === 0 ? (
+            ) : paginadosFiltrados.length === 0 ? (
               <TableEmptyState
                 colSpan={7}
                 icon={Users}
-                title={busca || status ? 'Nenhum cliente encontrado' : 'Ainda não há clientes'}
-                description={busca || status
+                title={busca || status || regime ? 'Nenhum cliente encontrado' : 'Ainda não há clientes'}
+                description={busca || status || regime
                   ? 'Tente ajustar os filtros de busca.'
                   : 'Clique em "Novo Cliente" para começar.'}
-                action={!busca && !status ? { label: 'Novo Cliente', href: '/clientes/novo' } : undefined}
+                action={!busca && !status && !regime ? { label: 'Novo Cliente', href: '/clientes/novo' } : undefined}
               />
             ) : (
-              paginados.map((c) => {
+              paginadosFiltrados.map((c) => {
                 const saude = saudeCliente(c)
+                const temWhatsApp = !!(c.whatsapp ?? c.whatsappFinanceiro ?? c.aceiteWhatsAppCobranca)
+                const mensalidade = c.mensalidade as number | undefined
+                const vencimento = c.vencimento as string | undefined
                 return (
+                <Fragment key={c.id as string}>
                 <tr
-                  key={c.id as string}
-                  className="cursor-pointer transition-colors hover:bg-muted/35"
+                  className="group cursor-pointer transition-colors hover:bg-muted/35 hidden sm:table-row"
                   onClick={() => { setModalClienteId(c.id as string); setModalClienteNome((c.razaoSocial as string) ?? '') }}
                 >
-                  <td className="px-3 py-1.5">
+                  <td className="px-3 py-2">
                     <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                        <span className="text-xs font-semibold text-primary">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/10">
+                        <span className="text-xs font-bold text-primary">
                           {clienteInitials((c.razaoSocial as string) || '?')}
                         </span>
                       </div>
                       <div className="min-w-0">
-                        <p className="font-medium truncate">{c.razaoSocial as string}</p>
-                        {c.nomeFantasia ? (
-                          <p className="text-xs text-muted-foreground truncate">{c.nomeFantasia as string}</p>
-                        ) : null}
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-medium truncate leading-tight">{c.razaoSocial as string}</p>
+                          {temWhatsApp && (
+                            <span title="WhatsApp ativo"><MessageCircle className="h-3 w-3 shrink-0 text-success" /></span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {c.nomeFantasia
+                            ? <p className="text-xs text-muted-foreground truncate">{c.nomeFantasia as string}</p>
+                            : (c.cidade && c.uf)
+                              ? <p className="text-xs text-muted-foreground truncate">{c.cidade as string} · {c.uf as string}</p>
+                              : null}
+                          {vencimento && <span className="text-[10px] text-muted-foreground/70">dia {vencimento}</span>}
+                        </div>
                       </div>
                     </div>
                   </td>
-                  <td className="px-3 py-1.5 text-muted-foreground font-mono text-xs">
+                  <td className="px-3 py-2 text-muted-foreground font-mono text-xs hidden sm:table-cell">
                     {formatCpfCnpj(c.cpfCnpj as string)}
                   </td>
-                  <td className="px-3 py-1.5 hidden md:table-cell">
+                  <td className="px-3 py-2 hidden md:table-cell">
                     {c.regimeTributario ? (
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${REGIME_BADGE[c.regimeTributario as string] ?? REGIME_BADGE.isento}`}>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${REGIME_BADGE[c.regimeTributario as string] ?? REGIME_BADGE.isento}`}>
                         {REGIME_LABELS[c.regimeTributario as string] ?? (c.regimeTributario as string)}
                       </span>
                     ) : <span className="text-muted-foreground">—</span>}
                   </td>
-                  <td className="px-3 py-1.5 text-muted-foreground hidden lg:table-cell">
-                    {c.cidade && c.uf ? `${c.cidade as string} / ${c.uf as string}` : '—'}
+                  <td className="px-3 py-2 text-right hidden lg:table-cell">
+                    {mensalidade != null && mensalidade > 0
+                      ? <span className="text-sm font-semibold tabular-nums">{formatCurrency(mensalidade)}</span>
+                      : <span className="text-muted-foreground text-xs">—</span>}
                   </td>
-                  <td className="px-3 py-1.5">
+                  <td className="px-3 py-2">
                     <ClienteStatusBadge status={c.status as string} />
                   </td>
-                  <td className="px-3 py-1.5">
-                    <div
-                      className="inline-flex items-center gap-1.5"
-                      title={`Saúde ${saude.label}: ${saude.reason}. Operacional: ${saude.areas.operacional}. Fiscal: ${saude.areas.fiscal}. Financeiro: ${saude.areas.financeiro}.`}
-                    >
-                      {[1, 2, 3].map((dot) => (
-                        <span
-                          key={dot}
-                          className={`h-2 w-2 rounded-full ${
-                            dot <= saude.score
-                              ? saude.score === 3
-                                ? 'bg-success'
-                                : saude.score === 2
-                                  ? 'bg-warning'
-                                  : 'bg-destructive'
-                              : 'bg-muted'
-                          }`}
-                        />
-                      ))}
-                    </div>
+                  <td className="px-3 py-2">
+                    <SaudeBadge nivel={saude.nivel} motivo={saude.motivo} />
                   </td>
-                  <td className="px-3 py-1.5">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setModalClienteId(c.id as string)
-                        setModalClienteNome((c.razaoSocial as string) ?? '')
-                      }}
-                    >
-                      Ver
-                    </Button>
+                  <td className="px-3 py-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" onClick={e => e.stopPropagation()}>
+                        <DropdownMenuItem onClick={() => router.push(`/clientes/${c.id as string}`)}>
+                          <Users className="h-3.5 w-3.5 mr-2" />Abrir cliente
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => router.push(`/clientes/${c.id as string}/editar`)}>
+                          <Pencil className="h-3.5 w-3.5 mr-2" />Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => router.push(`/tarefas/nova?clienteId=${c.id as string}`)}>
+                          <CheckSquare className="h-3.5 w-3.5 mr-2" />Nova tarefa
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => router.push(`/competencias/nova?clienteId=${c.id as string}`)}>
+                          <Layers className="h-3.5 w-3.5 mr-2" />Nova competência
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => router.push(`/fiscal?emitir=1&clienteId=${c.id as string}`)}>
+                          <Receipt className="h-3.5 w-3.5 mr-2" />Emitir NFS-e
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </td>
                 </tr>
+                <tr className="sm:hidden">
+                  <td colSpan={7} className="px-3 py-2 sm:hidden">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/10">
+                        <span className="text-xs font-bold text-primary">
+                          {clienteInitials((c.razaoSocial as string) || '?')}
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-sm truncate">{c.razaoSocial as string}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {c.nomeFantasia
+                            ? (c.nomeFantasia as string)
+                            : (c.cidade && c.uf)
+                              ? `${c.cidade as string} · ${c.uf as string}`
+                              : ''}
+                        </p>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          <ClienteStatusBadge status={c.status as string} />
+                          {c.regimeTributario && (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${REGIME_BADGE[c.regimeTributario as string] ?? REGIME_BADGE.isento}`}>
+                              {REGIME_LABELS[c.regimeTributario as string] ?? (c.regimeTributario as string)}
+                            </span>
+                          )}
+                          <SaudeBadge nivel={saude.nivel} motivo={saude.motivo} />
+                        </div>
+                      </div>
+                      {mensalidade != null && mensalidade > 0 && (
+                        <span className="text-sm font-bold tabular-nums shrink-0">{formatCurrency(mensalidade)}</span>
+                      )}
+                      <button
+                        className="text-xs text-primary shrink-0 font-medium"
+                        onClick={() => { setModalClienteId(c.id as string); setModalClienteNome((c.razaoSocial as string) ?? '') }}
+                      >
+                        Abrir
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                </Fragment>
                 )
               })
             )}
           </tbody>
         </table>
-        </div>
-      </div>
+      </DataTableShell>
 
       {/* Paginação */}
       {totalPages > 1 && (
         <div className="surface-subtle mt-4 flex items-center justify-between border px-3 py-2.5 text-sm">
-          <span className="text-muted-foreground">Página {page} de {totalPages}</span>
+          <span className="text-muted-foreground">Página {page} de {totalPages} · {total} cliente{total !== 1 ? 's' : ''}</span>
           <div className="flex gap-2">
             {page > 1 && (
-              <Link href={clientesPageHref({ busca, status, page: page - 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
+              <Link href={clientesPageHref({ busca, status, regime, page: page - 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
                 Anterior
               </Link>
             )}
             {page < totalPages && (
-              <Link href={clientesPageHref({ busca, status, page: page + 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
+              <Link href={clientesPageHref({ busca, status, regime, page: page + 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
                 Próxima
               </Link>
             )}
