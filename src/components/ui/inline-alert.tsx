@@ -43,7 +43,7 @@ export function InlineAlert({
   return (
     <div
       role="alert"
-      className={cn('flex gap-3 rounded-xl border px-3 py-2.5', TONE_STYLES[tone], className)}
+      className={cn('flex gap-3 rounded-xl border px-3 py-2.5 animate-in fade-in-0 slide-in-from-top-1 duration-200', TONE_STYLES[tone], className)}
     >
       {TONE_ICON[tone]}
       <div className="flex-1 min-w-0 space-y-0.5">

@@ -31,7 +31,7 @@ export function KpiCard({
   const classes = toneClasses[tone]
 
   return (
-    <section className={cn('rounded-2xl border border-border/65 bg-card/95 p-4 card-shadow', className)}>
+    <section className={cn('rounded-2xl border border-border/65 bg-card/95 p-4 card-shadow animate-in fade-in-0 slide-in-from-bottom-2 duration-300', className)}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>

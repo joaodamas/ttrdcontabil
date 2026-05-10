@@ -19,6 +19,7 @@ import { FilaCobrancaItem } from '@/components/financeiro/fila-cobranca'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useAuth } from '@/contexts/auth-context'
 import { Download, Plus, TrendingUp, CheckCircle, AlertTriangle, Receipt, Trash2, Clock } from 'lucide-react'
+import { FilterSheet, FilterSheetTrigger } from '@/components/ui/filter-sheet'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { FilterBtn } from '@/components/ui/filter-btn'
@@ -97,6 +98,7 @@ function FinanceiroContent() {
   const [historyItems, setHistoryItems] = useState<Array<Record<string, unknown>>>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [timelineLancamento, setTimelineLancamento] = useState<Record<string, unknown> | null>(null)
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
 
   async function refreshFinanceiro() {
     await queryClient.invalidateQueries({
@@ -215,6 +217,10 @@ function FinanceiroContent() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <FilterSheetTrigger
+            onClick={() => setFilterSheetOpen(true)}
+            activeCount={(tipo ? 1 : 0) + (status ? 1 : 0)}
+          />
           <Button variant="outline" size="sm" className="h-10 rounded-xl" onClick={exportarLancamentos}>
             <Download className="w-4 h-4 mr-1" />
             Exportar lista
@@ -241,7 +247,35 @@ function FinanceiroContent() {
       <CentralCobranca lancamentos={filteredLancamentos as Record<string, unknown>[]} agora={agora} />
       <AlertasFinanceiros lancamentos={filteredLancamentos as Record<string, unknown>[]} agora={agora} />
 
-      <div className="surface-subtle flex flex-wrap items-center gap-3 border px-3 py-2.5">
+      <FilterSheet
+        open={filterSheetOpen}
+        onOpenChange={setFilterSheetOpen}
+        activeCount={(tipo ? 1 : 0) + (status ? 1 : 0)}
+        onReset={() => { setTipo(''); setStatus(''); setPagination({ filterKey, page: 1, cursorStack: [null] }) }}
+      >
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tipo</p>
+          <div className="flex flex-wrap gap-2">
+            {(['', 'receita', 'despesa'] as const).map(t => (
+              <FilterBtn key={t} onClick={() => { setTipo(t); setPagination({ filterKey, page: 1, cursorStack: [null] }) }} active={tipo === t}>
+                {t === '' ? 'Todos' : TIPO_MAP[t]?.label ?? t}
+              </FilterBtn>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</p>
+          <div className="flex flex-wrap gap-2">
+            {(['', 'pendente', 'atrasado', 'pago', 'cancelado', 'estornado'] as const).map(s => (
+              <FilterBtn key={s} onClick={() => { setStatus(s); setPagination({ filterKey, page: 1, cursorStack: [null] }) }} active={status === s}>
+                {s === '' ? 'Qualquer' : STATUS_MAP[s]?.label ?? s}
+              </FilterBtn>
+            ))}
+          </div>
+        </div>
+      </FilterSheet>
+
+      <div className="surface-subtle hidden sm:flex flex-wrap items-center gap-3 border px-3 py-2.5">
         <div className="flex items-center gap-1">
           {(['', 'receita', 'despesa'] as const).map((t) => (
             <FilterBtn key={t} onClick={() => { setTipo(t); setPagination({ filterKey, page: 1, cursorStack: [null] }) }} active={tipo === t}>

@@ -22,6 +22,7 @@ import { DataTableShell } from '@/components/ui/data-table-shell'
 import { Textarea } from '@/components/ui/textarea'
 import { ArrowLeft, Download, Eye, FileText, Loader2, RefreshCw, XCircle, History } from 'lucide-react'
 import { LogsNfseModal } from '@/components/fiscal/logs-nfse-modal'
+import { HeatmapFiscal } from '@/components/fiscal/heatmap-fiscal'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   emitida: { label: 'Emitida', variant: 'default' },
@@ -273,6 +274,14 @@ function FiscalHistoricoContent() {
           <p className="mt-1 text-2xl font-bold tabular-nums">{formatCurrency(valorTotal)}</p>
         </div>
       </div>
+
+      {/* Heatmap anual */}
+      {notas.length > 0 && (
+        <div className="rounded-2xl border border-border/65 bg-card/95 p-4 card-shadow">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Atividade de emissões — {ano ?? new Date().getFullYear()}</p>
+          <HeatmapFiscal notas={notas} ano={ano ?? new Date().getFullYear()} />
+        </div>
+      )}
 
       {totalRejeitadas > 0 && (
         <div className="rounded-xl border border-destructive/25 bg-destructive/5 flex items-center gap-3 px-4 py-3">

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useState, useRef } from 'react'
+import React, { useMemo, useState, useRef, useEffect } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -18,6 +18,7 @@ import {
   ShieldAlert,
   LayoutList,
   Columns2,
+  CalendarDays,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -34,7 +35,9 @@ import { useAuth } from '@/contexts/auth-context'
 import { bulkAlterarPrazo, bulkConcluirTarefas, bulkReatribuirTarefas } from '@/features/hoje/services'
 import { updateDocument } from '@/lib/firestore-client'
 import { Timestamp } from 'firebase/firestore'
+import { usePersistedFilters } from '@/lib/use-persisted-filters'
 import { KanbanBoard } from '@/components/hoje/kanban-board'
+import { AgendaView } from '@/components/hoje/agenda-view'
 import { hojeKeys } from '@/features/hoje/queries'
 import { useHojeData } from '@/features/hoje/hooks'
 import type { HojeTask, HojeUsuario } from '@/features/hoje/types'
@@ -73,13 +76,26 @@ function diasAtraso(data: Date | null) {
   return Math.max(0, Math.floor((inicioHoje.getTime() - inicioData.getTime()) / 86400000))
 }
 
+const FISCAL_KEYWORDS = /nfs-?e|das|iss|reinf|esocial|fgts|fiscal|tribut|imposto|certid/i
+const FINANCEIRO_KEYWORDS = /cobrança|cobrar|honorário|mensalidade|fatura|receber|pagar|vencimento|inadimpl/i
+
+function impactoPeso(task: HojeTask): number {
+  const area = (task.area ?? task.tipo ?? '').toLowerCase()
+  const titulo = (task.titulo ?? '').toLowerCase()
+  if (task.impactoFinanceiro) return 3
+  if (area === 'fiscal' || FISCAL_KEYWORDS.test(titulo)) return 3
+  if (area === 'financeiro' || FINANCEIRO_KEYWORDS.test(titulo)) return 2
+  if (task.valorEnvolvido && task.valorEnvolvido >= 1000) return 2
+  return 0
+}
+
 function scoreTask(task: HojeTask, grupo: FilaItem['grupo']) {
   const prazo = tsToDate(task.dataPrazo)
   const atraso = diasAtraso(prazo)
   const atrasoPeso = atraso >= 3 ? atraso + 3 : atraso
   const grupoPeso = grupo === 'atrasada' ? 8 : grupo === 'hoje' ? 5 : 1
   const semResponsavel = task.responsavelId ? 0 : 2
-  return grupoPeso + atrasoPeso + prioridadePeso(task.prioridade) + semResponsavel
+  return grupoPeso + atrasoPeso + prioridadePeso(task.prioridade) + semResponsavel + impactoPeso(task)
 }
 
 function buildFila(data: ReturnType<typeof useHojeData>['cockpit']['data']): FilaItem[] {
@@ -177,6 +193,12 @@ function TaskRow({
             {item.titulo ?? 'Tarefa sem titulo'}
           </Link>
           <Badge variant={badge}>{PRIORIDADE_LABEL[item.prioridade ?? 'normal'] ?? item.prioridade ?? 'Normal'}</Badge>
+          {impactoPeso(item) >= 3 && (
+            <span className="rounded-full border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-[10px] font-semibold text-warning">fiscal</span>
+          )}
+          {impactoPeso(item) === 2 && (
+            <span className="rounded-full border border-info/30 bg-info/10 px-1.5 py-0.5 text-[10px] font-semibold text-info">financeiro</span>
+          )}
           {semResponsavel && usuarios.length > 0 ? (
             <DropdownMenu>
               <DropdownMenuTrigger className="inline-flex items-center gap-1 rounded-full border border-destructive/40 bg-destructive/5 px-2 py-0.5 text-[11px] font-medium text-destructive hover:bg-destructive/10 transition-colors">
@@ -327,8 +349,12 @@ export default function HojePage() {
   const [responsavelId, setResponsavelId] = useState('todos')
   const [prioridadeFiltro, setPrioridadeFiltro] = useState<string>('todos')
   const [modoFoco, setModoFoco] = useState(false)
-  const [modoView,   setModoView]   = useState<'lista' | 'kanban'>('lista')
-  const [swimlanes,  setSwimlanes]  = useState(false)
+  const [hojeView, saveHojeView] = usePersistedFilters('hoje-view', { modoView: 'lista' as string, swimlanes: false as boolean })
+  const [modoView,   setModoView]   = useState<'lista' | 'kanban' | 'agenda'>((hojeView.modoView as 'lista' | 'kanban' | 'agenda') || 'lista')
+  const [swimlanes,  setSwimlanes]  = useState(Boolean(hojeView.swimlanes))
+  // Sync to localStorage on change
+  useEffect(() => { saveHojeView({ modoView }) }, [modoView, saveHojeView])
+  useEffect(() => { saveHojeView({ swimlanes }) }, [swimlanes, saveHojeView])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkResponsavelId, setBulkResponsavelId] = useState('')
   const [bulkDate, setBulkDate] = useState('')
@@ -449,12 +475,19 @@ export default function HojePage() {
             >
               <Columns2 className="h-3.5 w-3.5" />Kanban
             </button>
+            <button
+              type="button"
+              onClick={() => setModoView('agenda')}
+              className={cn('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', modoView === 'agenda' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}
+            >
+              <CalendarDays className="h-3.5 w-3.5" />Agenda
+            </button>
           </div>
           {modoView === 'kanban' && (
             <Button
               variant={swimlanes ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setSwimlanes(v => !v)}
+              onClick={() => setSwimlanes(v => !v as boolean)}
             >
               <Users className="h-3.5 w-3.5" />
               Swimlanes
@@ -599,6 +632,10 @@ export default function HojePage() {
           quickAssign={quickAssign}
           swimlanes={swimlanes}
         />
+      )}
+
+      {modoView === 'agenda' && (
+        <AgendaView fila={fila} />
       )}
 
       {modoView === 'lista' && (

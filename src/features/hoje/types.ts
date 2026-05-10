@@ -10,6 +10,10 @@ export type HojeTask = {
   responsavelNome?: string
   dataPrazo?: Timestamp
   status?: string
+  tipo?: string
+  area?: string
+  impactoFinanceiro?: boolean
+  valorEnvolvido?: number
 }
 
 export type HojeUsuario = {

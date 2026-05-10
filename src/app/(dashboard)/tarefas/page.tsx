@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense, Fragment } from 'react'
+import { useState, useEffect, Suspense, Fragment } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Timestamp } from 'firebase/firestore'
@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { concluirTarefa } from '@/features/tarefas/services'
+import { usePersistedFilters } from '@/lib/use-persisted-filters'
 import { tarefasFiltroSchema } from '@/features/tarefas/schemas'
 import { useTarefasList } from '@/features/tarefas/hooks'
 import { tarefasKeys } from '@/features/tarefas/queries'
@@ -63,6 +64,12 @@ function TarefasContent() {
   const [confirmUrgente, setConfirmUrgente] = useState<{ id: string; titulo: string } | null>(null)
   const [localSearch, setLocalSearch] = useState('')
   const [filterSheetOpen, setFilterSheetOpen] = useState(false)
+
+  // Persist last used filters
+  const [, saveFilters] = usePersistedFilters('tarefas-view', { status: '', prioridade: '' })
+  useEffect(() => {
+    if (status || prioridade) saveFilters({ status, prioridade })
+  }, [status, prioridade, saveFilters])
 
   const hoje = new Date()
   const tarefasFiltradas = localSearch.trim()

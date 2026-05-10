@@ -91,7 +91,7 @@ export function DataTableShell({
       )}
       <div
         className={cn(
-          'overflow-x-auto',
+          'overflow-x-auto animate-in fade-in-0 duration-200',
           activeDensity === 'compact' && '[&_td]:py-1.5 [&_th]:py-2',
           activeDensity === 'comfortable' && '[&_td]:py-2.5 [&_th]:py-2.5',
           '[&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10',

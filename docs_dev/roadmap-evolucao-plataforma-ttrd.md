@@ -1,11 +1,11 @@
 # Roadmap de Evolução — Plataforma TTRD Contábil
 
-Atualizado em: 2026-05-10 (sessão 8)  
+Atualizado em: 2026-05-10 (sessão 9)  
 Base: arquitetura e funcionalidades atuais documentadas em `docs_dev/documentacao-tecnica-telas-fluxos-modais.md`.
 
 ## 0. Acompanhamento da execução
 
-Status atualizado em: 2026-05-10 (sessão 8).
+Status atualizado em: 2026-05-10 (sessão 9).
 
 ### Prioridade da sessão 6
 
@@ -160,6 +160,13 @@ Status atualizado em: 2026-05-10 (sessão 8).
 - [x] FilterSheet aplicado em Competências (mobile).
 - [x] Indicadores históricos Cliente 360: mini gráfico SVG de tendência (últimas 6 competências) com pontos coloridos por status e legenda.
 - [x] Lint e TypeScript validados limpos (round 11).
+- [x] Modo Agenda no cockpit Hoje: visualização de 14 dias (2 passados + 12 futuros) com colunas por dia, tarefas agrupadas por prazo, strip de tarefas sem prazo, botão no toggle Lista/Kanban/Agenda.
+- [x] Heatmap fiscal anual: grid estilo GitHub Contributions mostrando emissões por dia com intensidade de cor + indicador de erros via ring vermelho. Integrado no histórico NFS-e.
+- [x] Classificação por impacto financeiro/fiscal: função `impactoPeso()` detecta tarefas fiscais (+3 pts) e financeiras (+2 pts) por `area`, `tipo` e keywords no título. Badge inline no cockpit.
+- [x] FilterSheet no Financeiro: trigger mobile com badge de filtros ativos (tipo + status).
+- [x] Animações suaves (`tw-animate-css`): `fade-in` + `slide-in-from-bottom-2` no KpiCard; `fade-in` + `slide-in-from-top-1` no InlineAlert; `fade-in` no DataTableShell.
+- [x] Salvar views/filtros de tabela (`usePersistedFilters`): hook em `src/lib/use-persisted-filters.ts`; aplicado em Tarefas (status + prioridade) e Hoje (modoView + swimlanes) via localStorage.
+- [x] Lint e TypeScript validados limpos (round 12).
 
 ### Em andamento
 
