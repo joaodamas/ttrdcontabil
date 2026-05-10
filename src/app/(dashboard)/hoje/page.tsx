@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useRef } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import {
@@ -31,6 +32,8 @@ import { formatDate, tsToDate, cn } from '@/lib/utils'
 import { TaskTimer } from '@/components/tarefas/task-timer'
 import { useAuth } from '@/contexts/auth-context'
 import { bulkAlterarPrazo, bulkConcluirTarefas, bulkReatribuirTarefas } from '@/features/hoje/services'
+import { updateDocument } from '@/lib/firestore-client'
+import { Timestamp } from 'firebase/firestore'
 import { hojeKeys } from '@/features/hoje/queries'
 import { useHojeData } from '@/features/hoje/hooks'
 import type { HojeTask, HojeUsuario } from '@/features/hoje/types'
@@ -143,6 +146,19 @@ function TaskRow({
   const atraso = diasAtraso(prazo)
   const badge = PRIORIDADE_BADGE[item.prioridade ?? 'normal'] ?? 'outline'
   const semResponsavel = !item.responsavelId
+  const [editingPrazo, setEditingPrazo] = useState(false)
+  const [savingPrazo,  setSavingPrazo]  = useState(false)
+
+  async function handlePrazoChange(isoDate: string) {
+    if (!isoDate) { setEditingPrazo(false); return }
+    setSavingPrazo(true)
+    try {
+      const dataPrazo = Timestamp.fromDate(new Date(isoDate + 'T00:00:00'))
+      await updateDocument('tarefas', item.id, { dataPrazo })
+      toast.success('Prazo atualizado.')
+    } catch { toast.error('Não foi possível alterar o prazo.') }
+    finally { setSavingPrazo(false); setEditingPrazo(false) }
+  }
 
   return (
     <div
@@ -182,8 +198,33 @@ function TaskRow({
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span>{item.clienteNome ?? 'Sem cliente'}</span>
           {!semResponsavel && <span>{item.responsavelNome}</span>}
-          <span>{prazo ? formatDate(prazo) : 'Sem prazo'}</span>
-          {atraso > 0 ? <span className="font-medium text-destructive">{atraso} dia(s) em atraso</span> : null}
+          {editingPrazo ? (
+            <input
+              type="date"
+              autoFocus
+              defaultValue={prazo ? prazo.toISOString().slice(0, 10) : ''}
+              disabled={savingPrazo}
+              onBlur={e => void handlePrazoChange(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') void handlePrazoChange((e.target as HTMLInputElement).value)
+                if (e.key === 'Escape') setEditingPrazo(false)
+              }}
+              className="rounded border border-primary px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary bg-background"
+            />
+          ) : (
+            <button
+              type="button"
+              title="Clique para editar prazo"
+              onClick={() => setEditingPrazo(true)}
+              className={cn(
+                'hover:text-primary hover:underline underline-offset-2 transition-colors',
+                atraso > 0 ? 'text-destructive font-medium' : ''
+              )}
+            >
+              {prazo ? formatDate(prazo) : 'Sem prazo'}
+            </button>
+          )}
+          {atraso > 0 && !editingPrazo ? <span className="font-medium text-destructive">{atraso} dia(s) em atraso</span> : null}
         </div>
       </div>
       <div className="flex flex-col items-end gap-1">
@@ -194,6 +235,86 @@ function TaskRow({
           usuarioId={usuarioId}
           usuarioNome={usuarioNome}
         />
+      </div>
+    </div>
+  )
+}
+
+type FlatRow =
+  | { kind: 'header'; grupo: FilaItem['grupo']; count: number }
+  | { kind: 'task';   item: FilaItem }
+
+function buildFlatRows(fila: FilaItem[]): FlatRow[] {
+  const rows: FlatRow[] = []
+  let lastGrupo: FilaItem['grupo'] | null = null
+  for (const item of fila) {
+    if (item.grupo !== lastGrupo) {
+      rows.push({ kind: 'header', grupo: item.grupo, count: fila.filter(f => f.grupo === item.grupo).length })
+      lastGrupo = item.grupo
+    }
+    rows.push({ kind: 'task', item })
+  }
+  return rows
+}
+
+function VirtualTaskList({
+  fila, selected, toggle, usuariosData, quickAssign, usuarioId, usuarioNome,
+}: {
+  fila: FilaItem[]
+  selected: Set<string>
+  toggle: (id: string) => void
+  usuariosData: HojeUsuario[]
+  quickAssign: (id: string, uid: string, uname: string) => Promise<void>
+  usuarioId: string
+  usuarioNome: string
+}) {
+  const parentRef = useRef<HTMLDivElement>(null)
+  const rows = useMemo(() => buildFlatRows(fila), [fila])
+
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: (i) => (rows[i].kind === 'header' ? 36 : 72),
+    overscan: 8,
+  })
+
+  return (
+    <div ref={parentRef} className="max-h-[600px] overflow-y-auto">
+      <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+        {virtualizer.getVirtualItems().map(vRow => {
+          const row = rows[vRow.index]
+          return (
+            <div
+              key={vRow.key}
+              data-index={vRow.index}
+              ref={virtualizer.measureElement}
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${vRow.start}px)` }}
+            >
+              {row.kind === 'header' ? (
+                <div className={cn(
+                  'flex items-center gap-2 border-b bg-muted/30 px-4 py-2',
+                  vRow.index > 0 && 'border-t'
+                )}>
+                  <span className={cn('text-xs font-semibold uppercase tracking-wide', GRUPO_COLOR[row.grupo])}>
+                    {GRUPO_LABEL[row.grupo]}
+                  </span>
+                  <span className="text-xs text-muted-foreground">— {row.count} tarefa(s)</span>
+                </div>
+              ) : (
+                <TaskRow
+                  item={row.item}
+                  checked={selected.has(row.item.id)}
+                  onToggle={() => toggle(row.item.id)}
+                  usuarios={usuariosData}
+                  onAssign={(id, uid, uname) => void quickAssign(id, uid, uname)}
+                  usuarioId={usuarioId}
+                  usuarioNome={usuarioNome}
+                />
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -570,38 +691,15 @@ export default function HojePage() {
           ) : fila.length === 0 ? (
             <EmptyCockpit />
           ) : (
-            <div>
-              {fila.map((item, idx) => {
-                const prevGrupo = idx > 0 ? fila[idx - 1].grupo : null
-                const showGroupHeader = prevGrupo !== item.grupo
-                return (
-                  <div key={item.id}>
-                    {showGroupHeader && (
-                      <div className={cn(
-                        'flex items-center gap-2 border-b bg-muted/30 px-4 py-2',
-                        idx > 0 && 'border-t'
-                      )}>
-                        <span className={cn('text-xs font-semibold uppercase tracking-wide', GRUPO_COLOR[item.grupo])}>
-                          {GRUPO_LABEL[item.grupo]}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          — {fila.filter(f => f.grupo === item.grupo).length} tarefa(s)
-                        </span>
-                      </div>
-                    )}
-                    <TaskRow
-                      item={item}
-                      checked={selected.has(item.id)}
-                      onToggle={() => toggle(item.id)}
-                      usuarios={usuariosData}
-                      onAssign={(id, uid, uname) => void quickAssign(id, uid, uname)}
-                      usuarioId={usuario?.uid ?? ''}
-                      usuarioNome={usuario?.nome ?? usuario?.email ?? ''}
-                    />
-                  </div>
-                )
-              })}
-            </div>
+            <VirtualTaskList
+              fila={fila}
+              selected={selected}
+              toggle={toggle}
+              usuariosData={usuariosData}
+              quickAssign={quickAssign}
+              usuarioId={usuario?.uid ?? ''}
+              usuarioNome={usuario?.nome ?? usuario?.email ?? ''}
+            />
           )}
         </CardContent>
       </Card>

@@ -1,11 +1,11 @@
 # Roadmap de Evolução — Plataforma TTRD Contábil
 
-Atualizado em: 2026-05-10 (sessão 6)  
+Atualizado em: 2026-05-10 (sessão 7)  
 Base: arquitetura e funcionalidades atuais documentadas em `docs_dev/documentacao-tecnica-telas-fluxos-modais.md`.
 
 ## 0. Acompanhamento da execução
 
-Status atualizado em: 2026-05-10 (sessão 6).
+Status atualizado em: 2026-05-10 (sessão 7).
 
 ### Prioridade da sessão 6
 
@@ -38,16 +38,16 @@ Status atualizado em: 2026-05-10 (sessão 6).
 | 1.5 | Modais e wizards | 90% |
 | 2.1 | Cockpit operacional | 90% |
 | 2.2 | Priorização inteligente | 90% |
-| 2.3 | Modo foco | 90% |
+| 2.3 | Modo foco | 100% |
 | 3.1 | Cliente 360 | 95% |
 | 3.2 | Timeline CRM | 100% |
 | 3.3 | POP/base de conhecimento | 65% |
 | 4.1 | Central de cobrança | 95% |
 | 4.2 | Timeline financeira | 70% |
-| 5.1 | Emissão assistida | 98% |
+| 5.1 | Emissão assistida | 100% |
 | 5.2 | Histórico e analytics fiscais | 85% |
-| 7 | Mobile Experience | 70% |
-| 10 | Performance e Arquitetura | 30% |
+| 7 | Mobile Experience | 80% |
+| 10 | Performance e Arquitetura | 55% |
 | 6, 8–12 | IA, SaaS, Segurança | 5–10% |
 
 ### Entregue
@@ -146,6 +146,12 @@ Status atualizado em: 2026-05-10 (sessão 6).
 - [x] Mobile: `FilterSheet` + `FilterSheetTrigger` criados em `src/components/ui/filter-sheet.tsx`; `FilterSheetTrigger` aparece apenas em mobile (`sm:hidden`); integrado na página de Tarefas (status + prioridade).
 - [x] Timeline: badge visual `manual` (ícone User) vs `auto` (ícone Bot) adicionado à `TimelineEvent`; comentários manuais marcados como `source: 'manual'`, eventos WhatsApp e automáticos marcados como `source: 'auto'`.
 - [x] Lint e TypeScript validados limpos (round 9).
+- [x] Virtualização do cockpit Hoje com `@tanstack/react-virtual` — lista de tarefas renderiza apenas as linhas visíveis; `VirtualTaskList` com overscan=8, estimativa por tipo (header 36px / tarefa 72px).
+- [x] Relatório de produtividade individual — página `/relatorios/produtividade` com KPIs (total, sessões, usuários, média/sessão), gráfico de barras por usuário, top-10 tarefas, histórico de sessões. Dados de `tarefas_timers`. Link adicionado na sidebar.
+- [x] Quick edit inline de prazo no cockpit Hoje — clique na data abre `<input type="date">` inline; Enter/blur salva; Escape cancela; salva em `tarefas` via `updateDocument`.
+- [x] FilterSheet aplicado na página de Clientes — trigger mobile com badge de filtros ativos, sheet com status e regime tributário.
+- [x] Validações avançadas no wizard NFS-e — CPF/CNPJ com checagem de dígitos, código de serviço com regex ABRASF, descrição mínima 10 chars, painel de avisos não-bloqueantes para alíquota < 2% e valor > R$ 50k.
+- [x] Lint e TypeScript validados limpos (round 10).
 
 ### Em andamento
 

@@ -14,6 +14,7 @@ import { PageHeader } from '@/components/layout/page-header'
 import { ClientesFiltros } from '@/components/clientes/clientes-filtros'
 import { ClienteModal } from '@/components/clientes/cliente-modal'
 import { FilterBtn } from '@/components/ui/filter-btn'
+import { FilterSheet, FilterSheetTrigger } from '@/components/ui/filter-sheet'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -102,6 +103,7 @@ function ClientesContent() {
   const { paginados, total, totalPages, isLoading, isError } = useClientesList({ busca, status, page })
   const [modalClienteId,   setModalClienteId]   = useState<string | null>(null)
   const [modalClienteNome, setModalClienteNome] = useState('')
+  const [filterSheetOpen,  setFilterSheetOpen]  = useState(false)
 
   const paginadosFiltrados = regime
     ? paginados.filter(c => (c.regimeTributario as string | undefined) === regime)
@@ -113,14 +115,54 @@ function ClientesContent() {
         title="Clientes"
         description={isLoading ? undefined : `${total} cliente${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`}
         action={
-          <Link href="/clientes/novo" className={buttonVariants({ size: 'sm', className: 'h-10 rounded-xl' })}>
-            <Plus className="w-4 h-4" />
-            Novo Cliente
-          </Link>
+          <div className="flex items-center gap-2">
+            <FilterSheetTrigger
+              onClick={() => setFilterSheetOpen(true)}
+              activeCount={(status ? 1 : 0) + (regime ? 1 : 0)}
+            />
+            <Link href="/clientes/novo" className={buttonVariants({ size: 'sm', className: 'h-10 rounded-xl' })}>
+              <Plus className="w-4 h-4" />
+              Novo Cliente
+            </Link>
+          </div>
         }
       />
 
-      <div className="surface-subtle border px-3 py-2.5 space-y-2.5">
+      <FilterSheet
+        open={filterSheetOpen}
+        onOpenChange={setFilterSheetOpen}
+        activeCount={(status ? 1 : 0) + (regime ? 1 : 0)}
+        onReset={() => router.push('/clientes')}
+      >
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</p>
+          <div className="flex flex-wrap gap-2">
+            {(['', 'ativo', 'inativo', 'suspenso'] as const).map(s => (
+              <FilterBtn key={s} href={clientesPageHref({ busca, status: s, regime, page: 1 })} active={status === s}>
+                {s === '' ? 'Todos' : s.charAt(0).toUpperCase() + s.slice(1)}
+              </FilterBtn>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Regime tributário</p>
+          <div className="flex flex-wrap gap-2">
+            {([
+              ['', 'Todos'],
+              ['simples_nacional', 'Simples'],
+              ['lucro_presumido',  'L. Presumido'],
+              ['lucro_real',       'L. Real'],
+              ['mei',              'MEI'],
+            ] as const).map(([val, label]) => (
+              <FilterBtn key={val} href={clientesPageHref({ busca, status, regime: val, page: 1 })} active={regime === val}>
+                {label}
+              </FilterBtn>
+            ))}
+          </div>
+        </div>
+      </FilterSheet>
+
+      <div className="surface-subtle border px-3 py-2.5 space-y-2.5 hidden sm:block">
         <Suspense>
           <ClientesFiltros busca={busca} status={status} />
         </Suspense>

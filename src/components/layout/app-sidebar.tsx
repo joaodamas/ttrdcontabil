@@ -15,7 +15,7 @@ import {
   Receipt, FileText, Wallet, Settings, LogOut,
   Building2, ChevronDown, Menu, History, UserCog,
   Package2, CheckSquare, Plus, CalendarClock, Plug, SlidersHorizontal,
-  AlertTriangle,
+  AlertTriangle, LineChart,
 } from 'lucide-react'
 import { useHojeData } from '@/features/hoje/hooks'
 
@@ -88,6 +88,14 @@ const NAV_SECTIONS: NavSection[] = [
     icon: Wallet,
     href: '/financeiro',
     telaKey: 'financeiro',
+  },
+  {
+    id: 'relatorios',
+    label: 'Relatórios',
+    icon: LineChart,
+    items: [
+      { href: '/relatorios/produtividade', label: 'Produtividade', icon: LineChart, telaKey: 'admin' },
+    ],
   },
   {
     id: 'admin',

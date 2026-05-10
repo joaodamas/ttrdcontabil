@@ -28,15 +28,32 @@ import { getFirebaseApp } from '@/lib/firebase'
 import { getErrorMessage } from '@/lib/error-message'
 import { SELECT_NONE_VALUE } from '@/lib/select-values'
 
+function isValidCpfCnpj(raw: string): boolean {
+  const digits = raw.replace(/\D/g, '')
+  if (digits.length !== 11 && digits.length !== 14) return false
+  if (/^(\d)\1+$/.test(digits)) return false
+  return true
+}
+
+function isValidCodigoServico(code: string): boolean {
+  return /^\d{1,4}(\.\d{1,4})?$/.test(code.trim())
+}
+
 const nfseSchema = z.object({
   clienteId:        z.string().min(1, 'Cliente é obrigatório'),
   competenciaId:    z.string().optional().nullable(),
   tomadorNome:      z.string().min(1, 'Nome do tomador é obrigatório').max(150),
-  tomadorCpfCnpj:   z.string().min(11, 'CPF/CNPJ inválido').max(18),
+  tomadorCpfCnpj:   z.string().min(11, 'CPF/CNPJ inválido').max(18).refine(
+    v => isValidCpfCnpj(v),
+    { message: 'CPF/CNPJ inválido — verifique os dígitos' }
+  ),
   tomadorEmail:     z.string().email('E-mail inválido').optional().or(z.literal('')).nullable(),
-  descricaoServico: z.string().min(1, 'Descrição do serviço é obrigatória').max(500),
-  codigoServico:    z.string().min(1, 'Código do serviço é obrigatório').max(20),
-  valorServico:     z.number().positive('Valor deve ser positivo'),
+  descricaoServico: z.string().min(10, 'Descrição muito curta (mín. 10 caracteres)').max(500),
+  codigoServico:    z.string().min(1, 'Código do serviço é obrigatório').max(20).refine(
+    v => isValidCodigoServico(v),
+    { message: 'Formato inválido. Use ex: 17.19 ou 6014' }
+  ),
+  valorServico:     z.number().min(0.01, 'Valor deve ser maior que zero'),
   aliquota:         z.number().min(0).max(100).optional().nullable(),
   issRetido:        z.boolean().default(false),
 })
@@ -546,6 +563,30 @@ export function NfseEmissaoForm({
       </div>
 
       <div className={isModal ? 'space-y-5 lg:sticky lg:top-0 lg:self-start' : 'space-y-5'}>
+        {/* Alertas de validação — avisos não-bloqueantes */}
+        {(() => {
+          const avisos: string[] = []
+          if (previewTomadorCpf && !isValidCpfCnpj(previewTomadorCpf))
+            avisos.push('CPF/CNPJ do tomador parece inválido.')
+          if (previewCodigo && !isValidCodigoServico(previewCodigo))
+            avisos.push('Código de serviço fora do padrão (ex.: 17.19).')
+          if (Number.isFinite(previewAliquota) && Number(previewAliquota) < 2)
+            avisos.push('Alíquota abaixo de 2% — confirme com a prefeitura.')
+          if (Number.isFinite(previewValor) && Number(previewValor) > 50000)
+            avisos.push('Valor acima de R$ 50.000 — verifique se há retenção obrigatória.')
+          if (avisos.length === 0) return null
+          return (
+            <div className="space-y-1.5 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2.5">
+              <p className="text-xs font-semibold text-warning">Avisos de validação</p>
+              {avisos.map(a => (
+                <p key={a} className="text-xs text-warning/80 flex items-start gap-1.5">
+                  <span className="mt-0.5 shrink-0">⚠</span>{a}
+                </p>
+              ))}
+            </div>
+          )
+        })()}
+
         <Card className={isModal ? 'border-primary/15 bg-gradient-to-b from-primary/[0.06] to-background shadow-none' : 'border-warning/30 bg-warning/5'}>
           <CardHeader>
             <CardTitle className="text-sm">{isModal ? 'Resumo da emissão' : 'Checklist antes da emissão'}</CardTitle>
