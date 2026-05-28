@@ -96,6 +96,14 @@ service cloud.firestore {
 
     match /usuarios/{uid} {
       allow get: if (isAuth() && request.auth.uid == uid) || (canRead() && sameTenantExisting());
+      // NOTA DE ISOLAMENTO: regras de `list` não conseguem filtrar por `tenantId`
+      // (não há acesso ao `where` da query). O isolamento aqui depende de dois
+      // fatos: (1) o ambiente é SINGLE-TENANT por deploy — `requireEnvironmentTenant`
+      // (functions/src/tenant.ts) rejeita qualquer tenant != DEFAULT_TENANT_ID, então
+      // todo doc em `usuarios` compartilha o mesmo tenant; (2) o helper de cliente
+      // `listDocuments` (src/lib/firestore-client.ts) sempre adiciona
+      // `where('tenantId','==', actor.tenantId)`. Num cenário futuro de banco
+      // compartilhado entre tenants, trocar por leitura por-doc/denormalização.
       allow list: if canRead();
       allow update: if (isAuth() && request.auth.uid == uid
           && !request.resource.data.diff(resource.data).affectedKeys()
@@ -265,6 +273,43 @@ service cloud.firestore {
     // nfse_fila_processamento: somente Cloud Functions.
     match /nfse_fila_processamento/{id} {
       allow read: if isFiscal() && sameTenantExisting();
+      allow write: if false;
+    }
+
+    // nfse_erros: histórico de rejeições/erros de integração. Escrita só via
+    // Cloud Functions (Admin SDK); o front apenas lê o erro do próprio tenant.
+    match /nfse_erros/{id} {
+      allow read: if canRead() && sameTenantExisting();
+      allow write: if false;
+    }
+
+    // ─── WhatsApp (régua de cobrança) ─────────────────────────────────────────
+    // Todas as coleções são escritas exclusivamente pelas Cloud Functions
+    // (Admin SDK ignora rules). O front só lê dados do próprio tenant — sem isso
+    // a régua de cobrança e o histórico de mensagens falham com permission-denied.
+
+    match /whatsapp_campaign_rules/{id} {
+      allow read: if canRead() && sameTenantExisting();
+      allow write: if false;
+    }
+
+    match /whatsapp_templates/{id} {
+      allow read: if canRead() && sameTenantExisting();
+      allow write: if false;
+    }
+
+    match /whatsapp_messages/{id} {
+      allow read: if isFinanceiro() && sameTenantExisting();
+      allow write: if false;
+    }
+
+    match /whatsapp_jobs/{id} {
+      allow read: if isFinanceiro() && sameTenantExisting();
+      allow write: if false;
+    }
+
+    match /whatsapp_webhook_events/{id} {
+      allow read: if isAdmin() && sameTenantExisting();
       allow write: if false;
     }
 
