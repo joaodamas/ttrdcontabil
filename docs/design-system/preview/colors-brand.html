@@ -1,0 +1,45 @@
+<!-- @dsCard group="Colors" -->
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;background:var(--card);font-family:var(--font-sans);padding:18px;color:var(--foreground)}
+  .hero{display:flex;gap:12px;margin-bottom:12px}
+  .blue{flex:1;background:var(--brand-blue);border-radius:14px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;min-height:104px}
+  .green{flex:1;background:var(--brand-green);border-radius:14px;padding:14px;display:flex;flex-direction:column;justify-content:space-between}
+  .t{font-size:13px;font-weight:700;color:#fff}
+  .h{font-family:var(--font-mono);font-size:11px;color:rgba(255,255,255,.85)}
+  .h2{font-family:var(--font-mono);font-size:10px;color:rgba(255,255,255,.6);margin-top:2px}
+  .demo{background:var(--background);border:1px solid var(--border);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .navsw{display:flex;align-items:center;gap:8px;padding:7px 11px;border-radius:9px;font-size:13px;font-weight:600;background:color-mix(in oklab,var(--brand-blue) 12%,transparent);color:var(--brand-blue)}
+  .navsw .d{width:8px;height:8px;border-radius:2px;background:var(--brand-blue)}
+  .btn{height:30px;padding:0 13px;border-radius:9px;font-size:13px;font-weight:600;border:0;background:var(--brand-blue);color:#fff;display:inline-flex;align-items:center}
+  .b{display:inline-flex;align-items:center;height:21px;padding:0 10px;border-radius:9999px;font-size:12px;font-weight:600;background:color-mix(in oklab,var(--brand-green) 14%,transparent);color:var(--brand-green-700)}
+  .cap{margin-left:auto;font-size:11px;color:var(--muted-foreground)}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
+  .sw{border-radius:9px;height:34px;border:1px solid var(--border);display:flex;align-items:flex-end;padding:6px;font-size:10px;font-weight:600}
+</style></head>
+<body>
+  <div class="hero">
+    <div class="blue">
+      <div class="t">JP Azul · Primary</div>
+      <div><div class="h">#2243A5</div><div class="h2">a letra “J” da marca</div></div>
+    </div>
+    <div class="green">
+      <div class="t">JP Verde · Accent</div>
+      <div><div class="h">#13A877</div><div class="h2">a letra “P” da marca</div></div>
+    </div>
+  </div>
+  <div class="demo">
+    <span class="navsw"><span class="d"></span>Painel</span>
+    <button class="btn">Emitir NFS-e</button>
+    <span class="b">Concluída</span>
+    <span class="cap">Azul = ação · Verde = positivo/accent</span>
+  </div>
+  <div class="grid">
+    <div class="sw" style="background:var(--background)">slate-50 canvas</div>
+    <div class="sw" style="background:#fff">white card</div>
+    <div class="sw" style="background:var(--sidebar);color:#fff;border:0">sidebar dark</div>
+    <div class="sw" style="background:var(--muted)">muted</div>
+  </div>
+</body></html>

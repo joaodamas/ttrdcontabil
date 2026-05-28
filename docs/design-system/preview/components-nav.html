@@ -1,0 +1,52 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;background:var(--card);font-family:var(--font-sans);padding:18px;display:flex;justify-content:center}
+  .sidebar{width:230px;background:var(--sidebar);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+  .logo{height:52px;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--sidebar-border)}
+  .nm{color:#fff;font-size:13.5px;font-weight:700;line-height:1}
+  .tg{color:rgba(255,255,255,.42);font-size:9px;margin-top:2px}
+  .summary{margin:9px;border:1px solid var(--sidebar-border);background:rgba(255,255,255,.03);border-radius:10px;padding:9px 11px}
+  .stop{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .slbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.4)}
+  .srow{display:flex;gap:16px}
+  .sn{font-size:14px;font-weight:700;line-height:1}
+  .sc{font-size:9px;color:rgba(255,255,255,.45)}
+  .nav{padding:6px 8px;display:flex;flex-direction:column;gap:2px}
+  a{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;font-size:13.5px;font-weight:500}
+  a svg{width:15px;height:15px}
+  .idle{color:rgba(255,255,255,.62)}
+  .active{background:color-mix(in oklab,#4f7df0 18%,transparent);color:#7da2f7}
+  .group{color:#fff;justify-content:space-between}
+  .group .l{display:flex;align-items:center;gap:10px}
+  .group .chev{opacity:.5}
+  .sub{margin-left:15px;border-left:1px solid var(--sidebar-border);padding-left:11px;display:flex;flex-direction:column;gap:2px}
+  .sub a{font-size:13px;padding:6px 10px}
+  .t-danger{color:#f87171}.t-warning{color:#fbbf24}
+</style></head>
+<body>
+  <div class="sidebar">
+    <div class="logo"><span class="jp-logo on-dark" style="font-size:24px"><b>J</b><b>P</b></span><div><div class="nm">JP Fiscal</div><div class="tg">Gestão Contábil</div></div></div>
+    <div class="summary">
+      <div class="stop"><span class="slbl">Hoje</span><i data-lucide="alert-triangle" style="width:11px;height:11px;color:#f87171"></i></div>
+      <div class="srow">
+        <div style="text-align:center"><div class="sn t-danger">2</div><div class="sc">atrasadas</div></div>
+        <div style="text-align:center"><div class="sn t-warning">3</div><div class="sc">para hoje</div></div>
+      </div>
+    </div>
+    <div class="nav">
+      <a class="idle"><i data-lucide="calendar-clock"></i>Hoje</a>
+      <a class="active"><i data-lucide="bar-chart-3"></i>Painel</a>
+      <a class="group"><span class="l"><i data-lucide="receipt"></i>Fiscal &amp; NFS-e</span><i data-lucide="chevron-up" class="chev"></i></a>
+      <div class="sub">
+        <a class="active"><i data-lucide="receipt"></i>Emissão NFS-e</a>
+        <a class="idle"><i data-lucide="history"></i>Histórico NFS-e</a>
+        <a class="idle"><i data-lucide="file-text"></i>Imposto de Renda</a>
+      </div>
+      <a class="idle"><i data-lucide="wallet"></i>Financeiro</a>
+    </div>
+  </div>
+  <script src="https://unpkg.com/lucide@latest"></script><script>lucide.createIcons();</script>
+</body></html>

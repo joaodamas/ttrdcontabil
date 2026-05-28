@@ -1,0 +1,29 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;background:var(--card);font-family:var(--font-sans);padding:18px;color:var(--foreground)}
+  .tbl{border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  thead{background:color-mix(in oklab,var(--muted) 50%,transparent)}
+  th{text-align:left;padding:8px 12px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted-foreground)}
+  td{padding:10px 12px;border-top:1px solid var(--border)}
+  .cur{text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+  .b{display:inline-flex;height:20px;align-items:center;padding:0 9px;border-radius:9999px;font-size:12px;font-weight:500}
+  .pago{background:color-mix(in oklab,var(--success) 12%,transparent);color:var(--success)}
+  .atr{background:color-mix(in oklab,var(--destructive) 10%,transparent);color:var(--destructive)}
+  .red{color:var(--destructive)}
+</style></head>
+<body>
+  <div class="tbl">
+    <table>
+      <thead><tr><th>Descrição</th><th>Cliente</th><th>Vencimento</th><th class="cur">Valor</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Honorários · Abril</td><td>JP Project Manager</td><td>10/05/2026</td><td class="cur">R$ 1.200,00</td><td><span class="b pago">Pago</span></td></tr>
+        <tr><td>Honorários · Abril</td><td>Damasit Comércio</td><td class="red">28/04/2026</td><td class="cur red">R$ 980,00</td><td><span class="b atr">Atrasado</span></td></tr>
+        <tr><td>Abertura de empresa</td><td>Núcleo Contábil</td><td>15/05/2026</td><td class="cur">R$ 2.500,00</td><td><span class="b pago">Pago</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</body></html>

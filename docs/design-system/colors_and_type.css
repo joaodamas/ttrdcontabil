@@ -1,0 +1,235 @@
+/* ============================================================================
+   JP FISCAL / TTRD CONTÁBIL — Colors & Type
+   Foundational design tokens lifted verbatim from the product's globals.css
+   (Tailwind v4 @theme + shadcn). Source: ttrdcontabil-1/src/app/globals.css
+   Brand: JP blue #2243A5 + green #13A877  ·  Font: Inter / Sora  ·  Mono: Geist Mono
+   ============================================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* ─── Brand — JP Project ─────────────────────────────────────────────── */
+  --brand-blue:          #2243A5;   /* JP "J" — primary action color */
+  --brand-blue-700:      #1b3585;   /* darker blue — hover / pressed */
+  --brand-green:         #13A877;   /* JP "P" — accent / positive */
+  --brand-green-700:     #0e8a61;   /* darker green — hover */
+  --brand-primary:       var(--brand-blue);
+  --brand-ink:           #0a1430;   /* deep navy-ink for dark panels */
+
+  /* ─── Core surfaces (light, default) ─────────────────────────────────── */
+  --background:          oklch(0.982 0.002 250);   /* slate-50 tool canvas */
+  --foreground:          oklch(0.13 0.008 260);    /* near-black text */
+  --card:                oklch(1 0 0);             /* pure white */
+  --card-foreground:     oklch(0.13 0.008 260);
+  --popover:             oklch(1 0 0);
+  --popover-foreground:  oklch(0.13 0.008 260);
+
+  /* Layered surfaces */
+  --surface-1:           oklch(1 0 0);
+  --surface-2:           oklch(0.975 0.003 250);
+  --surface-3:           oklch(0.958 0.003 250);
+
+  /* ─── Primary / secondary / muted / accent ───────────────────────────── */
+  --primary:             #2243A5;                  /* JP blue */
+  --primary-foreground:  #ffffff;                  /* white text on blue */
+  --accent-brand:        #13A877;                  /* JP green */
+  --accent-brand-foreground: #ffffff;
+  --secondary:           oklch(0.94 0 0);
+  --secondary-foreground:oklch(0.22 0 0);
+  --muted:               oklch(0.958 0.003 250);
+  --muted-foreground:    oklch(0.48 0.012 250);
+  --accent:              oklch(0.958 0.003 250);
+  --accent-foreground:   oklch(0.18 0.008 260);
+
+  /* ─── Semantic status ────────────────────────────────────────────────── */
+  --destructive:         oklch(0.577 0.245 27.325);  /* red — atrasado / erro */
+  --success:             oklch(0.52 0.15 145);       /* green — pago / concluída */
+  --success-foreground:  oklch(1 0 0);
+  --warning:             oklch(0.72 0.15 70);        /* amber — alta / pendente */
+  --warning-foreground:  oklch(0.10 0 0);
+  --info:                oklch(0.55 0.14 240);       /* blue — em andamento */
+  --info-foreground:     oklch(1 0 0);
+  --neutral:             oklch(0.56 0.012 250);      /* gray — aguardando / rascunho */
+  --neutral-foreground:  oklch(1 0 0);
+
+  /* ─── Borders / inputs / ring ────────────────────────────────────────── */
+  --border:              oklch(0.916 0.004 250);
+  --input:               oklch(0.916 0.004 250);
+  --ring:                #2243A5;                    /* blue focus ring */
+
+  /* ─── Charts ─────────────────────────────────────────────────────────── */
+  --chart-1:             #2243A5;               /* JP blue */
+  --chart-2:             #13A877;               /* JP green */
+  --chart-3:             oklch(0.577 0.245 27.325); /* red */
+  --chart-4:             oklch(0.6 0.12 230);   /* blue */
+  --chart-5:             oklch(0.65 0.14 300);  /* purple */
+
+  /* ─── Sidebar (always dark, even in light mode) ──────────────────────── */
+  --sidebar:                    oklch(0.155 0.012 260);
+  --sidebar-foreground:         oklch(0.95 0 0);
+  --sidebar-primary:            #4f7df0;   /* lighter blue for legibility on dark */
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent:             oklch(0.22 0.016 260);
+  --sidebar-accent-foreground:  oklch(0.95 0 0);
+  --sidebar-border:             oklch(0.28 0.012 260);
+  --sidebar-ring:               #4f7df0;
+
+  /* ─── Radius scale ───────────────────────────────────────────────────── */
+  --radius:      0.625rem;                       /* 10px base */
+  --radius-sm:   calc(var(--radius) * 0.6);      /* 6px  */
+  --radius-md:   calc(var(--radius) * 0.8);      /* 8px  */
+  --radius-lg:   var(--radius);                  /* 10px */
+  --radius-xl:   calc(var(--radius) * 1.4);      /* 14px */
+  --radius-2xl:  calc(var(--radius) * 1.8);      /* 18px */
+  --radius-3xl:  calc(var(--radius) * 2.2);      /* 22px */
+  --radius-full: 9999px;                         /* pills / badges (rounded-4xl) */
+
+  /* ─── Spacing scale (design-system v1 tokens) ────────────────────────── */
+  --space-1: 0.25rem;  /* 4px  */
+  --space-2: 0.5rem;   /* 8px  */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px */
+  --space-6: 1.5rem;   /* 24px */
+  --space-8: 2rem;     /* 32px */
+
+  /* ─── Shadows / elevation ────────────────────────────────────────────── */
+  --shadow-card:        0 1px 2px 0 rgb(0 0 0 / 0.04);            /* .card-shadow */
+  --shadow-card-hover:  0 2px 8px -2px rgb(0 0 0 / 0.08);         /* .card-shadow-hover */
+  --shadow-modal:       0 0 0 1px rgb(0 0 0 / 0.07), 0 8px 40px rgb(0 0 0 / 0.10), 0 2px 8px rgb(0 0 0 / 0.06);
+  --ring-1-foreground:  inset 0 0 0 1px oklch(0.13 0.008 260 / 0.10); /* card ring-1 ring-foreground/10 */
+
+  /* ─── Type ───────────────────────────────────────────────────────────── */
+  --font-sans:    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-heading: var(--font-sans);
+  --font-mono:    'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --text-xs:  0.75rem;    /* 12px */
+  --text-sm:  0.875rem;   /* 14px — app body default */
+  --text-md:  1rem;       /* 16px */
+  --text-lg:  1.125rem;   /* 18px */
+
+  /* Hero métrica (dashboards / cockpits) */
+  --text-metric:         clamp(2rem, 4vw, 3rem);
+  --text-metric-leading: 1.05;
+}
+
+/* ============================================================================
+   DARK THEME  (.dark) — sidebar-matched dark canvas
+   ============================================================================ */
+.dark {
+  --background:          oklch(0.145 0.014 260);
+  --foreground:          oklch(0.97 0 0);
+  --card:                oklch(0.19 0.012 260);
+  --card-foreground:     oklch(0.97 0 0);
+  --popover:             oklch(0.18 0 0);
+  --popover-foreground:  oklch(0.97 0 0);
+  --surface-1:           oklch(0.19 0.012 260);
+  --surface-2:           oklch(0.22 0.013 260);
+  --surface-3:           oklch(0.25 0.014 260);
+  --primary:             #4f7df0;   /* lighter blue on dark */
+  --primary-foreground:  #ffffff;
+  --secondary:           oklch(0.24 0 0);
+  --secondary-foreground:oklch(0.97 0 0);
+  --muted:               oklch(0.24 0.01 260);
+  --muted-foreground:    oklch(0.72 0.01 260);
+  --accent:              oklch(0.25 0.01 260);
+  --accent-foreground:   oklch(0.97 0 0);
+  --destructive:         oklch(0.704 0.191 22.216);
+  --success:             oklch(0.65 0.15 145);
+  --warning:             oklch(0.80 0.15 70);
+  --info:                oklch(0.65 0.14 240);
+  --neutral:             oklch(0.62 0.014 250);
+  --border:              oklch(1 0 0 / 12%);
+  --input:               oklch(1 0 0 / 16%);
+  --ring:                #4f7df0;
+}
+
+/* ============================================================================
+   SEMANTIC TYPE ROLES — ready-to-use classes (mirror globals.css utilities)
+   ============================================================================ */
+body {
+  font-family: var(--font-sans);
+  background: var(--background);
+  color: var(--foreground);
+  font-feature-settings: "rlig" 1, "calt" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, .h1 {
+  font-size: 1.5rem;          /* text-2xl page titles */
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+h2, .h2 {
+  font-size: var(--text-lg);
+  line-height: 1.4;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+h3, .h3 {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+p, .body {
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+/* Hero KPI number */
+.kpi-value {
+  font-size: clamp(1.6rem, 2.2vw, 2.35rem);
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.text-metric-hero {
+  font-family: var(--font-heading);
+  font-size: var(--text-metric);
+  line-height: var(--text-metric-leading);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Uppercase eyebrow / section label */
+.section-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
+}
+
+/* Financial data — monospace, tabular */
+.tabular-currency {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.01em;
+}
+
+/* ============================================================================
+   SURFACE UTILITIES (from globals.css @layer utilities)
+   ============================================================================ */
+.surface-card  { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-xl); }
+.surface-muted { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.card-shadow        { box-shadow: var(--shadow-card); }
+.card-shadow-hover  { box-shadow: var(--shadow-card-hover); }
+
+/* ============================================================================
+   JP MONOGRAM — crisp CSS recreation of the JP Project mark (J blue · P green)
+   Usage:  <span class="jp-logo" style="font-size:32px"><b>J</b><b>P</b></span>
+   Scales perfectly; size via font-size. On dark surfaces add .on-dark.
+   ============================================================================ */
+.jp-logo{display:inline-flex;align-items:center;font-family:var(--font-sans);font-weight:800;letter-spacing:-0.13em;line-height:1;font-style:italic}
+.jp-logo b{font-weight:800}
+.jp-logo b:first-child{color:var(--brand-blue)}
+.jp-logo b:last-child{color:var(--brand-green)}
+.jp-logo.on-dark b:first-child{color:#5a86f5}
+.jp-logo.on-dark b:last-child{color:#2fd49b}
+
+/* brand tints */
+.brand-blue-tint{background:color-mix(in oklab,var(--brand-blue) 12%,transparent);color:var(--brand-blue)}
+.brand-green-tint{background:color-mix(in oklab,var(--brand-green) 14%,transparent);color:var(--brand-green-700)}

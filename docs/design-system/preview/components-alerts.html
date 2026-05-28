@@ -1,0 +1,33 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;background:var(--card);font-family:var(--font-sans);padding:20px;color:var(--foreground)}
+  .alert{display:flex;gap:12px;align-items:center;border-radius:14px;padding:12px 14px;margin-bottom:11px}
+  .alert svg{width:18px;height:18px;flex-shrink:0}
+  .ic{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .ttl{font-size:14px;font-weight:600}
+  .sub{font-size:12px;color:var(--muted-foreground);margin-top:2px}
+  .red{background:color-mix(in oklab,var(--destructive) 5%,transparent);border:1px solid color-mix(in oklab,var(--destructive) 25%,transparent)}
+  .red .ic{background:color-mix(in oklab,var(--destructive) 10%,transparent);color:var(--destructive)}
+  .amb{background:color-mix(in oklab,var(--warning) 6%,transparent);border:1px solid color-mix(in oklab,var(--warning) 30%,transparent)}
+  .amb .ic{background:color-mix(in oklab,var(--warning) 15%,transparent);color:#8a5a00}
+  .grn{background:color-mix(in oklab,var(--success) 6%,transparent);border:1px solid color-mix(in oklab,var(--success) 25%,transparent)}
+  .grn .ic{background:color-mix(in oklab,var(--success) 10%,transparent);color:var(--success)}
+</style></head>
+<body>
+  <div class="alert red">
+    <div class="ic"><i data-lucide="alert-triangle"></i></div>
+    <div><div class="ttl">3 ponto(s) pedem ação</div><div class="sub">Tarefas vencidas · cobranças atrasadas · emissão fiscal próxima.</div></div>
+  </div>
+  <div class="alert amb">
+    <div class="ic"><i data-lucide="bell"></i></div>
+    <div><div class="ttl">2 clientes com NFS-e a emitir</div><div class="sub">Dia de emissão se aproximando.</div></div>
+  </div>
+  <div class="alert grn">
+    <div class="ic"><i data-lucide="check-circle-2"></i></div>
+    <div><div class="ttl">Operação sem alerta crítico</div><div class="sub">Todos os fechamentos em dia.</div></div>
+  </div>
+  <script src="https://unpkg.com/lucide@latest"></script><script>lucide.createIcons();</script>
+</body></html>

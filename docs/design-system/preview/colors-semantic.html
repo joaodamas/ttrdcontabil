@@ -1,0 +1,30 @@
+<!-- @dsCard group="Colors" -->
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;background:var(--card);font-family:var(--font-sans);padding:20px}
+  .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+  .item{text-align:center}
+  .sw{border-radius:10px;height:48px;margin-bottom:7px}
+  .nm{font-size:11px;font-weight:600;color:var(--foreground)}
+  .role{font-size:9.5px;color:var(--muted-foreground);margin-top:1px}
+  .chip{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:9999px;font-size:11px;font-weight:500;border:1px solid transparent}
+  .chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px}
+</style></head>
+<body>
+  <div class="grid">
+    <div class="item"><div class="sw" style="background:var(--success)"></div><div class="nm">success</div><div class="role">pago · concluída</div></div>
+    <div class="item"><div class="sw" style="background:var(--warning)"></div><div class="nm">warning</div><div class="role">alta · pendente</div></div>
+    <div class="item"><div class="sw" style="background:var(--destructive)"></div><div class="nm">destructive</div><div class="role">atrasado · erro</div></div>
+    <div class="item"><div class="sw" style="background:var(--info)"></div><div class="nm">info</div><div class="role">em andamento</div></div>
+    <div class="item"><div class="sw" style="background:var(--neutral)"></div><div class="nm">neutral</div><div class="role">aguardando</div></div>
+  </div>
+  <div class="chips">
+    <span class="chip" style="background:color-mix(in oklab,var(--success) 12%,transparent);color:var(--success);border-color:color-mix(in oklab,var(--success) 20%,transparent)">Pago</span>
+    <span class="chip" style="background:color-mix(in oklab,var(--warning) 15%,transparent);color:#8a5a00;border-color:color-mix(in oklab,var(--warning) 20%,transparent)">Pendente</span>
+    <span class="chip" style="background:color-mix(in oklab,var(--destructive) 10%,transparent);color:var(--destructive)">Atrasado</span>
+    <span class="chip" style="background:color-mix(in oklab,var(--info) 12%,transparent);color:var(--info);border-color:color-mix(in oklab,var(--info) 20%,transparent)">Em andamento</span>
+    <span class="chip" style="background:color-mix(in oklab,var(--neutral) 10%,transparent);color:var(--neutral);border-color:color-mix(in oklab,var(--neutral) 20%,transparent)">Rascunho</span>
+  </div>
+</body></html>

@@ -1,0 +1,26 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;background:var(--card);font-family:var(--font-sans);padding:22px;color:var(--foreground)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px}
+  .lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted-foreground);margin-bottom:6px}
+  .lbl .req{color:var(--destructive)}
+  .inp{width:100%;box-sizing:border-box;height:32px;padding:0 10px;border:1px solid var(--input);border-radius:10px;font-size:14px;font-family:var(--font-sans);color:var(--foreground);background:transparent}
+  .inp::placeholder{color:var(--muted-foreground)}
+  .focus{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklab,var(--ring) 25%,transparent)}
+  .err{border-color:var(--destructive)}
+  .errtxt{font-size:11px;color:var(--destructive);margin-top:4px}
+  .sel{position:relative}
+  .sel svg{position:absolute;right:9px;top:9px;width:14px;height:14px;color:var(--muted-foreground)}
+</style></head>
+<body>
+  <div class="grid">
+    <div><div class="lbl">Inscrição Municipal <span class="req">*</span></div><input class="inp focus" value="123456"></div>
+    <div class="sel"><div class="lbl">Município de Emissão <span class="req">*</span></div><input class="inp" value="3525904"><i data-lucide="chevron-down"></i></div>
+    <div><div class="lbl">Inscrição Estadual</div><input class="inp" placeholder="Opcional"></div>
+    <div><div class="lbl">CNPJ <span class="req">*</span></div><input class="inp err" value="59.360.092/0001-63"><div class="errtxt">Inscrição municipal obrigatória</div></div>
+  </div>
+  <script src="https://unpkg.com/lucide@latest"></script><script>lucide.createIcons();</script>
+</body></html>

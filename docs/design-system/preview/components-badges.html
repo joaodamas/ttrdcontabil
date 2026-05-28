@@ -1,0 +1,39 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;background:var(--card);font-family:var(--font-sans);padding:22px}
+  .lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted-foreground);margin:0 0 8px}
+  .row{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+  .b{display:inline-flex;align-items:center;height:20px;padding:0 9px;border-radius:9999px;font-size:12px;font-weight:500;border:1px solid transparent}
+  .success{background:color-mix(in oklab,var(--success) 12%,transparent);color:var(--success);border-color:color-mix(in oklab,var(--success) 20%,transparent)}
+  .warning{background:color-mix(in oklab,var(--warning) 15%,transparent);color:#8a5a00;border-color:color-mix(in oklab,var(--warning) 22%,transparent)}
+  .info{background:color-mix(in oklab,var(--info) 12%,transparent);color:var(--info);border-color:color-mix(in oklab,var(--info) 20%,transparent)}
+  .destructive{background:color-mix(in oklab,var(--destructive) 10%,transparent);color:var(--destructive)}
+  .secondary{background:var(--secondary);color:var(--secondary-foreground)}
+  .outline{border-color:var(--border);color:var(--foreground)}
+  .primary{background:var(--brand-blue);color:#fff}
+</style></head>
+<body>
+  <p class="lbl">Cliente · Competência · Tarefa</p>
+  <div class="row">
+    <span class="b success">Ativo</span>
+    <span class="b secondary">Inativo</span>
+    <span class="b warning">Suspenso</span>
+    <span class="b outline">Aberta</span>
+    <span class="b info">Em andamento</span>
+    <span class="b success">Concluída</span>
+  </div>
+  <p class="lbl">Prioridade · Pagamento · NFS-e · IR</p>
+  <div class="row">
+    <span class="b destructive">Urgente</span>
+    <span class="b warning">Alta</span>
+    <span class="b success">Pago</span>
+    <span class="b destructive">Atrasado</span>
+    <span class="b success">Emitida</span>
+    <span class="b destructive">Rejeitada</span>
+    <span class="b warning">Retificado</span>
+    <span class="b primary">Produção</span>
+  </div>
+</body></html>

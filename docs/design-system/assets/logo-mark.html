@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&display=swap">
+<style>
+  body{margin:0;font-family:var(--font-sans);background:var(--card);color:var(--foreground);padding:26px}
+  .row{display:flex;gap:28px;align-items:center;flex-wrap:wrap}
+  .lockup{display:flex;align-items:center;gap:13px}
+  .logo-img{height:40px;width:auto;display:block}
+  .name{font-family:'Sora',var(--font-sans);font-weight:700;font-size:21px;letter-spacing:-.02em;line-height:1}
+  .name .thin{font-weight:600;color:var(--brand-green-700)}
+  .tag{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted-foreground);margin-top:5px;font-weight:500}
+  /* white app-tile so the logo's white background reads as intentional on dark */
+  .tile{width:48px;height:48px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.12);flex-shrink:0}
+  .tile img{height:30px;width:auto}
+  .ink{background:var(--brand-ink);border-radius:14px;padding:16px 20px}
+  .ink .name{color:#fff}.ink .tag{color:rgba(255,255,255,.5)}
+  .sep{width:1px;align-self:stretch;background:var(--border)}
+  .scale{display:flex;align-items:flex-end;gap:20px}
+  .scale img{width:auto;display:block}
+  .note{margin-top:24px;font-size:11.5px;color:var(--muted-foreground);border-top:1px dashed var(--border);padding-top:12px;line-height:1.5}
+  .note b{color:var(--foreground)}
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="lockup">
+      <img class="logo-img" src="jp-logo.png" alt="JP Project">
+      <div><div class="name">JP&nbsp;<span class="thin">Fiscal</span></div><div class="tag">Gestão Contábil Integrada</div></div>
+    </div>
+    <div class="sep"></div>
+    <div class="ink">
+      <div class="lockup">
+        <div class="tile"><img src="jp-logo.png" alt="JP Project"></div>
+        <div><div class="name">JP&nbsp;<span class="thin">Fiscal</span></div><div class="tag">Gestão Contábil Integrada</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="row" style="margin-top:26px">
+    <div class="scale">
+      <img src="jp-logo.png" alt="" style="height:52px">
+      <img src="jp-logo.png" alt="" style="height:36px">
+      <img src="jp-logo.png" alt="" style="height:24px">
+      <span class="tag" style="margin:0 0 4px">logo enviado · 52 / 36 / 24 px</span>
+    </div>
+  </div>
+  <p class="note"><b>Logo oficial JP Project</b> (<code>assets/jp-logo.png</code>) — monograma “JP”, <b style="color:var(--brand-blue)">J azul #2243A5</b> + <b style="color:var(--brand-green-700)">P verde #13A877</b>. Em superfícies escuras, use sobre um tile branco arredondado. Para máxima nitidez em telas grandes, peça uma versão <b>SVG/PNG de alta resolução</b>.</p>
+</body>
+</html>

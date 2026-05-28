@@ -1,0 +1,31 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;background:var(--background);font-family:var(--font-sans);padding:20px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .kpi{background:color-mix(in oklab,var(--card) 95%,transparent);border:1px solid color-mix(in oklab,var(--border) 65%,transparent);border-radius:18px;padding:16px;box-shadow:var(--shadow-card)}
+  .top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .lbl{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted-foreground)}
+  .val{font-size:30px;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums;margin-top:8px;color:var(--foreground)}
+  .ic{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .ic svg{width:16px;height:16px}
+  .desc{font-size:12px;color:var(--muted-foreground);margin-top:6px}
+  .yel{background:color-mix(in oklab,var(--brand-blue) 12%,transparent);color:var(--brand-blue)}
+  .grn{background:color-mix(in oklab,var(--success) 12%,transparent);color:var(--success)}
+  .red{background:color-mix(in oklab,var(--destructive) 10%,transparent);color:var(--destructive)}
+</style></head>
+<body>
+  <div class="grid">
+    <div class="kpi">
+      <div class="top"><div><div class="lbl">Clientes ativos</div><div class="val">214</div></div><div class="ic yel"><i data-lucide="users"></i></div></div>
+      <div class="desc">Carteira operacional disponível.</div>
+    </div>
+    <div class="kpi">
+      <div class="top"><div><div class="lbl">Recebíveis 7 dias</div><div class="val" style="color:var(--success)">R$ 48.250</div></div><div class="ic grn"><i data-lucide="wallet-cards"></i></div></div>
+      <div class="desc">12 lançamento(s) previstos.</div>
+    </div>
+  </div>
+  <script src="https://unpkg.com/lucide@latest"></script><script>lucide.createIcons();</script>
+</body></html>
