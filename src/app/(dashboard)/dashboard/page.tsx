@@ -262,15 +262,14 @@ function DashboardV2(props: DashboardV2Props) {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cockpit executivo</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">O que precisa acontecer hoje</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Visão executiva</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {props.hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/hoje" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            <CalendarClock className="size-3.5" /> Hoje
+            <CalendarClock className="size-3.5" /> Fila de execução
           </Link>
           <Link href="/fiscal?emitir=1" className={buttonVariants({ size: 'sm' })}>
             <Receipt className="size-3.5" /> Emitir NFS-e
@@ -363,53 +362,26 @@ function DashboardV2(props: DashboardV2Props) {
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
         <div className="space-y-4">
-          <div className="rounded-2xl border border-border/70 bg-card/95 card-shadow">
-            <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
-              <div>
-                <h2 className="text-sm font-semibold">Fila crítica</h2>
-                <p className="text-xs text-muted-foreground">Itens ordenados por impacto operacional imediato.</p>
-              </div>
-              <Link href="/hoje" className={buttonVariants({ variant: 'outline', size: 'sm' })}>Abrir Hoje</Link>
+          {/* Resumo de pendências — leitura executiva, ações na fila /hoje */}
+          <Link
+            href="/hoje"
+            className="group flex items-center justify-between rounded-2xl border border-border/70 bg-card/95 px-4 py-4 card-shadow transition-all hover:border-primary/35 hover:shadow-md"
+          >
+            <div>
+              <h2 className="text-sm font-semibold">Pendências operacionais</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {tarefasCriticas.length > 0 && `${tarefasCriticas.length} tarefa(s) vencida(s)`}
+                {tarefasCriticas.length > 0 && financeiroCritico.length > 0 && ' · '}
+                {financeiroCritico.length > 0 && `${financeiroCritico.length} cobrança(s) em atraso`}
+                {(tarefasCriticas.length > 0 || financeiroCritico.length > 0) && fiscalCritico.length > 0 && ' · '}
+                {fiscalCritico.length > 0 && `${fiscalCritico.length} NFS-e a emitir`}
+                {tarefasCriticas.length === 0 && financeiroCritico.length === 0 && fiscalCritico.length === 0 && 'Nenhuma ação crítica no momento.'}
+              </p>
             </div>
-            <div className="divide-y divide-border/70">
-              {tarefasCriticas.length === 0 && financeiroCritico.length === 0 && fiscalCritico.length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-muted-foreground">Nenhuma ação crítica no momento.</div>
-              ) : (
-                <>
-                  {tarefasCriticas.map((item) => (
-                    <Link key={`t-${item.id}`} href={`/tarefas/${item.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/35">
-                      <Badge variant="destructive">Tarefa</Badge>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{item.titulo}</p>
-                        <p className="truncate text-xs text-muted-foreground">{item.clienteNome ?? 'Sem cliente'}</p>
-                      </div>
-                      <span className="text-xs text-destructive">{formatDate(tsToDate(item.dataPrazo))}</span>
-                    </Link>
-                  ))}
-                  {financeiroCritico.map((item) => (
-                    <Link key={`f-${item.id}`} href="/financeiro?status=pendente" className="flex items-center gap-3 px-4 py-3 hover:bg-muted/35">
-                      <Badge variant="destructive">Cobrança</Badge>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{item.descricao}</p>
-                        <p className="truncate text-xs text-muted-foreground">{item.clienteNome ?? 'Sem cliente'}</p>
-                      </div>
-                      <span className="text-xs font-semibold text-destructive">{formatCurrency(item.valor)}</span>
-                    </Link>
-                  ))}
-                  {fiscalCritico.map((item) => (
-                    <Link key={`n-${item.id}`} href={`/fiscal?emitir=1&clienteId=${item.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/35">
-                      <Badge variant="warning">Fiscal</Badge>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{item.razaoSocial}</p>
-                        <p className="truncate text-xs text-muted-foreground">Dia de emissão {item.diaEmissaoNFSe}</p>
-                      </div>
-                      <span className="text-xs text-warning">{item.diasRestantes <= 0 ? 'emitir hoje' : `${item.diasRestantes}d`}</span>
-                    </Link>
-                  ))}
-                </>
-              )}
+            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground group-hover:text-primary">
+              Abrir fila <ArrowRight className="size-3" />
             </div>
-          </div>
+          </Link>
         </div>
 
         <aside className="space-y-4">

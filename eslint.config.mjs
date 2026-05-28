@@ -18,6 +18,8 @@ const eslintConfig = defineConfig([
     // JS gerado pelo tsc das Cloud Functions — não lintar na raiz
     "functions/lib/**",
     "functions/node_modules/**",
+    // UI kit e assets do design system — protótipos standalone, não código Next.js
+    "docs/**",
   ]),
   ...storybook.configs["flat/recommended"]
 ]);
