@@ -17,7 +17,7 @@ export const appConfig = {
   shortName: clean(env.appShortName, 'TTRD'),
   tagline: clean(env.appTagline, 'Gestão Contábil Integrada'),
   tenantId: clean(env.tenantId, 'ttrd'),
-  brandPrimary: clean(env.brandPrimary, '#F5C200'),
+  brandPrimary: clean(env.brandPrimary, '#2243A5'),
   logoUrl: env.logoUrl?.trim() || null,
 }
 

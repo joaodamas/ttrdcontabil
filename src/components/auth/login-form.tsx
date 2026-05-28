@@ -10,7 +10,6 @@ import { appConfig } from '@/lib/app-config'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
-  Building2,
   Eye,
   EyeOff,
   Loader2,
@@ -29,10 +28,13 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.input<typeof loginSchema>
 
+const BRAND_BLUE  = '#2243A5'
+const BRAND_GREEN = '#13A877'
+
 const STATS = [
-  { label: 'Clientes ativos', value: '200+', icon: Users, color: '#F5C200' },
-  { label: 'Fechamentos/mês', value: '99%', icon: CheckCircle2, color: '#22c55e' },
-  { label: 'Obrigações entregues', value: '100%', icon: FileCheck2, color: '#3b82f6' },
+  { label: 'Clientes ativos',       value: '200+',  icon: Users,       color: BRAND_BLUE },
+  { label: 'Fechamentos/mês',        value: '99%',   icon: CheckCircle2, color: BRAND_GREEN },
+  { label: 'Obrigações entregues',   value: '100%',  icon: FileCheck2,  color: '#4f7df0' },
 ]
 
 const FEATURES = [
@@ -47,7 +49,6 @@ export function LoginForm() {
   const from = searchParams.get('from') ?? '/hoje'
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const brandColor = appConfig.brandPrimary
 
   const {
     register,
@@ -85,40 +86,34 @@ export function LoginForm() {
   return (
     <div className="min-h-screen flex">
 
-      {/* ── PAINEL ESQUERDO ─────────────────────────────────── */}
+      {/* ── PAINEL ESQUERDO — dark navy + glows JP ──────────── */}
       <div
         className="hidden lg:flex lg:w-[52%] flex-col relative overflow-hidden"
-        style={{ background: '#0a0a0a' }}
+        style={{ background: '#070d22' }}
       >
-        {/* Grid de pontos de fundo */}
+        {/* Grid de pontos azuis */}
         <div
           className="absolute inset-0"
           style={{
-            backgroundImage: 'radial-gradient(circle, rgba(245,194,0,0.12) 1px, transparent 1px)',
+            backgroundImage: `radial-gradient(circle, rgba(34,67,165,0.18) 1px, transparent 1px)`,
             backgroundSize: '28px 28px',
           }}
         />
-
-        {/* Glow amarelo superior direito */}
+        {/* Glow azul superior direito */}
         <div
           className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full pointer-events-none"
-          style={{
-            background: 'radial-gradient(circle, rgba(245,194,0,0.15) 0%, transparent 70%)',
-          }}
+          style={{ background: 'radial-gradient(circle, rgba(34,67,165,0.22) 0%, transparent 70%)' }}
         />
-        {/* Glow sutil inferior esquerdo */}
+        {/* Glow verde inferior esquerdo */}
         <div
           className="absolute -bottom-40 -left-20 w-[400px] h-[400px] rounded-full pointer-events-none"
-          style={{
-            background: 'radial-gradient(circle, rgba(245,194,0,0.08) 0%, transparent 70%)',
-          }}
+          style={{ background: 'radial-gradient(circle, rgba(19,168,119,0.12) 0%, transparent 70%)' }}
         />
-
         {/* Linha diagonal decorativa */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            background: 'linear-gradient(135deg, transparent 0%, transparent 49.5%, rgba(245,194,0,0.06) 49.5%, rgba(245,194,0,0.06) 50.5%, transparent 50.5%)',
+            background: 'linear-gradient(135deg, transparent 0%, transparent 49.5%, rgba(34,67,165,0.07) 49.5%, rgba(34,67,165,0.07) 50.5%, transparent 50.5%)',
           }}
         />
 
@@ -126,38 +121,45 @@ export function LoginForm() {
         <div className="relative z-10 flex flex-col h-full px-12 py-10">
 
           {/* Logo */}
-        <div className="flex items-center gap-3">
-          <div
-            className="flex items-center justify-center w-10 h-10 rounded-xl shrink-0"
-            style={{ background: brandColor }}
-          >
-            {appConfig.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={appConfig.logoUrl} alt="" className="h-7 w-7 object-contain" />
-            ) : (
-              <Building2 className="w-5 h-5 text-black" strokeWidth={2.5} />
-            )}
-          </div>
-          <div>
+          <div className="flex items-center gap-3">
+            <div
+              className="flex items-center justify-center w-10 h-10 rounded-xl shrink-0 bg-white"
+            >
+              {appConfig.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={appConfig.logoUrl} alt="" className="h-7 w-7 object-contain" />
+              ) : (
+                <span style={{ fontWeight: 800, fontStyle: 'italic', letterSpacing: '-0.1em', lineHeight: 1, fontSize: 16 }}>
+                  <span style={{ color: BRAND_BLUE }}>J</span><span style={{ color: BRAND_GREEN }}>P</span>
+                </span>
+              )}
+            </div>
+            <div>
               <p className="font-bold text-white text-base leading-tight tracking-wide">{appConfig.name}</p>
               <p className="text-white/40 text-xs tracking-wider uppercase">{appConfig.tagline}</p>
+            </div>
           </div>
-        </div>
 
-          {/* Headline central */}
+          {/* Headline */}
           <div className="flex-1 flex flex-col justify-center space-y-8">
             <div className="space-y-4">
               <div
                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border"
-                style={{ borderColor: 'rgba(245,194,0,0.3)', color: '#F5C200', background: 'rgba(245,194,0,0.08)' }}
+                style={{ borderColor: 'rgba(34,67,165,0.4)', color: '#4f7df0', background: 'rgba(34,67,165,0.10)' }}
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-[#F5C200] animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: BRAND_GREEN }} />
                 Sistema em operação
               </div>
 
               <h1 className="text-4xl font-bold leading-[1.15] text-white">
                 Sua contabilidade<br />
-                no próximo nível
+                <span style={{
+                  background: `linear-gradient(90deg, #4f7df0, ${BRAND_GREEN})`,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}>
+                  no próximo nível
+                </span>
               </h1>
 
               <p className="text-white/50 text-sm leading-relaxed max-w-xs">
@@ -165,22 +167,22 @@ export function LoginForm() {
               </p>
             </div>
 
-            {/* Features list */}
+            {/* Features */}
             <div className="space-y-3">
               {FEATURES.map((feat, i) => (
                 <div key={i} className="flex items-start gap-3">
                   <div
                     className="flex items-center justify-center w-5 h-5 rounded-full shrink-0 mt-0.5"
-                    style={{ background: 'rgba(245,194,0,0.15)' }}
+                    style={{ background: 'rgba(19,168,119,0.15)' }}
                   >
-                    <CheckCircle2 className="w-3 h-3" style={{ color: '#F5C200' }} />
+                    <CheckCircle2 className="w-3 h-3" style={{ color: BRAND_GREEN }} />
                   </div>
                   <span className="text-sm text-white/60 leading-relaxed">{feat}</span>
                 </div>
               ))}
             </div>
 
-            {/* Comparativo posicionamento (ERP cliente vs. escritório) */}
+            {/* Comparativo */}
             <div
               className="rounded-xl p-4 space-y-3 max-w-md"
               style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
@@ -200,7 +202,7 @@ export function LoginForm() {
               </ul>
             </div>
 
-            {/* Stats cards */}
+            {/* Stats */}
             <div className="grid grid-cols-3 gap-3">
               {STATS.map(({ label, value, icon: Icon, color }) => (
                 <div
@@ -216,7 +218,6 @@ export function LoginForm() {
             </div>
           </div>
 
-          {/* Rodapé */}
           <p className="text-xs text-white/20">
             © {new Date().getFullYear()} {appConfig.name} · Acesso restrito
           </p>
@@ -226,28 +227,27 @@ export function LoginForm() {
       {/* ── PAINEL DIREITO ──────────────────────────────────── */}
       <div
         className="flex-1 flex flex-col items-center justify-center px-6 py-12 relative"
-        style={{ background: '#f8f8f8' }}
+        style={{ background: '#f6f7f9' }}
       >
-        {/* Padrão sutil de fundo */}
+        {/* Padrão de fundo sutil */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            backgroundImage: 'radial-gradient(circle, rgba(0,0,0,0.04) 1px, transparent 1px)',
+            backgroundImage: `radial-gradient(circle, rgba(34,67,165,0.05) 1px, transparent 1px)`,
             backgroundSize: '20px 20px',
           }}
         />
 
         {/* Logo mobile */}
         <div className="flex flex-col items-center mb-8 lg:hidden relative z-10">
-          <div
-            className="flex items-center justify-center w-12 h-12 rounded-xl mb-3"
-            style={{ background: brandColor }}
-          >
+          <div className="flex items-center justify-center w-12 h-12 rounded-xl mb-3 bg-white shadow-sm">
             {appConfig.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={appConfig.logoUrl} alt="" className="h-8 w-8 object-contain" />
             ) : (
-              <Building2 className="w-6 h-6 text-black" />
+              <span style={{ fontWeight: 800, fontStyle: 'italic', letterSpacing: '-0.1em', lineHeight: 1, fontSize: 20 }}>
+                <span style={{ color: BRAND_BLUE }}>J</span><span style={{ color: BRAND_GREEN }}>P</span>
+              </span>
             )}
           </div>
           <p className="font-bold text-[#0a0a0a] text-base">{appConfig.name}</p>
@@ -269,9 +269,9 @@ export function LoginForm() {
             <div className="flex items-center gap-2 mb-4">
               <div
                 className="w-8 h-8 rounded-lg flex items-center justify-center"
-                style={{ background: '#F5C200' }}
+                style={{ background: BRAND_BLUE }}
               >
-                <TrendingUp className="w-4 h-4 text-black" strokeWidth={2.5} />
+                <TrendingUp className="w-4 h-4 text-white" strokeWidth={2.5} />
               </div>
             </div>
             <h2 className="text-2xl font-bold text-[#0a0a0a] leading-tight">
@@ -295,7 +295,7 @@ export function LoginForm() {
                 placeholder="seu@email.com"
                 autoComplete="email"
                 autoFocus
-                className="h-11 bg-gray-50 border-gray-200 focus:border-[#F5C200] focus:ring-[#F5C200]/20 text-[#0a0a0a] placeholder:text-gray-400 rounded-xl transition-all"
+                className="h-11 bg-gray-50 border-gray-200 focus:border-[#2243A5] focus:ring-[#2243A5]/20 text-[#0a0a0a] placeholder:text-gray-400 rounded-xl transition-all"
                 {...register('email')}
               />
               {errors.email && (
@@ -317,7 +317,7 @@ export function LoginForm() {
                   type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
                   autoComplete="current-password"
-                  className="h-11 bg-gray-50 border-gray-200 focus:border-[#F5C200] focus:ring-[#F5C200]/20 text-[#0a0a0a] placeholder:text-gray-400 rounded-xl pr-10 transition-all"
+                  className="h-11 bg-gray-50 border-gray-200 focus:border-[#2243A5] focus:ring-[#2243A5]/20 text-[#0a0a0a] placeholder:text-gray-400 rounded-xl pr-10 transition-all"
                   {...register('senha')}
                 />
                 <button
@@ -357,11 +357,10 @@ export function LoginForm() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full h-11 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer mt-2"
+              className="w-full h-11 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer mt-2 text-white"
               style={{
-                background: isSubmitting ? '#d4a900' : '#F5C200',
-                color: '#0a0a0a',
-                boxShadow: isSubmitting ? 'none' : '0 4px 16px rgba(245,194,0,0.35)',
+                background: isSubmitting ? '#1b3585' : BRAND_BLUE,
+                boxShadow: isSubmitting ? 'none' : '0 4px 16px rgba(34,67,165,0.35)',
               }}
             >
               {isSubmitting ? (
@@ -379,7 +378,6 @@ export function LoginForm() {
           </form>
         </div>
 
-        {/* Rodapé */}
         <p className="text-center text-xs text-gray-400 mt-6 relative z-10">
           Acesso restrito a usuários autorizados
         </p>
