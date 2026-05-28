@@ -1,0 +1,43 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body{margin:0;background:var(--card);font-family:var(--font-sans);padding:22px;color:var(--foreground)}
+  .lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted-foreground);margin:0 0 9px}
+  .block{margin-bottom:20px}
+  /* segmented */
+  .seg{display:inline-flex;background:var(--muted);border-radius:10px;padding:3px;gap:2px}
+  .seg button{border:0;background:transparent;font-family:inherit;font-size:13px;font-weight:500;color:var(--muted-foreground);padding:6px 14px;border-radius:7px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+  .seg button svg{width:13px;height:13px}
+  .seg button.on{background:var(--card);color:var(--foreground);box-shadow:0 1px 2px rgb(0 0 0/.1)}
+  /* underline tabs */
+  .pills{display:flex;gap:20px;border-bottom:1px solid var(--border)}
+  .pills button{border:0;background:transparent;font-family:inherit;font-size:14px;font-weight:500;color:var(--muted-foreground);padding:0 0 10px;cursor:pointer;position:relative;display:inline-flex;align-items:center;gap:6px}
+  .pills button svg{width:14px;height:14px}
+  .pills button .c{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:9999px;background:var(--muted);font-size:11px;font-weight:600;color:var(--muted-foreground)}
+  .pills button.on{color:var(--foreground)}
+  .pills button.on .c{background:color-mix(in oklab,var(--brand-blue) 14%,transparent);color:var(--brand-blue)}
+  .pills button.on:after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--foreground);border-radius:2px}
+</style></head>
+<body>
+  <div class="block">
+    <p class="lbl">Segmented · filtros de lista</p>
+    <div class="seg">
+      <button class="on">Todos</button>
+      <button><i data-lucide="arrow-down-left"></i>Receita</button>
+      <button><i data-lucide="arrow-up-right"></i>Despesa</button>
+    </div>
+  </div>
+  <div class="block" style="margin-bottom:0">
+    <p class="lbl">Underline · abas do cliente 360</p>
+    <div class="pills">
+      <button class="on">Resumo</button>
+      <button>Serviços <span class="c">0</span></button>
+      <button>Competências <span class="c">2</span></button>
+      <button>Financeiro <span class="c">3</span></button>
+      <button>NFS-e <span class="c">3</span></button>
+    </div>
+  </div>
+  <script src="https://unpkg.com/lucide@latest"></script><script>lucide.createIcons();</script>
+</body></html>

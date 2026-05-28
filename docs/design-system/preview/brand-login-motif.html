@@ -1,0 +1,75 @@
+<!-- @dsCard group="Brand" -->
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&display=swap">
+<style>
+  body{margin:0;font-family:var(--font-sans);background:var(--card)}
+  .wrap{display:flex;height:312px}
+  /* ── brand panel ── */
+  .panel{flex:1.3;position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;padding:26px 28px;background:
+    radial-gradient(620px 320px at 88% -10%, rgba(34,67,165,.55), transparent 60%),
+    radial-gradient(520px 300px at -8% 115%, rgba(19,168,119,.4), transparent 60%),
+    #070d22}
+  .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px);background-size:34px 34px;mask-image:radial-gradient(120% 100% at 70% 0%,#000,transparent 78%)}
+  .ring{position:absolute;border-radius:50%;border:1px solid rgba(90,134,245,.18)}
+  .r1{width:340px;height:340px;top:-150px;right:-90px}
+  .r2{width:230px;height:230px;top:-95px;right:-35px;border-color:rgba(47,212,155,.18)}
+  .c{position:relative;z-index:1}
+  .logo{display:flex;align-items:center;gap:11px}
+  .tile{width:38px;height:38px;border-radius:11px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+  .tile img{height:23px;width:auto;display:block}
+  .name{color:#fff;font-family:'Sora',sans-serif;font-weight:700;font-size:15px;letter-spacing:-.01em}
+  .tag{color:rgba(255,255,255,.42);font-size:10px;text-transform:uppercase;letter-spacing:.12em;margin-top:3px}
+  .pill{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:9999px;font-size:11.5px;font-weight:500;border:1px solid rgba(47,212,155,.4);color:#43e0a8;background:rgba(19,168,119,.1);backdrop-filter:blur(4px)}
+  .dot{width:6px;height:6px;border-radius:50%;background:#2fd49b;box-shadow:0 0 0 0 rgba(47,212,155,.6);animation:p 2s infinite}
+  @keyframes p{0%{box-shadow:0 0 0 0 rgba(47,212,155,.5)}70%{box-shadow:0 0 0 7px rgba(47,212,155,0)}100%{box-shadow:0 0 0 0 rgba(47,212,155,0)}}
+  h1{color:#fff;font-family:'Sora',sans-serif;font-size:27px;font-weight:700;line-height:1.16;margin:12px 0 0;letter-spacing:-.02em}
+  h1 .g{background:linear-gradient(92deg,#5a86f5,#2fd49b);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .lead{color:rgba(255,255,255,.5);font-size:12.5px;line-height:1.5;margin:9px 0 0;max-width:290px}
+  .stats{display:flex;gap:9px}
+  .stat{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:11px 12px;backdrop-filter:blur(6px)}
+  .stat .v{color:#fff;font-family:'Sora',sans-serif;font-size:18px;font-weight:700;margin-top:6px}
+  .stat .l{color:rgba(255,255,255,.42);font-size:9.5px;margin-top:2px;line-height:1.2}
+  .stat svg{width:15px;height:15px}
+  /* ── form preview ── */
+  .form{flex:1;background:#f6f7f9;position:relative;display:flex;align-items:center;justify-content:center;padding:24px}
+  .rdots{position:absolute;inset:0;background-image:radial-gradient(circle,rgba(34,67,165,.05) 1px,transparent 1px);background-size:18px 18px}
+  .card{position:relative;z-index:1;width:100%;max-width:226px;background:#fff;border-radius:18px;padding:22px;box-shadow:0 0 0 1px rgba(0,0,0,.05),0 12px 38px rgba(13,30,80,.12)}
+  .cic{width:30px;height:30px;border-radius:9px;background:var(--brand-blue);display:flex;align-items:center;justify-content:center;margin-bottom:13px}
+  .cic svg{width:15px;height:15px;color:#fff;stroke-width:2.5}
+  .ch{font-family:'Sora',sans-serif;font-size:17px;font-weight:700;color:#0a1430}
+  .cs{font-size:11px;color:#6b7280;margin-top:3px;line-height:1.4}
+  .inp{height:32px;border:1px solid #e5e7eb;background:#f9fafb;border-radius:10px;margin-top:11px;display:flex;align-items:center;padding:0 10px;font-size:11px;color:#9ca3af}
+  .sub{height:34px;border-radius:10px;background:linear-gradient(92deg,var(--brand-blue),#2f5ad0);color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:13px;box-shadow:0 6px 18px rgba(34,67,165,.32)}
+  .sub svg{width:13px;height:13px}
+</style></head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <div class="grid"></div><div class="ring r1"></div><div class="ring r2"></div>
+      <div class="c logo"><div class="tile"><img src="../assets/jp-logo.png" alt="JP"></div><div><div class="name">JP Fiscal</div><div class="tag">Gestão Contábil Integrada</div></div></div>
+      <div class="c">
+        <h1>Sua contabilidade<br><span class="g">no próximo nível</span></h1>
+        <p class="lead">Plataforma completa para escritórios contábeis em um único painel.</p>
+      </div>
+      <div class="c stats">
+        <div class="stat"><i data-lucide="users" style="color:#5a86f5"></i><div class="v">200+</div><div class="l">Clientes ativos</div></div>
+        <div class="stat"><i data-lucide="check-circle-2" style="color:#2fd49b"></i><div class="v">99%</div><div class="l">Fechamentos/mês</div></div>
+        <div class="stat"><i data-lucide="shield-check" style="color:#5a86f5"></i><div class="v">100%</div><div class="l">Obrigações</div></div>
+      </div>
+    </div>
+    <div class="form">
+      <div class="rdots"></div>
+      <div class="card">
+        <div class="cic"><i data-lucide="trending-up"></i></div>
+        <div class="ch">Bem-vindo de volta</div>
+        <div class="cs">Entre com suas credenciais para acessar o painel</div>
+        <div class="inp">seu@email.com</div>
+        <div class="inp">••••••••</div>
+        <div class="sub">Entrar no painel <i data-lucide="arrow-right"></i></div>
+      </div>
+    </div>
+  </div>
+  <script src="https://unpkg.com/lucide@latest"></script><script>lucide.createIcons();</script>
+</body></html>
