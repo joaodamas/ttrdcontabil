@@ -41,6 +41,7 @@ import { AgendaView } from '@/components/hoje/agenda-view'
 import { hojeKeys } from '@/features/hoje/queries'
 import { useHojeData } from '@/features/hoje/hooks'
 import type { HojeTask, HojeUsuario } from '@/features/hoje/types'
+import { PageHeader } from '@/components/layout/page-header'
 
 type FilaItem = HojeTask & {
   grupo: 'atrasada' | 'hoje' | 'proximos'
@@ -454,31 +455,30 @@ export default function HojePage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Hoje</h1>
-          <p className="text-sm text-muted-foreground">Fila operacional priorizada por prazo, prioridade e responsavel.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <PageHeader
+        title="Hoje"
+        description="Fila operacional priorizada por prazo, prioridade e responsável."
+        action={
+          <div className="flex flex-wrap gap-2">
           <div className="flex rounded-lg border border-border overflow-hidden">
             <button
               type="button"
               onClick={() => setModoView('lista')}
-              className={cn('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', modoView === 'lista' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}
+              className={cn('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', modoView === 'lista' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground hover:bg-muted')}
             >
               <LayoutList className="h-3.5 w-3.5" />Lista
             </button>
             <button
               type="button"
               onClick={() => setModoView('kanban')}
-              className={cn('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', modoView === 'kanban' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}
+              className={cn('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', modoView === 'kanban' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground hover:bg-muted')}
             >
               <Columns2 className="h-3.5 w-3.5" />Kanban
             </button>
             <button
               type="button"
               onClick={() => setModoView('agenda')}
-              className={cn('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', modoView === 'agenda' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted')}
+              className={cn('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors', modoView === 'agenda' ? 'bg-foreground text-background' : 'bg-background text-muted-foreground hover:bg-muted')}
             >
               <CalendarDays className="h-3.5 w-3.5" />Agenda
             </button>
@@ -517,7 +517,8 @@ export default function HojePage() {
             Atualizar
           </Button>
         </div>
-      </div>
+        }
+      />
 
       {/* Filtros de prioridade */}
       <div className="flex flex-wrap gap-1.5">
@@ -529,7 +530,7 @@ export default function HojePage() {
             className={cn(
               'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
               prioridadeFiltro === p
-                ? 'border-primary bg-primary text-primary-foreground'
+                ? 'border-foreground bg-foreground text-background'
                 : 'border-border bg-background text-muted-foreground hover:bg-muted'
             )}
           >
@@ -689,8 +690,17 @@ export default function HojePage() {
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <div className="divide-y divide-border/70 animate-pulse">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-3">
+                  <div className="h-4 w-4 rounded bg-muted" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3.5 w-48 rounded-full bg-muted" />
+                    <div className="h-3 w-32 rounded-full bg-muted" />
+                  </div>
+                  <div className="h-5 w-16 rounded-full bg-muted" />
+                </div>
+              ))}
             </div>
           ) : fila.length === 0 ? (
             <EmptyCockpit />

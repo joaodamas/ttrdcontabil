@@ -13,7 +13,7 @@ import { Separator } from '@/components/ui/separator'
 import {
   BarChart3, Users, ClipboardList, Layers, FolderOpen,
   Receipt, FileText, Wallet, Settings, LogOut,
-  Building2, ChevronDown, Menu, History, UserCog,
+  ChevronDown, Menu, History, UserCog,
   Package2, CheckSquare, Plus, CalendarClock, Plug, SlidersHorizontal,
   AlertTriangle, LineChart,
 } from 'lucide-react'
@@ -97,16 +97,20 @@ const NAV_SECTIONS: NavSection[] = [
       { href: '/relatorios/produtividade', label: 'Produtividade', icon: LineChart, telaKey: 'admin' },
     ],
   },
+]
+
+// Configurações/admin — renderizadas no rodapé, fora do fluxo operacional.
+const ADMIN_SECTIONS: NavSection[] = [
   {
     id: 'admin',
-    label: 'Administração',
+    label: 'Configurações',
     icon: Settings,
     items: [
-      { href: '/admin',          label: 'Painel Admin',     icon: Settings, telaKey: 'admin' },
-      { href: '/admin/usuarios', label: 'Usuários',         icon: UserCog,  telaKey: 'admin' },
-      { href: '/admin/servicos', label: 'Tipos de Serviço', icon: Package2, telaKey: 'servicos' },
-      { href: '/admin/conectores', label: 'Conectores',     icon: Plug, telaKey: 'admin' },
-      { href: '/admin/parametros', label: 'Parâmetros',     icon: SlidersHorizontal, telaKey: 'admin' },
+      { href: '/admin',            label: 'Painel Admin',     icon: Settings,          telaKey: 'admin' },
+      { href: '/admin/usuarios',   label: 'Usuários',         icon: UserCog,           telaKey: 'admin' },
+      { href: '/admin/servicos',   label: 'Tipos de Serviço', icon: Package2,          telaKey: 'servicos' },
+      { href: '/admin/conectores', label: 'Conectores',       icon: Plug,              telaKey: 'admin' },
+      { href: '/admin/parametros', label: 'Parâmetros',       icon: SlidersHorizontal, telaKey: 'admin' },
     ],
   },
 ]
@@ -194,8 +198,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     // eslint-disable-next-line @next/next/no-img-element
     <img src={appConfig.logoUrl} alt="" className="h-7 w-7 rounded-lg object-contain" />
   ) : (
-    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
-      <Building2 size={14} className="text-primary-foreground" />
+    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white">
+      <span style={{ fontFamily: 'inherit', fontWeight: 800, fontStyle: 'italic', letterSpacing: '-0.1em', lineHeight: 1, fontSize: 13 }}>
+        <span style={{ color: '#2243A5' }}>J</span><span style={{ color: '#13A877' }}>P</span>
+      </span>
     </div>
   )
 
@@ -299,6 +305,54 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           )
         })}
       </nav>
+
+      {/* Configurações — rodapé, fora do fluxo operacional */}
+      {ADMIN_SECTIONS.filter(canSeeSection).map((section) => {
+        const visibleItems = section.items?.filter(canSeeItem) ?? []
+        if (visibleItems.length === 0) return null
+        const Icon = section.icon
+        const active = isSectionActive(section)
+        const isOpen = openSections[section.id] ?? false
+        return (
+          <div key={section.id} className="px-2 pb-1 shrink-0">
+            <Separator className="mb-1" />
+            <button
+              type="button"
+              onClick={() => toggleSection(section.id)}
+              className={cn(
+                'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                active ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              )}
+            >
+              <Icon size={15} className="shrink-0" />
+              <span className="flex-1 text-left">{section.label}</span>
+              <ChevronDown size={13} className={cn('shrink-0 transition-transform duration-200', isOpen && 'rotate-180')} />
+            </button>
+            {isOpen && (
+              <div className="ml-4 mt-0.5 space-y-0.5 border-l border-border pl-3">
+                {visibleItems.map((item) => {
+                  const ItemIcon = item.icon
+                  const itemActive = isActive(item.href)
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={onNavigate}
+                      className={cn(
+                        'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors',
+                        itemActive ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                      )}
+                    >
+                      <ItemIcon size={13} className="shrink-0" />
+                      {item.label}
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })}
 
       {/* Quick actions */}
       <div className="px-2 pb-2 shrink-0">
