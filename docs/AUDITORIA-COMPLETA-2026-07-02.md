@@ -221,7 +221,17 @@ Auditadas por leitura direta de código: firestore/storage rules, auth/RBAC, tod
 - IR: **dedup por cliente+ano-base** antes de criar (evita declaração/checklist/tarefa duplicados). · `ir-form.tsx`
 - **Limpeza de código morto:** apagados `_api_backup/**` (29 arquivos), `auth.ts`/`firebase-admin.ts`, `hooks/queries/*`, `use-action`/`use-paginated-query`, `sla-score` órfão (~3.250 linhas); removidas deps mortas `bcryptjs`/`jose`; `firebase-admin` movida para devDependencies. **`npm audit --omit=dev`: 16 → 7** (as 7 restantes são framework/transitivas: Next.js, @babel/core, @grpc/grpc-js, hono, js-yaml).
 
-**Follow-ups menores (P2, não bloqueiam):** `fiscal_conectores` ainda com `canRead()`; sem bypass de admin para editar `fechamentos` de mês travado (precisa reabrir antes — consistente com o app); TOCTOU teórico no dedup de IR (double-submit — fix definitivo seria ID determinístico); as 7 vulnerabilidades restantes (bump de versão do Next); rotação manual da senha `Jopa@0206` + purga do histórico do git.
+**Lote 6 — P1 de UX/negócio e observabilidade (QA aprovado; build 40/40, rules 31/31 inalteradas):**
+- Produtividade: **exportação CSV/Excel**. · `produtividade/page.tsx`
+- **Exclusão de cliente** (admin, ConfirmDialog, via soft-delete que inativa + encerra serviços) e **inativação de serviço**. · `clientes/[id]/page-client.tsx` + `admin/servicos/page.tsx`
+- Honorários **vinculam `competenciaId`** (scheduler com a chave determinística da competência + seletor no form, com reset ao trocar cliente). · `scheduler/lancamentos.ts` + `lancamento-form.tsx`
+- Concluir tarefa/competência pelo form **grava `dataConclusao`** (e limpa ao reabrir). · `tarefa-form.tsx` + `competencia-form.tsx`
+- Dashboard: **erro de carga vira estado de erro + retry** (não mostra mais zeros como dados reais). · `dashboard/page.tsx`
+- **Alerta de falha no backup** semanal (audit + e-mail + rethrow). · `functions/backup.ts`
+
+**Ainda pendente (precisa de você / decisão / risco):** observabilidade completa (**Sentry** front+functions — precisa do DSN); **recorrência de tarefas** configurável / backfill (precisa do calendário de obrigações); **bump do Next** (fecha as 7 vulns restantes — major, risco de build); **dark mode** (ligar o ThemeProvider — pode expor telas quebradas); **TTL** nas coleções (config no console). Transições de status de competência/tarefa (matriz de regras) também aguardam decisão.
+
+**Follow-ups menores (P2, não bloqueiam):** `fiscal_conectores` ainda com `canRead()`; sem bypass de admin para editar `fechamentos` de mês travado; TOCTOU teórico nos dedup de IR/competência (double-submit); rotação manual da senha `Jopa@0206` + purga do histórico do git; **conteúdo enganoso em `AGENTS.md`/`CLAUDE.md`** (instrução falsa sobre "não é o Next.js que você conhece" / ler docs inexistentes) — vale revisar/remover.
 
 **Status dos 5 P0 da auditoria:** P0-1 ✅ (rules validadas) · P0-2 ✅ (código; falta rotação manual) · P0-3 ✅ · P0-4 ✅ núcleo (RPS persistido; numeração sequencial + homologação pendentes) · P0-5 ✅. **Nada commitado nem deployado; toda a mudança fiscal exige homologação antes de produção.**
 
