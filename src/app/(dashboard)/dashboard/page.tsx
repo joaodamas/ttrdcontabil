@@ -7,11 +7,13 @@ import { getFunctions, httpsCallable } from 'firebase/functions'
 import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { getFirebaseApp } from '@/lib/firebase'
 import { appConfig } from '@/lib/app-config'
+import { getErrorMessage } from '@/lib/error-message'
 import { useAuth } from '@/contexts/auth-context'
 import { useFeatureFlags } from '@/contexts/feature-flags-context'
 import { formatCurrency, formatDate, formatMesAno, tsToDate, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
+import { InlineAlert } from '@/components/ui/inline-alert'
 import {
   Users, ClipboardList, CheckSquare, TrendingUp,
   AlertTriangle, ArrowRight, CheckCircle2, DollarSign,
@@ -127,6 +129,8 @@ type DashboardV2Props = {
   clientesEmRisco: ClienteRisco[]
   completedByDay: Record<number, number>
   totalFechamentos: number
+  erro: unknown
+  onRetry: () => void
 }
 
 function CurvaSFechamento({
@@ -277,6 +281,17 @@ function DashboardV2(props: DashboardV2Props) {
         </div>
       </div>
 
+      {props.erro ? (
+        <InlineAlert
+          tone="danger"
+          title="Não foi possível carregar o painel."
+          description={getErrorMessage(props.erro, 'Ocorreu um erro ao carregar os dados executivos. Tente novamente.')}
+          action={{ label: 'Tentar novamente', onClick: props.onRetry }}
+        />
+      ) : null}
+
+      {props.erro ? null : (
+      <>
       <section className="rounded-2xl border border-border/70 bg-card/95 p-4 card-shadow">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-3">
@@ -513,6 +528,8 @@ function DashboardV2(props: DashboardV2Props) {
           </div>
         </aside>
       </section>
+      </>
+      )}
     </div>
   )
 }
@@ -542,12 +559,17 @@ export default function DashboardPage() {
   const [clientesEmRisco,      setClientesEmRisco]      = useState<ClienteRisco[]>([])
   const [completedByDay,       setCompletedByDay]       = useState<Record<number, number>>({})
   const [totalFechamentos,     setTotalFechamentos]     = useState(0)
+  const [erro,                 setErro]                 = useState<unknown>(null)
+  const [reloadToken,          setReloadToken]          = useState(0)
 
   const AVISO_DIAS = 5 // janela de alerta em dias
 
   useEffect(() => {
     const em7Dias   = new Date(hoje); em7Dias.setDate(hoje.getDate() + 7)
     const hojeTs    = Timestamp.fromDate(hoje)
+
+    setLoading(true)
+    setErro(null)
 
     async function load() {
       const tenantId = usuario?.tenantId ?? appConfig.tenantId
@@ -562,24 +584,46 @@ export default function DashboardPage() {
         setAtrasadosCount,
       }
 
-      const kpis = await getDocument<DashboardKpis>('dashboard_kpis', kpiDocId).catch(() => null)
+      // KPI doc + recálculo engolem falhas individualmente para não travar a
+      // tela por causa de um doc ausente; só marcamos falha crítica se AMBAS
+      // as tentativas (doc + recálculo) não conseguirem produzir dados.
+      let kpiErro: unknown = null
+      const kpis = await getDocument<DashboardKpis>('dashboard_kpis', kpiDocId).catch((err) => { kpiErro = err; return null })
       if (kpis) {
         applyKpis(kpis, setters)
       } else {
-        const refreshed = await recalcularDashboardKpis({ mes: mesAtual, ano: anoAtual }).catch(() => null)
-        if (refreshed) applyKpis(refreshed, setters)
+        const refreshed = await recalcularDashboardKpis({ mes: mesAtual, ano: anoAtual }).catch((err) => { kpiErro = err; return null })
+        if (refreshed) {
+          applyKpis(refreshed, setters)
+          kpiErro = null // recálculo recuperou os dados: não é falha
+        }
       }
 
-      return Promise.allSettled([
+      const results = await Promise.allSettled([
         listDocuments('clientes',     [where('status', '==', 'ativo'), limit(500)]),
         listDocuments('tarefas',      [where('status', 'in', ['pendente', 'em_andamento']), orderBy('dataPrazo', 'asc'), limit(300)]),
         listDocuments('competencias', [where('mes', '==', mesAnterior), where('ano', '==', anoAnterior), where('status', '==', 'aberta'), limit(5)]),
         listDocuments('lancamentos',  [where('tipo', '==', 'receita'), where('status', '==', 'pendente'), where('dataVencimento', '<', hojeTs), orderBy('dataVencimento', 'asc'), limit(5)]),
         listDocuments('fechamentos',  [where('mes', '==', mesAtual), where('ano', '==', anoAtual), limit(300)]),
       ])
+
+      return { kpiErro, results }
     }
 
-    load().then((results) => {
+    load().then(({ kpiErro, results }) => {
+      // Critério de falha crítica: KPI indisponível (doc + recálculo falharam),
+      // ou as buscas fundamentais (clientes/tarefas) rejeitaram, ou todas as
+      // 5 listas rejeitaram. Peças secundárias isoladas (ex.: só fechamentos)
+      // não disparam o alerta — mantemos o fallback silencioso pra elas.
+      const clientesResult = results[0]
+      const tarefasResult  = results[1]
+      const todasRejeitaram = results.every((r) => r.status === 'rejected')
+      const falhaCritica = kpiErro
+        ?? (clientesResult.status === 'rejected' ? clientesResult.reason : null)
+        ?? (tarefasResult.status === 'rejected' ? tarefasResult.reason : null)
+        ?? (todasRejeitaram ? (results.find((r) => r.status === 'rejected') as PromiseRejectedResult).reason : null)
+      if (falhaCritica) setErro(falhaCritica)
+
       function get<T>(idx: number): T[] {
         const r = results[idx]
         return r.status === 'fulfilled' ? (r as PromiseFulfilledResult<unknown[]>).value as T[] : []
@@ -655,9 +699,9 @@ export default function DashboardPage() {
       }
       const risco = Array.from(riscoMap.values()).sort((a, b) => b.score - a.score).slice(0, 5)
       setClientesEmRisco(risco)
-    }).finally(() => setLoading(false))
+    }).catch((err) => setErro(err)).finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [usuario?.tenantId])
+  }, [usuario?.tenantId, reloadToken])
 
   /* ─── Loading ─────────────────────────────────────────────────────────── */
   if (loading) {
@@ -705,6 +749,8 @@ export default function DashboardPage() {
         clientesEmRisco={clientesEmRisco}
         completedByDay={completedByDay}
         totalFechamentos={totalFechamentos}
+        erro={erro}
+        onRetry={() => setReloadToken((t) => t + 1)}
       />
     )
   }
@@ -721,6 +767,17 @@ export default function DashboardPage() {
         </p>
       </div>
 
+      {erro ? (
+        <InlineAlert
+          tone="danger"
+          title="Não foi possível carregar o painel."
+          description={getErrorMessage(erro, 'Ocorreu um erro ao carregar os dados executivos. Tente novamente.')}
+          action={{ label: 'Tentar novamente', onClick: () => setReloadToken((t) => t + 1) }}
+        />
+      ) : null}
+
+      {erro ? null : (
+      <>
       {/* Urgency banner */}
       {totalUrgente > 0 && (
         <div className="flex items-center gap-3 rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3">
@@ -1000,6 +1057,8 @@ export default function DashboardPage() {
           </Link>
         ))}
       </div>
+      </>
+      )}
     </div>
   )
 }

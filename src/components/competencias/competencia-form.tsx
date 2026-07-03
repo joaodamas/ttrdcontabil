@@ -6,6 +6,7 @@ import { useForm, Controller, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { FirebaseError } from 'firebase/app'
+import { Timestamp } from 'firebase/firestore'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -156,12 +157,22 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
     const cliente = clientes.find((c) => c.id === data.clienteId)
     const servico = servicos.find((s) => s.id === data.clienteServicoId)
     const responsavel = data.responsavelId ? usuarios.find((u) => u.id === data.responsavelId) : null
+
+    // Carimba a conclusão só na transição para "concluida" (mesmo campo do
+    // CompetenciaDoc: dataConclusao); ao sair dela, limpa. Se já estava
+    // concluida, não mexe (evita sobrescrever o carimbo original).
+    const jaEstavaConcluida = initialData?.status === 'concluida'
+    const dataConclusao = data.status === 'concluida'
+      ? (jaEstavaConcluida ? undefined : Timestamp.now())
+      : (jaEstavaConcluida ? null : undefined)
+
     const payload = {
       ...data,
       clienteNome: cliente?.razaoSocial ?? null,
       servicoNome: servico?.servicoNome ?? null,
       responsavelId: data.responsavelId || null,
       responsavelNome: responsavel?.nome ?? null,
+      dataConclusao,
     }
 
     try {

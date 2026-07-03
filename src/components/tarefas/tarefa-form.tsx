@@ -41,6 +41,7 @@ type TarefaPayload = Omit<TarefaFormData, 'dataPrazo'> & {
   dataPrazo?: Timestamp | null
   clienteNome?: string | null
   responsavelNome?: string | null
+  dataConclusao?: Timestamp | null
 }
 
 interface ClienteItem { id: string; razaoSocial: string }
@@ -88,7 +89,7 @@ export function TarefaForm({ initialData, onSuccess, onClose }: TarefaFormProps)
   }, [])
 
   async function onSubmit(data: TarefaFormData) {
-    const payload = buildPayload(data, clientes, usuarios)
+    const payload = buildPayload(data, clientes, usuarios, initialData?.status)
 
     try {
       if (isEditing) {
@@ -230,13 +231,21 @@ export function TarefaForm({ initialData, onSuccess, onClose }: TarefaFormProps)
 function buildPayload(
   data: TarefaFormData,
   clientes: ClienteItem[],
-  usuarios: UsuarioItem[]
+  usuarios: UsuarioItem[],
+  statusAnterior?: TarefaFormData['status']
 ): TarefaPayload {
   const cliente = data.clienteId ? clientes.find((c) => c.id === data.clienteId) : null
   const responsavel = data.responsavelId ? usuarios.find((u) => u.id === data.responsavelId) : null
   const dataPrazo = data.dataPrazo
     ? Timestamp.fromDate(new Date(`${data.dataPrazo}T12:00:00`))
     : null
+
+  // Carimba a conclusão só na transição para "concluida"; ao sair dela, limpa.
+  // Se já estava concluida, não mexe (evita sobrescrever o carimbo original).
+  const jaEstavaConcluida = statusAnterior === 'concluida'
+  const dataConclusao = data.status === 'concluida'
+    ? (jaEstavaConcluida ? undefined : Timestamp.now())
+    : (jaEstavaConcluida ? null : undefined)
 
   return {
     ...data,
@@ -245,5 +254,6 @@ function buildPayload(
     responsavelId: data.responsavelId || null,
     responsavelNome: responsavel?.nome ?? null,
     dataPrazo,
+    dataConclusao,
   }
 }

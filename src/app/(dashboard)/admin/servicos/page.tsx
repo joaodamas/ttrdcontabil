@@ -4,13 +4,15 @@ import { useState, useEffect, useCallback } from 'react'
 
 import { formatCurrency } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { TableEmptyState } from '@/components/ui/empty-state'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { ServicoForm } from '@/components/admin/servico-form'
-import { Loader2, ChevronUp, ChevronDown, ChevronsUpDown, BriefcaseBusiness } from 'lucide-react'
+import { Loader2, ChevronUp, ChevronDown, ChevronsUpDown, BriefcaseBusiness, Ban } from 'lucide-react'
 import { toast } from 'sonner'
 import { getErrorMessage } from '@/lib/error-message'
-import { fetchServicosAdmin, gerarTabelaCobAdmin } from '@/features/admin/services'
+import { fetchServicosAdmin, gerarTabelaCobAdmin, updateServicoAdmin } from '@/features/admin/services'
 import type { ServicoAdmin } from '@/features/admin/types'
 
 type SortKey = 'codigo' | 'nome' | 'frequencia' | 'valorPadrao' | 'ativo'
@@ -29,6 +31,7 @@ export default function AdminServicosPage() {
   const [gerando, setGerando] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('codigo')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [servicoParaInativar, setServicoParaInativar] = useState<ServicoAdmin | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -61,6 +64,19 @@ export default function AdminServicosPage() {
     const bs = String(bv ?? '').toLowerCase()
     return sortDir === 'asc' ? as.localeCompare(bs) : bs.localeCompare(as)
   })
+
+  async function handleInativarServico() {
+    if (!servicoParaInativar) return
+    try {
+      await updateServicoAdmin(servicoParaInativar.id, { ativo: false })
+      toast.success('Serviço inativado.')
+      load()
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Nao foi possivel inativar o servico.'))
+    } finally {
+      setServicoParaInativar(null)
+    }
+  }
 
   async function gerarTabelaCob() {
     setGerando(true)
@@ -176,7 +192,20 @@ export default function AdminServicosPage() {
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
-                      <ServicoForm servico={s} onSaved={load} />
+                      <div className="flex items-center gap-1">
+                        <ServicoForm servico={s} onSaved={load} />
+                        {s.ativo && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs text-destructive hover:text-destructive"
+                            onClick={() => setServicoParaInativar(s)}
+                          >
+                            <Ban className="mr-1 h-3 w-3" />
+                            Inativar
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -185,6 +214,16 @@ export default function AdminServicosPage() {
           </table>
         </div>
       </Card>
+
+      <ConfirmDialog
+        open={!!servicoParaInativar}
+        onOpenChange={(open) => { if (!open) setServicoParaInativar(null) }}
+        title="Inativar serviço?"
+        description={`O serviço "${servicoParaInativar?.nome ?? ''}" ficará indisponível para novos vínculos com clientes. Vínculos já existentes não são encerrados automaticamente.`}
+        confirmLabel="Inativar"
+        destructive
+        onConfirm={handleInativarServico}
+      />
     </div>
   )
 }

@@ -7,8 +7,9 @@ import { where, orderBy, limit } from 'firebase/firestore'
 import { Timestamp } from 'firebase/firestore'
 import { toast } from 'sonner'
 
-import { getDocument, listDocuments, updateDocument, createDocument } from '@/lib/firestore-client'
+import { getDocument, listDocuments, updateDocument, createDocument, softDeleteDocument } from '@/lib/firestore-client'
 import { formatCpfCnpj, formatDate, formatCurrency, formatMesAno, tsToDate, cn } from '@/lib/utils'
+import { getErrorMessage } from '@/lib/error-message'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,10 +18,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Timeline, type TimelineEvent, type TimelineEventType } from '@/components/clientes/timeline'
 import { ClienteServicoDialog } from '@/components/clientes/cliente-servico-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import {
   ArrowLeft, Mail, MapPin, Pencil, ShieldCheck, ShieldAlert, ShieldOff,
   AlertTriangle, Plus, Receipt, Wallet, AlertCircle, Bell, FileDown,
-  CheckSquare, DollarSign, BookOpen, Loader2, Save, Send, MessageSquarePlus,
+  CheckSquare, DollarSign, BookOpen, Loader2, Save, Send, MessageSquarePlus, Trash2,
 } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
@@ -337,6 +339,7 @@ export default function ClienteDetailPage() {
   const router  = useRouter()
   const { usuario } = useAuth()
   const podeAcessarFiscal = canAccessTela(usuario, 'fiscal')
+  const isAdmin = usuario?.perfil === 'admin'
 
   const [cliente,      setCliente]      = useState<Record<string, unknown> | null>(null)
   const [servicos,     setServicos]     = useState<Array<Record<string, unknown>>>([])
@@ -353,6 +356,7 @@ export default function ClienteDetailPage() {
   const [commentSaving, setCommentSaving] = useState(false)
   const [emitirOpen, setEmitirOpen] = useState(false)
   const [timelineFilter, setTimelineFilter] = useState<TimelineEventType | 'todos'>('todos')
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   // POP — Procedimento Operacional do Cliente
   const [popDocId, setPopDocId] = useState<string | null>(null)
@@ -461,6 +465,17 @@ export default function ClienteDetailPage() {
       toast.success('Nota interna registrada.')
     } catch { toast.error('Não foi possível salvar a nota.') }
     finally { setNotaSaving(false) }
+  }
+
+  async function handleDeleteCliente() {
+    if (!id) return
+    try {
+      await softDeleteDocument('clientes', id)
+      toast.success('Cliente inativado com sucesso.')
+      router.push('/clientes')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Não foi possível inativar o cliente.'))
+    }
   }
 
   function loadFiscal() {
@@ -688,6 +703,17 @@ export default function ClienteDetailPage() {
         <Link href={`/clientes/${id}/editar`} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
           Editar
         </Link>
+        {isAdmin && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Excluir cliente
+          </Button>
+        )}
       </div>
 
       {/* ── 70/30 grid ──────────────────────────────────────── */}
@@ -1259,6 +1285,15 @@ export default function ClienteDetailPage() {
           setEmitirOpen(false)
           await loadClienteContext()
         }}
+      />
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Excluir cliente?"
+        description="O cliente será inativado e seus serviços encerrados. Não serão geradas novas competências, cobranças nem NFS-e. As competências já existentes são preservadas. Esta ação pode ser revertida por um admin."
+        confirmLabel="Excluir"
+        destructive
+        onConfirm={handleDeleteCliente}
       />
     </div>
   )

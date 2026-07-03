@@ -3,13 +3,16 @@
 import { useState, useEffect, useMemo } from 'react'
 import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
 import { listDocuments } from '@/lib/firestore-client'
-import { tsToDate, cn } from '@/lib/utils'
+import { tsToDate, cn, formatDateTime } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error-message'
+import { exportToCsv } from '@/lib/export-csv'
+import { exportToExcel } from '@/lib/export-excel'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { InlineAlert } from '@/components/ui/inline-alert'
-import { Clock, User, TrendingUp, BarChart2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Clock, User, TrendingUp, BarChart2, Download } from 'lucide-react'
 
 type TimerSession = {
   id: string
@@ -93,6 +96,36 @@ export default function ProdutividadePage() {
   const totalMs = filtradas.reduce((s, t) => s + t.duracaoMs, 0)
   const maxMs   = porUsuario[0]?.totalMs ?? 1
   const semDados = loading || Boolean(error)
+  const exportDisabled = semDados || filtradas.length === 0
+
+  const exportColumns = [
+    { key: 'tarefa',   label: 'Tarefa' },
+    { key: 'usuario',  label: 'Usuário' },
+    { key: 'duracao',  label: 'Duração' },
+    { key: 'inicio',   label: 'Início' },
+  ]
+
+  function montarLinhasExportacao() {
+    return filtradas.map(s => ({
+      tarefa: s.tarefaTitulo || 'Tarefa sem título',
+      usuario: s.usuarioNome,
+      duracao: formatMs(s.duracaoMs),
+      inicio: formatDateTime(tsToDate(s.inicioEm)),
+    }))
+  }
+
+  function nomeArquivoExport() {
+    const hoje = new Date().toISOString().slice(0, 10)
+    return `produtividade-${hoje}`
+  }
+
+  function exportarCsv() {
+    exportToCsv(nomeArquivoExport(), montarLinhasExportacao(), exportColumns)
+  }
+
+  function exportarExcel() {
+    exportToExcel(nomeArquivoExport(), montarLinhasExportacao(), exportColumns)
+  }
 
   return (
     <div className="space-y-5">
@@ -115,6 +148,14 @@ export default function ProdutividadePage() {
               {usuarios.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Button variant="outline" size="sm" className="h-9 rounded-xl" disabled={exportDisabled} onClick={exportarExcel}>
+            <Download className="h-4 w-4" />
+            Excel
+          </Button>
+          <Button variant="outline" size="sm" className="h-9 rounded-xl" disabled={exportDisabled} onClick={exportarCsv}>
+            <Download className="h-4 w-4" />
+            CSV
+          </Button>
         </div>
       </div>
 
