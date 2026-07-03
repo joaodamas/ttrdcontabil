@@ -19,8 +19,8 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
-import { getClientes, getUsuarios, createDocument, updateDocument } from '@/lib/firestore-client'
-import { Timestamp } from 'firebase/firestore'
+import { getClientes, getUsuarios, createDocument, updateDocument, listDocuments } from '@/lib/firestore-client'
+import { Timestamp, where, limit } from 'firebase/firestore'
 import { getErrorMessage } from '@/lib/error-message'
 import { SELECT_NONE_VALUE } from '@/lib/select-values'
 import { toDateInputValue } from '@/lib/form-dates'
@@ -116,6 +116,18 @@ export function IrForm({ initialData }: IrFormProps) {
         toast.success('Declaração atualizada!')
         router.push(`/ir/${initialData!.id}`)
       } else {
+        // Evita declarações duplicadas: mesmo cliente + mesmo ano-base.
+        // listDocuments já filtra por tenantId automaticamente.
+        const duplicadas = await listDocuments('ir_declaracoes', [
+          where('clienteId', '==', data.clienteId),
+          where('anoBase', '==', data.anoBase),
+          limit(1),
+        ])
+        if (duplicadas.length > 0) {
+          toast.error('Já existe uma declaração de IR para este cliente e ano-base.')
+          return
+        }
+
         const id = await createDocument('ir_declaracoes', payload as Record<string, unknown>)
         await Promise.all([
           ...CHECKLIST_IR_PADRAO.map((descricao, index) =>

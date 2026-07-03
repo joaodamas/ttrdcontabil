@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm, Controller, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -87,6 +87,10 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
   const servicos = clienteId && servicosState.clienteId === clienteId ? servicosState.items : []
   const loadingServicos = Boolean(clienteId) && servicosState.clienteId !== clienteId
 
+  // Na edição, o clienteId inicial já vem preenchido e o efeito abaixo roda no
+  // mount só para carregar a lista de serviços — não pode apagar o serviço salvo.
+  const skipInitialServicoResetRef = useRef(isEditing)
+
   useEffect(() => {
     Promise.allSettled([
       getClientes(),
@@ -134,7 +138,13 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
           })
         setServicosState({ clienteId, items: joined })
       }
-      setValue('clienteServicoId', '')
+
+      if (skipInitialServicoResetRef.current) {
+        // Primeiro run na edição: só carrega a lista, preserva o serviço salvo.
+        skipInitialServicoResetRef.current = false
+      } else {
+        setValue('clienteServicoId', '')
+      }
     })
 
     return () => {
@@ -184,13 +194,19 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
           <CardTitle className="text-sm">Dados da Competência</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {isEditing && (
+            <p className="text-xs text-muted-foreground">
+              Para trocar cliente/serviço/competência, crie uma nova.
+            </p>
+          )}
+
           <div className="space-y-1.5">
             <Label>Cliente <span className="text-destructive">*</span></Label>
             <Controller
               name="clienteId"
               control={control}
               render={({ field }) => (
-                <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={loadingClientes}>
+                <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={isEditing || loadingClientes}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder={loadingClientes ? 'Carregando...' : 'Selecione o cliente'} />
                   </SelectTrigger>
@@ -220,7 +236,7 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
                   <Select
                     value={field.value ?? ''}
                     onValueChange={field.onChange}
-                    disabled={!clienteId || loadingServicos}
+                    disabled={isEditing || !clienteId || loadingServicos}
                   >
                     <SelectTrigger className="w-full">
                       <span className={selected ? 'truncate text-left' : 'truncate text-left text-muted-foreground'}>
@@ -246,7 +262,7 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
                 name="mes"
                 control={control}
                 render={({ field }) => (
-                  <Select value={String(field.value)} onValueChange={(v) => field.onChange(parseInt(v ?? '0'))}>
+                  <Select value={String(field.value)} onValueChange={(v) => field.onChange(parseInt(v ?? '0'))} disabled={isEditing}>
                     <SelectTrigger className="w-full"><SelectValue placeholder="Mês" /></SelectTrigger>
                     <SelectContent>
                       {MESES.map((m) => (
@@ -264,7 +280,7 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
                 name="ano"
                 control={control}
                 render={({ field }) => (
-                  <Select value={String(field.value)} onValueChange={(v) => field.onChange(parseInt(v ?? '0'))}>
+                  <Select value={String(field.value)} onValueChange={(v) => field.onChange(parseInt(v ?? '0'))} disabled={isEditing}>
                     <SelectTrigger className="w-full"><SelectValue placeholder="Ano" /></SelectTrigger>
                     <SelectContent>
                       {Array.from({ length: 5 }, (_, i) => hoje.getFullYear() - 2 + i).map((a) => (

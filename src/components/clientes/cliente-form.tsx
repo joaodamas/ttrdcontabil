@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CpfCnpjInput } from '@/components/ui/cpf-cnpj-input'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { formatPhone, formatCep, formatWhatsApp, normalizeWhatsApp, validateCpf, validateCnpj, UFS } from '@/lib/utils'
 import { Loader2, CheckCircle2, Bell, KeyRound } from 'lucide-react'
 import { createDocument, updateDocument, getNextClienteCodigo } from '@/lib/firestore-client'
@@ -172,6 +173,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
   const { buscar: buscarCepHook, loading: buscandoCep } = useViaCep()
   const [buscandoCnpj, setBuscandoCnpj] = useState(false)
   const [cnpjOk, setCnpjOk] = useState(false)
+  const [confirmDescartarOpen, setConfirmDescartarOpen] = useState(false)
 
   const {
     register,
@@ -179,7 +181,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
     control,
     watch,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<ClienteFormData>({
     resolver: zodResolver(clienteSchema),
     defaultValues: {
@@ -199,20 +201,20 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
   async function buscarCep(cepRaw: string) {
     const resultado = await buscarCepHook(cepRaw)
     if (resultado) {
-      if (resultado.logradouro) setValue('logradouro', resultado.logradouro)
-      if (resultado.bairro)     setValue('bairro',     resultado.bairro)
-      if (resultado.cidade)     setValue('cidade',     resultado.cidade)
-      if (resultado.uf)         setValue('uf',         resultado.uf)
+      if (resultado.logradouro) setValue('logradouro', resultado.logradouro, { shouldDirty: true })
+      if (resultado.bairro)     setValue('bairro',     resultado.bairro,     { shouldDirty: true })
+      if (resultado.cidade)     setValue('cidade',     resultado.cidade,     { shouldDirty: true })
+      if (resultado.uf)         setValue('uf',         resultado.uf,         { shouldDirty: true })
     }
   }
 
   async function buscarCepResponsavel(cepRaw: string) {
     const resultado = await buscarCepHook(cepRaw)
     if (resultado) {
-      if (resultado.logradouro) setValue('responsavelEndereco', resultado.logradouro)
-      if (resultado.bairro)     setValue('responsavelBairro',   resultado.bairro)
-      if (resultado.cidade)     setValue('responsavelCidade',   resultado.cidade)
-      if (resultado.uf)         setValue('responsavelUf',       resultado.uf)
+      if (resultado.logradouro) setValue('responsavelEndereco', resultado.logradouro, { shouldDirty: true })
+      if (resultado.bairro)     setValue('responsavelBairro',   resultado.bairro,     { shouldDirty: true })
+      if (resultado.cidade)     setValue('responsavelCidade',   resultado.cidade,     { shouldDirty: true })
+      if (resultado.uf)         setValue('responsavelUf',       resultado.uf,         { shouldDirty: true })
     }
   }
 
@@ -226,25 +228,25 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
       if (!res.ok) return
       const data = await res.json()
 
-      if (data.razao_social)  setValue('razaoSocial',  data.razao_social)
-      if (data.nome_fantasia) setValue('nomeFantasia', data.nome_fantasia)
-      if (data.email)         setValue('email',        data.email)
+      if (data.razao_social)  setValue('razaoSocial',  data.razao_social,  { shouldDirty: true })
+      if (data.nome_fantasia) setValue('nomeFantasia', data.nome_fantasia, { shouldDirty: true })
+      if (data.email)         setValue('email',        data.email,         { shouldDirty: true })
       if (data.ddd_telefone_1) {
-        setValue('telefone', formatPhone(data.ddd_telefone_1.replace(/\D/g, '')))
+        setValue('telefone', formatPhone(data.ddd_telefone_1.replace(/\D/g, '')), { shouldDirty: true })
       }
 
       // Endereço
       if (data.cep) {
         const formatted = formatCep(data.cep)
-        setValue('cep', formatted)
+        setValue('cep', formatted, { shouldDirty: true })
         await buscarCep(data.cep)
       }
-      if (data.logradouro)  setValue('logradouro',  data.logradouro)
-      if (data.numero)      setValue('numero',      data.numero)
-      if (data.complemento) setValue('complemento', data.complemento)
-      if (data.bairro)      setValue('bairro',      data.bairro)
-      if (data.municipio)   setValue('cidade',      data.municipio)
-      if (data.uf)          setValue('uf',          data.uf)
+      if (data.logradouro)  setValue('logradouro',  data.logradouro,  { shouldDirty: true })
+      if (data.numero)      setValue('numero',      data.numero,      { shouldDirty: true })
+      if (data.complemento) setValue('complemento', data.complemento, { shouldDirty: true })
+      if (data.bairro)      setValue('bairro',      data.bairro,      { shouldDirty: true })
+      if (data.municipio)   setValue('cidade',      data.municipio,   { shouldDirty: true })
+      if (data.uf)          setValue('uf',          data.uf,          { shouldDirty: true })
 
       setCnpjOk(true)
       toast.success('Dados da empresa preenchidos automaticamente')
@@ -305,7 +307,24 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
     }
   }
 
+  function cancelar() {
+    if (onClose) {
+      onClose()
+    } else {
+      router.back()
+    }
+  }
+
+  function handleCancelClick() {
+    if (isDirty) {
+      setConfirmDescartarOpen(true)
+    } else {
+      cancelar()
+    }
+  }
+
   return (
+    <>
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
       {/* Dados gerais */}
       <Card>
@@ -318,7 +337,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
               <Label>Tipo de Pessoa</Label>
               <Select
                 defaultValue={initialData?.tipoPessoa ?? 'pj'}
-                onValueChange={(v) => setValue('tipoPessoa', v as 'pf' | 'pj')}
+                onValueChange={(v) => setValue('tipoPessoa', v as 'pf' | 'pj', { shouldDirty: true })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -334,7 +353,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
               <Label>Status</Label>
               <Select
                 defaultValue={initialData?.status ?? 'ativo'}
-                onValueChange={(v) => setValue('status', v as 'ativo' | 'inativo' | 'suspenso')}
+                onValueChange={(v) => setValue('status', v as 'ativo' | 'inativo' | 'suspenso', { shouldDirty: true })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -392,7 +411,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
               <Select
                 defaultValue={initialData?.regimeTributario ?? SELECT_NONE_VALUE}
                 onValueChange={(v) =>
-                  setValue('regimeTributario', v === SELECT_NONE_VALUE ? null : (v as NonNullable<ClienteFormData['regimeTributario']>))
+                  setValue('regimeTributario', v === SELECT_NONE_VALUE ? null : (v as NonNullable<ClienteFormData['regimeTributario']>), { shouldDirty: true })
                 }
               >
                 <SelectTrigger>
@@ -438,7 +457,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
                 {...register('telefone')}
                 onChange={(e) => {
                   e.target.value = formatPhone(e.target.value)
-                  setValue('telefone', e.target.value)
+                  setValue('telefone', e.target.value, { shouldDirty: true })
                 }}
               />
             </div>
@@ -451,7 +470,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
               {...register('celular')}
               onChange={(e) => {
                 e.target.value = formatPhone(e.target.value)
-                setValue('celular', e.target.value)
+                setValue('celular', e.target.value, { shouldDirty: true })
               }}
               className="max-w-56"
             />
@@ -472,7 +491,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
                 {...register('whatsapp')}
                 onChange={(e) => {
                   e.target.value = formatWhatsApp(e.target.value)
-                  setValue('whatsapp', e.target.value)
+                  setValue('whatsapp', e.target.value, { shouldDirty: true })
                 }}
                 placeholder="(11) 99999-9999"
               />
@@ -484,7 +503,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
                 {...register('whatsappFinanceiro')}
                 onChange={(e) => {
                   e.target.value = formatWhatsApp(e.target.value)
-                  setValue('whatsappFinanceiro', e.target.value)
+                  setValue('whatsappFinanceiro', e.target.value, { shouldDirty: true })
                 }}
                 placeholder="(11) 99999-9999"
               />
@@ -496,7 +515,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
               <Label>Consentimento para cobrança</Label>
               <Select
                 defaultValue={initialData?.aceiteWhatsAppCobranca ? 'sim' : 'nao'}
-                onValueChange={(value) => setValue('aceiteWhatsAppCobranca', value === 'sim')}
+                onValueChange={(value) => setValue('aceiteWhatsAppCobranca', value === 'sim', { shouldDirty: true })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -541,7 +560,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
                 {...register('responsavelFinanceiroTelefone')}
                 onChange={(e) => {
                   e.target.value = formatPhone(e.target.value)
-                  setValue('responsavelFinanceiroTelefone', e.target.value)
+                  setValue('responsavelFinanceiroTelefone', e.target.value, { shouldDirty: true })
                 }}
               />
             </div>
@@ -552,7 +571,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
                 {...register('responsavelFinanceiroWhatsapp')}
                 onChange={(e) => {
                   e.target.value = formatWhatsApp(e.target.value)
-                  setValue('responsavelFinanceiroWhatsapp', e.target.value)
+                  setValue('responsavelFinanceiroWhatsapp', e.target.value, { shouldDirty: true })
                 }}
               />
             </div>
@@ -563,7 +582,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
               <Label>Contato financeiro preferencial</Label>
               <Select
                 defaultValue={initialData?.responsavelFinanceiroPreferencial ? 'sim' : 'nao'}
-                onValueChange={(value) => setValue('responsavelFinanceiroPreferencial', value === 'sim')}
+                onValueChange={(value) => setValue('responsavelFinanceiroPreferencial', value === 'sim', { shouldDirty: true })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -578,7 +597,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
               <Label>Pausar régua automática</Label>
               <Select
                 defaultValue={initialData?.whatsappCobrancaPausado ? 'sim' : 'nao'}
-                onValueChange={(value) => setValue('whatsappCobrancaPausado', value === 'sim')}
+                onValueChange={(value) => setValue('whatsappCobrancaPausado', value === 'sim', { shouldDirty: true })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -629,7 +648,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
                   onChange={(e) => {
                     const formatted = formatCep(e.target.value)
                     e.target.value = formatted
-                    setValue('cep', formatted)
+                    setValue('cep', formatted, { shouldDirty: true })
                     if (formatted.replace(/\D/g, '').length === 8) {
                       buscarCep(formatted)
                     }
@@ -673,7 +692,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
               <Label htmlFor="uf">UF</Label>
               <Select
                 defaultValue={initialData?.uf ?? ''}
-                onValueChange={(v) => setValue('uf', v ?? undefined)}
+                onValueChange={(v) => setValue('uf', v ?? undefined, { shouldDirty: true })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="UF" />
@@ -759,7 +778,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
                 {...register('responsavelCelular')}
                 onChange={(e) => {
                   e.target.value = formatPhone(e.target.value)
-                  setValue('responsavelCelular', e.target.value)
+                  setValue('responsavelCelular', e.target.value, { shouldDirty: true })
                 }}
               />
             </div>
@@ -797,7 +816,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
                 onChange={(e) => {
                   const formatted = formatCep(e.target.value)
                   e.target.value = formatted
-                  setValue('responsavelCep', formatted)
+                  setValue('responsavelCep', formatted, { shouldDirty: true })
                   if (formatted.replace(/\D/g, '').length === 8) {
                     buscarCepResponsavel(formatted)
                   }
@@ -812,7 +831,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
               <Label htmlFor="responsavelUf">UF</Label>
               <Select
                 defaultValue={initialData?.responsavelUf ?? ''}
-                onValueChange={(v) => setValue('responsavelUf', v ?? undefined)}
+                onValueChange={(v) => setValue('responsavelUf', v ?? undefined, { shouldDirty: true })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="UF" />
@@ -900,11 +919,21 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
         <Button
           type="button"
           variant="outline"
-          onClick={() => onClose ? onClose() : router.back()}
+          onClick={handleCancelClick}
         >
           Cancelar
         </Button>
       </div>
     </form>
+    <ConfirmDialog
+      open={confirmDescartarOpen}
+      onOpenChange={setConfirmDescartarOpen}
+      title="Descartar alterações?"
+      description="As alterações não salvas serão perdidas."
+      confirmLabel="Descartar"
+      destructive
+      onConfirm={cancelar}
+    />
+    </>
   )
 }
