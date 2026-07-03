@@ -36,6 +36,39 @@ service cloud.firestore {
     function isFinanceiro()  { return isAtivo() && userDoc().perfil in ['admin', 'financeiro']; }
     function canRead()       { return isAtivo(); }
 
+    // [P1] Espelha canAccessTela() (src/lib/permissions.ts): quando o admin concede
+    // um array `telas` não vazio a um usuário via usuario-form, esse array vira a
+    // fonte de verdade e PODE incluir telas fora do default do perfil. Sem este
+    // helper, um usuário com a tela concedida via override veria o link na UI mas
+    // levaria permission-denied no Firestore (regressão de lockout).
+    function hasTela(tela) {
+      return isAtivo()
+        && ('telas' in userDoc())
+        && (userDoc().telas is list)
+        && (userDoc().telas.size() > 0)
+        && (tela in userDoc().telas);
+    }
+
+    // [P0-1/P1] Leitura de coleções sensíveis: perfil-padrão OU override por tela
+    // (hasTela), nunca mais restritivo que o que a UI já permite hoje.
+    // nfse_*: PERFIL_DEFAULT_TELAS libera a tela 'fiscal' tanto para 'fiscal' quanto
+    // para 'financeiro' (financeiro concilia emissão de NFS-e com cobrança).
+    function canReadNfse()         { return isFiscal() || isFinanceiro() || hasTela('fiscal'); }
+    // clientes_fiscal / clientes_fiscal_integracao: mesma tela 'fiscal', mas restrito
+    // ao perfil 'fiscal' (financeiro não configura integração fiscal do cliente).
+    function canReadFiscalConfig() { return isFiscal() || hasTela('fiscal'); }
+    function canReadIr()           { return isFiscal() || hasTela('ir'); }
+    function canReadFinanceiro()   { return isFinanceiro() || hasTela('financeiro'); }
+    function canReadFechamento()   { return isOperacional() || isFiscal() || hasTela('fechamento'); }
+
+    // [P1] Update de fechamento_revisoes que REABRE o mês (seta travado explicitamente
+    // para false) exige admin. Ausência do campo `travado` no payload (não deveria
+    // ocorrer — salvarRevisao sempre grava travado:true/false) NÃO é tratada como
+    // reabertura, para nunca bloquear updates normais por acidente.
+    function revisaoReabrindo() {
+      return ('travado' in request.resource.data) && request.resource.data.travado == false;
+    }
+
     function sameTenantExisting() {
       return isAtivo()
         && ('tenantId' in resource.data)
@@ -54,6 +87,25 @@ service cloud.firestore {
 
     function sameTenantUpdate() {
       return sameTenantExisting() && sameTenantNew();
+    }
+
+    // [P1] Enforcement server-side da trava mensal de fechamento. Espelha o check
+    // client-side em updateFechamentoField (src/features/fechamento/services.ts):
+    // reconstrói o id de fechamento_revisoes a partir de ano/mes do próprio doc
+    // (mesmo formato usado por salvarRevisao: `${ano}_${String(mes).padStart(2,'0')}`)
+    // e nega update se a revisão do mês estiver travada. Só avalia quando ano/mes
+    // existem no doc (sempre presentes — únicos gravados por gerarFechamentoMensal,
+    // Cloud Function) para nunca travar por doc malformado.
+    function mesFechamentoTravadoImpl(ano, mes) {
+      let revisaoId = string(ano) + '_' + (mes < 10 ? '0' + string(mes) : string(mes));
+      return exists(/databases/$(database)/documents/fechamento_revisoes/$(revisaoId))
+        && get(/databases/$(database)/documents/fechamento_revisoes/$(revisaoId)).data.tenantId == userDoc().tenantId
+        && get(/databases/$(database)/documents/fechamento_revisoes/$(revisaoId)).data.travado == true;
+    }
+
+    function mesFechamentoTravado() {
+      return ('ano' in resource.data) && ('mes' in resource.data)
+        && mesFechamentoTravadoImpl(resource.data.ano, resource.data.mes);
     }
 
     // ─── Validadores de payload ───────────────────────────────────────────────
@@ -171,14 +223,18 @@ service cloud.firestore {
     // ─── Declarações de IR ────────────────────────────────────────────────────
 
     match /ir_declaracoes/{id} {
-      allow read: if canRead() && sameTenantExisting();
+      // [P0-1/P1] Leitura restrita a admin/fiscal (perfil) OU quem tem a tela 'ir'
+      // concedida via override (hasTela) — tela 'ir' em PERFIL_DEFAULT_TELAS não é
+      // liberada por padrão para operacional/financeiro/leitura.
+      allow read: if canReadIr() && sameTenantExisting();
       allow create: if isOperacional() && sameTenantWrite();
       allow update: if isOperacional() && sameTenantUpdate();
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
     match /ir_checklist/{id} {
-      allow read: if canRead() && sameTenantExisting();
+      // [P1] Mesma coleção-irmã de ir_declaracoes — mesma gate de leitura.
+      allow read: if canReadIr() && sameTenantExisting();
       allow create: if isOperacional() && sameTenantWrite();
       allow update: if isOperacional() && sameTenantUpdate();
       allow delete: if isAdmin() && sameTenantExisting();
@@ -187,7 +243,10 @@ service cloud.firestore {
     // ─── Financeiro ───────────────────────────────────────────────────────────
 
     match /lancamentos/{id} {
-      allow read: if canRead() && sameTenantExisting();
+      // [P0-1/P1] Leitura restrita a admin/financeiro (perfil) OU quem tem a tela
+      // 'financeiro' concedida via override (hasTela) — não liberada por padrão
+      // para operacional/fiscal/leitura.
+      allow read: if canReadFinanceiro() && sameTenantExisting();
       allow create: if isFinanceiro() && sameTenantWrite();
       allow update: if isFinanceiro() && sameTenantUpdate();
       // [MELHORIA 2] Lançamentos financeiros só podem ser deletados por admin —
@@ -205,23 +264,41 @@ service cloud.firestore {
     // ─── Fechamento mensal ────────────────────────────────────────────────────
 
     match /fechamentos/{id} {
-      allow read: if canRead() && sameTenantExisting();
+      // [P0-1/P1] Leitura restrita a admin/operacional/fiscal (perfil) OU quem tem
+      // a tela 'fechamento' concedida via override (hasTela) — não liberada por
+      // padrão para financeiro/leitura.
+      allow read: if canReadFechamento() && sameTenantExisting();
       allow create: if isOperacional() && sameTenantWrite();
-      allow update: if isOperacional() && sameTenantUpdate();
+      // [P1] Enforcement server-side da trava mensal: espelha o check client-side
+      // em updateFechamentoField — nega update se o mês (ano/mes do próprio doc)
+      // tiver uma revisão travada em fechamento_revisoes. Reabrir o mês (admin,
+      // via fechamento_revisoes.update) libera este update novamente.
+      allow update: if isOperacional() && sameTenantUpdate() && !mesFechamentoTravado();
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
     match /fechamento_revisoes/{id} {
-      allow read: if canRead() && sameTenantExisting();
-      allow create: if isOperacional() && sameTenantWrite();
-      allow update: if isOperacional() && sameTenantUpdate();
+      // [P1] Mesma gate de leitura de fechamentos (mesma tela 'fechamento').
+      allow read: if canReadFechamento() && sameTenantExisting();
+      // [P1] Encerrar revisão (grava travado:true, ou cria a 1ª revisão do mês —
+      // sempre travado:true em salvarRevisao) fica liberado para quem já revisa o
+      // fechamento (operacional/fiscal — a tela 'fechamento' inclui fiscal em
+      // PERFIL_DEFAULT_TELAS, e o create anterior só permitia operacional, o que
+      // quebrava "Encerrar revisão" para fiscal). Reabrir o mês (travado:false)
+      // exige admin — é a única forma de destravar fechamentos.update acima.
+      allow create: if (isOperacional() || isFiscal()) && sameTenantWrite();
+      allow update: if sameTenantUpdate()
+        && (revisaoReabrindo() ? isAdmin() : (isOperacional() || isFiscal()));
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
     // ─── Fiscal — configuração ────────────────────────────────────────────────
 
     match /clientes_fiscal/{id} {
-      allow read: if canRead() && sameTenantExisting();
+      // [P1] Leitura restrita a admin/fiscal (perfil) OU quem tem a tela 'fiscal'
+      // concedida via override — dado fiscal sensível, hoje legível por qualquer
+      // ativo (inclusive 'leitura') via canRead().
+      allow read: if canReadFiscalConfig() && sameTenantExisting();
       allow create: if isFiscal() && sameTenantWrite();
       allow update: if isFiscal() && sameTenantUpdate();
       // Configuração fiscal nunca deve ser deletada sem supervisão admin.
@@ -236,7 +313,8 @@ service cloud.firestore {
     }
 
     match /clientes_fiscal_integracao/{id} {
-      allow read: if canRead() && sameTenantExisting();
+      // [P1] Mesma gate de leitura de clientes_fiscal (mesma tela 'fiscal').
+      allow read: if canReadFiscalConfig() && sameTenantExisting();
       allow create: if isFiscal() && sameTenantWrite();
       allow update: if isFiscal() && sameTenantUpdate();
       allow delete: if isAdmin() && sameTenantExisting();
@@ -245,7 +323,8 @@ service cloud.firestore {
     // ─── NFS-e ────────────────────────────────────────────────────────────────
 
     match /nfse_rascunhos/{id} {
-      allow read: if canRead() && sameTenantExisting();
+      // [P0-1] Leitura restrita a admin/fiscal/financeiro (ver canReadNfse()).
+      allow read: if canReadNfse() && sameTenantExisting();
       allow create: if isFiscal() && sameTenantWrite();
       allow update: if isFiscal() && sameTenantUpdate();
       // Rascunhos podem ser deletados pelo fiscal (limpeza de rascunhos antigos).
@@ -254,12 +333,14 @@ service cloud.firestore {
 
     // nfse_emitidas: NUNCA escrita direta do browser — apenas Admin SDK via Cloud Functions.
     match /nfse_emitidas/{id} {
-      allow read: if canRead() && sameTenantExisting();
+      // [P0-1] Leitura restrita a admin/fiscal/financeiro (ver canReadNfse()).
+      allow read: if canReadNfse() && sameTenantExisting();
       allow write: if false;
     }
 
     match /nfse_eventos/{id} {
-      allow read: if canRead() && sameTenantExisting();
+      // [P0-1] Leitura restrita a admin/fiscal/financeiro (ver canReadNfse()).
+      allow read: if canReadNfse() && sameTenantExisting();
       allow create: if isFiscal() && sameTenantNew();
       allow update, delete: if false;
     }
@@ -279,7 +360,8 @@ service cloud.firestore {
     // nfse_erros: histórico de rejeições/erros de integração. Escrita só via
     // Cloud Functions (Admin SDK); o front apenas lê o erro do próprio tenant.
     match /nfse_erros/{id} {
-      allow read: if canRead() && sameTenantExisting();
+      // [P0-1] Leitura restrita a admin/fiscal/financeiro (ver canReadNfse()).
+      allow read: if canReadNfse() && sameTenantExisting();
       allow write: if false;
     }
 

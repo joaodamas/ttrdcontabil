@@ -47,6 +47,20 @@ async function seedBaseData() {
       ativo: true,
       tenantId: 'tenant-b',
     })
+    // [P1] Perfil 'operacional' com override de `telas` concedendo acesso a telas
+    // fora do default do perfil (via usuario-form) — usado para testar hasTela().
+    await setDoc(doc(db, 'usuarios/operacional-telas-financeiro'), {
+      perfil: 'operacional',
+      ativo: true,
+      tenantId: 'tenant-a',
+      telas: ['hoje', 'clientes', 'tarefas', 'competencias', 'fechamento', 'financeiro'],
+    })
+    await setDoc(doc(db, 'usuarios/operacional-telas-fiscal'), {
+      perfil: 'operacional',
+      ativo: true,
+      tenantId: 'tenant-a',
+      telas: ['hoje', 'clientes', 'tarefas', 'competencias', 'fechamento', 'fiscal'],
+    })
     await setDoc(doc(db, 'clientes/cliente-a'), {
       tenantId: 'tenant-a',
       status: 'ativo',
@@ -79,6 +93,75 @@ async function seedBaseData() {
       tenantId: 'tenant-a',
       clienteId: 'cliente-a',
       erro: 'rejeicao_teste',
+    })
+    // [P0-1] Seeds dedicados para testar leitura gated por perfil (ids distintos
+    // dos usados em testes de escrita, para não colidir com setDoc/assertFails
+    // que já exercitam create/update nestas mesmas coleções).
+    await setDoc(doc(db, 'lancamentos/lanc-seed'), {
+      tenantId: 'tenant-a',
+      tipo: 'receita',
+      status: 'pendente',
+      valor: 100,
+    })
+    await setDoc(doc(db, 'ir_declaracoes/ir-seed'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      status: 'pendente',
+    })
+    await setDoc(doc(db, 'nfse_rascunhos/rascunho-seed'), {
+      tenantId: 'tenant-a',
+      status: 'aguardando_emissao',
+      clienteId: 'cliente-a',
+    })
+    await setDoc(doc(db, 'nfse_emitidas/nfse-seed'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      status: 'emitida',
+    })
+    await setDoc(doc(db, 'fechamentos/fechamento-seed'), {
+      tenantId: 'tenant-a',
+      competenciaId: 'comp-a',
+      status: 'aberto',
+    })
+    // [P1] Seeds das coleções fiscais irmãs (Tarefa 2).
+    await setDoc(doc(db, 'ir_checklist/checklist-seed'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      item: 'documentos_pendentes',
+    })
+    await setDoc(doc(db, 'clientes_fiscal/cf-seed'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      regime: 'simples_nacional',
+    })
+    await setDoc(doc(db, 'clientes_fiscal_integracao/cfi-seed'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      provedor: 'x',
+    })
+    // [P1] Fechamento de julho/2026 travado por revisão encerrada, e um segundo
+    // mês (agosto/2026) sem revisão registrada — usados para testar o enforcement
+    // server-side da trava mensal (mesFechamentoTravado) e a reabertura restrita
+    // a admin (revisaoReabrindo) na Tarefa 3.
+    await setDoc(doc(db, 'fechamento_revisoes/2026_07'), {
+      tenantId: 'tenant-a',
+      ano: 2026,
+      mes: 7,
+      travado: true,
+    })
+    await setDoc(doc(db, 'fechamentos/fechamento-travado'), {
+      tenantId: 'tenant-a',
+      ano: 2026,
+      mes: 7,
+      clienteId: 'cliente-a',
+      dasStatus: 'pendente',
+    })
+    await setDoc(doc(db, 'fechamentos/fechamento-aberto'), {
+      tenantId: 'tenant-a',
+      ano: 2026,
+      mes: 8,
+      clienteId: 'cliente-a',
+      dasStatus: 'pendente',
     })
   })
 }
@@ -266,5 +349,113 @@ describeIfEmulator('firestore.rules', () => {
   it('usuarios/list: usuario ativo lista; nao autenticado nao', async () => {
     await assertSucceeds(getDocs(collection(dbAs('operacional-a'), 'usuarios')))
     await assertFails(getDocs(collection(testEnv.unauthenticatedContext().firestore(), 'usuarios')))
+  })
+
+  // ─── P0-1: leitura de colecoes sensiveis restrita por perfil (nao so por tenant) ──
+
+  it('lancamentos: leitura restrita a admin/financeiro', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('admin-a'), 'lancamentos/lanc-seed')))
+    await assertSucceeds(getDoc(doc(dbAs('financeiro-a'), 'lancamentos/lanc-seed')))
+    await assertFails(getDoc(doc(dbAs('leitura-a'), 'lancamentos/lanc-seed')))
+    await assertFails(getDoc(doc(dbAs('operacional-a'), 'lancamentos/lanc-seed')))
+    await assertFails(getDoc(doc(dbAs('fiscal-a'), 'lancamentos/lanc-seed')))
+  })
+
+  it('ir_declaracoes: leitura restrita a admin/fiscal', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('admin-a'), 'ir_declaracoes/ir-seed')))
+    await assertSucceeds(getDoc(doc(dbAs('fiscal-a'), 'ir_declaracoes/ir-seed')))
+    await assertFails(getDoc(doc(dbAs('leitura-a'), 'ir_declaracoes/ir-seed')))
+    await assertFails(getDoc(doc(dbAs('operacional-a'), 'ir_declaracoes/ir-seed')))
+    await assertFails(getDoc(doc(dbAs('financeiro-a'), 'ir_declaracoes/ir-seed')))
+  })
+
+  it('nfse_rascunhos: leitura restrita a admin/fiscal/financeiro', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('admin-a'), 'nfse_rascunhos/rascunho-seed')))
+    await assertSucceeds(getDoc(doc(dbAs('fiscal-a'), 'nfse_rascunhos/rascunho-seed')))
+    await assertSucceeds(getDoc(doc(dbAs('financeiro-a'), 'nfse_rascunhos/rascunho-seed')))
+    await assertFails(getDoc(doc(dbAs('leitura-a'), 'nfse_rascunhos/rascunho-seed')))
+    await assertFails(getDoc(doc(dbAs('operacional-a'), 'nfse_rascunhos/rascunho-seed')))
+  })
+
+  it('nfse_emitidas: leitura restrita a admin/fiscal/financeiro', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('admin-a'), 'nfse_emitidas/nfse-seed')))
+    await assertSucceeds(getDoc(doc(dbAs('fiscal-a'), 'nfse_emitidas/nfse-seed')))
+    await assertSucceeds(getDoc(doc(dbAs('financeiro-a'), 'nfse_emitidas/nfse-seed')))
+    await assertFails(getDoc(doc(dbAs('leitura-a'), 'nfse_emitidas/nfse-seed')))
+    await assertFails(getDoc(doc(dbAs('operacional-a'), 'nfse_emitidas/nfse-seed')))
+  })
+
+  it('nfse_erros: leitura restrita a admin/fiscal/financeiro (perfil errado, mesmo tenant)', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('financeiro-a'), 'nfse_erros/erro-a')))
+    await assertFails(getDoc(doc(dbAs('operacional-a'), 'nfse_erros/erro-a')))
+    await assertFails(getDoc(doc(dbAs('leitura-a'), 'nfse_erros/erro-a')))
+  })
+
+  it('fechamentos: leitura restrita a admin/operacional/fiscal', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('admin-a'), 'fechamentos/fechamento-seed')))
+    await assertSucceeds(getDoc(doc(dbAs('operacional-a'), 'fechamentos/fechamento-seed')))
+    await assertSucceeds(getDoc(doc(dbAs('fiscal-a'), 'fechamentos/fechamento-seed')))
+    await assertFails(getDoc(doc(dbAs('financeiro-a'), 'fechamentos/fechamento-seed')))
+    await assertFails(getDoc(doc(dbAs('leitura-a'), 'fechamentos/fechamento-seed')))
+  })
+
+  // ─── P1 (Tarefa 1): override de tela (hasTela) nao pode travar quem tem a tela ──
+
+  it('lancamentos: operacional com override de tela financeiro le; sem override, nao', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('operacional-telas-financeiro'), 'lancamentos/lanc-seed')))
+    await assertFails(getDoc(doc(dbAs('operacional-a'), 'lancamentos/lanc-seed')))
+  })
+
+  it('nfse_rascunhos: operacional com override de tela fiscal le; sem override, nao', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('operacional-telas-fiscal'), 'nfse_rascunhos/rascunho-seed')))
+    await assertFails(getDoc(doc(dbAs('operacional-a'), 'nfse_rascunhos/rascunho-seed')))
+  })
+
+  // ─── P1 (Tarefa 2): colecoes fiscais irma que ficaram com canRead() ──────────
+
+  it('ir_checklist: leitura restrita a admin/fiscal, negada para leitura', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('fiscal-a'), 'ir_checklist/checklist-seed')))
+    await assertFails(getDoc(doc(dbAs('leitura-a'), 'ir_checklist/checklist-seed')))
+    await assertFails(getDoc(doc(dbAs('operacional-a'), 'ir_checklist/checklist-seed')))
+  })
+
+  it('clientes_fiscal: leitura restrita a admin/fiscal, negada para leitura', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed')))
+    await assertFails(getDoc(doc(dbAs('leitura-a'), 'clientes_fiscal/cf-seed')))
+  })
+
+  it('clientes_fiscal_integracao: leitura restrita a admin/fiscal, negada para leitura', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal_integracao/cfi-seed')))
+    await assertFails(getDoc(doc(dbAs('leitura-a'), 'clientes_fiscal_integracao/cfi-seed')))
+  })
+
+  it('fechamento_revisoes: leitura restrita a admin/operacional/fiscal, negada para leitura/financeiro', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('operacional-a'), 'fechamento_revisoes/2026_07')))
+    await assertFails(getDoc(doc(dbAs('leitura-a'), 'fechamento_revisoes/2026_07')))
+    await assertFails(getDoc(doc(dbAs('financeiro-a'), 'fechamento_revisoes/2026_07')))
+  })
+
+  // ─── P1 (Tarefa 3): trava mensal do fechamento — enforcement server-side ────
+
+  it('fechamento_revisoes: reabertura (travado:false) exige admin', async () => {
+    await assertFails(updateDoc(doc(dbAs('operacional-a'), 'fechamento_revisoes/2026_07'), { travado: false }))
+    await assertFails(updateDoc(doc(dbAs('fiscal-a'), 'fechamento_revisoes/2026_07'), { travado: false }))
+    await assertSucceeds(updateDoc(doc(dbAs('admin-a'), 'fechamento_revisoes/2026_07'), { travado: false }))
+  })
+
+  it('fechamento_revisoes: encerrar revisao (travado:true) permitido para operacional e fiscal', async () => {
+    await assertSucceeds(updateDoc(doc(dbAs('operacional-a'), 'fechamento_revisoes/2026_07'), {
+      travado: true,
+      nota: 'revisado por operacional',
+    }))
+    await assertSucceeds(updateDoc(doc(dbAs('fiscal-a'), 'fechamento_revisoes/2026_07'), {
+      travado: true,
+      nota: 'revisado por fiscal',
+    }))
+  })
+
+  it('fechamentos: update bloqueado no mes travado; liberado em mes sem revisao', async () => {
+    await assertFails(updateDoc(doc(dbAs('operacional-a'), 'fechamentos/fechamento-travado'), { dasStatus: 'ok' }))
+    await assertSucceeds(updateDoc(doc(dbAs('operacional-a'), 'fechamentos/fechamento-aberto'), { dasStatus: 'ok' }))
   })
 })

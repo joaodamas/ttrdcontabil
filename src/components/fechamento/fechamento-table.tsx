@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ExternalLink, ClipboardList } from 'lucide-react'
+import { ExternalLink, ClipboardList, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DataTableShell } from '@/components/ui/data-table-shell'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -26,6 +26,8 @@ interface Fechamento {
 interface FechamentoTableProps {
   fechamentos: Fechamento[]
   onUpdate: (id: string, field: string, value: string) => Promise<void>
+  /** Mês travado após "Encerrar revisão" — status deixam de ser clicáveis. */
+  travado?: boolean
 }
 
 // Ciclo de status ao clicar
@@ -61,15 +63,18 @@ export function StatusCell({
   campo,
   id,
   onUpdate,
+  travado = false,
 }: {
   status: StatusObrigacao
   campo: string
   id: string
   onUpdate: (id: string, field: string, value: string) => Promise<void>
+  travado?: boolean
 }) {
   const [loading, setLoading] = useState(false)
 
   async function handleClick() {
+    if (travado) return
     const cycle = STATUS_CYCLE[campo] ?? ['pendente', 'ok', 'na']
     const currentIdx = cycle.indexOf(status)
     const nextStatus = cycle[(currentIdx + 1) % cycle.length]
@@ -84,13 +89,14 @@ export function StatusCell({
   return (
     <button
       onClick={handleClick}
-      disabled={loading}
+      disabled={loading || travado}
       className={cn(
         'inline-flex items-center justify-center rounded border px-2 py-0.5 text-xs font-semibold transition-colors min-w-[42px]',
         STATUS_STYLE[status],
-        loading && 'opacity-50 cursor-wait'
+        loading && 'opacity-50 cursor-wait',
+        travado && 'opacity-60 cursor-not-allowed hover:bg-transparent'
       )}
-      title="Clique para alterar status"
+      title={travado ? 'Mês revisado e travado — reabra para editar' : 'Clique para alterar status'}
     >
       {loading ? '...' : STATUS_LABEL[status]}
     </button>
@@ -113,7 +119,7 @@ const REGIME_COLOR: Record<string, string> = {
   isento:           'bg-muted text-muted-foreground border border-border',
 }
 
-export function FechamentoTable({ fechamentos, onUpdate }: FechamentoTableProps) {
+export function FechamentoTable({ fechamentos, onUpdate, travado = false }: FechamentoTableProps) {
   if (fechamentos.length === 0) {
     return (
       <EmptyState
@@ -126,7 +132,18 @@ export function FechamentoTable({ fechamentos, onUpdate }: FechamentoTableProps)
   }
 
   return (
-    <DataTableShell storageKey="fechamento-table-density">
+    <DataTableShell
+      storageKey="fechamento-table-density"
+      title={
+        travado ? (
+          <span className="inline-flex items-center gap-1.5 text-warning">
+            <Lock className="w-3.5 h-3.5" />
+            Mês revisado — travado
+          </span>
+        ) : undefined
+      }
+      description={travado ? 'Status não podem ser alterados. Reabra o mês para editar.' : undefined}
+    >
       <table className="w-full min-w-[860px] text-sm">
         <thead className="bg-muted/50 border-b">
           <tr>
@@ -179,16 +196,16 @@ export function FechamentoTable({ fechamentos, onUpdate }: FechamentoTableProps)
                 })()}
               </td>
               <td className="px-2 py-2 text-center">
-                <StatusCell status={f.dasStatus} campo="das" id={f.id} onUpdate={onUpdate} />
+                <StatusCell status={f.dasStatus} campo="das" id={f.id} onUpdate={onUpdate} travado={travado} />
               </td>
               <td className="px-2 py-2 text-center">
-                <StatusCell status={f.esocialStatus} campo="esocial" id={f.id} onUpdate={onUpdate} />
+                <StatusCell status={f.esocialStatus} campo="esocial" id={f.id} onUpdate={onUpdate} travado={travado} />
               </td>
               <td className="px-2 py-2 text-center">
-                <StatusCell status={f.reinfStatus} campo="reinf" id={f.id} onUpdate={onUpdate} />
+                <StatusCell status={f.reinfStatus} campo="reinf" id={f.id} onUpdate={onUpdate} travado={travado} />
               </td>
               <td className="px-2 py-2 text-center">
-                <StatusCell status={f.fgtsStatus} campo="fgts" id={f.id} onUpdate={onUpdate} />
+                <StatusCell status={f.fgtsStatus} campo="fgts" id={f.id} onUpdate={onUpdate} travado={travado} />
               </td>
               <td className="px-3 py-2">
                 {f.portalUrl && f.portalUrl !== 'PROGRAMA' && f.portalUrl !== 'EMAIL' ? (

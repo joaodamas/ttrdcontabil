@@ -48,6 +48,20 @@ export const gerarFechamentoMensal = onCall(
     const input = validateInput(request.data)
     const usuario = await assertOperacional(request.auth.uid)
 
+    // O mês pode estar travado por uma revisão encerrada (ver
+    // `salvarRevisao`/`reabrirMes` no app). Gerar fechamento para um mês
+    // travado adicionaria linhas novas a um período que deveria estar
+    // congelado — bloqueia até o mês ser reaberto por um admin.
+    const revisaoId = `${input.ano}_${String(input.mes).padStart(2, '0')}`
+    const revisaoSnap = await db().collection('fechamento_revisoes').doc(revisaoId).get()
+    const revisao = revisaoSnap.data()
+    if (revisaoSnap.exists && revisao?.tenantId === usuario.tenantId && revisao?.travado === true) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Este mês já foi revisado e está travado. Reabra o mês para gerar novos fechamentos.'
+      )
+    }
+
     const clientesQuery = db()
       .collection('clientes')
       .where('status', '==', 'ativo')
@@ -66,7 +80,7 @@ export const gerarFechamentoMensal = onCall(
 
     for (const clienteDoc of clientesSnap.docs) {
       const cliente = clienteDoc.data()
-      if (cliente.tenantId !== usuario.tenantId) {
+      if (cliente.tenantId !== usuario.tenantId || cliente.deletedAt) {
         ignorados++
         continue
       }

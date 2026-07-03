@@ -34,7 +34,11 @@ const lancamentoSchema = z.object({
   valor:            z.number().positive('Valor deve ser positivo'),
   dataVencimento:   z.string().min(1, 'Data de vencimento é obrigatória'),
   dataPagamento:    z.string().optional().nullable(),
-  status:           z.enum(['pendente', 'pago', 'atrasado', 'cancelado', 'estornado']).default('pendente'),
+  // 'atrasado' e 'estornado' NÃO são graváveis: 'atrasado' é sempre derivado
+  // (pendente + vencimento < hoje) e 'estornado' foi descontinuado. Registros
+  // legados com esses valores são normalizados ao carregar o form — ver
+  // normalizeStatusLegado() abaixo.
+  status:           z.enum(['pendente', 'pago', 'cancelado']).default('pendente'),
   formaPagamento:   z.string().max(50).optional().nullable(),
   pagadorNome:      z.string().optional().nullable(),
   pagadorWhatsapp:  z.string().optional().nullable(),
@@ -53,6 +57,13 @@ const lancamentoSchema = z.object({
       message: 'Receitas devem estar vinculadas a um cliente',
     })
   }
+  if (data.status === 'pago' && !data.dataPagamento) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['dataPagamento'],
+      message: 'Informe a data de pagamento para marcar como pago.',
+    })
+  }
 })
 
 type LancamentoFormData = z.input<typeof lancamentoSchema>
@@ -64,8 +75,21 @@ type LancamentoPayload = Omit<LancamentoFormData, 'dataVencimento' | 'dataPagame
 
 interface ClienteItem { id: string; razaoSocial: string }
 
+// Status legado que pode vir gravado em documentos antigos (Firestore não
+// valida o enum). O form nunca oferece esses valores, mas precisa aceitá-los
+// como entrada ao editar um lançamento existente.
+type StatusLegado = LancamentoFormData['status'] | 'atrasado' | 'estornado'
+
+// Cura o status legado para o modelo atual: 'atrasado' volta a ser derivado
+// (pendente + vencimento < hoje), 'estornado' vira 'cancelado'.
+function normalizeStatusLegado(status?: StatusLegado): LancamentoFormData['status'] {
+  if (status === 'atrasado') return 'pendente'
+  if (status === 'estornado') return 'cancelado'
+  return status
+}
+
 interface LancamentoFormProps {
-  initialData?: Partial<LancamentoFormData> & { id?: string }
+  initialData?: Partial<Omit<LancamentoFormData, 'status'>> & { status?: StatusLegado; id?: string }
   onSuccess?: (id: string) => void
   onClose?: () => void
 }
@@ -86,16 +110,17 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
     resolver: zodResolver(lancamentoSchema),
     defaultValues: {
       tipo: 'receita',
-      status: 'pendente',
       cobrancaWhatsappEnabled: true,
       statusWhatsappCobranca: 'nao_agendado',
       whatsappCobrancaPausada: false,
       whatsappCobrancaIgnorada: false,
       whatsappCobrancaExigeAprovacao: false,
       ...initialData,
+      status: normalizeStatusLegado(initialData?.status) ?? 'pendente',
     },
   })
   const tipo = useWatch({ control, name: 'tipo' })
+  const status = useWatch({ control, name: 'status' })
 
   useEffect(() => {
     getClientes({ status: 'ativo' })
@@ -196,9 +221,7 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
                     <SelectContent>
                       <SelectItem value="pendente">Pendente</SelectItem>
                       <SelectItem value="pago">Pago</SelectItem>
-                      <SelectItem value="atrasado">Atrasado</SelectItem>
                       <SelectItem value="cancelado">Cancelado</SelectItem>
-                      <SelectItem value="estornado">Estornado</SelectItem>
                     </SelectContent>
                   </Select>
                 )}
@@ -212,8 +235,11 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="dataPagamento">Data de Pagamento</Label>
+            <Label htmlFor="dataPagamento">
+              Data de Pagamento {status === 'pago' ? <span className="text-destructive">*</span> : null}
+            </Label>
             <Input id="dataPagamento" type="date" {...register('dataPagamento')} className="max-w-48" />
+            {errors.dataPagamento && <p className="text-xs text-destructive">{errors.dataPagamento.message}</p>}
           </div>
 
           <div className="space-y-1.5">

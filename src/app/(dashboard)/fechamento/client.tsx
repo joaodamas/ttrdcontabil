@@ -22,12 +22,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
-import { RefreshCw, Plus, CheckCircle2, Clock, AlertCircle, ClipboardList } from 'lucide-react'
+import { RefreshCw, Plus, CheckCircle2, Clock, AlertCircle, ClipboardList, LockOpen } from 'lucide-react'
 import {
   updateFechamentoField,
   gerarFechamentoMensal,
   salvarRevisao,
   buscarRevisao,
+  reabrirMes,
   type RevisaoRecord,
 } from '@/features/fechamento/services'
 import { fechamentoFiltroSchema } from '@/features/fechamento/schemas'
@@ -87,6 +88,10 @@ function FechamentoContent() {
   const [revisaoSalva, setRevisaoSalva] = useState<RevisaoRecord | null>(null)
   const [revisaoLoading, setRevisaoLoading] = useState(false)
   const [confirmRevisaoOpen, setConfirmRevisaoOpen] = useState(false)
+  const [confirmReabrirOpen, setConfirmReabrirOpen] = useState(false)
+  const [reabrindo, setReabrindo] = useState(false)
+  const travado = revisaoSalva?.travado === true
+  const isAdmin = usuario?.perfil === 'admin'
 
   useEffect(() => {
     setRevisaoLoading(true)
@@ -140,7 +145,7 @@ function FechamentoContent() {
 
   const handleUpdate = useCallback(async (id: string, field: string, value: string) => {
     try {
-      await updateFechamentoField(id, field, value)
+      await updateFechamentoField(id, field, value, ano, mes)
       setFechamentos((prev) =>
         prev.map((f) => (f.id === id ? { ...f, [field]: value } : f))
       )
@@ -148,7 +153,7 @@ function FechamentoContent() {
     } catch (err) {
       toast.error(getErrorMessage(err, 'Não foi possível salvar o status do fechamento. Atualize a tela e tente novamente.'))
     }
-  }, [parsed, queryClient])
+  }, [ano, mes, parsed, queryClient])
 
   async function registrarRevisaoMes() {
     try {
@@ -175,6 +180,20 @@ function FechamentoContent() {
     setRevisaoDialogOpen(false)
     setConfirmRevisaoOpen(false)
     setRevisaoNota('')
+  }
+
+  async function reabrirMesAtual() {
+    setReabrindo(true)
+    try {
+      await reabrirMes(ano, mes, usuario?.uid ?? '', usuario?.nome ?? usuario?.email ?? 'Usuário')
+      setRevisaoSalva(await buscarRevisao(ano, mes))
+      toast.success(`Mês de ${mesLabel}/${ano} reaberto para edição.`)
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Não foi possível reabrir o mês. Verifique permissões e tente novamente.'))
+    } finally {
+      setReabrindo(false)
+      setConfirmReabrirOpen(false)
+    }
   }
 
   // Resumo stats
@@ -218,15 +237,29 @@ function FechamentoContent() {
             <RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
             Atualizar
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setRevisaoDialogOpen(true)}
-            disabled={loading || revisaoLoading}
-          >
-            <ClipboardList className="w-4 h-4 mr-1" />
-            Encerrar revisão do mês
-          </Button>
+          {travado ? (
+            isAdmin ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmReabrirOpen(true)}
+                disabled={loading || revisaoLoading || reabrindo}
+              >
+                <LockOpen className="w-4 h-4 mr-1" />
+                {reabrindo ? 'Reabrindo...' : 'Reabrir mês'}
+              </Button>
+            ) : null
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRevisaoDialogOpen(true)}
+              disabled={loading || revisaoLoading}
+            >
+              <ClipboardList className="w-4 h-4 mr-1" />
+              Encerrar revisão do mês
+            </Button>
+          )}
           <Button size="sm" onClick={() => setConfirmGeracaoOpen(true)} disabled={gerando || loading}>
             <Plus className="w-4 h-4 mr-1" />
             {gerando ? 'Gerando...' : 'Gerar Fechamento'}
@@ -287,13 +320,37 @@ function FechamentoContent() {
         onConfirm={gerarFechamento}
       />
 
-      {revisaoSalva ? (
+      <ConfirmDialog
+        open={confirmReabrirOpen}
+        onOpenChange={setConfirmReabrirOpen}
+        title={`Reabrir ${mesLabel}/${ano} para edição?`}
+        description="A trava de revisão será removida e os status dos fechamentos voltam a ficar editáveis. O histórico da revisão anterior é mantido para auditoria."
+        confirmLabel="Reabrir mês"
+        cancelLabel="Cancelar"
+        onConfirm={reabrirMesAtual}
+      />
+
+      {revisaoSalva && travado ? (
         <InlineAlert
           tone="success"
-          title="Revisão do mês registrada"
+          title="Mês revisado — travado"
           description={
-            `${new Date(revisaoSalva.revisadoEm).toLocaleString('pt-BR')} por ${revisaoSalva.nomeUsuario}` +
-            (revisaoSalva.nota ? ` — ${revisaoSalva.nota}` : '')
+            `Revisado em ${new Date(revisaoSalva.revisadoEm).toLocaleString('pt-BR')} por ${revisaoSalva.nomeUsuario}` +
+            (revisaoSalva.nota ? ` — ${revisaoSalva.nota}` : '') +
+            '. Edição de status bloqueada' +
+            (isAdmin ? ' — use "Reabrir mês" para liberar.' : '. Apenas um admin pode reabrir este mês.')
+          }
+        />
+      ) : null}
+
+      {revisaoSalva && !travado ? (
+        <InlineAlert
+          tone="info"
+          title="Mês reaberto para edição"
+          description={
+            `Reaberto em ${new Date(revisaoSalva.reabertoEm ?? revisaoSalva.revisadoEm).toLocaleString('pt-BR')}` +
+            (revisaoSalva.reabertoPorNome ? ` por ${revisaoSalva.reabertoPorNome}` : '') +
+            `. Revisão anterior: ${new Date(revisaoSalva.revisadoEm).toLocaleString('pt-BR')} por ${revisaoSalva.nomeUsuario}.`
           }
         />
       ) : null}
@@ -411,6 +468,7 @@ function FechamentoContent() {
         <FechamentoPendenciasCards
           fechamentos={fechamentos}
           onUpdate={handleUpdate}
+          travado={travado}
           onIrParaTabela={() =>
             tabelaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
           }
@@ -428,7 +486,7 @@ function FechamentoContent() {
             </table>
           </div>
         ) : (
-          <FechamentoTable fechamentos={fechamentos} onUpdate={handleUpdate} />
+          <FechamentoTable fechamentos={fechamentos} onUpdate={handleUpdate} travado={travado} />
         )}
       </div>
     </div>

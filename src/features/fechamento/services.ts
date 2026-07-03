@@ -16,6 +16,15 @@ export type RevisaoRecord = {
   parciais?: number
   enviados?: number
   snapshotStatus?: Record<string, number>
+  // Estado de trava do mês (congelamento pós-revisão).
+  travado?: boolean
+  travadoEm?: string
+  travadoPorId?: string
+  travadoPorNome?: string
+  // Preenchido quando um admin reabre o mês para novas edições.
+  reabertoEm?: string
+  reabertoPorId?: string
+  reabertoPorNome?: string
 }
 
 export type GerarFechamentoResult = {
@@ -39,14 +48,21 @@ export async function salvarRevisao(
   }
 ): Promise<void> {
   const id = `${ano}_${String(mes).padStart(2, '0')}`
+  const revisadoEm = new Date().toISOString()
   const payload = {
     ano,
     mes,
     nota,
     uid,
     nomeUsuario,
-    revisadoEm: new Date().toISOString(),
+    revisadoEm,
     ...snapshot,
+    // Encerrar a revisão trava o mês: a tabela deixa de ser editável até
+    // um admin reabrir explicitamente (ver `reabrirMes`).
+    travado: true,
+    travadoEm: revisadoEm,
+    travadoPorId: uid,
+    travadoPorNome: nomeUsuario,
   }
 
   const existing = await getDoc(doc(getClientDb(), 'fechamento_revisoes', id))
@@ -80,12 +96,67 @@ export async function buscarRevisao(ano: number, mes: number): Promise<RevisaoRe
   return snap.data() as RevisaoRecord
 }
 
+/**
+ * Reabre um mês previamente travado por `salvarRevisao`, permitindo edições
+ * novamente. Não apaga o histórico da revisão anterior — apenas marca
+ * `travado: false` e registra quem/quando reabriu, para auditoria.
+ * A checagem de perfil (somente admin) é responsabilidade da tela chamadora.
+ */
+export async function reabrirMes(
+  ano: number,
+  mes: number,
+  uid: string,
+  nomeUsuario: string
+): Promise<void> {
+  const id = `${ano}_${String(mes).padStart(2, '0')}`
+  const revisao = await buscarRevisao(ano, mes)
+  if (!revisao) {
+    throw new Error('Não há revisão registrada para este mês.')
+  }
+
+  const reabertoEm = new Date().toISOString()
+  await updateDocument('fechamento_revisoes', id, {
+    travado: false,
+    reabertoEm,
+    reabertoPorId: uid,
+    reabertoPorNome: nomeUsuario,
+  })
+
+  await createDocument('events', {
+    tipo: 'fechamento',
+    titulo: `Mês reaberto para edição - ${String(mes).padStart(2, '0')}/${ano}`,
+    descricao: `A trava de revisão de ${String(mes).padStart(2, '0')}/${ano} foi removida por ${nomeUsuario}.`,
+    origemColecao: 'fechamento_revisoes',
+    origemId: id,
+    actorId: uid,
+    actorNome: nomeUsuario,
+    metadata: {
+      severidade: 'media',
+      href: `/fechamento?mes=${mes}&ano=${ano}`,
+    },
+    criadoEm: Timestamp.now(),
+  })
+}
+
 export async function fetchFechamentos(filters: FechamentoFilters): Promise<FechamentoRecord[]> {
   const data = await getFechamentos(filters.mes, filters.ano, filters.regime || undefined)
   return data as FechamentoRecord[]
 }
 
-export async function updateFechamentoField(id: string, field: string, value: string) {
+export async function updateFechamentoField(
+  id: string,
+  field: string,
+  value: string,
+  ano: number,
+  mes: number
+) {
+  // Enforcement em nível de app: o mês travado por `salvarRevisao` não pode
+  // ser editado até um admin chamar `reabrirMes`. A garantia forte (Firestore
+  // rules / server-side) está prevista no lote de RBAC, ainda não aplicado aqui.
+  const revisao = await buscarRevisao(ano, mes)
+  if (revisao?.travado) {
+    throw new Error('Este mês já foi revisado e está travado. Reabra o mês para editar.')
+  }
   await updateDocument('fechamentos', id, { [field]: value })
 }
 

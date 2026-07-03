@@ -14,6 +14,7 @@ import {
   AlertCircle,
   AlertTriangle,
   Minus,
+  Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
@@ -117,15 +118,18 @@ function StatusCell({
   campo,
   id,
   onUpdate,
+  travado = false,
 }: {
   status: StatusObrigacao
   campo: string
   id: string
   onUpdate: (id: string, field: string, value: string) => Promise<void>
+  travado?: boolean
 }) {
   const [loading, setLoading] = useState(false)
 
   async function handleClick() {
+    if (travado) return
     const cycle = STATUS_CYCLE[campo] ?? ['pendente', 'ok', 'na']
     const currentIdx = cycle.indexOf(status)
     const nextStatus = cycle[(currentIdx + 1) % cycle.length]
@@ -140,13 +144,14 @@ function StatusCell({
   return (
     <button
       onClick={handleClick}
-      disabled={loading}
+      disabled={loading || travado}
       className={cn(
         'inline-flex items-center justify-center gap-1 rounded border px-2 py-0.5 text-xs font-semibold transition-colors min-w-[52px]',
         STATUS_STYLE[status],
-        loading && 'opacity-50 cursor-wait'
+        loading && 'opacity-50 cursor-wait',
+        travado && 'opacity-60 cursor-not-allowed hover:bg-transparent'
       )}
-      title="Clique para alterar status"
+      title={travado ? 'Mês revisado e travado — reabra para editar' : 'Clique para alterar status'}
     >
       {loading ? (
         '...'
@@ -177,9 +182,11 @@ type Props = {
   fechamentos: FechamentoCardRow[]
   onUpdate: (id: string, field: string, value: string) => Promise<void>
   onIrParaTabela?: () => void
+  /** Mês travado após "Encerrar revisão" — status deixam de ser clicáveis. */
+  travado?: boolean
 }
 
-export function FechamentoPendenciasCards({ fechamentos, onUpdate, onIrParaTabela }: Props) {
+export function FechamentoPendenciasCards({ fechamentos, onUpdate, onIrParaTabela, travado = false }: Props) {
   const criticos = useMemo(() => fechamentos.filter(isCritico), [fechamentos])
   const [openId, setOpenId] = useState<string | null>(null)
 
@@ -195,6 +202,12 @@ export function FechamentoPendenciasCards({ fechamentos, onUpdate, onIrParaTabel
           <p className="text-xs text-muted-foreground">
             Obrigações em pendente ou parcial — expanda o cliente para atualizar DAS, eSocial, Reinf e FGTS.
           </p>
+          {travado ? (
+            <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-warning">
+              <Lock className="h-3 w-3" />
+              Mês revisado — travado. Reabra o mês para editar.
+            </p>
+          ) : null}
         </div>
         {onIrParaTabela ? (
           <Button type="button" variant="outline" size="sm" onClick={onIrParaTabela}>
@@ -268,6 +281,7 @@ export function FechamentoPendenciasCards({ fechamentos, onUpdate, onIrParaTabel
                           campo={campo}
                           id={f.id}
                           onUpdate={onUpdate}
+                          travado={travado}
                         />
                       </div>
                     ))}
