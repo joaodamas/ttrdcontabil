@@ -20,8 +20,9 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { CpfCnpjInput } from '@/components/ui/cpf-cnpj-input'
 import { Loader2, Save, Send, ArrowLeft, CheckCircle2, ChevronRight, RotateCcw } from 'lucide-react'
-import { formatCurrency, formatCpfCnpj } from '@/lib/utils'
+import { formatCurrency, formatCpfCnpj, validateCpf, validateCnpj } from '@/lib/utils'
 import { getClientes, getCompetencias, createDocument, getDocument, updateDocument, listDocuments } from '@/lib/firestore-client'
 import { where, orderBy, limit } from 'firebase/firestore'
 import { getFunctions, httpsCallable } from 'firebase/functions'
@@ -31,9 +32,9 @@ import { SELECT_NONE_VALUE } from '@/lib/select-values'
 
 function isValidCpfCnpj(raw: string): boolean {
   const digits = raw.replace(/\D/g, '')
-  if (digits.length !== 11 && digits.length !== 14) return false
-  if (/^(\d)\1+$/.test(digits)) return false
-  return true
+  if (digits.length === 11) return validateCpf(digits)
+  if (digits.length === 14) return validateCnpj(digits)
+  return false
 }
 
 function isValidCodigoServico(code: string): boolean {
@@ -494,7 +495,19 @@ export function NfseEmissaoForm({
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="tomadorCpfCnpj">CPF / CNPJ <span className="text-destructive">*</span></Label>
-              <Input id="tomadorCpfCnpj" {...register('tomadorCpfCnpj')} placeholder="000.000.000-00" />
+              <Controller
+                name="tomadorCpfCnpj"
+                control={control}
+                render={({ field }) => (
+                  <CpfCnpjInput
+                    id="tomadorCpfCnpj"
+                    value={field.value ?? ''}
+                    onBlur={field.onBlur}
+                    onChange={(masked) => field.onChange(masked)}
+                    placeholder="000.000.000-00"
+                  />
+                )}
+              />
               {errors.tomadorCpfCnpj && <p className="text-xs text-destructive">{errors.tomadorCpfCnpj.message}</p>}
             </div>
             <div className="space-y-1.5">

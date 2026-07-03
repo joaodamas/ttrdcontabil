@@ -149,9 +149,10 @@ interface KanbanBoardProps {
   usuarios: HojeUsuario[]
   quickAssign: (id: string, uid: string, name: string) => Promise<void>
   swimlanes?: boolean
+  onChanged?: () => void | Promise<void>
 }
 
-export function KanbanBoard({ fila, selected, toggle, usuarios, quickAssign, swimlanes = false }: KanbanBoardProps) {
+export function KanbanBoard({ fila, selected, toggle, usuarios, quickAssign, swimlanes = false, onChanged }: KanbanBoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null)
 
   const sensors = useSensors(
@@ -189,6 +190,7 @@ export function KanbanBoard({ fila, selected, toggle, usuarios, quickAssign, swi
     try {
       await updateDocument('tarefas', draggedItem.id, { dataPrazo })
       toast.success(`Prazo ajustado para ${new Date(isoDate + 'T00:00:00').toLocaleDateString('pt-BR')}`)
+      await onChanged?.()
     } catch {
       toast.error('Não foi possível mover a tarefa.')
     }

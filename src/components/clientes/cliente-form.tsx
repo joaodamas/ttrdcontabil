@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useQueryClient } from '@tanstack/react-query'
@@ -13,7 +13,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatCpfCnpj, formatPhone, formatCep, formatWhatsApp, normalizeWhatsApp, UFS } from '@/lib/utils'
+import { CpfCnpjInput } from '@/components/ui/cpf-cnpj-input'
+import { formatPhone, formatCep, formatWhatsApp, normalizeWhatsApp, validateCpf, validateCnpj, UFS } from '@/lib/utils'
 import { Loader2, CheckCircle2, Bell, KeyRound } from 'lucide-react'
 import { createDocument, updateDocument, getNextClienteCodigo } from '@/lib/firestore-client'
 import { getErrorMessage } from '@/lib/error-message'
@@ -25,7 +26,12 @@ const clienteSchema = z.object({
   tipoPessoa: z.enum(['pf', 'pj']).default('pj'),
   razaoSocial: z.string().min(2, 'Nome/Razão social obrigatório'),
   nomeFantasia: z.string().optional(),
-  cpfCnpj: z.string().min(11, 'CPF/CNPJ inválido'),
+  cpfCnpj: z.string().min(11, 'CPF/CNPJ inválido').refine((v) => {
+    const digits = v.replace(/\D/g, '')
+    if (digits.length === 11) return validateCpf(digits)
+    if (digits.length === 14) return validateCnpj(digits)
+    return false
+  }, 'CPF/CNPJ inválido — verifique os dígitos'),
   email: z.string().email('E-mail inválido').optional().or(z.literal('')),
   telefone: z.string().optional(),
   celular: z.string().optional(),
@@ -170,6 +176,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
   const {
     register,
     handleSubmit,
+    control,
     watch,
     setValue,
     formState: { errors, isSubmitting },
@@ -353,19 +360,24 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
                 )}
               </Label>
               <div className="relative">
-                <Input
-                  id="cpfCnpj"
-                  {...register('cpfCnpj')}
-                  onChange={(e) => {
-                    const formatted = formatCpfCnpj(e.target.value)
-                    e.target.value = formatted
-                    setValue('cpfCnpj', formatted)
-                    if (tipoPessoa === 'pj' && formatted.replace(/\D/g, '').length === 14) {
-                      buscarCnpj(formatted)
-                    }
-                  }}
-                  maxLength={tipoPessoa === 'pj' ? 18 : 14}
-                  className="pr-8"
+                <Controller
+                  name="cpfCnpj"
+                  control={control}
+                  render={({ field }) => (
+                    <CpfCnpjInput
+                      id="cpfCnpj"
+                      tipoPessoa={tipoPessoa}
+                      value={field.value ?? ''}
+                      onBlur={field.onBlur}
+                      showValidation={false}
+                      onChange={(masked) => {
+                        field.onChange(masked)
+                        if (tipoPessoa === 'pj' && masked.replace(/\D/g, '').length === 14) {
+                          buscarCnpj(masked)
+                        }
+                      }}
+                    />
+                  )}
                 />
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
                   {buscandoCnpj && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}

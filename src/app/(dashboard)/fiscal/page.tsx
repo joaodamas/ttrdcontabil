@@ -12,6 +12,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { AppModal } from '@/components/ui/app-modal'
 import { KpiCard } from '@/components/ui/kpi-card'
 import { DataTableShell } from '@/components/ui/data-table-shell'
+import { InlineAlert } from '@/components/ui/inline-alert'
 import {
   FileText, CheckCircle2, XCircle, AlertTriangle,
   Plus, Loader2, Trash2, Layers, History, Receipt,
@@ -57,9 +58,18 @@ export default function FiscalPage() {
   const emissaoModalOpen = searchParams.get('emitir') === '1'
   const modalClienteId = searchParams.get('clienteId') ?? undefined
   const modalRascunhoId = searchParams.get('rascunhoId') ?? undefined
-  const { isLoading: loading, emitidaMesCount, somaEmitidaMes, pendenteCount, erroCount, canceladaCount, notas } = useFiscalDashboard()
+  const {
+    isLoading: loading,
+    isError: notasIsError,
+    error: notasError,
+    refetch: refetchNotas,
+    emitidaMesCount, somaEmitidaMes, pendenteCount, erroCount, canceladaCount, notas,
+  } = useFiscalDashboard()
   const {
     isLoading: readinessLoading,
+    isError: readinessIsError,
+    error: readinessError,
+    refetch: refetchReadiness,
     totalClientesAtivos,
     prontosRascunho,
     prontosEmissao,
@@ -146,7 +156,9 @@ export default function FiscalPage() {
         <div>
           <h1 className="text-lg font-semibold tracking-tight">NFS-e — Emissão de Notas</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {emitidaMesCount} nota{emitidaMesCount !== 1 ? 's' : ''} emitida{emitidaMesCount !== 1 ? 's' : ''} este mês · {formatCurrency(somaEmitidaMes)}
+            {notasIsError
+              ? 'Não foi possível carregar o resumo de notas.'
+              : <>{emitidaMesCount} nota{emitidaMesCount !== 1 ? 's' : ''} emitida{emitidaMesCount !== 1 ? 's' : ''} este mês · {formatCurrency(somaEmitidaMes)}</>}
           </p>
         </div>
 
@@ -188,11 +200,20 @@ export default function FiscalPage() {
 
       {/* KPI strip — horizontal, compacto */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiCard label="Emitidas no mês" value={emitidaMesCount} description={formatCurrency(somaEmitidaMes)} icon={Receipt} tone="success" />
-        <KpiCard label="Pendentes" value={pendenteCount} description="aguardando envio" icon={AlertTriangle} tone="warning" />
-        <KpiCard label="Com erro" value={erroCount} description="requer atenção" icon={XCircle} tone={erroCount > 0 ? 'danger' : 'neutral'} />
-        <KpiCard label="Canceladas" value={canceladaCount} description="neste mês" icon={CheckCircle2} />
+        <KpiCard label="Emitidas no mês" value={notasIsError ? '—' : emitidaMesCount} description={notasIsError ? undefined : formatCurrency(somaEmitidaMes)} icon={Receipt} tone="success" />
+        <KpiCard label="Pendentes" value={notasIsError ? '—' : pendenteCount} description={notasIsError ? undefined : 'aguardando envio'} icon={AlertTriangle} tone="warning" />
+        <KpiCard label="Com erro" value={notasIsError ? '—' : erroCount} description={notasIsError ? undefined : 'requer atenção'} icon={XCircle} tone={!notasIsError && erroCount > 0 ? 'danger' : 'neutral'} />
+        <KpiCard label="Canceladas" value={notasIsError ? '—' : canceladaCount} description={notasIsError ? undefined : 'neste mês'} icon={CheckCircle2} />
       </div>
+
+      {notasIsError ? (
+        <InlineAlert
+          tone="danger"
+          title="Não foi possível carregar as notas fiscais."
+          description={getErrorMessage(notasError, 'Ocorreu um erro ao buscar as notas. Verifique sua conexão e tente novamente.')}
+          action={{ label: 'Tentar novamente', onClick: () => { void refetchNotas() } }}
+        />
+      ) : null}
 
       <div className="rounded-xl border border-border bg-card card-shadow overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
@@ -201,15 +222,17 @@ export default function FiscalPage() {
             <h2 className="text-sm font-semibold">Prontidão para emissão recorrente</h2>
           </div>
           <span className="text-xs text-muted-foreground">
-            {prontosEmissao}/{totalClientesAtivos} cliente{totalClientesAtivos !== 1 ? 's' : ''} pronto{totalClientesAtivos !== 1 ? 's' : ''} para emissão
+            {readinessIsError
+              ? 'Falha ao validar'
+              : `${prontosEmissao}/${totalClientesAtivos} cliente${totalClientesAtivos !== 1 ? 's' : ''} pronto${totalClientesAtivos !== 1 ? 's' : ''} para emissão`}
           </span>
         </div>
         <div className="grid gap-3 p-4 md:grid-cols-4">
           {[
-            { label: 'Clientes ativos', value: totalClientesAtivos, tone: 'text-foreground' },
-            { label: 'Prontos p/ rascunho', value: prontosRascunho, tone: 'text-info' },
-            { label: 'Prontos p/ emissão', value: prontosEmissao, tone: 'text-success' },
-            { label: 'Com bloqueios', value: bloqueados, tone: bloqueados > 0 ? 'text-destructive' : 'text-muted-foreground' },
+            { label: 'Clientes ativos', value: readinessIsError ? '—' : totalClientesAtivos, tone: 'text-foreground' },
+            { label: 'Prontos p/ rascunho', value: readinessIsError ? '—' : prontosRascunho, tone: 'text-info' },
+            { label: 'Prontos p/ emissão', value: readinessIsError ? '—' : prontosEmissao, tone: 'text-success' },
+            { label: 'Com bloqueios', value: readinessIsError ? '—' : bloqueados, tone: !readinessIsError && bloqueados > 0 ? 'text-destructive' : 'text-muted-foreground' },
           ].map((item) => (
             <div key={item.label} className="rounded-lg border border-border bg-muted/20 p-3">
               <p className="text-xs font-medium text-muted-foreground">{item.label}</p>
@@ -235,6 +258,24 @@ export default function FiscalPage() {
                   <td colSpan={6} className="px-4 py-8 text-center text-sm text-muted-foreground">
                     <Loader2 className="mx-auto mb-2 h-4 w-4 animate-spin" />
                     Validando clientes e configurações fiscais...
+                  </td>
+                </tr>
+              ) : readinessIsError ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm">
+                    <div className="flex flex-col items-center gap-2">
+                      <XCircle size={20} className="text-destructive/70" />
+                      <p className="text-muted-foreground">
+                        {getErrorMessage(readinessError, 'Não foi possível validar a prontidão fiscal dos clientes.')}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => { void refetchReadiness() }}
+                        className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')}
+                      >
+                        Tentar novamente
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ) : readinessClientes.length === 0 ? (
@@ -321,7 +362,25 @@ export default function FiscalPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {notas.length === 0 ? (
+              {notasIsError ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-12 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <XCircle size={28} className="text-destructive/60" />
+                      <p className="text-sm text-muted-foreground">
+                        {getErrorMessage(notasError, 'Não foi possível carregar as notas fiscais.')}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => { void refetchNotas() }}
+                        className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mt-1 gap-1.5')}
+                      >
+                        Tentar novamente
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : notas.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-12 text-center">
                     <div className="flex flex-col items-center gap-2">

@@ -166,6 +166,7 @@ function TaskRow({
   const semResponsavel = !item.responsavelId
   const [editingPrazo, setEditingPrazo] = useState(false)
   const [savingPrazo,  setSavingPrazo]  = useState(false)
+  const queryClient = useQueryClient()
 
   async function handlePrazoChange(isoDate: string) {
     if (!isoDate) { setEditingPrazo(false); return }
@@ -174,6 +175,7 @@ function TaskRow({
       const dataPrazo = Timestamp.fromDate(new Date(isoDate + 'T00:00:00'))
       await updateDocument('tarefas', item.id, { dataPrazo })
       toast.success('Prazo atualizado.')
+      await queryClient.invalidateQueries({ queryKey: hojeKeys.all })
     } catch { toast.error('Não foi possível alterar o prazo.') }
     finally { setSavingPrazo(false); setEditingPrazo(false) }
   }
@@ -632,6 +634,7 @@ export default function HojePage() {
           usuarios={usuariosData}
           quickAssign={quickAssign}
           swimlanes={swimlanes}
+          onChanged={refresh}
         />
       )}
 

@@ -4,9 +4,11 @@ import { useState, useEffect, useMemo } from 'react'
 import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
 import { listDocuments } from '@/lib/firestore-client'
 import { tsToDate, cn } from '@/lib/utils'
+import { getErrorMessage } from '@/lib/error-message'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { InlineAlert } from '@/components/ui/inline-alert'
 import { Clock, User, TrendingUp, BarChart2 } from 'lucide-react'
 
 type TimerSession = {
@@ -35,10 +37,12 @@ const PERIODOS = [
 ]
 
 export default function ProdutividadePage() {
-  const [sessions,  setSessions]  = useState<TimerSession[]>([])
-  const [loading,   setLoading]   = useState(true)
-  const [periodo,   setPeriodo]   = useState('7')
-  const [usuFiltro, setUsuFiltro] = useState('todos')
+  const [sessions,    setSessions]    = useState<TimerSession[]>([])
+  const [loading,     setLoading]     = useState(true)
+  const [error,       setError]       = useState<unknown>(null)
+  const [periodo,     setPeriodo]     = useState('7')
+  const [usuFiltro,   setUsuFiltro]   = useState('todos')
+  const [reloadToken, setReloadToken] = useState(0)
 
   useEffect(() => {
     const since = new Date()
@@ -46,16 +50,17 @@ export default function ProdutividadePage() {
     const sinceTs = Timestamp.fromDate(since)
     let active = true
     setLoading(true)  // eslint-disable-line react-hooks/set-state-in-effect
+    setError(null)
     listDocuments<TimerSession>('tarefas_timers', [
       where('inicioEm', '>=', sinceTs),
       orderBy('inicioEm', 'desc'),
       limit(500),
     ])
       .then(data => { if (active) setSessions(data as TimerSession[]) })
-      .catch(() => { if (active) setSessions([]) })
+      .catch(err => { if (active) setError(err) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [periodo])
+  }, [periodo, reloadToken])
 
   const usuarios = useMemo(() => {
     const map = new Map<string, string>()
@@ -87,6 +92,7 @@ export default function ProdutividadePage() {
 
   const totalMs = filtradas.reduce((s, t) => s + t.duracaoMs, 0)
   const maxMs   = porUsuario[0]?.totalMs ?? 1
+  const semDados = loading || Boolean(error)
 
   return (
     <div className="space-y-5">
@@ -112,6 +118,15 @@ export default function ProdutividadePage() {
         </div>
       </div>
 
+      {error ? (
+        <InlineAlert
+          tone="danger"
+          title="Não foi possível carregar as sessões."
+          description={getErrorMessage(error, 'Ocorreu um erro ao buscar os dados de produtividade. Tente novamente.')}
+          action={{ label: 'Tentar novamente', onClick: () => setReloadToken(t => t + 1) }}
+        />
+      ) : null}
+
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card>
@@ -121,7 +136,7 @@ export default function ProdutividadePage() {
             </div>
             <div>
               <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Total</p>
-              <p className="text-xl font-bold tabular-nums">{loading ? '—' : formatMs(totalMs)}</p>
+              <p className="text-xl font-bold tabular-nums">{semDados ? '—' : formatMs(totalMs)}</p>
             </div>
           </CardContent>
         </Card>
@@ -132,7 +147,7 @@ export default function ProdutividadePage() {
             </div>
             <div>
               <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Sessões</p>
-              <p className="text-xl font-bold tabular-nums">{loading ? '—' : filtradas.length}</p>
+              <p className="text-xl font-bold tabular-nums">{semDados ? '—' : filtradas.length}</p>
             </div>
           </CardContent>
         </Card>
@@ -143,7 +158,7 @@ export default function ProdutividadePage() {
             </div>
             <div>
               <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Usuários</p>
-              <p className="text-xl font-bold tabular-nums">{loading ? '—' : porUsuario.length}</p>
+              <p className="text-xl font-bold tabular-nums">{semDados ? '—' : porUsuario.length}</p>
             </div>
           </CardContent>
         </Card>
@@ -154,7 +169,7 @@ export default function ProdutividadePage() {
             </div>
             <div>
               <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Média/sessão</p>
-              <p className="text-xl font-bold tabular-nums">{loading || filtradas.length === 0 ? '—' : formatMs(Math.round(totalMs / filtradas.length))}</p>
+              <p className="text-xl font-bold tabular-nums">{semDados || filtradas.length === 0 ? '—' : formatMs(Math.round(totalMs / filtradas.length))}</p>
             </div>
           </CardContent>
         </Card>
@@ -172,7 +187,7 @@ export default function ProdutividadePage() {
           <CardContent className="space-y-3">
             {loading ? (
               Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)
-            ) : porUsuario.length === 0 ? (
+            ) : error ? null : porUsuario.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">Nenhuma sessão registrada neste período.</p>
             ) : porUsuario.map(u => (
               <div key={u.nome} className="space-y-1">
@@ -202,7 +217,7 @@ export default function ProdutividadePage() {
           <CardContent>
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full mb-2" />)
-            ) : porTarefa.length === 0 ? (
+            ) : error ? null : porTarefa.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">Nenhuma sessão registrada neste período.</p>
             ) : (
               <div className="divide-y divide-border/50">
@@ -232,7 +247,7 @@ export default function ProdutividadePage() {
             <div className="p-4 space-y-2">
               {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
             </div>
-          ) : filtradas.length === 0 ? (
+          ) : error ? null : filtradas.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">Nenhuma sessão no período.</p>
           ) : (
             <div className="overflow-x-auto">

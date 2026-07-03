@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Timestamp } from 'firebase/firestore'
 
 import { formatDate , tsToDate } from '@/lib/utils'
+import { getErrorMessage } from '@/lib/error-message'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Plus, FileText } from 'lucide-react'
@@ -33,7 +34,7 @@ function IrContent() {
     page: parseInt(searchParams.get('page') ?? '1'),
   })
   const { anoBase, status, page } = filters
-  const { declaracoes, total, totalPages, isLoading: loading } = useIrList(filters)
+  const { declaracoes, total, totalPages, isLoading: loading, isError, error, refetch } = useIrList(filters)
 
   const anosDisponiveis = [anoBaseAtual, anoBaseAtual - 1, anoBaseAtual - 2, anoBaseAtual - 3]
 
@@ -53,7 +54,7 @@ function IrContent() {
         <div>
           <h2 className="text-lg font-semibold">Declarações de IR</h2>
           <p className="text-sm text-muted-foreground">
-            {total} declaraç{total !== 1 ? 'ões' : 'ão'} — Ano-base {anoBase}
+            {isError ? `Ano-base ${anoBase}` : <>{total} declaraç{total !== 1 ? 'ões' : 'ão'} — Ano-base {anoBase}</>}
           </p>
         </div>
         <Link href="/ir/nova">
@@ -95,6 +96,14 @@ function IrContent() {
           <tbody className="divide-y">
             {loading ? (
               <TableRowSkeleton cols={5} rows={6} />
+            ) : isError ? (
+              <TableEmptyState
+                colSpan={5}
+                icon={FileText}
+                title="Não foi possível carregar as declarações"
+                description={getErrorMessage(error, 'Verifique sua conexão e tente novamente.')}
+                action={{ label: 'Tentar novamente', onClick: () => { void refetch() } }}
+              />
             ) : declaracoes.length === 0 ? (
               <TableEmptyState
                 colSpan={5}
