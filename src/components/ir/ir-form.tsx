@@ -23,6 +23,7 @@ import { getClientes, getUsuarios, createDocument, updateDocument } from '@/lib/
 import { Timestamp } from 'firebase/firestore'
 import { getErrorMessage } from '@/lib/error-message'
 import { SELECT_NONE_VALUE } from '@/lib/select-values'
+import { toDateInputValue } from '@/lib/form-dates'
 
 const irSchema = z.object({
   clienteId: z.string().min(1, 'Cliente é obrigatório'),
@@ -69,6 +70,12 @@ export function IrForm({ initialData }: IrFormProps) {
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [loading, setLoading] = useState(true)
 
+  // initialData vem do doc cru do Firestore: dataEntrega pode ser um Timestamp,
+  // mas o input é type="date" e o schema espera string 'YYYY-MM-DD'.
+  const normalizedInitialData = initialData
+    ? { ...initialData, dataEntrega: toDateInputValue(initialData.dataEntrega) }
+    : undefined
+
   const {
     register,
     handleSubmit,
@@ -79,7 +86,7 @@ export function IrForm({ initialData }: IrFormProps) {
     defaultValues: {
       status: 'pendente',
       anoBase: new Date().getFullYear() - 1,
-      ...initialData,
+      ...normalizedInitialData,
     },
   })
 

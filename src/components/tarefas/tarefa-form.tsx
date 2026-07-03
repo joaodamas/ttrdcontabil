@@ -23,6 +23,7 @@ import { Loader2 } from 'lucide-react'
 import { getClientes, getUsuarios, createDocument, updateDocument } from '@/lib/firestore-client'
 import { getErrorMessage } from '@/lib/error-message'
 import { SELECT_NONE_VALUE } from '@/lib/select-values'
+import { toDateInputValue } from '@/lib/form-dates'
 
 const tarefaSchema = z.object({
   clienteId:     z.string().optional().nullable(),
@@ -59,6 +60,12 @@ export function TarefaForm({ initialData, onSuccess, onClose }: TarefaFormProps)
   const [usuarios, setUsuarios] = useState<UsuarioItem[]>([])
   const [loading, setLoading]   = useState(true)
 
+  // initialData vem do doc cru do Firestore: dataPrazo pode ser um Timestamp,
+  // mas o input é type="date" e o schema espera string 'YYYY-MM-DD'.
+  const normalizedInitialData = initialData
+    ? { ...initialData, dataPrazo: toDateInputValue(initialData.dataPrazo) }
+    : undefined
+
   const {
     register,
     handleSubmit,
@@ -66,7 +73,7 @@ export function TarefaForm({ initialData, onSuccess, onClose }: TarefaFormProps)
     formState: { errors, isSubmitting },
   } = useForm<TarefaFormData>({
     resolver: zodResolver(tarefaSchema),
-    defaultValues: { prioridade: 'normal', status: 'pendente', ...initialData },
+    defaultValues: { prioridade: 'normal', status: 'pendente', ...normalizedInitialData },
   })
 
   useEffect(() => {

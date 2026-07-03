@@ -171,9 +171,24 @@ async function criarUsuario(email: string, senha: string, nome: string, perfil: 
   }
 }
 
+// ⚠️ SEGURANÇA: este script já teve senhas reais commitadas em texto puro no
+// histórico do git (incluindo a senha pessoal antiga de joaodamasit@gmail.com).
+// Essa senha PRECISA SER ROTACIONADA manualmente pelo dono, pois já vazou.
+// As credenciais do admin agora vêm exclusivamente de variáveis de ambiente.
 async function criarAdmin() {
-  await criarUsuario('admin@ttrdcontabil.com.br', 'Admin@123456', 'Administrador', 'admin')
-  await criarUsuario('joaodamasit@gmail.com', 'Jopa@0206', 'João Damas', 'admin')
+  const adminEmail = process.env.SEED_ADMIN_EMAIL
+  const adminSenha = process.env.SEED_ADMIN_SENHA
+  if (!adminEmail || !adminSenha) {
+    throw new Error('Defina SEED_ADMIN_EMAIL e SEED_ADMIN_SENHA no ambiente antes de rodar o seed.')
+  }
+  await criarUsuario(adminEmail, adminSenha, 'Administrador', 'admin')
+
+  const donoEmail = process.env.SEED_DONO_EMAIL
+  const donoSenha = process.env.SEED_DONO_SENHA
+  if (!donoEmail || !donoSenha) {
+    throw new Error('Defina SEED_DONO_EMAIL e SEED_DONO_SENHA no ambiente antes de rodar o seed.')
+  }
+  await criarUsuario(donoEmail, donoSenha, 'João Damas', 'admin')
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -236,7 +251,7 @@ async function main() {
   await criarAdmin()
 
   console.log('\n✅ Seed concluído.')
-  console.log('   Admin: admin@ttrdcontabil.com.br / Admin@123456')
+  console.log('   Admin criado com as credenciais definidas em SEED_ADMIN_EMAIL/SEED_ADMIN_SENHA.')
   console.log('   ⚠️  TROQUE A SENHA NO PRIMEIRO LOGIN!')
   process.exit(0)
 }

@@ -36,6 +36,7 @@ import { cn } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error-message'
 import { appConfig } from '@/lib/app-config'
 import { createUsuarioProfileAdmin, updateUsuarioAdmin } from '@/features/admin/services'
+import { useAuth } from '@/contexts/auth-context'
 
 const DEFAULT_TENANT_ID = appConfig.tenantId
 
@@ -112,6 +113,8 @@ interface UsuarioFormProps {
 export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
   const isEditing = !!usuario?.id
   const [open, setOpen] = useState(false)
+  const { usuario: usuarioLogado } = useAuth()
+  const isSelf = isEditing && !!usuarioLogado && usuarioLogado.uid === usuario?.id
 
   const defaultPerfil = isEditing
     ? ((PERFIS.includes(usuario?.perfil as Perfil) ? usuario?.perfil : 'leitura') as Perfil)
@@ -163,6 +166,11 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
   async function onSubmit(data: EditData) {
     try {
       if (isEditing) {
+        if (isSelf && (data.perfil !== 'admin' || data.ativo === false)) {
+          toast.error('Você não pode rebaixar o perfil nem inativar o seu próprio usuário.')
+          return
+        }
+
         await updateUsuarioAdmin(usuario!.id, {
           nome:   data.nome,
           perfil: data.perfil,
@@ -289,7 +297,7 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
                     name="perfil"
                     control={control}
                     render={({ field }) => (
-                      <Select value={field.value} onValueChange={field.onChange}>
+                      <Select value={field.value} onValueChange={field.onChange} disabled={isSelf}>
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -313,6 +321,7 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
                         <Select
                           value={field.value ? 'ativo' : 'inativo'}
                           onValueChange={(v) => field.onChange(v === 'ativo')}
+                          disabled={isSelf}
                         >
                           <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
@@ -325,6 +334,12 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
                   </div>
                 )}
               </div>
+
+              {isSelf && (
+                <p className="text-xs text-muted-foreground">
+                  Você está editando o seu próprio usuário: não é possível alterar o perfil ou inativar sua conta por aqui.
+                </p>
+              )}
             </div>
 
             {/* Permissões de tela */}

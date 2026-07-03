@@ -5,7 +5,10 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { sendPasswordResetEmail } from 'firebase/auth'
+import { toast } from 'sonner'
 import { signIn } from '@/lib/auth-client'
+import { getClientAuth } from '@/lib/firebase'
 import { appConfig } from '@/lib/app-config'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -46,13 +49,20 @@ const FEATURES = [
 export function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const from = searchParams.get('from') ?? '/hoje'
+  const rawFrom = searchParams.get('from')
+  const isInternalPath = (p: string | null): p is string =>
+    !!p && p.startsWith('/') && !p.startsWith('//') && !p.startsWith('/\\') && !p.includes('\\')
+  const from = isInternalPath(rawFrom) ? rawFrom : '/hoje'
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [resetLoading, setResetLoading] = useState(false)
 
   const {
     register,
     handleSubmit,
+    getValues,
+    trigger,
+    setFocus,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema) })
 
@@ -81,6 +91,34 @@ export function LoginForm() {
         setError('Erro de conexão. Tente novamente.')
       }
     }
+  }
+
+  async function handleForgotPassword() {
+    if (resetLoading) return
+    const email = getValues('email')?.trim() ?? ''
+    const parsed = z.string().email().safeParse(email)
+    if (!parsed.success) {
+      await trigger('email')
+      setFocus('email')
+      toast.error('Informe um e-mail válido para receber o link de redefinição.')
+      return
+    }
+
+    setResetLoading(true)
+    try {
+      await sendPasswordResetEmail(getClientAuth(), parsed.data)
+    } catch (err) {
+      const code = (err as { code?: string }).code
+      if (code === 'auth/network-request-failed' || code === 'auth/too-many-requests') {
+        toast.error('Não foi possível enviar agora. Tente novamente.')
+        setResetLoading(false)
+        return
+      }
+      // Demais erros (ex.: auth/user-not-found) caem na mensagem neutra abaixo —
+      // não revelamos se o e-mail existe (anti-enumeração)
+    }
+    toast.success('Se este e-mail estiver cadastrado, enviamos um link para redefinir a senha.')
+    setResetLoading(false)
   }
 
   return (
@@ -336,6 +374,16 @@ export function LoginForm() {
                   {errors.senha.message}
                 </p>
               )}
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  disabled={resetLoading}
+                  className="text-xs font-medium text-gray-500 hover:text-[#2243A5] transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {resetLoading ? 'Enviando...' : 'Esqueci minha senha'}
+                </button>
+              </div>
             </div>
 
             {/* Erro geral */}
