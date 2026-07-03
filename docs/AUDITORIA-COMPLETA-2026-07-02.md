@@ -215,7 +215,13 @@ Auditadas por leitura direta de código: firestore/storage rules, auth/RBAC, tod
 - **Fechamento travado de fato após a revisão** — enforcement no app (`updateFechamentoField`) **e** server-side nas rules (edição bloqueada em mês travado; reabertura só-admin) + na Cloud Function que gera o mês; UI desabilita as células e mostra o estado; "Reabrir mês" só admin. · `fechamento.ts` + `fechamento/services.ts` + `fechamento/client.tsx` + `fechamento-table.tsx` + `fechamento-pendencias-cards.tsx`
 - **Status manual `atrasado`/`estornado` removido do Financeiro** ('atrasado' volta a ser derivado); legado normalizado no load sem quebrar leitura; `dataPagamento` exigido quando `pago`. · `lancamento-form.tsx`
 
-**Follow-ups menores (P2, não bloqueiam):** `fiscal_conectores` ainda com `canRead()`; sem bypass de admin para editar `fechamentos` de mês travado (precisa reabrir antes — consistente com o app); rotação manual da senha `Jopa@0206` + purga do histórico do git.
+**Lote 5 — correções de UX e limpeza (QA aprovado; build 40/40):**
+- Cadastro de cliente: **confirmação de descarte** ao cancelar com alterações não salvas (isDirty em todos os campos, sem falso-dirty). · `cliente-form.tsx`
+- Edição de competência: **preserva o serviço** ao abrir (não apaga no mount) e **trava cliente/serviço/mês/ano** na edição (protege o ID determinístico contra duplicata com o scheduler). · `competencia-form.tsx`
+- IR: **dedup por cliente+ano-base** antes de criar (evita declaração/checklist/tarefa duplicados). · `ir-form.tsx`
+- **Limpeza de código morto:** apagados `_api_backup/**` (29 arquivos), `auth.ts`/`firebase-admin.ts`, `hooks/queries/*`, `use-action`/`use-paginated-query`, `sla-score` órfão (~3.250 linhas); removidas deps mortas `bcryptjs`/`jose`; `firebase-admin` movida para devDependencies. **`npm audit --omit=dev`: 16 → 7** (as 7 restantes são framework/transitivas: Next.js, @babel/core, @grpc/grpc-js, hono, js-yaml).
+
+**Follow-ups menores (P2, não bloqueiam):** `fiscal_conectores` ainda com `canRead()`; sem bypass de admin para editar `fechamentos` de mês travado (precisa reabrir antes — consistente com o app); TOCTOU teórico no dedup de IR (double-submit — fix definitivo seria ID determinístico); as 7 vulnerabilidades restantes (bump de versão do Next); rotação manual da senha `Jopa@0206` + purga do histórico do git.
 
 **Status dos 5 P0 da auditoria:** P0-1 ✅ (rules validadas) · P0-2 ✅ (código; falta rotação manual) · P0-3 ✅ · P0-4 ✅ núcleo (RPS persistido; numeração sequencial + homologação pendentes) · P0-5 ✅. **Nada commitado nem deployado; toda a mudança fiscal exige homologação antes de produção.**
 
