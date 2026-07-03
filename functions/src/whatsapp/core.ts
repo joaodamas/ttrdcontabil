@@ -299,21 +299,26 @@ export async function dispatchWhatsappJob(jobId: string) {
   const jobSnap = await db().collection('whatsapp_jobs').doc(jobId).get()
   if (!jobSnap.exists) throw new HttpsError('not-found', 'Job não encontrado.')
   const job = jobSnap.data() ?? {}
-  const config = await getTenantWhatsappConfig(String(job.tenantId ?? DEFAULT_TENANT_ID))
-  if (!config.whatsappCloudApiEnabled) {
-    throw new HttpsError('failed-precondition', 'Cloud API de WhatsApp desabilitada nos parâmetros.')
-  }
 
-  const apiToken = process.env.WHATSAPP_CLOUD_API_TOKEN
-  const phoneNumberId = config.whatsappPhoneNumberId
-  if (!apiToken || !phoneNumberId) {
-    throw new HttpsError('failed-precondition', 'Token ou phone number ID do WhatsApp não configurados.')
-  }
-
-  const messagePayload = await buildMessagePayload(job)
-  const url = `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`
-
+  // Todo o caminho de dispatch (pré-condições, montagem e envio) fica dentro do
+  // try para que QUALQUER falha — inclusive Cloud API desabilitada ou token/phone
+  // ausente — seja registrada com nextRetryAt/attemptCount e progrida até
+  // 'esgotado' na fila, em vez de virar um job 'falhou' preso sem retry.
   try {
+    const config = await getTenantWhatsappConfig(String(job.tenantId ?? DEFAULT_TENANT_ID))
+    if (!config.whatsappCloudApiEnabled) {
+      throw new HttpsError('failed-precondition', 'Cloud API de WhatsApp desabilitada nos parâmetros.')
+    }
+
+    const apiToken = process.env.WHATSAPP_CLOUD_API_TOKEN
+    const phoneNumberId = config.whatsappPhoneNumberId
+    if (!apiToken || !phoneNumberId) {
+      throw new HttpsError('failed-precondition', 'Token ou phone number ID do WhatsApp não configurados.')
+    }
+
+    const messagePayload = await buildMessagePayload(job)
+    const url = `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`
+
     const response = await axios.post(url, messagePayload, {
       headers: {
         Authorization: `Bearer ${apiToken}`,
@@ -390,15 +395,19 @@ export async function dispatchWhatsappJob(jobId: string) {
       attemptCount: FieldValue.increment(1),
       lastAttemptAt: FieldValue.serverTimestamp(),
       nextRetryAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 30 * 60 * 1000)),
-      erro: 'Falha ao enviar mensagem pelo provider.',
+      erro: axiosError.message ?? 'Falha ao enviar mensagem pelo provider.',
       detalhes: details,
       atualizadoEm: FieldValue.serverTimestamp(),
     }, { merge: true })
-    await db().collection('lancamentos').doc(String(job.lancamentoId)).set({
-      statusWhatsappCobranca: 'falhou',
-      atualizadoEm: FieldValue.serverTimestamp(),
-    }, { merge: true })
-    throw new HttpsError('internal', 'Falha ao enviar mensagem pelo provider.')
+    if (job.lancamentoId) {
+      await db().collection('lancamentos').doc(String(job.lancamentoId)).set({
+        statusWhatsappCobranca: 'falhou',
+        atualizadoEm: FieldValue.serverTimestamp(),
+      }, { merge: true })
+    }
+    // Preserva o motivo real (ex.: pré-condição de config) em vez de mascarar tudo
+    // como erro de provider — a fila registra nextRetryAt/attemptCount de qualquer forma.
+    throw error instanceof HttpsError ? error : new HttpsError('internal', 'Falha ao enviar mensagem pelo provider.')
   }
 }
 

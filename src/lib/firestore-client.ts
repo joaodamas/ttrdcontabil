@@ -323,6 +323,15 @@ export async function deleteDocument(col: string, id: string) {
 /**
  * Soft-delete: marca o documento com deletedAt em vez de apagar fisicamente.
  * Usado exclusivamente para clientes — mantém integridade referencial.
+ *
+ * Também seta `status: 'inativo'` no documento, para que os filtros
+ * `status == 'ativo'` já existentes (schedulers de competências, lançamentos
+ * e fechamentos) passem a excluí-lo automaticamente — o soft-delete por si só
+ * (só deletedAt) não bastava para interromper cobranças recorrentes.
+ *
+ * Quando a coleção é `clientes`, cascateia a inativação para os
+ * `clientes_servicos` do cliente, parando a geração de honorários e
+ * NFS-e recorrente.
  */
 export async function softDeleteDocument(col: string, id: string) {
   const uid = getClientAuth().currentUser?.uid ?? null
@@ -331,6 +340,7 @@ export async function softDeleteDocument(col: string, id: string) {
   const before = beforeSnap?.exists() ? beforeSnap.data() : null
   const actor = await getAuditActor()
   const payload = withActorMetadata({
+    status:       'inativo',
     deletedAt:    serverTimestamp(),
     deletedById:  uid,
     atualizadoEm: serverTimestamp(),
@@ -341,8 +351,24 @@ export async function softDeleteDocument(col: string, id: string) {
     entidadeId: id,
     acao: 'soft_delete',
     dadosAntes: before,
-    dadosDepois: { ...(before ?? {}), deletedById: uid },
+    dadosDepois: { ...(before ?? {}), status: 'inativo', deletedById: uid },
   })
+
+  if (col === 'clientes') {
+    const servicos = await listDocuments<Record<string, unknown>>(
+      'clientes_servicos',
+      [where('clienteId', '==', id), limit(500)]
+    )
+    await Promise.all(
+      servicos
+        .filter((servico) => servico.status !== 'inativo')
+        .map((servico) =>
+          updateDocument('clientes_servicos', servico.id, { status: 'inativo' }).catch((err) => {
+            console.error('[softDeleteDocument] Falha ao inativar clientes_servicos', servico.id, err)
+          })
+        )
+    )
+  }
 }
 
 // ── Domain queries ────────────────────────────────────────────────────────────

@@ -80,7 +80,12 @@ export const gerarRascunhosNfseMensais = onCall(
         .where('tenantId', '==', actor.tenantId)
         .get()
 
-    if (clientesSnap.docs.length === 0) {
+    // Defesa em profundidade: pula clientes com deletedAt setado mesmo que o
+    // status ainda não tenha sido virado — evita gerar rascunho fiscal (e,
+    // por consequência, RPS) para cliente excluído.
+    const clientesAtivos = clientesSnap.docs.filter((doc) => !doc.data()?.deletedAt)
+
+    if (clientesAtivos.length === 0) {
       return { criados: 0, ignorados: 0, pendentesRevisao: 0, motivos: ['Nenhum cliente ativo encontrado.'] }
     }
 
@@ -120,7 +125,7 @@ export const gerarRascunhosNfseMensais = onCall(
     const motivos: string[] = []
     const comp = competenciaLabel(mes, ano)
 
-    for (const clienteDoc of clientesSnap.docs) {
+    for (const clienteDoc of clientesAtivos) {
       const cliente = clienteDoc.data() ?? {}
       const clienteId = clienteDoc.id
       const diaEmissao = Number(cliente.diaEmissaoNFSe)

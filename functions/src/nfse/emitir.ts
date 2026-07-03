@@ -144,23 +144,58 @@ function resumoTentativaNfse(input: EmitirNfseInput, config: ConfigFiscalCliente
 
 export async function processarEmissao(input: EmitirNfseInput, uid: string) {
   const actor: AuditActor = { id: uid, nome: 'Usuário autenticado' }
+
+  // ─── RPS: aloca (ou reusa) e PERSISTE antes de enviar à prefeitura ───────────
+  // O número/série usados nesta emissão são fixados aqui — não mais deixados para
+  // o conector decidir "no meio do caminho". Isso garante que, em caso de timeout
+  // pós-envio, o RPS efetivamente consumido na prefeitura fique registrado local-
+  // mente (rascunho) e possa ser REUSADO pelo retry, em vez de gerar um RPS novo
+  // e arriscar nota duplicada/perdida.
+  let numeroRps = input.numeroRps
+  let serieRps  = input.serieRps
+
   if (input.rascunhoId) {
     const rascunhoRef = db().collection('nfse_rascunhos').doc(input.rascunhoId)
-    await db().runTransaction(async (tx) => {
+    const rps = await db().runTransaction(async (tx) => {
       const rascunho = await tx.get(rascunhoRef)
       if (!rascunho.exists) throw new HttpsError('not-found', 'Rascunho não encontrado.')
-      const status = rascunho.data()?.status as string | undefined
+      const rascunhoData = rascunho.data() ?? {}
+      const status = rascunhoData.status as string | undefined
       if (status === 'emitida') throw new HttpsError('already-exists', 'Este rascunho já foi emitido.')
       if (status === 'processando') throw new HttpsError('already-exists', 'Este rascunho já está em processamento.')
+
+      // Reusa o RPS já persistido no rascunho (retry) ou recebido no input;
+      // só aloca um novo se nenhum dos dois existir ainda. Trunca para os
+      // últimos 8 dígitos do timestamp — mesmo formato que os conectores de
+      // São Paulo/Barueri já usam para o campo NumeroRPS (limite do schema
+      // municipal); os demais conectores aceitam números mais curtos sem problema.
+      const dadosExistentes = (rascunhoData.dados ?? {}) as Record<string, unknown>
+      const numero = numeroRps ?? (dadosExistentes.numeroRps as string | undefined) ?? String(Date.now()).slice(-8)
+      const serie  = serieRps  ?? (dadosExistentes.serieRps as string | undefined)  ?? 'RPS'
+
       tx.update(rascunhoRef, {
         status: 'processando',
         tentativas: FieldValue.increment(1),
         erroUltimaTentativa: null,
         atualizadoEm: Timestamp.now(),
         atualizadoPorId: uid,
+        'dados.numeroRps': numero,
+        'dados.serieRps': serie,
       })
+
+      return { numero, serie }
     })
+    numeroRps = rps.numero
+    serieRps  = rps.serie
+  } else {
+    numeroRps = numeroRps ?? String(Date.now()).slice(-8)
+    serieRps  = serieRps  ?? 'RPS'
   }
+
+  // Repassa explicitamente ao conector — este apenas reusa o valor recebido
+  // (ver municipios/*.ts: `input.numeroRps ?? ...` — fallback só é acionado
+  // se, por algum motivo, nada tiver sido alocado acima).
+  input = { ...input, numeroRps, serieRps }
 
   const [config, cliente] = await Promise.all([
     getConfigFiscal(input.clienteId),
@@ -207,6 +242,8 @@ export async function processarEmissao(input: EmitirNfseInput, uid: string) {
       issRetido:         input.servico.issRetido,
       numeroNfse:        resultado.numeroNfse ?? null,
       codigoVerificacao: resultado.codigoVerificacao ?? null,
+      numeroRps:         numeroRps ?? null,
+      serieRps:          serieRps ?? null,
       xmlNfse:           resultado.xmlNfse ?? null,
       pdfUrl:            resultado.pdfUrl ?? null,
       municipioIbge:     config.municipioIbge,
@@ -271,6 +308,11 @@ export async function processarEmissao(input: EmitirNfseInput, uid: string) {
         ultimaTentativaEm: now,
         atualizadoEm: now,
         atualizadoPorId: uid,
+        // Reforça a persistência do RPS já alocado (defesa em profundidade —
+        // a transação acima já grava isto, mas garante o dado para o retry
+        // mesmo que este bloco venha a ser alcançado por outro caminho).
+        'dados.numeroRps': numeroRps ?? null,
+        'dados.serieRps': serieRps ?? null,
       })
     }
     await writeAuditLog({

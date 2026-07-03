@@ -68,7 +68,12 @@ export const criarCompetenciasMensais = onSchedule(
     for (const [clienteId, servicos] of porCliente.entries()) {
       // Busca razaoSocial do cliente
       const clienteDoc = await db().collection('clientes').doc(clienteId).get()
-      if (!clienteDoc.exists || clienteDoc.data()?.status !== 'ativo' || clienteDoc.data()?.tenantId !== DEFAULT_TENANT_ID) {
+      if (
+        !clienteDoc.exists ||
+        clienteDoc.data()?.status !== 'ativo' ||
+        clienteDoc.data()?.deletedAt ||
+        clienteDoc.data()?.tenantId !== DEFAULT_TENANT_ID
+      ) {
         ignoradas += servicos.length
         continue
       }

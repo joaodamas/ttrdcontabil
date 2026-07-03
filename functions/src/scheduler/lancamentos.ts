@@ -70,7 +70,7 @@ export const criarLancamentosMensais = onSchedule(
     for (const c of clienteDocs) {
       if (!c.exists) continue
       const data = c.data()
-      if (!data || data.status === 'inativo') continue
+      if (!data || data.status === 'inativo' || data.deletedAt) continue
       if (data.tenantId !== DEFAULT_TENANT_ID) continue
       clienteAtivoMap.set(c.id, (data.razaoSocial ?? '') as string)
     }
