@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm, Controller, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2 } from 'lucide-react'
-import { getClientes, createDocument, updateDocument } from '@/lib/firestore-client'
+import { getClientes, getCompetencias, createDocument, updateDocument } from '@/lib/firestore-client'
 import { SELECT_NONE_VALUE } from '@/lib/select-values'
 import { formatWhatsApp, normalizeWhatsApp } from '@/lib/utils'
 
@@ -74,6 +74,7 @@ type LancamentoPayload = Omit<LancamentoFormData, 'dataVencimento' | 'dataPagame
 }
 
 interface ClienteItem { id: string; razaoSocial: string }
+interface CompetenciaItem { id: string; mes: number; ano: number; servicoNome?: string }
 
 // Status legado que pode vir gravado em documentos antigos (Firestore não
 // valida o enum). O form nunca oferece esses valores, mas precisa aceitá-los
@@ -100,11 +101,14 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
 
   const [clientes, setClientes]         = useState<ClienteItem[]>([])
   const [loadingClientes, setLoading]   = useState(true)
+  const [competencias, setCompetencias]             = useState<CompetenciaItem[]>([])
+  const [loadingCompetencias, setLoadingCompetencias] = useState(false)
 
   const {
     register,
     handleSubmit,
     control,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LancamentoFormData>({
     resolver: zodResolver(lancamentoSchema),
@@ -121,6 +125,13 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
   })
   const tipo = useWatch({ control, name: 'tipo' })
   const status = useWatch({ control, name: 'status' })
+  const clienteId = useWatch({ control, name: 'clienteId' })
+
+  // Na edição, o clienteId inicial já vem preenchido e o efeito abaixo roda no
+  // mount só para carregar a lista de competências — não pode apagar a
+  // competência salva. Só a partir da 2ª execução (troca manual de cliente)
+  // é que o competenciaId deve ser limpo.
+  const skipInitialCompetenciaResetRef = useRef(isEditing)
 
   useEffect(() => {
     getClientes({ status: 'ativo' })
@@ -129,11 +140,36 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
       .finally(() => setLoading(false))
   }, [])
 
+  // Carrega as competências do cliente selecionado para permitir vincular o
+  // lançamento (ex: honorário automático) à competência correspondente.
+  useEffect(() => {
+    const skipReset = skipInitialCompetenciaResetRef.current
+    skipInitialCompetenciaResetRef.current = false
+
+    if (!clienteId) {
+      setCompetencias([])  // eslint-disable-line react-hooks/set-state-in-effect
+      if (!skipReset) setValue('competenciaId', null)
+      return
+    }
+
+    // Cliente trocado (não é o carregamento inicial de uma edição): a
+    // competência selecionada pertence ao cliente anterior, então precisa
+    // ser limpa para evitar gravar competenciaId de outro cliente.
+    if (!skipReset) setValue('competenciaId', null)
+
+    setLoadingCompetencias(true)
+    getCompetencias({ clienteId })
+      .then((data) => setCompetencias(data as unknown as CompetenciaItem[]))
+      .catch(() => toast.error('Erro ao carregar competências do cliente'))
+      .finally(() => setLoadingCompetencias(false))
+  }, [clienteId, setValue])
+
   async function onSubmit(data: LancamentoFormData) {
     const cliente = data.clienteId ? clientes.find((c) => c.id === data.clienteId) : null
     const payload: LancamentoPayload = {
       ...data,
       clienteId: data.clienteId || null,
+      competenciaId: data.competenciaId || null,
       clienteNome: cliente?.razaoSocial ?? null,
       pagadorNome: data.pagadorNome || cliente?.razaoSocial || null,
       pagadorWhatsapp: normalizeWhatsApp(data.pagadorWhatsapp),
@@ -262,6 +298,40 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
               )}
             />
             {errors.clienteId && <p className="text-xs text-destructive">{errors.clienteId.message}</p>}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Competência (opcional)</Label>
+            <Controller
+              name="competenciaId"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  value={field.value ?? SELECT_NONE_VALUE}
+                  onValueChange={(v) => field.onChange(v === SELECT_NONE_VALUE ? null : v)}
+                  disabled={loadingCompetencias || !clienteId}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        !clienteId ? 'Selecione um cliente primeiro'
+                        : loadingCompetencias ? 'Carregando...'
+                        : 'Selecione a competência'
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SELECT_NONE_VALUE}>Nenhuma</SelectItem>
+                    {competencias.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {String(c.mes).padStart(2, '0')}/{c.ano}
+                        {c.servicoNome ? ` — ${c.servicoNome}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

@@ -112,6 +112,13 @@ export const criarLancamentosMensais = onSchedule(
       const dataVencimento = buildDataVencimento(ano, mes, diaVencimento)
       const descricao = (servico.descricaoServico ?? servico.nomeServico ?? servico.descricao ?? 'Honorários contábeis') as string
 
+      // Mesmo id determinístico usado por criarCompetenciasMensais (competencias.ts):
+      // `${clienteId}_${clienteServicoId}_${ano}_${mes}`. servicoDoc.id aqui é o id do
+      // doc em clientes_servicos, o mesmo usado como clienteServicoId na competência —
+      // isso vincula o honorário à competência do cliente+serviço do mês, mesmo que
+      // ela ainda não exista no momento da criação.
+      const competenciaId = `${clienteId}_${servicoDoc.id}_${ano}_${String(mes).padStart(2, '0')}`
+
       const tenantId = DEFAULT_TENANT_ID
       const ref = db()
         .collection('lancamentos')
@@ -121,6 +128,7 @@ export const criarLancamentosMensais = onSchedule(
         clienteId,
         clienteNome: razaoSocial,
         servicoId: servicoDoc.id,
+        competenciaId,
         tipo: 'receita',
         natureza: 'servico_contabil',
         status: 'pendente',
