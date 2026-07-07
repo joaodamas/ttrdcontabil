@@ -98,21 +98,26 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
 
   useEffect(() => {
     if (!open) return
-    const creds = defaultValues?.credenciais ?? {}
     reset({
       ambienteEmissao:  'homologacao',
       optanteSimples:   true,
       naturezaOperacao: '1',
       provedorNfse:     'municipio',
       ...defaultValues,
-      simplissToken:          (creds.simplissToken as string) ?? null,
-      usuario:                (creds.usuario as string) ?? null,
-      senha:                  (creds.senha as string) ?? null,
-      conamCodigoUsuario:     (creds.conamCodigoUsuario as string) ?? null,
-      conamCodigoContribuinte:(creds.conamCodigoContribuinte as string) ?? null,
-      giaplogin:              (creds.giaplogin as string) ?? null,
-      giapSenha:              (creds.giapSenha as string) ?? null,
-      spedyApiKey:            (creds.spedyApiKey as string) ?? null,
+      // Credenciais NUNCA são pré-preenchidas: o que vem de defaultValues.credenciais
+      // já está criptografado (formato iv:authTag:ciphertext). Preencher o campo com
+      // isso e salvar de novo sem alterar reencripta o ciphertext por cima do
+      // ciphertext a cada edição — foi exatamente o que corrompeu a chave de API da
+      // Spedy do JPProject (694 caracteres depois de 3 salvamentos). Campo fica
+      // sempre vazio; só é enviado pro backend se o usuário digitar algo novo.
+      simplissToken:          null,
+      usuario:                null,
+      senha:                  null,
+      conamCodigoUsuario:     null,
+      conamCodigoContribuinte:null,
+      giaplogin:              null,
+      giapSenha:              null,
+      spedyApiKey:            null,
     })
   }, [open, defaultValues, reset])
 
@@ -361,7 +366,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
               <p className="text-xs font-semibold uppercase text-muted-foreground">Credenciais — SimplissWeb (Santana de Parnaíba)</p>
               <div className="space-y-1.5">
                 <Label>Token de Acesso</Label>
-                <Input {...register('simplissToken')} placeholder="Token fornecido pela prefeitura" />
+                <Input {...register('simplissToken')} placeholder={credenciais.simplissToken ? 'Já configurado — deixe em branco para manter' : 'Token fornecido pela prefeitura'} />
               </div>
             </div>
           )}
@@ -373,11 +378,11 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Código de Usuário</Label>
-                  <Input {...register('conamCodigoUsuario')} placeholder="Cód. usuário" />
+                  <Input {...register('conamCodigoUsuario')} placeholder={credenciais.conamCodigoUsuario ? 'Já configurado' : 'Cód. usuário'} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Código do Contribuinte</Label>
-                  <Input {...register('conamCodigoContribuinte')} placeholder="Cód. contribuinte" />
+                  <Input {...register('conamCodigoContribuinte')} placeholder={credenciais.conamCodigoContribuinte ? 'Já configurado' : 'Cód. contribuinte'} />
                 </div>
               </div>
             </div>
@@ -390,11 +395,11 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Login</Label>
-                  <Input {...register('giaplogin')} placeholder="Login" />
+                  <Input {...register('giaplogin')} placeholder={credenciais.giaplogin ? 'Já configurado' : 'Login'} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Senha</Label>
-                  <Input type="password" {...register('giapSenha')} placeholder="Senha" />
+                  <Input type="password" {...register('giapSenha')} placeholder={credenciais.giapSenha ? 'Já configurada — deixe em branco para manter' : 'Senha'} />
                 </div>
               </div>
             </div>
@@ -406,9 +411,13 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
               <p className="text-xs font-semibold uppercase text-muted-foreground">Credenciais — Spedy (API)</p>
               <div className="space-y-1.5">
                 <Label>Chave de API</Label>
-                <Input type="password" {...register('spedyApiKey')} placeholder="Cole a chave de API da Spedy (aba Geral → Credenciais da API)" />
+                <Input
+                  type="password"
+                  {...register('spedyApiKey')}
+                  placeholder={credenciais.spedyApiKey ? 'Já configurada — deixe em branco para manter' : 'Cole a chave de API da Spedy (aba Geral → Credenciais da API)'}
+                />
                 <p className="text-xs text-muted-foreground">
-                  Criptografada antes de salvar — nunca fica em texto puro. O certificado A1 continua sendo enviado direto no painel da Spedy, não aqui.
+                  Criptografada antes de salvar — nunca fica em texto puro. Deixe em branco pra manter a chave já salva; só preencha se for trocar. O certificado A1 continua sendo enviado direto no painel da Spedy, não aqui.
                 </p>
               </div>
             </div>
