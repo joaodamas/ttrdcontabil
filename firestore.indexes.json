@@ -63,6 +63,16 @@
       "collectionGroup": "competencias",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "mes", "order": "ASCENDING" },
+        { "fieldPath": "ano", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "competencias",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "mes", "order": "ASCENDING" },
         { "fieldPath": "ano", "order": "ASCENDING" },
         { "fieldPath": "clienteId", "order": "ASCENDING" }
@@ -231,6 +241,15 @@
       "collectionGroup": "tarefas",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "dataPrazo", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "tarefas",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "prioridade", "order": "ASCENDING" },
         { "fieldPath": "dataPrazo", "order": "ASCENDING" }
       ]
@@ -291,6 +310,15 @@
         { "fieldPath": "mes", "order": "ASCENDING" },
         { "fieldPath": "ano", "order": "ASCENDING" },
         { "fieldPath": "clienteCodigo", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "fechamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "mes", "order": "ASCENDING" },
+        { "fieldPath": "ano", "order": "ASCENDING" }
       ]
     },
     {
