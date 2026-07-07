@@ -21,10 +21,30 @@ Convenção para novas entradas:
 - Rotação de uma senha de admin que vazou no histórico do git (rotação manual, fora do código — valor não reproduzido aqui de propósito).
 - **Monitorar o perfil `financeiro` em produção pós-deploy das rules (2026-07-07):** risco identificado de regressão de leitura em `clientes_fiscal`/`clientes_fiscal_integracao` se algum `usuarios/{uid}` não tiver o array `telas` (usuários criados via `seed.ts` não gravam esse campo). O dono decidiu deployar mesmo assim; falta ainda adicionar `financeiro` em `canReadFiscalConfig()` (ou confirmar que todo `financeiro` ativo tem `telas`), cobrir com teste, e colocar `.catch` nos dois `Promise.all` sem tratamento (`clientes/[id]/fiscal/page-client.tsx`, `features/fiscal/services.ts`) para que uma leitura negada não deixe a tela em branco sem aviso.
 
+- A emissão via Spedy (Lote 8) ainda não foi testada contra a API real — primeiro teste real com o JPProject fica pendente.
+- Cadastro dos clientes na Spedy: hoje é manual (colar a chave de API por cliente). A Spedy suporta uma hierarquia Owner/empresas-secundárias (`POST /v1/companies`) que permite automatizar isso pros 119 clientes de uma vez — ainda não construído.
+
 ### Gaps conhecidos (backlog, não bloqueiam)
 - A checagem de "sem tarefas abertas" para concluir competência só existe no client — Firestore rules não faz query em coleção, só valida documento por path. Fechar de vez exige uma Cloud Function (o trigger `functions/src/triggers/tarefa-concluida.ts` já tem a lógica de referência e pode ser reaproveitado).
 - Sidebar deveria ser "sempre escura" conforme `docs/design-system`, mas hoje só acompanha o tema (`bg-card`) — os tokens `--sidebar-*` existem no CSS mas nenhum componente os usa. Desvio pré-existente, não causado pelo dark mode.
-- Dark mode não testado visualmente em navegador (ambiente do agente é headless) — conferir `/dashboard`, `/tarefas`, `/fechamento`, `/clientes/[id]`, `/premium` antes de liberar.
+- Consulta e cancelamento de NFS-e via Spedy não implementados (só emissão).
+
+---
+
+## [Lote 8] — 2026-07-07 (commits `91681ee`, `34c86a1`, `17e082f`, `9392c4e`)
+### Confirmado
+- Dark mode aprovado pelo dono em teste real — "ficou perfeita, não vamos mexer".
+
+### Corrigido
+- Cabeçalho da sidebar cortava visualmente ("TTRD Contábil" + tagline quebrando em 3 linhas dentro de um container de altura fixa) — truncado em uma linha.
+- Índices compostos do Firestore nunca tinham sido deployados (só as rules) — causava "Não foi possível carregar o painel" no dashboard. Publicados via `firebase deploy --only firestore:indexes`.
+- **`getErrorMessage` descartava a mensagem real de toda Cloud Function**: erros de `httpsCallable` chegam com código prefixado (`functions/failed-precondition`), que nunca batia com as chaves sem prefixo da tabela de mensagens amigáveis — todo erro de function (emissão de NFS-e, upload de certificado, fechamento mensal etc.) sempre mostrava o texto genérico de fallback em vez da causa real. Achado depurando por que a emissão de NFS-e do JPProject "não emitia" sem erro visível.
+- Formulário de emissão de NFS-e: descrição abaixo do mínimo de caracteres barrava o envio **silenciosamente** (sem toast, sem chamada de rede) porque a mensagem de erro só existia numa tela escondida atrás do passo "Resumo". Agora mostra o erro e volta pra edição.
+- **"Item da lista de serviço" (LC 116)** é exigido pelo backend mas nunca existia no formulário de emissão — só na config fiscal do cliente. Adicionado o campo (obrigatório) na emissão, com pré-preenchimento automático a partir da config do cliente.
+
+### Adicionado
+- Picker de item de serviço LC 116/2003 com busca por código ou palavra-chave (`src/lib/lc116.ts` + `src/components/fiscal/lc116-picker.tsx`), lista completa (193 itens) direto do texto oficial do planalto.gov.br. Usado na config fiscal do cliente e no formulário de emissão.
+- **Integração com Spedy** como provedor alternativo de emissão de NFS-e (`provedorNfse: 'municipio' | 'spedy'`) — cobre 1.200+ municípios via API REST em vez dos 8 conectores caseiros. Ver pendências acima (não testado ainda, provisionamento em massa ainda manual).
 
 ---
 
