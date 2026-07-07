@@ -61,7 +61,14 @@ type SpedyResposta = { resp: Response; body: Record<string, unknown> | null; bod
 
 async function spedyFetch(config: ConfigFiscalCliente, path: string, init: RequestInit): Promise<SpedyResposta> {
   const apiKey = decryptApiKey(config.credenciais?.spedyApiKey)
-  const resp = await fetch(`${baseUrl(config)}${path}`, {
+  const url = `${baseUrl(config)}${path}`
+  console.log('[Spedy] chamando', {
+    url,
+    method: init.method ?? 'GET',
+    apiKeyPresente: apiKey.length > 0,
+    apiKeyTamanho: apiKey.length,
+  })
+  const resp = await fetch(url, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -76,6 +83,7 @@ async function spedyFetch(config: ConfigFiscalCliente, path: string, init: Reque
   } catch {
     // resposta não-JSON (ex: erro 5xx cru) — segue com body null, bodyText preserva o texto bruto
   }
+  console.log('[Spedy] resposta', { url, status: resp.status, bodyPreview: bodyText.slice(0, 500) })
   return { resp, body, bodyText }
 }
 
