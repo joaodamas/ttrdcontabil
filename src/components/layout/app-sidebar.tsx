@@ -211,10 +211,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <div className="flex h-14 items-center gap-2.5 border-b border-border px-4 shrink-0">
         {logoNode}
         <div className="min-w-0">
-          <p className="text-sm font-bold tracking-tight leading-none">
+          <p className="truncate text-sm font-bold tracking-tight leading-none">
             {appConfig.name}
           </p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">{appConfig.tagline}</p>
+          <p className="truncate text-[10px] text-muted-foreground mt-0.5">{appConfig.tagline}</p>
         </div>
       </div>
 
