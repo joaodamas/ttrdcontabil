@@ -25,6 +25,7 @@ import axios from 'axios'
 import { SYSTEM_ACTOR, writeAuditLog } from './audit'
 import { DEFAULT_TENANT_ID } from './tenant'
 import { sendEmail } from './email/mailer'
+import { emailSecrets } from './email/secrets'
 
 const PROJECT_ID  = 'ttrdcontabil-jpproject'
 const BACKUP_BUCKET = `gs://${PROJECT_ID}-backups`
@@ -47,6 +48,7 @@ export const exportarFirestoreSemanal = onSchedule(
     schedule:  '0 5 * * 0',          // every Sunday at 05:00 UTC = 02:00 BRT
     timeZone:  'America/Sao_Paulo',
     region:    'southamerica-east1',
+    secrets:   emailSecrets,
   },
   async () => {
     const datePart        = new Date().toISOString().slice(0, 10)   // e.g. 2026-04-22

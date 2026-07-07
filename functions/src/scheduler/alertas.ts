@@ -20,6 +20,7 @@ import * as admin from 'firebase-admin'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { Timestamp } from 'firebase-admin/firestore'
 import { sendEmail, tableHtml } from '../email/mailer'
+import { emailSecrets } from '../email/secrets'
 
 const db = () => admin.firestore()
 
@@ -39,6 +40,7 @@ export const enviarAlertasDiarios = onSchedule(
     region:         'southamerica-east1',
     memory:         '256MiB',
     timeoutSeconds: 120,
+    secrets:        emailSecrets,
   },
   async () => {
     const hoje        = new Date()

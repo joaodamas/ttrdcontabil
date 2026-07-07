@@ -22,11 +22,21 @@ Convenção para novas entradas:
 - **Monitorar o perfil `financeiro` em produção pós-deploy das rules (2026-07-07):** risco identificado de regressão de leitura em `clientes_fiscal`/`clientes_fiscal_integracao` se algum `usuarios/{uid}` não tiver o array `telas` (usuários criados via `seed.ts` não gravam esse campo). O dono decidiu deployar mesmo assim; falta ainda adicionar `financeiro` em `canReadFiscalConfig()` (ou confirmar que todo `financeiro` ativo tem `telas`), cobrir com teste, e colocar `.catch` nos dois `Promise.all` sem tratamento (`clientes/[id]/fiscal/page-client.tsx`, `features/fiscal/services.ts`) para que uma leitura negada não deixe a tela em branco sem aviso.
 
 - Cadastro dos clientes na Spedy: hoje é manual (colar a chave de API por cliente, e criar a empresa direto no painel do Stage). A Spedy suporta uma hierarquia Owner/empresas-secundárias (`POST /v1/companies`) que permite automatizar isso pros 119 clientes de uma vez — inclusive **obrigatório** pro ambiente de teste, já que lá (arquitetura "API-First") não dá pra cadastrar empresa nem certificado pelo painel, só via API. Ainda não construído.
+- **Configurar o SMTP de verdade** — código já corrigido (`functions/src/email/secrets.ts`, ainda não commitado), mas falta o dono rodar `firebase functions:secrets:set SMTP_USER` e `SMTP_PASS` (senha nunca passa pelo assistente) e criar `functions/.env` com host/porta/remetente/destinatário reais. Sem isso, o e-mail de alerta diário continua sem sair mesmo com o índice corrigido.
+- **Envio automático de NFS-e pro tomador** — não existe hoje (só a Spedy manda, e só se configurada, delegado pra ela). Nenhum conector (nem Spedy) devolve PDF da nota, só XML. Cenário proposto (aguardando decisão): e-mail com dados da nota + XML anexado, disparado quando `processarEmissao` retornar sucesso — depende do SMTP acima estar configurado e de dar suporte a anexo em `sendEmail` (não tem hoje).
+- **Editor da régua de cobrança WhatsApp** — a régua (7/3/0/-3/-7 dias) já roda automaticamente, mas os valores só existem como dado no Firestore (`whatsapp_campaign_rules`); não há tela pra editar. Também vale confirmar que o token da Cloud API está de fato configurado (o agendamento enfileira job mesmo desligado; só falha, com retry, na hora de despachar).
 
 ### Gaps conhecidos (backlog, não bloqueiam)
 - A checagem de "sem tarefas abertas" para concluir competência só existe no client — Firestore rules não faz query em coleção, só valida documento por path. Fechar de vez exige uma Cloud Function (o trigger `functions/src/triggers/tarefa-concluida.ts` já tem a lógica de referência e pode ser reaproveitado).
 - Sidebar deveria ser "sempre escura" conforme `docs/design-system`, mas hoje só acompanha o tema (`bg-card`) — os tokens `--sidebar-*` existem no CSS mas nenhum componente os usa. Desvio pré-existente, não causado pelo dark mode.
 - Consulta e cancelamento de NFS-e via Spedy não implementados (só emissão).
+
+---
+
+## [Lote 11] — 2026-07-07 (commits `5403f94`, `839b9ab`)
+### Corrigido
+- **Painel/"Hoje" quebrado com "Não foi possível carregar o painel"** — voltou a acontecer mesmo já tendo sido "corrigido" antes nesta mesma sessão. Causa real: a auto-injeção de `tenantId` em `listDocuments()` (`src/lib/firestore-client.ts`) só passou a valer com a ativação de RBAC, e os índices compostos com `tenantId` na frente para `tarefas`, `competencias` e `fechamentos` nunca existiam. Adicionados e deployados.
+- **E-mail de alerta diário (`enviarAlertasDiarios`) falhando 100% das vezes, todo dia, desde pelo menos 2026-07-02** — confirmado via `firebase functions:log`: `Error: 9 FAILED_PRECONDITION` na consulta de "lançamentos atrasados" (`status == pendente` + `dataVencimento < hoje` + `orderBy(dataVencimento, asc)`). Só existia o índice `status ASC + dataVencimento DESC` (direção errada pro `orderBy asc` desta query específica). Índice `status ASC + dataVencimento ASC` adicionado. **Consequência direta:** as duas melhorias do Lote 10 que dependem deste e-mail (recuperação automática de rascunho travado em `processando`, seção "rascunhos gerados automaticamente hoje") nunca chegaram a rodar de fato em produção, apesar de deployadas — só passam a funcionar a partir desta correção.
 
 ---
 
