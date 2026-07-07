@@ -21,6 +21,8 @@ import { getFirebaseApp } from '@/lib/firebase'
 import { getErrorMessage } from '@/lib/error-message'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 import { Lc116Picker } from '@/components/fiscal/lc116-picker'
+import { Switch } from '@/components/ui/switch'
+import { AlertTriangle } from 'lucide-react'
 
 export const MUNICIPIOS = [
   { ibge: '3525904', nome: 'Jundiaí' },
@@ -70,6 +72,8 @@ const schema = z.object({
   // Spedy (API agregadora — cobre qualquer município)
   provedorNfse:        z.enum(['municipio', 'spedy']).optional(),
   spedyApiKey:         z.string().optional().nullable(),
+  // Emissão automática (sem revisão humana) no dia configurado abaixo
+  emissaoAutomatica:   z.boolean().optional(),
 })
 
 type FormData = z.input<typeof schema>
@@ -93,6 +97,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       optanteSimples:   true,
       naturezaOperacao: '1',
       provedorNfse:     'municipio',
+      emissaoAutomatica:false,
     },
   })
 
@@ -157,6 +162,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
         aliquotaPadrao:       data.aliquotaPadrao    ?? null,
         issRetidoPadrao:      data.issRetidoPadrao   ?? false,
         provedorNfse:         data.provedorNfse ?? 'municipio',
+        emissaoAutomatica:    data.emissaoAutomatica ?? false,
       }
 
       let savedDocId = docId
@@ -219,6 +225,27 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
                 ? 'Emite via API da Spedy — cobre qualquer município do Brasil, não só os 8 com conector próprio.'
                 : 'Usa o conector escrito para o município selecionado abaixo (só cobre os municípios listados).'}
             </p>
+          </div>
+
+          {/* Emissão automática — reverte a trava de revisão humana, por cliente */}
+          <div className="space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <Label className="flex items-center gap-1.5 text-destructive">
+                  <AlertTriangle className="size-3.5" />
+                  Emissão automática (sem revisão)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  No dia de emissão configurado no cadastro do cliente, a NFS-e é gerada <strong>e emitida direto</strong>,
+                  sem ninguém revisar antes. Qualquer erro de configuração (valor, alíquota, regime) vira nota fiscal
+                  real emitida errada, sem chance de corrigir antes de sair. Deixe desligado se preferir revisar
+                  cada rascunho manualmente antes de emitir.
+                </p>
+              </div>
+              <Controller name="emissaoAutomatica" control={control} render={({ field }) => (
+                <Switch checked={field.value ?? false} onCheckedChange={field.onChange} />
+              )} />
+            </div>
           </div>
 
           {/* Município + Ambiente */}

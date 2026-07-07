@@ -74,6 +74,7 @@ export default function FiscalPage() {
     prontosRascunho,
     prontosEmissao,
     bloqueados,
+    emissaoAutomaticaCount,
     clientes: readinessClientes,
   } = useFiscalReadiness()
 
@@ -227,12 +228,13 @@ export default function FiscalPage() {
               : `${prontosEmissao}/${totalClientesAtivos} cliente${totalClientesAtivos !== 1 ? 's' : ''} pronto${totalClientesAtivos !== 1 ? 's' : ''} para emissão`}
           </span>
         </div>
-        <div className="grid gap-3 p-4 md:grid-cols-4">
+        <div className="grid gap-3 p-4 md:grid-cols-5">
           {[
             { label: 'Clientes ativos', value: readinessIsError ? '—' : totalClientesAtivos, tone: 'text-foreground' },
             { label: 'Prontos p/ rascunho', value: readinessIsError ? '—' : prontosRascunho, tone: 'text-info' },
             { label: 'Prontos p/ emissão', value: readinessIsError ? '—' : prontosEmissao, tone: 'text-success' },
             { label: 'Com bloqueios', value: readinessIsError ? '—' : bloqueados, tone: !readinessIsError && bloqueados > 0 ? 'text-destructive' : 'text-muted-foreground' },
+            { label: 'Emissão automática', value: readinessIsError ? '—' : emissaoAutomaticaCount, tone: !readinessIsError && emissaoAutomaticaCount > 0 ? 'text-destructive' : 'text-muted-foreground' },
           ].map((item) => (
             <div key={item.label} className="rounded-lg border border-border bg-muted/20 p-3">
               <p className="text-xs font-medium text-muted-foreground">{item.label}</p>
@@ -288,9 +290,18 @@ export default function FiscalPage() {
                 readinessClientes.slice(0, 8).map((cliente) => (
                   <tr key={cliente.clienteId} className="hover:bg-muted/30 transition-colors">
                     <td className="px-4 py-3 font-medium max-w-[240px]">
-                      <Link href={`/clientes/${cliente.clienteId}`} className="truncate block hover:text-primary">
-                        {cliente.clienteNome}
-                      </Link>
+                      <div className="flex items-center gap-1.5">
+                        <Link href={`/clientes/${cliente.clienteId}`} className="truncate hover:text-primary">
+                          {cliente.clienteNome}
+                        </Link>
+                        {cliente.emissaoAutomatica && (
+                          <span title="Emite sem revisão humana, sozinho, no dia configurado">
+                            <Badge variant="destructive" className="gap-1 shrink-0 text-[10px]">
+                              <AlertTriangle size={9} /> Auto
+                            </Badge>
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{cliente.municipio ?? '—'}</td>
                     <td className="px-4 py-3 text-center tabular-nums">{cliente.servicosAtivos}</td>
@@ -409,7 +420,14 @@ export default function FiscalPage() {
                       )}
                     >
                       <td className="px-4 py-3 font-medium max-w-[200px]">
-                        <span className="truncate block">{(n.clienteNome as string) ?? '—'}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate">{(n.clienteNome as string) ?? '—'}</span>
+                          {n.origemEmissao === 'automatica' && (
+                            <span title="Emitida automaticamente, sem revisão humana" className="shrink-0 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-destructive">
+                              Auto
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                         {(n.numeroNfse as string) ?? (isRascunho ? '(rascunho)' : '—')}
@@ -503,7 +521,7 @@ export default function FiscalPage() {
         open={gerarRascunhosOpen}
         onOpenChange={setGerarRascunhosOpen}
         title="Gerar rascunhos NFS-e do mês?"
-        description="A ferramenta criará rascunhos recorrentes para clientes ativos com dia de emissão vencido, serviço ativo e configuração fiscal completa. Os rascunhos ficam para revisão antes de qualquer emissão."
+        description="A ferramenta criará rascunhos recorrentes para clientes ativos com dia de emissão vencido, serviço ativo e configuração fiscal completa. Os rascunhos ficam para revisão antes de qualquer emissão — exceto para clientes com 'Emissão automática' ligada na config fiscal, que emitem direto, sem revisão."
         confirmLabel="Gerar rascunhos"
         onConfirm={prepararRascunhosMensais}
       />

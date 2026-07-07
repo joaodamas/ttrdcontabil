@@ -9,7 +9,7 @@ import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, Loader2, Pencil, Plus, ShieldCheck, ShieldAlert, ShieldOff } from 'lucide-react'
+import { ArrowLeft, Loader2, Pencil, Plus, ShieldCheck, ShieldAlert, ShieldOff, AlertTriangle } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
@@ -131,7 +131,14 @@ export default function ClienteFiscalPage() {
       {/* Dados Fiscais */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-sm">Dados Fiscais</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-sm">Dados Fiscais</CardTitle>
+            {fiscal?.emissaoAutomatica === true && (
+              <Badge variant="destructive" className="gap-1 text-[10px]" title="Emite sem revisão humana, sozinho, no dia configurado">
+                <AlertTriangle className="h-2.5 w-2.5" /> Emissão automática
+              </Badge>
+            )}
+          </div>
           <Button variant="outline" size="sm" onClick={() => setConfigOpen(true)}>
             <Pencil className="w-3.5 h-3.5 mr-1.5" />
             {fiscal ? 'Editar' : 'Configurar'}

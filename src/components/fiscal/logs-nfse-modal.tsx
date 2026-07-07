@@ -22,12 +22,13 @@ function buildLogs(nota: Record<string, unknown>): LogEntry[] {
   // Criação do rascunho
   const criadoEm = tsToDate(nota.criadoEm as Timestamp | undefined)
   if (criadoEm) {
+    const automatica = nota.origemEmissao === 'automatica'
     logs.push({
       id: 'criado',
       ts: criadoEm,
-      evento: 'Rascunho criado',
+      evento: automatica ? 'Rascunho criado (emissão automática, sem revisão)' : 'Rascunho criado',
       detalhe: `Valor: ${formatCurrency(Number(nota.valorServico ?? 0))}`,
-      variante: 'neutral',
+      variante: automatica ? 'warning' : 'neutral',
       icon: <FileText className="h-3.5 w-3.5" />,
     })
   }

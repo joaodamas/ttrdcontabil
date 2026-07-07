@@ -146,6 +146,7 @@ function FiscalHistoricoContent() {
     { key: 'emissao', label: 'Emissao' },
     { key: 'valor', label: 'Valor' },
     { key: 'status', label: 'Status' },
+    { key: 'origem', label: 'Origem' },
   ]
 
   function montarLinhasExportacao() {
@@ -156,6 +157,7 @@ function FiscalHistoricoContent() {
       emissao: n.dataEmissao ? formatDate(tsToDate(n.dataEmissao as Timestamp)) : '',
       valor: n.valorServico,
       status: n.status,
+      origem: n.origemEmissao === 'automatica' ? 'Automática' : 'Manual',
     }))
   }
 
@@ -346,7 +348,16 @@ function FiscalHistoricoContent() {
                     const dataEmissao = n.dataEmissao as Timestamp | undefined
                     return (
                       <tr key={n.id as string} className={cn('transition-colors hover:bg-muted/35', (n.status === 'rejeitada' || n.status === 'erro_integracao') && 'bg-destructive/[0.03] border-l-2 border-l-destructive')}>
-                        <td className="px-4 py-3 font-medium">{(n.clienteNome as string) ?? '—'}</td>
+                        <td className="px-4 py-3 font-medium">
+                          <div className="flex items-center gap-1.5">
+                            <span>{(n.clienteNome as string) ?? '—'}</span>
+                            {n.origemEmissao === 'automatica' && (
+                              <span title="Emitida automaticamente, sem revisão humana" className="shrink-0 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-destructive">
+                                Auto
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-4 py-3 font-mono text-xs">
                           {(n.numeroNfse as string) ?? '—'}
                         </td>

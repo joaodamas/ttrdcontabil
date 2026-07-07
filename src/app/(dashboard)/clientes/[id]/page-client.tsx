@@ -893,7 +893,14 @@ export default function ClienteDetailPage() {
           <TabsContent value="fiscal" className="space-y-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
-                <CardTitle className="text-sm">Configuração NFS-e</CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-sm">Configuração NFS-e</CardTitle>
+                  {fiscal?.emissaoAutomatica === true && (
+                    <Badge variant="destructive" className="gap-1 text-[10px]" title="Emite sem revisão humana, sozinho, no dia configurado">
+                      <AlertTriangle className="h-2.5 w-2.5" /> Emissão automática
+                    </Badge>
+                  )}
+                </div>
                 <Button size="sm" variant="outline" onClick={() => setConfigOpen(true)}>
                   <Pencil className="h-3.5 w-3.5" />{fiscal ? 'Editar' : 'Configurar'}
                 </Button>
