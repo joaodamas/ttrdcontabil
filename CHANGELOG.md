@@ -19,6 +19,7 @@ Convenção para novas entradas:
 
 ### Corrigido
 - **Scroll horizontal na listagem do Financeiro** — a coluna Ações tinha até 7 botões lado a lado, forçando a tabela a `min-w-[1480px]` (maior que a área de conteúdo em telas comuns). Consolidado em timeline + baixar (visíveis) + menu suspenso pro resto (enviar cobrança, pausar/retomar régua, reagendar, histórico, excluir). `min-w` reduzido para 1180px.
+- **E-mail de alerta diário funcionando de ponta a ponta pela primeira vez (2026-07-07).** Depois do índice (Lote 11) e do secret SMTP corrigidos, o envio ainda falhava com `535 5.7.8 Authentication Failed` mesmo com usuário/senha corretos e confirmados. Causa raiz real: contas Titan Email (usadas pelo HostGator) vêm com **acesso de terceiros desligado por padrão** — SMTP/IMAP/POP de qualquer aplicativo externo (incluindo um servidor automatizado) é bloqueado até habilitar manualmente em Titan Webmail → Configurações → "Enable Titan on Other Apps" (pré-requisito: 2FA da caixa precisa estar desligado). Não era problema de código, índice, secret nem senha — as três correções anteriores eram necessárias mas não suficientes. Confirmado no log: `Email enviado. Tarefas: 0, Lançamentos: 1...`.
 
 ### Pendências que exigem decisão do dono
 - Sentry — precisa de DSN para habilitar monitoramento de erros em produção.
