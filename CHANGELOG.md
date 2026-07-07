@@ -30,6 +30,22 @@ Convenção para novas entradas:
 
 ---
 
+## [Lote 10] — 2026-07-07 (commits `325ba10`, `b058ca7`, `752bfb0`)
+### Adicionado
+- **Emissão automática de NFS-e — opt-in por cliente, semi-automática por padrão.** Decisão do dono: NFS-e recorrente sempre gera rascunho sozinho + avisa por e-mail (humano confirma antes de emitir); "totalmente automático" (emite sem revisão) só existe como opção avançada, desligada por padrão, com aviso de risco explícito na tela.
+  - Cron novo `processarNfseRecorrenteDiaria` (06:30 BRT, diário) — respeita o `diaEmissaoNFSe` de cada cliente. Reaproveita a mesma lógica de elegibilidade do botão manual "Gerar rascunhos".
+  - Toda emissão automática reaproveita `processarEmissao(input, rascunhoId)` — herda a transação de alocação/reuso de RPS já validada, em vez de um caminho paralelo mais frágil.
+  - Toggle "Emissão automática (sem revisão)" na config fiscal do cliente.
+- **Botão "Exportar PDF" na listagem de Clientes** — reaproveita o padrão de impressão via navegador já usado na ficha cadastral (sem lib de PDF nova); exporta a lista inteira respeitando os filtros ativos.
+
+### Corrigido (achados numa auditoria de UX dedicada, antes do deploy)
+- **Rascunho podia travar permanentemente em `processando`** se a function crashasse no meio de uma emissão — ficava invisível em todo KPI/lista/alerta e bloqueava qualquer nova tentativa pro cliente naquela competência. O alerta diário agora detecta e recupera automaticamente (30min de tolerância).
+- Texto do modal "Preparar mês" dizia que rascunhos sempre ficam pra revisão antes de emitir — não é mais verdade pros clientes com emissão automática ligada; corrigido.
+- **Visibilidade total, ponta a ponta:** card de contagem + badge na tela Fiscal, badge na tela do cliente (as duas rotas), tag "Auto" no histórico de notas (tela Fiscal, Histórico completo e export CSV/Excel) e no modal de logs de cada nota — usa um campo novo (`origemEmissao`) gravado em `nfse_emitidas`/`nfse_erros` a cada emissão.
+- Nova seção no e-mail diário: "rascunhos gerados automaticamente hoje, aguardando revisão" — fecha o "avisa" do fluxo semi-automático.
+
+---
+
 ## [Lote 9] — 2026-07-07 (commits `29491f7`..`e96dddc`)
 ### Confirmado
 - **Primeira emissão de NFS-e via Spedy funcionou de ponta a ponta** — NFS-e nº 14, R$ 20,00, JPProject, status "Emitida", via ambiente de teste da Spedy (Stage). Valida o conector inteiro: payload, autenticação, polling, gravação no histórico.
