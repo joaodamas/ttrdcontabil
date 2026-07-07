@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import {
   Plus, Users, MoreHorizontal, CheckSquare, Layers, Receipt, Pencil,
-  ShieldCheck, ShieldAlert, AlertTriangle, MessageCircle, FileDown,
+  ShieldCheck, ShieldAlert, AlertTriangle, MessageCircle, FileDown, Upload,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useClientesList } from '@/features/clientes/hooks'
@@ -262,6 +262,10 @@ function ClientesContent() {
               <FileDown className="w-4 h-4" />
               Exportar PDF
             </Button>
+            <Link href="/clientes/importar" className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-10 rounded-xl' })}>
+              <Upload className="w-4 h-4" />
+              Importar
+            </Link>
             <Link href="/clientes/novo" className={buttonVariants({ size: 'sm', className: 'h-10 rounded-xl' })}>
               <Plus className="w-4 h-4" />
               Novo Cliente

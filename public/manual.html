@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual JP Fiscal — TTRD Contábil</title>
+<style>
+  :root{
+    --bg:#f6f5f1;
+    --bg-raised:#ffffff;
+    --ink:#1b1f27;
+    --ink-soft:#565f70;
+    --rule:#dcd9d0;
+    --accent:#2551d9;
+    --accent-soft:#e7edfc;
+    --accent-ink:#173a9e;
+    --success:#1f8f5f;
+    --success-soft:#e5f4ec;
+    --warning:#c97a1f;
+    --warning-soft:#faf0e0;
+    --critical:#c43d3d;
+    --critical-soft:#fbe9e8;
+    --mono-bg:#eeece4;
+    --shadow:0 1px 2px rgba(27,31,39,.06), 0 8px 24px -12px rgba(27,31,39,.12);
+  }
+  :root[data-theme="dark"]{
+    --bg:#10141c;
+    --bg-raised:#171c26;
+    --ink:#e8eaf0;
+    --ink-soft:#9aa3b8;
+    --rule:#2a3040;
+    --accent:#6f95ff;
+    --accent-soft:#1c2740;
+    --accent-ink:#bcd0ff;
+    --success:#4fbf8c;
+    --success-soft:#12261e;
+    --warning:#e0a256;
+    --warning-soft:#2b2013;
+    --critical:#e2726e;
+    --critical-soft:#2c1616;
+    --mono-bg:#1c212c;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#10141c;
+      --bg-raised:#171c26;
+      --ink:#e8eaf0;
+      --ink-soft:#9aa3b8;
+      --rule:#2a3040;
+      --accent:#6f95ff;
+      --accent-soft:#1c2740;
+      --accent-ink:#bcd0ff;
+      --success:#4fbf8c;
+      --success-soft:#12261e;
+      --warning:#e0a256;
+      --warning-soft:#2b2013;
+      --critical:#e2726e;
+      --critical-soft:#2c1616;
+      --mono-bg:#1c212c;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:16px;
+    line-height:1.6;
+  }
+  ::selection{background:var(--accent-soft);color:var(--accent-ink);}
+
+  h1,h2,h3,h4{
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    font-weight:600;
+    text-wrap:balance;
+    color:var(--ink);
+    margin:0;
+  }
+  code,.field,.mono{
+    font-family:ui-monospace,"Cascadia Code","Consolas","SF Mono",monospace;
+  }
+
+  a{color:var(--accent-ink);}
+
+  .shell{
+    display:grid;
+    grid-template-columns:272px minmax(0,1fr);
+    max-width:1280px;
+    margin:0 auto;
+  }
+  .toc{
+    position:sticky;
+    top:0;
+    align-self:start;
+    height:100vh;
+    overflow-y:auto;
+    padding:32px 20px 40px 28px;
+    border-right:1px solid var(--rule);
+  }
+  .toc-brand{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    margin-bottom:28px;
+    padding-bottom:16px;
+    border-bottom:1px solid var(--rule);
+  }
+  .toc-brand strong{font-size:15px;letter-spacing:.01em;}
+  .toc-brand span{font-size:12px;color:var(--ink-soft);}
+  .toc nav{display:flex;flex-direction:column;gap:2px;}
+  .toc-group{margin-bottom:16px;}
+  .toc-group-label{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--ink-soft);
+    padding:0 10px;
+    margin-bottom:6px;
+    font-family:ui-monospace,monospace;
+  }
+  .toc a{
+    display:block;
+    padding:6px 10px;
+    border-radius:6px;
+    color:var(--ink-soft);
+    text-decoration:none;
+    font-size:14px;
+  }
+  .toc a:hover{background:var(--accent-soft);color:var(--accent-ink);}
+
+  main{padding:48px 56px 120px;min-width:0;}
+  .cover{margin-bottom:64px;}
+  .cover .eyebrow{
+    font-family:ui-monospace,monospace;
+    font-size:12px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--accent-ink);
+    background:var(--accent-soft);
+    display:inline-block;
+    padding:4px 10px;
+    border-radius:5px;
+    margin-bottom:16px;
+  }
+  .cover h1{font-size:40px;line-height:1.15;margin-bottom:14px;}
+  .cover p.lede{
+    font-size:18px;
+    color:var(--ink-soft);
+    max-width:62ch;
+    margin-bottom:20px;
+  }
+  .cover-meta{
+    display:flex;
+    gap:24px;
+    flex-wrap:wrap;
+    font-size:13px;
+    color:var(--ink-soft);
+    border-top:1px solid var(--rule);
+    padding-top:16px;
+  }
+  .cover-meta b{color:var(--ink);font-weight:600;}
+
+  section.screen{
+    padding:56px 0;
+    border-top:1px solid var(--rule);
+    scroll-margin-top:24px;
+  }
+  section.screen:first-of-type{border-top:none;}
+  .path{
+    font-family:ui-monospace,monospace;
+    font-size:12.5px;
+    color:var(--ink-soft);
+    letter-spacing:.02em;
+    margin-bottom:10px;
+  }
+  .path .sep{margin:0 6px;color:var(--rule);}
+  section.screen h2{font-size:27px;margin-bottom:8px;}
+  .screen-sub{color:var(--ink-soft);font-size:16px;max-width:64ch;margin-bottom:28px;}
+
+  h3.sub{
+    font-family:-apple-system,"Segoe UI",Roboto,sans-serif;
+    font-size:14px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--ink-soft);
+    margin:32px 0 12px;
+  }
+  section.screen p{max-width:68ch;margin:0 0 14px;}
+  section.screen ul,section.screen ol{max-width:66ch;margin:0 0 14px;padding-left:22px;}
+  section.screen li{margin-bottom:6px;}
+
+  .field-table{width:100%;border-collapse:collapse;margin:8px 0 20px;font-size:14.5px;}
+  .field-table th{
+    text-align:left;
+    font-family:ui-monospace,monospace;
+    font-size:11.5px;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    color:var(--ink-soft);
+    padding:0 12px 8px 0;
+    border-bottom:1px solid var(--rule);
+  }
+  .field-table td{
+    padding:9px 12px 9px 0;
+    border-bottom:1px solid var(--rule);
+    vertical-align:top;
+  }
+  .field-table td:first-child{font-family:ui-monospace,monospace;font-size:13.5px;white-space:nowrap;color:var(--ink);}
+  .field-table tr:last-child td{border-bottom:none;}
+  .table-wrap{overflow-x:auto;margin-bottom:20px;}
+
+  .callout{
+    display:flex;
+    gap:12px;
+    padding:14px 16px;
+    border-radius:8px;
+    margin:0 0 20px;
+    max-width:68ch;
+    font-size:14.5px;
+  }
+  .callout b{display:block;margin-bottom:2px;}
+  .callout.tip{background:var(--accent-soft);color:var(--accent-ink);}
+  .callout.warn{background:var(--warning-soft);color:var(--warning);}
+  .callout.danger{background:var(--critical-soft);color:var(--critical);}
+  .callout.ok{background:var(--success-soft);color:var(--success);}
+  .callout .icon{flex:none;font-family:ui-monospace,monospace;font-weight:700;}
+
+  .badge{
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    font-size:12px;
+    font-weight:600;
+    padding:2px 8px;
+    border-radius:99px;
+    font-family:ui-monospace,monospace;
+  }
+  .badge.blue{background:var(--accent-soft);color:var(--accent-ink);}
+  .badge.green{background:var(--success-soft);color:var(--success);}
+  .badge.amber{background:var(--warning-soft);color:var(--warning);}
+  .badge.red{background:var(--critical-soft);color:var(--critical);}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:74ch;margin-bottom:20px;}
+  @media (max-width:720px){.grid2{grid-template-columns:1fr;}}
+  .card{
+    background:var(--bg-raised);
+    border:1px solid var(--rule);
+    border-radius:10px;
+    padding:16px 18px;
+    box-shadow:var(--shadow);
+  }
+  .card h4{font-size:14.5px;margin-bottom:6px;}
+  .card p{font-size:13.5px;color:var(--ink-soft);margin:0;}
+
+  .steps{counter-reset:step;max-width:66ch;margin-bottom:20px;}
+  .steps li{
+    counter-increment:step;
+    list-style:none;
+    position:relative;
+    padding-left:34px;
+    margin-bottom:14px;
+  }
+  .steps li::before{
+    content:counter(step);
+    position:absolute;left:0;top:0;
+    width:24px;height:24px;
+    border-radius:50%;
+    background:var(--accent);
+    color:#fff;
+    font-family:ui-monospace,monospace;
+    font-size:12.5px;
+    font-weight:700;
+    display:flex;align-items:center;justify-content:center;
+  }
+
+  footer{
+    padding:40px 56px 80px;
+    color:var(--ink-soft);
+    font-size:13px;
+    border-top:1px solid var(--rule);
+  }
+
+  @media (max-width:900px){
+    .shell{grid-template-columns:1fr;}
+    .toc{position:static;height:auto;border-right:none;border-bottom:1px solid var(--rule);}
+    main{padding:32px 20px 80px;}
+  }
+</style>
+
+</head>
+<body>
+<div class="shell">
+  <aside class="toc">
+    <div class="toc-brand">
+      <strong>Manual — JP Fiscal</strong>
+      <span>TTRD Contábil · gestao.ttrdcontabil.com.br</span>
+    </div>
+    <nav>
+      <div class="toc-group">
+        <div class="toc-group-label">Início</div>
+        <a href="#hoje">Hoje</a>
+        <a href="#painel">Painel</a>
+      </div>
+      <div class="toc-group">
+        <div class="toc-group-label">Cadastros</div>
+        <a href="#clientes">Clientes</a>
+      </div>
+      <div class="toc-group">
+        <div class="toc-group-label">Operacional</div>
+        <a href="#tarefas">Tarefas</a>
+        <a href="#competencias">Competências</a>
+        <a href="#fechamento">Fechamento Mensal</a>
+      </div>
+      <div class="toc-group">
+        <div class="toc-group-label">Fiscal &amp; NFS-e</div>
+        <a href="#emissao">Emissão NFS-e</a>
+        <a href="#historico">Histórico NFS-e</a>
+        <a href="#ir">Imposto de Renda</a>
+      </div>
+      <div class="toc-group">
+        <div class="toc-group-label">Financeiro</div>
+        <a href="#financeiro">Lançamentos</a>
+      </div>
+      <div class="toc-group">
+        <div class="toc-group-label">Relatórios</div>
+        <a href="#produtividade">Produtividade</a>
+      </div>
+      <div class="toc-group">
+        <div class="toc-group-label">Configurações</div>
+        <a href="#usuarios">Usuários</a>
+        <a href="#tipos-servico">Tipos de Serviço</a>
+        <a href="#conectores">Conectores Fiscais</a>
+        <a href="#parametros">Parâmetros</a>
+      </div>
+    </nav>
+  </aside>
+
+  <main>
+    <div class="cover">
+      <span class="eyebrow">Manual do usuário</span>
+      <h1>Como usar o JP Fiscal</h1>
+      <p class="lede">Guia tela a tela da plataforma de gestão contábil da TTRD Contábil — o que cada tela faz, o que ela gera e onde começar. Escrito pra quem usa no dia a dia, não pra quem programou.</p>
+      <div class="cover-meta">
+        <span><b>Ambiente</b> gestao.ttrdcontabil.com.br</span>
+        <span><b>Perfil de referência</b> Admin</span>
+        <span><b>Cobertura</b> 14 telas principais</span>
+      </div>
+    </div>
+
+    <section class="screen" id="hoje">
+      <div class="path">Menu <span class="sep">→</span> Hoje</div>
+      <h2>Hoje</h2>
+      <p class="screen-sub">A primeira tela depois do login. Uma fila única do que precisa de atenção agora — não é uma lista de tudo que existe, é uma lista do que importa hoje.</p>
+
+      <h3 class="sub">Pra que serve</h3>
+      <p>Reúne tarefas atrasadas, tarefas do dia e bloqueios de fechamento numa única fila, ordenada por prazo, prioridade e responsável. A ideia é que quem abre o sistema de manhã saiba em 10 segundos se tem algo urgente, sem precisar visitar Tarefas, Competências e Fechamento separadamente.</p>
+
+      <div class="grid2">
+        <div class="card"><h4>Atrasadas</h4><p>Tarefas que já passaram do prazo. Se tiver número aqui, é o primeiro lugar pra olhar.</p></div>
+        <div class="card"><h4>Hoje</h4><p>Tarefas com prazo pra hoje.</p></div>
+        <div class="card"><h4>Próximos 7 dias</h4><p>O que vem pela frente na semana — pra planejar, não pra apagar incêndio.</p></div>
+        <div class="card"><h4>Bloqueios fechamento</h4><p>Competências que não conseguem fechar porque ainda têm tarefa aberta vinculada.</p></div>
+      </div>
+
+      <h3 class="sub">Modos de visualização</h3>
+      <p>No canto superior direito: <b>Lista</b> (padrão, uma fila só), <b>Kanban</b> (colunas por status, pra quem prefere arrastar) e <b>Agenda</b> (visão de calendário). <span class="field">Modo foco</span> filtra pra mostrar só o que é acionável agora, escondendo o que ainda não vence.</p>
+
+      <h3 class="sub">Quando a fila está vazia</h3>
+      <p>Se aparecer "Nenhuma tarefa acionável para hoje", o sistema está te dizendo que não há nada pendente — não é erro. Se isso acontecer logo no início de uso, os três atalhos na tela (<b>Ver clientes</b>, <b>Criar competência</b>, <b>Nova tarefa</b>) são o caminho pra começar a alimentar o sistema.</p>
+    </section>
+
+    <section class="screen" id="painel">
+      <div class="path">Menu <span class="sep">→</span> Painel</div>
+      <h2>Painel</h2>
+      <p class="screen-sub">A visão executiva — números do escritório inteiro, não de um cliente específico. É pra quem quer o resumo do mês, não a fila de trabalho.</p>
+
+      <h3 class="sub">O que cada número significa</h3>
+      <div class="table-wrap">
+        <table class="field-table">
+          <tr><th>Cartão</th><th>O que mostra</th></tr>
+          <tr><td>Clientes ativos</td><td>Carteira operacional disponível pra rotinas mensais (exclui inativos/suspensos).</td></tr>
+          <tr><td>Tarefas abertas</td><td>Total de tarefas em aberto no escritório inteiro, com destaque pra quantas já venceram.</td></tr>
+          <tr><td>Recebíveis 7 dias</td><td>Quanto está previsto pra entrar em dinheiro nos próximos 7 dias.</td></tr>
+          <tr><td>Atraso financeiro</td><td>Soma de lançamentos já vencidos e não pagos — é o número que mais pede ação imediata.</td></tr>
+        </table>
+      </div>
+
+      <h3 class="sub">Pendências operacionais e Saúde do mês</h3>
+      <p>O bloco <b>Pendências operacionais</b> junta cobranças em atraso, tarefas vencidas e NFS-e com problema num único "ponto(s) que pedem ação" — clique em qualquer cartão pra ir direto pra tela responsável (Financeiro, Tarefas ou Fiscal). <b>Saúde do mês</b> mostra quantas competências já foram concluídas contra o total do mês corrente.</p>
+
+      <h3 class="sub">Clientes em risco</h3>
+      <p>Lista os clientes com algum sinal de alerta — cobrança vencida, tarefa parada, nota com erro — ordenados por gravidade. É o primeiro lugar pra olhar quando alguém pergunta "algum cliente está com problema?".</p>
+
+      <div class="callout tip"><span class="icon">i</span><div><b>Atalho rápido</b> Os três botões em "Atalhos executivos" (Novo cliente, Novo lançamento, Nova tarefa) existem pra não precisar navegar até a tela específica só pra criar um registro simples.</div></div>
+    </section>
+
+    <section class="screen" id="clientes">
+      <div class="path">Menu <span class="sep">→</span> Cadastros <span class="sep">→</span> Clientes</div>
+      <h2>Clientes</h2>
+      <p class="screen-sub">O cadastro central. Praticamente tudo no sistema — tarefa, competência, lançamento, NFS-e — se pendura num cliente. É o primeiro cadastro a existir antes de qualquer outra rotina funcionar.</p>
+
+      <h3 class="sub">Lista de clientes</h3>
+      <p>Busca por nome ou CNPJ, e filtro rápido por regime tributário (Simples, Lucro Presumido, Lucro Real, MEI). A coluna <b>Saúde</b> resume o estado geral do cliente num selo — "Estável" quando não há pendência, ou um alerta quando há cobrança atrasada, tarefa parada ou nota com erro. O botão <b>Exportar PDF</b> gera a lista inteira respeitando os filtros ativos na tela — útil pra levar uma reunião ou auditoria sem precisar printar a tela.</p>
+      <p>Clicar num cliente abre uma <b>janela rápida</b> com 4 abas — não sai da lista, então dá pra olhar vários clientes em sequência sem perder o lugar:</p>
+
+      <div class="grid2">
+        <div class="card"><h4>Serviços</h4><p>Serviços recorrentes vinculados a esse cliente — o que gera cobrança e competência todo mês.</p></div>
+        <div class="card"><h4>Operacional</h4><p>Competências recentes desse cliente (os "meses" de trabalho, um por serviço/mês).</p></div>
+        <div class="card"><h4>Financeiro</h4><p>Lançamentos recentes — cobranças geradas a partir dos serviços recorrentes.</p></div>
+        <div class="card"><h4>Fiscal</h4><p>Configuração de NFS-e (município/credenciais) e histórico de notas emitidas pra esse cliente.</p></div>
+      </div>
+      <p>No rodapé da janela rápida: <b>Ver completo</b> abre a ficha cadastral inteira (todos os campos abaixo), e <b>Editar</b> vai direto pro formulário de edição.</p>
+
+      <h3 class="sub">Cadastrar um cliente novo</h3>
+      <p>Pelo atalho "Cliente" (barra lateral) ou "Novo Cliente" na lista. O formulário é longo de propósito — reúne tudo que qualquer rotina do escritório (fiscal, financeira, societária) vai precisar depois, pra não ter que voltar aqui toda hora. Está dividido em blocos:</p>
+
+      <div class="table-wrap">
+        <table class="field-table">
+          <tr><th>Bloco</th><th>O que preenche</th></tr>
+          <tr><td>Dados Gerais</td><td>Tipo de pessoa (PF/PJ), CNPJ/CPF, razão social, nome fantasia, regime tributário, contato, status.</td></tr>
+          <tr><td>Cobrança por WhatsApp</td><td>WhatsApp principal e financeiro, consentimento pra cobrança (obrigatório antes de mandar mensagem automática), responsável e contato financeiro, opção de pausar a régua automática pra esse cliente específico.</td></tr>
+          <tr><td>Endereço</td><td>CEP (auto-preenche o resto), logradouro, número, complemento, bairro, cidade, UF.</td></tr>
+          <tr><td>Dados Cadastrais da Empresa</td><td>Inscrição estadual/municipal, NIRE, capital social, porte, CNAE principal/secundário, código do Simples Nacional, mensalidade e dia de vencimento.</td></tr>
+          <tr><td>Credenciais da Empresa</td><td>Login/senha do portal da prefeitura, PIN do certificado digital e-CNPJ, login/senha do posto fiscal.</td></tr>
+          <tr><td>Dados do Representante</td><td>Identificação completa da pessoa física responsável (CPF, RG, filiação, estado civil, título de eleitor) + credenciais pessoais (Meu Gov, e-CAC PF, WEB Prefeitura, PIN do certificado CPF).</td></tr>
+          <tr><td>Alerta de Emissão de NFS-e</td><td>Dia do mês em que o sistema deve avisar/gerar rascunho de nota pra esse cliente.</td></tr>
+          <tr><td>Observações</td><td>Notas internas livres, só visíveis pra equipe.</td></tr>
+        </table>
+      </div>
+
+      <div class="callout danger">
+        <span class="icon">!</span>
+        <div><b>Credenciais nunca aparecem preenchidas de novo</b> Os campos de senha (prefeitura, certificado, Meu Gov, e-CAC) sempre abrem vazios ao editar um cliente que já tem credencial salva — mesmo que já exista uma senha gravada. Isso é proposital: o valor fica criptografado no banco, e reescrever por cima sem querer corrompe a credencial. Só preencha esses campos quando for realmente trocar a senha; se deixar em branco, o sistema mantém o que já estava salvo.</div>
+      </div>
+
+      <p>Depois de salvo, o cliente aparece na lista e já pode receber serviço vinculado, tarefa, competência e configuração fiscal.</p>
+    </section>
+
+    <section class="screen" id="tarefas">
+      <div class="path">Menu <span class="sep">→</span> Operacional <span class="sep">→</span> Tarefas</div>
+      <h2>Tarefas</h2>
+      <p class="screen-sub">A lista de trabalho detalhada — cada item individual que alguém da equipe precisa fazer, com prazo, prioridade e responsável.</p>
+      <p>Diferença pra "Hoje": Tarefas mostra <b>tudo</b> (com filtro), Hoje mostra só o que é acionável agora. Uma tarefa pode nascer solta (ex: "revisar contrato social") ou vinculada a um cliente/competência específica.</p>
+      <p>Filtros disponíveis: por status (Pendente, Em andamento, Concluída, Cancelada) e por prioridade (Baixa, Normal, Alta, Urgente). Toda tarefa tem um campo de comentários — histórico de conversa da equipe sobre aquele item específico, útil quando mais de uma pessoa mexe na mesma tarefa em dias diferentes.</p>
+    </section>
+
+    <section class="screen" id="competencias">
+      <div class="path">Menu <span class="sep">→</span> Operacional <span class="sep">→</span> Competências</div>
+      <h2>Competências</h2>
+      <p class="screen-sub">O "mês de trabalho" de um cliente pra um serviço específico — a unidade que amarra tarefa, prazo e cobrança num único registro mensal.</p>
+      <p>Toda competência nasce a partir de um serviço recorrente vinculado a um cliente (ex: "Contabilidade Mensal — Julho/2026"). Navegação por mês (setas ao lado do rótulo "Jul/2026"), com agrupamento por status ou por responsável. Concluir uma competência normalmente exige que não haja tarefa aberta vinculada a ela — é o gatilho que fecha o ciclo daquele cliente naquele mês.</p>
+      <div class="callout tip"><span class="icon">i</span><div><b>Geração automática</b> Competências de clientes com serviço recorrente ativo são criadas automaticamente todo mês pelo sistema — não é preciso criar uma por uma na mão, a menos que seja um caso avulso.</div></div>
+    </section>
+
+    <section class="screen" id="fechamento">
+      <div class="path">Menu <span class="sep">→</span> Operacional <span class="sep">→</span> Fechamento Mensal</div>
+      <h2>Fechamento Mensal</h2>
+      <p class="screen-sub">A visão consolidada de "o mês fechou ou não" pra toda a carteira — um degrau acima de Competências, que olha cliente por cliente.</p>
+      <p>Filtro por mês/ano e por cliente. O botão <b>Gerar Fechamento</b> cria os registros do mês pra todos os clientes ativos de uma vez (equivalente a criar a competência de cada um, em lote). <b>Encerrar revisão do mês</b> trava o mês depois que tudo foi conferido — impede edição retroativa acidental.</p>
+    </section>
+
+    <section class="screen" id="emissao">
+      <div class="path">Menu <span class="sep">→</span> Fiscal &amp; NFS-e <span class="sep">→</span> Emissão NFS-e</div>
+      <h2>Emissão NFS-e</h2>
+      <p class="screen-sub">O painel de controle da nota fiscal de serviço — quem está pronto pra emitir, quem está bloqueado, e o formulário assistido pra emitir uma nota.</p>
+
+      <h3 class="sub">Prontidão para emissão recorrente</h3>
+      <p>Essa tabela é o retrato mais honesto do estado fiscal da carteira: pra cada cliente, mostra quantos serviços tem, o dia configurado pra emitir NFS-e, e se está <span class="badge red">Bloqueado</span> — com o motivo exato (sem serviço ativo, sem dia de emissão configurado, sem configuração fiscal). Antes de cobrar de alguém "por que a nota não saiu", olhe aqui primeiro — o bloqueio já vem explicado.</p>
+
+      <h3 class="sub">Nova NFS-e — emissão assistida</h3>
+      <p>Um assistente de 5 passos, pensado pra reduzir erro de digitação numa nota fiscal de verdade (que depois de emitida nem sempre pode ser cancelada):</p>
+      <ol class="steps">
+        <li><b>Vínculo</b> — escolhe o cliente prestador e, opcionalmente, a competência a que essa nota se refere.</li>
+        <li><b>Tomador</b> — dados de quem recebe o serviço (nome/razão social, CPF/CNPJ, e-mail).</li>
+        <li><b>Serviço</b> — descrição, código do serviço no município, item da LC 116 (tem busca por palavra-chave), valor, alíquota de ISS e se há retenção.</li>
+        <li><b>Validação</b> — o sistema confere as regras fiscais antes de deixar seguir (evita mandar pra prefeitura algo que vai ser rejeitado).</li>
+        <li><b>Resumo</b> — confirmação final com ambiente (produção/homologação), prestador, valor e credencial usada, antes de emitir de fato.</li>
+      </ol>
+      <p>O painel lateral "Resumo da emissão" vai se preenchendo conforme os passos avançam, então dá pra conferir tudo sem voltar pra trás. <b>Salvar rascunho</b> guarda o progresso sem emitir — útil quando falta alguma informação do tomador.</p>
+
+      <h3 class="sub">Outros botões da tela</h3>
+      <div class="table-wrap">
+        <table class="field-table">
+          <tr><th>Botão</th><th>O que faz</th></tr>
+          <tr><td>Emitir em Lote</td><td>Processa de uma vez todos os rascunhos prontos pra emissão.</td></tr>
+          <tr><td>Preparar mês</td><td>Gera os rascunhos de nota do mês pra todos os clientes elegíveis, pra depois revisar um por um antes de emitir.</td></tr>
+        </table>
+      </div>
+
+      <div class="callout tip"><span class="icon">i</span><div><b>Emissão automática por cliente</b> Cada cliente pode ter emissão totalmente automática (sem revisão humana) ligada na sua configuração fiscal — desligado por padrão. Notas assim ficam marcadas como <span class="badge amber">Auto</span> no histórico e nos logs, pra sempre dar pra saber que aquela nota saiu sozinha.</div></div>
+    </section>
+
+    <section class="screen" id="historico">
+      <div class="path">Menu <span class="sep">→</span> Fiscal &amp; NFS-e <span class="sep">→</span> Histórico NFS-e</div>
+      <h2>Histórico NFS-e</h2>
+      <p class="screen-sub">Todas as notas já emitidas (ou que tentaram ser emitidas), com o resultado de cada uma.</p>
+      <p>O mapa de calor no topo ("Atividade de emissões") mostra a frequência de emissão ao longo do ano — dá pra ver de longe se algum mês teve um volume fora do padrão. Abaixo, a lista filtra por status: Emitida, Pendente, Cancelamento pendente, Rejeitada, Cancelada, Erro. As ações por linha (ícones à direita) permitem reenviar, ver detalhes/logs e cancelar uma nota individual.</p>
+      <p><b>Excel</b> e <b>CSV</b> no topo exportam a lista filtrada — mesma lógica do "Exportar PDF" de Clientes, respeita o que está na tela.</p>
+    </section>
+
+    <section class="screen" id="ir">
+      <div class="path">Menu <span class="sep">→</span> Fiscal &amp; NFS-e <span class="sep">→</span> Imposto de Renda</div>
+      <h2>Imposto de Renda</h2>
+      <p class="screen-sub">Controle das declarações de IR das pessoas físicas atendidas pelo escritório — separado da rotina mensal porque tem calendário anual próprio.</p>
+      <p>Organizado por ano-base (a declaração de 2026 se refere ao ano-base 2025). Status: Pendente, Em andamento, Entregue, Retificado, Cancelado. Cada declaração guarda responsável e data de entrega — útil na correria de março/abril quando o volume de declarações sobe muito.</p>
+    </section>
+
+    <section class="screen" id="financeiro">
+      <div class="path">Menu <span class="sep">→</span> Financeiro</div>
+      <h2>Financeiro</h2>
+      <p class="screen-sub">Todo lançamento de dinheiro — a receber ou a pagar — vinculado a cliente e serviço.</p>
+      <p>Os três cartões do topo (<b>A receber</b>, <b>Recebido no mês</b>, <b>Em atraso</b>) dão o resumo de caixa em um olhar. A tabela traz uma coluna que os outros módulos não têm: <b>Status WhatsApp</b> — mostra se a régua de cobrança automática já mandou aviso pra esse lançamento, e qual foi a última ação.</p>
+      <p>Filtros: Receita/Despesa, e por status (Pendente, Atrasado, Pago, Cancelado, Estornado). <b>Inadimplência</b> abre uma visão dedicada aos clientes com atraso. <b>Exportar lista</b> segue o mesmo padrão de export dos outros módulos.</p>
+      <div class="callout tip"><span class="icon">i</span><div><b>De onde vêm os lançamentos</b> Na maior parte dos casos você não cria lançamento na mão — eles nascem sozinhos a partir do serviço recorrente vinculado ao cliente (Cadastros → Clientes → aba Serviços). "Novo Lançamento" é pra casos avulsos, fora da recorrência mensal.</div></div>
+    </section>
+
+    <section class="screen" id="produtividade">
+      <div class="path">Menu <span class="sep">→</span> Relatórios <span class="sep">→</span> Produtividade</div>
+      <h2>Produtividade</h2>
+      <p class="screen-sub">Tempo registrado pela equipe via timer no Cockpit "Hoje" — quanto tempo cada pessoa gastou, em qual tarefa, em qual período.</p>
+      <p>Filtra por período (dias) e por usuário. Os blocos <b>Tempo por usuário</b> e <b>Top 10 tarefas por tempo</b> ajudam a enxergar onde a equipe está gastando mais horas. Exporta em Excel ou CSV.</p>
+      <div class="callout warn"><span class="icon">!</span><div><b>Bug conhecido, ainda não corrigido</b> No teste feito pra este manual, essa tela retornou "Não foi possível carregar as sessões — você não tem permissão para esta ação", mesmo logado como Admin. Precisa de investigação nas regras de acesso da coleção de sessões de produtividade antes de confiar nesse relatório.</div></div>
+    </section>
+
+    <section class="screen" id="usuarios">
+      <div class="path">Menu <span class="sep">→</span> Configurações <span class="sep">→</span> Painel Admin <span class="sep">→</span> Usuários</div>
+      <h2>Configurações · Usuários</h2>
+      <p class="screen-sub">Quem tem acesso ao sistema, com qual perfil.</p>
+      <p>Cada usuário tem um <b>perfil</b> (Admin, Financeiro, Operacional, etc.) que define quais telas e ações ele enxerga. <b>Novo Usuário</b> cria um acesso; a tabela mostra e-mail, perfil, status e último acesso — útil pra saber se alguém da equipe parou de logar.</p>
+      <div class="callout tip"><span class="icon">i</span><div><b>Pelo menos dois perfis</b> O sistema recomenda criar pelo menos dois usuários por perfil principal antes de liberar o ambiente pra equipe — evita depender de uma única pessoa com acesso administrativo.</div></div>
+    </section>
+
+    <section class="screen" id="tipos-servico">
+      <div class="path">Menu <span class="sep">→</span> Configurações <span class="sep">→</span> Painel Admin <span class="sep">→</span> Tipos de Serviço</div>
+      <h2>Configurações · Tipos de Serviço</h2>
+      <p class="screen-sub">O catálogo de serviços que o escritório oferece — a base que depois é vinculada a cada cliente individualmente.</p>
+      <p>Cada tipo de serviço tem código, nome, frequência (mensal, trimestral, etc.) e valor padrão — que serve de sugestão ao vincular o serviço a um cliente específico (o valor pode ser ajustado por cliente). <b>Inativar</b> remove da lista de opções pra novos vínculos, sem apagar o histórico de quem já usa.</p>
+    </section>
+
+    <section class="screen" id="conectores">
+      <div class="path">Menu <span class="sep">→</span> Configurações <span class="sep">→</span> Painel Admin <span class="sep">→</span> Conectores Fiscais</div>
+      <h2>Configurações · Conectores Fiscais</h2>
+      <p class="screen-sub">A matriz de qual integração de prefeitura está homologada e liberada pra produção — não edita nada de cliente, é infraestrutura.</p>
+      <p>Cada linha é um conector (uma prefeitura, ou o modo de emissão manual assistida) com suas capacidades (Emissão, Consulta, Cancelamento — algumas ainda "pendente" quando a prefeitura em questão não tem aquele recurso disponível). As três chaves — <b>Homologado</b>, <b>Produção</b>, <b>Ativo</b> — controlam se aquele conector pode emitir nota real. Mexer aqui é decisão técnica/fiscal, não operacional do dia a dia.</p>
+    </section>
+
+    <section class="screen" id="parametros">
+      <div class="path">Menu <span class="sep">→</span> Configurações <span class="sep">→</span> Painel Admin <span class="sep">→</span> Parâmetros</div>
+      <h2>Configurações · Parâmetros</h2>
+      <p class="screen-sub">As configurações gerais do escritório — nome, ambiente fiscal padrão, régua de cobrança por WhatsApp e flags de interface.</p>
+
+      <h3 class="sub">Dados operacionais</h3>
+      <p>Nome e CNPJ do escritório, e-mail de alertas, dia padrão de vencimento (usado quando um serviço não tem dia específico), e o <b>ambiente fiscal padrão</b> — homologação (teste) ou produção (nota fiscal real). Todo cliente novo herda esse padrão, mas pode ser sobrescrito individualmente na config fiscal dele.</p>
+
+      <h3 class="sub">Cobrança por WhatsApp</h3>
+      <p>Configuração base da régua automática (os avisos de 7 dias antes, 3 dias antes, no vencimento, 3 e 7 dias de atraso) e do canal oficial da Cloud API — Business Account ID, Phone Number ID, token de verificação do webhook, e a janela de horário permitida pra mandar mensagem (janela mínima/máxima).</p>
+      <div class="callout warn"><span class="icon">!</span><div><b>Cloud API está desligada</b> No estado atual, "Cloud API habilitada" está marcado como <b>não</b>. Enquanto estiver assim, a régua de cobrança gera os avisos internamente mas eles não chegam de fato no WhatsApp do cliente — vale ativar e preencher Business Account ID / Phone Number ID quando a conta do WhatsApp Business estiver pronta.</div></div>
+
+      <h3 class="sub">Rollout de UI premium</h3>
+      <p>Flags técnicas que liberam gradualmente um redesign de interface (tabelas, modais e sidebar em versão nova) — não é algo que a operação do dia a dia precise mexer, fica a critério de quem administra o sistema.</p>
+    </section>
+
+    <section class="screen" id="glossario">
+      <div class="path">Referência rápida</div>
+      <h2>Selos e cores que aparecem em toda parte</h2>
+      <p class="screen-sub">Os mesmos selos se repetem em Clientes, Financeiro, Fiscal e Tarefas — aprender uma vez vale pro sistema inteiro.</p>
+      <div class="table-wrap">
+        <table class="field-table">
+          <tr><th>Selo</th><th>Significado</th></tr>
+          <tr><td><span class="badge green">Ativo / Estável / Emitida / Pago</span></td><td>Tudo certo, nenhuma ação necessária.</td></tr>
+          <tr><td><span class="badge amber">Pendente / Auto / Em andamento</span></td><td>Precisa de atenção ou revisão em algum momento — não é erro, mas não está concluído.</td></tr>
+          <tr><td><span class="badge red">Bloqueado / Atrasado / Erro / Rejeitada</span></td><td>Precisa de ação agora — é o que normalmente aparece primeiro em Hoje e no Painel.</td></tr>
+          <tr><td><span class="badge blue">Cancelado / Cancelamento pendente</span></td><td>Fora do fluxo normal, geralmente por decisão manual.</td></tr>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer>
+  Manual escrito a partir da navegação real da plataforma em julho de 2026, perfil Admin. Telas evoluem — se algo aqui não bater mais com o que você vê na plataforma, é sinal de que essa página precisa de uma atualização.
+</footer>
+
+</body>
+</html>
