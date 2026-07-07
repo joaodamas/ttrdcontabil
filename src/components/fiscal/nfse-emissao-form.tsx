@@ -29,6 +29,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions'
 import { getFirebaseApp } from '@/lib/firebase'
 import { getErrorMessage } from '@/lib/error-message'
 import { SELECT_NONE_VALUE } from '@/lib/select-values'
+import { Lc116Picker } from '@/components/fiscal/lc116-picker'
 
 function isValidCpfCnpj(raw: string): boolean {
   const digits = raw.replace(/\D/g, '')
@@ -54,6 +55,10 @@ const nfseSchema = z.object({
   codigoServico:    z.string().min(1, 'Código do serviço é obrigatório').max(20).refine(
     v => isValidCodigoServico(v),
     { message: 'Formato inválido. Use ex: 17.19 ou 6014' }
+  ),
+  itemListaServico: z.string().min(1, 'Item da lista de serviço (LC 116) é obrigatório').max(20).refine(
+    v => isValidCodigoServico(v),
+    { message: 'Formato inválido. Use ex: 1.07 ou 17.19' }
   ),
   valorServico:     z.number().min(0.01, 'Valor deve ser maior que zero'),
   aliquota:         z.number().min(0).max(100).optional().nullable(),
@@ -170,6 +175,7 @@ export function NfseEmissaoForm({
           tomadorEmail: (dados.tomadorEmail as string | undefined) ?? (dados.tomador as Record<string, unknown> | undefined)?.email as string | undefined ?? '',
           descricaoServico: (dados.descricaoServico as string | undefined) ?? (dados.servico as Record<string, unknown> | undefined)?.discriminacao as string | undefined ?? '',
           codigoServico: (dados.codigoServico as string | undefined) ?? (dados.servico as Record<string, unknown> | undefined)?.codigoServico as string | undefined ?? '',
+          itemListaServico: (dados.itemListaServico as string | undefined) ?? (dados.servico as Record<string, unknown> | undefined)?.itemListaServico as string | undefined ?? '',
           valorServico: Number((dados.valorServico as number | undefined) ?? (dados.servico as Record<string, unknown> | undefined)?.valorServico ?? 0),
           aliquota: (dados.aliquota as number | null | undefined) ?? (dados.servico as Record<string, unknown> | undefined)?.aliquota as number | null | undefined ?? null,
           issRetido: Boolean((dados.issRetido as boolean | undefined) ?? (dados.servico as Record<string, unknown> | undefined)?.issRetido ?? false),
@@ -199,6 +205,7 @@ export function NfseEmissaoForm({
     const dados = r.dados ?? {}
     if (dados.descricaoServico) setValue('descricaoServico', dados.descricaoServico as string)
     if (dados.codigoServico)    setValue('codigoServico',    dados.codigoServico as string)
+    if (dados.itemListaServico) setValue('itemListaServico', dados.itemListaServico as string)
     if (dados.valorServico)     setValue('valorServico',     Number(dados.valorServico))
     if (dados.aliquota != null) setValue('aliquota',         Number(dados.aliquota))
     if (dados.issRetido != null) setValue('issRetido',       Boolean(dados.issRetido))
@@ -226,12 +233,28 @@ export function NfseEmissaoForm({
       }
     }
 
+    // Pré-preenche com os padrões da configuração fiscal do cliente (código de
+    // serviço, item LC 116, alíquota, descrição) — sem sobrescrever um rascunho
+    // já existente ou algo que o usuário já tenha digitado.
+    if (!rascunhoAtual) {
+      listDocuments<Record<string, unknown>>('clientes_fiscal', [
+        where('clienteId', '==', selectedClienteId),
+        limit(1),
+      ]).then(([fiscal]) => {
+        if (!fiscal) return
+        if (!watch('codigoServico') && fiscal.codigoServicoPadrao) setValue('codigoServico', fiscal.codigoServicoPadrao as string)
+        if (!watch('itemListaServico') && fiscal.itemListaServico) setValue('itemListaServico', fiscal.itemListaServico as string)
+        if (!watch('descricaoServico') && fiscal.descricaoServicoPadrao) setValue('descricaoServico', fiscal.descricaoServicoPadrao as string)
+        if (watch('aliquota') == null && fiscal.aliquotaPadrao != null) setValue('aliquota', Number(fiscal.aliquotaPadrao))
+      }).catch(() => { /* segue sem pré-preencher — usuário digita na mão */ })
+    }
+
     setLoadingCompetencias(true)
     getCompetencias({ clienteId: selectedClienteId })
       .then((data) => setCompetencias(data as unknown as Competencia[]))
       .catch((err) => toast.error(getErrorMessage(err, 'Não foi possível carregar competências do cliente selecionado.')))
       .finally(() => setLoadingCompetencias(false))
-  }, [selectedClienteId, clientes, setValue, rascunhoAtual])
+  }, [selectedClienteId, clientes, setValue, watch, rascunhoAtual])
 
   async function handleSaveRascunho(data: NfseFormData) {
     setSaving(true)
@@ -250,6 +273,7 @@ export function NfseEmissaoForm({
           tomadorEmail:     data.tomadorEmail || null,
           descricaoServico: data.descricaoServico,
           codigoServico:    data.codigoServico,
+          itemListaServico: data.itemListaServico,
           valorServico:     data.valorServico,
           aliquota:         data.aliquota ?? null,
           issRetido:        data.issRetido,
@@ -274,6 +298,16 @@ export function NfseEmissaoForm({
     setEmissaoPendente(data)
   }
 
+  function onEmissaoInvalida(formErrors: typeof errors) {
+    const primeiraMensagem = Object.values(formErrors)[0]?.message
+    toast.error(
+      typeof primeiraMensagem === 'string'
+        ? primeiraMensagem
+        : 'Revise os campos antes de emitir — algum dado está incompleto ou inválido.'
+    )
+    setShowResume(false)
+  }
+
   async function confirmarEmissao() {
     if (!emissaoPendente) return
     const data = emissaoPendente
@@ -296,11 +330,12 @@ export function NfseEmissaoForm({
           email:       data.tomadorEmail || undefined,
         },
         servico: {
-          discriminacao:  data.descricaoServico,
-          codigoServico:  data.codigoServico,
-          valorServico:   data.valorServico,
-          aliquota:       data.aliquota ?? undefined,
-          issRetido:      data.issRetido,
+          discriminacao:    data.descricaoServico,
+          codigoServico:    data.codigoServico,
+          itemListaServico: data.itemListaServico,
+          valorServico:     data.valorServico,
+          aliquota:         data.aliquota ?? undefined,
+          issRetido:        data.issRetido,
         },
       }
 
@@ -336,13 +371,22 @@ export function NfseEmissaoForm({
   const previewCompetencia = competencias.find((c) => c.id === previewCompetenciaId)
   const previewValor = watch('valorServico')
   const previewCodigo = watch('codigoServico')
+  const previewItemListaServico = watch('itemListaServico')
   const previewAliquota = watch('aliquota')
   const previewIssRetido = watch('issRetido')
   const previewTomadorNome = watch('tomadorNome')
   const previewTomadorCpf = watch('tomadorCpfCnpj')
   const previewTomadorEmail = watch('tomadorEmail')
   const previewDescricao = watch('descricaoServico')
-  const allFieldsFilled = Boolean(selectedClienteId && previewTomadorNome && previewTomadorCpf && previewDescricao && previewCodigo && previewValor)
+  const allFieldsFilled = Boolean(
+    selectedClienteId
+    && previewTomadorNome
+    && previewTomadorCpf && isValidCpfCnpj(previewTomadorCpf)
+    && previewDescricao && previewDescricao.length >= 10
+    && previewCodigo && isValidCodigoServico(previewCodigo)
+    && previewItemListaServico && isValidCodigoServico(previewItemListaServico)
+    && previewValor
+  )
   const isModal = layout === 'modal'
 
   function handleShowResume() { setShowResume(true) }
@@ -403,6 +447,7 @@ export function NfseEmissaoForm({
               <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-sm">
                 <div className="sm:col-span-2"><dt className="text-xs text-muted-foreground">Descrição</dt><dd className="whitespace-pre-wrap">{previewDescricao || '—'}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">Código</dt><dd className="font-mono">{previewCodigo || '—'}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Item Lista Serviço</dt><dd className="font-mono">{previewItemListaServico || '—'}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">Valor</dt><dd className="font-semibold tabular-nums">{Number.isFinite(previewValor) ? formatCurrency(Number(previewValor)) : '—'}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">Alíquota ISS</dt><dd>{Number.isFinite(previewAliquota) ? `${Number(previewAliquota)}%` : 'Padrão configuração'}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">ISS retido</dt><dd>{previewIssRetido ? 'Sim' : 'Não'}</dd></div>
@@ -569,10 +614,20 @@ export function NfseEmissaoForm({
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="codigoServico">Código do Serviço <span className="text-destructive">*</span></Label>
+              <Label htmlFor="codigoServico">Código do Serviço (município) <span className="text-destructive">*</span></Label>
               <Input id="codigoServico" {...register('codigoServico')} placeholder="Ex: 17.19" />
               {errors.codigoServico && <p className="text-xs text-destructive">{errors.codigoServico.message}</p>}
             </div>
+            <div className="space-y-1.5">
+              <Label>Item Lista Serviço (LC 116) <span className="text-destructive">*</span></Label>
+              <Controller name="itemListaServico" control={control} render={({ field }) => (
+                <Lc116Picker value={field.value} onChange={field.onChange} />
+              )} />
+              {errors.itemListaServico && <p className="text-xs text-destructive">{errors.itemListaServico.message}</p>}
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="valorServico">Valor do Serviço (R$) <span className="text-destructive">*</span></Label>
               <Input id="valorServico" type="number" step="0.01" min="0.01" placeholder="0,00" {...register('valorServico', { valueAsNumber: true })} />
@@ -661,7 +716,7 @@ export function NfseEmissaoForm({
               </Button>
             )}
             {showResume && (
-              <Button type="button" className="w-full justify-center" disabled={isLoading} onClick={handleSubmit(solicitarEmissao)}>
+              <Button type="button" className="w-full justify-center" disabled={isLoading} onClick={handleSubmit(solicitarEmissao, onEmissaoInvalida)}>
                 {emitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
                 Emitir NFS-e
               </Button>

@@ -20,6 +20,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions'
 import { getFirebaseApp } from '@/lib/firebase'
 import { getErrorMessage } from '@/lib/error-message'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
+import { Lc116Picker } from '@/components/fiscal/lc116-picker'
 
 export const MUNICIPIOS = [
   { ibge: '3525904', nome: 'Jundiaí' },
@@ -66,6 +67,9 @@ const schema = z.object({
   conamCodigoContribuinte: z.string().optional().nullable(),
   giaplogin:           z.string().optional().nullable(),
   giapSenha:           z.string().optional().nullable(),
+  // Spedy (API agregadora — cobre qualquer município)
+  provedorNfse:        z.enum(['municipio', 'spedy']).optional(),
+  spedyApiKey:         z.string().optional().nullable(),
 })
 
 type FormData = z.input<typeof schema>
@@ -88,6 +92,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       ambienteEmissao:  'homologacao',
       optanteSimples:   true,
       naturezaOperacao: '1',
+      provedorNfse:     'municipio',
     },
   })
 
@@ -98,6 +103,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       ambienteEmissao:  'homologacao',
       optanteSimples:   true,
       naturezaOperacao: '1',
+      provedorNfse:     'municipio',
       ...defaultValues,
       simplissToken:          (creds.simplissToken as string) ?? null,
       usuario:                (creds.usuario as string) ?? null,
@@ -106,10 +112,12 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       conamCodigoContribuinte:(creds.conamCodigoContribuinte as string) ?? null,
       giaplogin:              (creds.giaplogin as string) ?? null,
       giapSenha:              (creds.giapSenha as string) ?? null,
+      spedyApiKey:            (creds.spedyApiKey as string) ?? null,
     })
   }, [open, defaultValues, reset])
 
   const municipioIbge = watch('municipioIbge')
+  const provedorNfse = watch('provedorNfse') ?? 'municipio'
   const tipo = MUNICIPIO_TIPO[municipioIbge]
   const municipioNome = MUNICIPIOS.find(m => m.ibge === municipioIbge)?.nome ?? ''
   const credenciais = (defaultValues?.credenciais ?? {}) as Record<string, unknown>
@@ -143,6 +151,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
         cnae:                 data.cnae              || null,
         aliquotaPadrao:       data.aliquotaPadrao    ?? null,
         issRetidoPadrao:      data.issRetidoPadrao   ?? false,
+        provedorNfse:         data.provedorNfse ?? 'municipio',
       }
 
       let savedDocId = docId
@@ -159,6 +168,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       if (tipo === 'conam'    && data.conamCodigoContribuinte)  credenciais.conamCodigoContribuinte = data.conamCodigoContribuinte
       if (tipo === 'giap'     && data.giaplogin)                credenciais.giaplogin = data.giaplogin
       if (tipo === 'giap'     && data.giapSenha)                credenciais.giapSenha = data.giapSenha
+      if (data.provedorNfse === 'spedy' && data.spedyApiKey)    credenciais.spedyApiKey = data.spedyApiKey
 
       if (Object.keys(credenciais).length > 0) {
         const functions = getFunctions(getFirebaseApp(), 'southamerica-east1')
@@ -186,6 +196,25 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       size="lg"
     >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-1">
+
+          {/* Provedor de emissão */}
+          <div className="space-y-1.5">
+            <Label>Provedor de Emissão *</Label>
+            <Controller name="provedorNfse" control={control} render={({ field }) => (
+              <Select value={field.value ?? 'municipio'} onValueChange={field.onChange}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="municipio">Conector direto do município (padrão)</SelectItem>
+                  <SelectItem value="spedy">Spedy (API — qualquer município)</SelectItem>
+                </SelectContent>
+              </Select>
+            )} />
+            <p className="text-xs text-muted-foreground">
+              {provedorNfse === 'spedy'
+                ? 'Emite via API da Spedy — cobre qualquer município do Brasil, não só os 8 com conector próprio.'
+                : 'Usa o conector escrito para o município selecionado abaixo (só cobre os municípios listados).'}
+            </p>
+          </div>
 
           {/* Município + Ambiente */}
           <div className="grid grid-cols-2 gap-3">
@@ -270,8 +299,10 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
               <Input {...register('codigoServicoPadrao')} placeholder="Ex: 1719" />
             </div>
             <div className="space-y-1.5">
-              <Label>Item Lista Serviço</Label>
-              <Input {...register('itemListaServico')} placeholder="Ex: 17.19" />
+              <Label>Item Lista Serviço (LC 116)</Label>
+              <Controller name="itemListaServico" control={control} render={({ field }) => (
+                <Lc116Picker value={field.value} onChange={field.onChange} />
+              )} />
             </div>
             <div className="space-y-1.5">
               <Label>CNAE</Label>
@@ -369,8 +400,22 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
             </div>
           )}
 
+          {/* Credenciais: Spedy */}
+          {provedorNfse === 'spedy' && (
+            <div className="border rounded-md p-3 bg-muted/30 space-y-3">
+              <p className="text-xs font-semibold uppercase text-muted-foreground">Credenciais — Spedy (API)</p>
+              <div className="space-y-1.5">
+                <Label>Chave de API</Label>
+                <Input type="password" {...register('spedyApiKey')} placeholder="Cole a chave de API da Spedy (aba Geral → Credenciais da API)" />
+                <p className="text-xs text-muted-foreground">
+                  Criptografada antes de salvar — nunca fica em texto puro. O certificado A1 continua sendo enviado direto no painel da Spedy, não aqui.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Aviso certificado A1 */}
-          {(tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
+          {provedorNfse !== 'spedy' && (tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
             <div className="space-y-3 rounded-md border border-warning/25 bg-warning/8 p-3">
               <p className="text-xs text-warning">
                 <strong>Certificado A1 necessário.</strong> O upload pode ser feito aqui mesmo na configuração fiscal do cliente.
