@@ -21,7 +21,7 @@ Convenção para novas entradas:
 - Rotação de uma senha de admin que vazou no histórico do git (rotação manual, fora do código — valor não reproduzido aqui de propósito).
 - **Monitorar o perfil `financeiro` em produção pós-deploy das rules (2026-07-07):** risco identificado de regressão de leitura em `clientes_fiscal`/`clientes_fiscal_integracao` se algum `usuarios/{uid}` não tiver o array `telas` (usuários criados via `seed.ts` não gravam esse campo). O dono decidiu deployar mesmo assim; falta ainda adicionar `financeiro` em `canReadFiscalConfig()` (ou confirmar que todo `financeiro` ativo tem `telas`), cobrir com teste, e colocar `.catch` nos dois `Promise.all` sem tratamento (`clientes/[id]/fiscal/page-client.tsx`, `features/fiscal/services.ts`) para que uma leitura negada não deixe a tela em branco sem aviso.
 
-- A emissão via Spedy (Lote 8) ainda não foi testada contra a API real — primeiro teste real com o JPProject fica pendente.
+- **Spedy usa sempre o host de produção deles** (`api.spedy.com.br`) — não há distinção homologação/produção do nosso lado pra esse provedor, porque o escritório só tem conta real da Spedy (sandbox exige conta separada, Plano Desenvolvedor). A segurança de testar sem emitir nota real depende do toggle "Ambiente: Simulação" de cada empresa no próprio painel da Spedy — decisão confirmada com o dono em 2026-07-07 (commit `29491f7`). Se algum dia o escritório abrir uma conta de sandbox própria, vale reavaliar.
 - Cadastro dos clientes na Spedy: hoje é manual (colar a chave de API por cliente). A Spedy suporta uma hierarquia Owner/empresas-secundárias (`POST /v1/companies`) que permite automatizar isso pros 119 clientes de uma vez — ainda não construído.
 
 ### Gaps conhecidos (backlog, não bloqueiam)
