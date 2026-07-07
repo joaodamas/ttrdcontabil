@@ -21,13 +21,26 @@ Convenção para novas entradas:
 - Rotação de uma senha de admin que vazou no histórico do git (rotação manual, fora do código — valor não reproduzido aqui de propósito).
 - **Monitorar o perfil `financeiro` em produção pós-deploy das rules (2026-07-07):** risco identificado de regressão de leitura em `clientes_fiscal`/`clientes_fiscal_integracao` se algum `usuarios/{uid}` não tiver o array `telas` (usuários criados via `seed.ts` não gravam esse campo). O dono decidiu deployar mesmo assim; falta ainda adicionar `financeiro` em `canReadFiscalConfig()` (ou confirmar que todo `financeiro` ativo tem `telas`), cobrir com teste, e colocar `.catch` nos dois `Promise.all` sem tratamento (`clientes/[id]/fiscal/page-client.tsx`, `features/fiscal/services.ts`) para que uma leitura negada não deixe a tela em branco sem aviso.
 
-- **Spedy usa sempre o host de produção deles** (`api.spedy.com.br`) — não há distinção homologação/produção do nosso lado pra esse provedor, porque o escritório só tem conta real da Spedy (sandbox exige conta separada, Plano Desenvolvedor). A segurança de testar sem emitir nota real depende do toggle "Ambiente: Simulação" de cada empresa no próprio painel da Spedy — decisão confirmada com o dono em 2026-07-07 (commit `29491f7`). Se algum dia o escritório abrir uma conta de sandbox própria, vale reavaliar.
-- Cadastro dos clientes na Spedy: hoje é manual (colar a chave de API por cliente). A Spedy suporta uma hierarquia Owner/empresas-secundárias (`POST /v1/companies`) que permite automatizar isso pros 119 clientes de uma vez — ainda não construído.
+- Cadastro dos clientes na Spedy: hoje é manual (colar a chave de API por cliente, e criar a empresa direto no painel do Stage). A Spedy suporta uma hierarquia Owner/empresas-secundárias (`POST /v1/companies`) que permite automatizar isso pros 119 clientes de uma vez — inclusive **obrigatório** pro ambiente de teste, já que lá (arquitetura "API-First") não dá pra cadastrar empresa nem certificado pelo painel, só via API. Ainda não construído.
 
 ### Gaps conhecidos (backlog, não bloqueiam)
 - A checagem de "sem tarefas abertas" para concluir competência só existe no client — Firestore rules não faz query em coleção, só valida documento por path. Fechar de vez exige uma Cloud Function (o trigger `functions/src/triggers/tarefa-concluida.ts` já tem a lógica de referência e pode ser reaproveitado).
 - Sidebar deveria ser "sempre escura" conforme `docs/design-system`, mas hoje só acompanha o tema (`bg-card`) — os tokens `--sidebar-*` existem no CSS mas nenhum componente os usa. Desvio pré-existente, não causado pelo dark mode.
 - Consulta e cancelamento de NFS-e via Spedy não implementados (só emissão).
+
+---
+
+## [Lote 9] — 2026-07-07 (commits `29491f7`..`e96dddc`)
+### Confirmado
+- **Primeira emissão de NFS-e via Spedy funcionou de ponta a ponta** — NFS-e nº 14, R$ 20,00, JPProject, status "Emitida", via ambiente de teste da Spedy (Stage). Valida o conector inteiro: payload, autenticação, polling, gravação no histórico.
+
+### Corrigido
+- Credenciais de configuração fiscal (chave da Spedy, token Simpliss, login/senha GIAP, códigos Conam) eram pré-preenchidas no formulário com o valor **já criptografado** vindo do Firestore. Salvar de novo sem alterar o campo reencriptava o ciphertext por cima do ciphertext a cada edição — corrompeu a chave da Spedy do JPProject (chegou a 694 caracteres; UUID real tem 36). Campos de credencial agora sempre abrem vazios, com placeholder "já configurado" quando existe valor salvo; só são reenviados (e recriptografados) se o usuário digitar algo novo. Afeta todos os provedores, não só Spedy.
+- Host do ambiente de teste da Spedy estava errado duas vezes: primeiro usava `sandbox-api.spedy.com.br` (nome que a doc pública usa, mas está desatualizado/incorreto), depois foi trocado para sempre produção (`api.spedy.com.br`) — mas a chave configurada era da conta de **Stage** (`stage-app.spedy.com.br`, plano Desenvolvedor Grátis), que só autentica em `stage-api.spedy.com.br`. Confirmado por teste direto (curl sem credencial) e pelo guia oficial da Spedy. `ambienteEmissao='homologacao'` agora roteia certo para o Stage.
+
+### Pendências que exigem decisão do dono (novas)
+- Testar emissão pra outros tipos de cliente/regime tributário e, futuramente, outros tipos de nota (produto/NF-e) — combinado como próximo passo.
+- Construir a automação de provisionamento em massa via `POST /v1/companies` (agora confirmada como não-opcional pro ambiente de teste, que é "API-First": não dá pra cadastrar empresa/certificado pelo painel do Stage).
 
 ---
 
