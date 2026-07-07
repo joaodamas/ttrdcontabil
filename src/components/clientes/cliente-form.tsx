@@ -735,7 +735,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
             Senhas ficam mascaradas no formulário. Revise permissões, auditoria e exportações antes de liberar clientes reais neste ambiente.
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

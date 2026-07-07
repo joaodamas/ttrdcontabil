@@ -55,11 +55,11 @@ const REGIME_LABEL: Record<string, string> = {
 }
 
 const REGIME_COLOR: Record<string, string> = {
-  simples_nacional: 'bg-blue-100 text-blue-700',
-  lucro_presumido:  'bg-purple-100 text-purple-700',
-  lucro_real:       'bg-indigo-100 text-indigo-700',
-  mei:              'bg-cyan-100 text-cyan-700',
-  isento:           'bg-gray-100 text-gray-600',
+  simples_nacional: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
+  lucro_presumido:  'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400',
+  lucro_real:       'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400',
+  mei:              'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-400',
+  isento:           'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 }
 
 // Ciclo de status ao clicar

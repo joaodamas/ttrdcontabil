@@ -73,10 +73,10 @@ const BORDER_LEFT: Record<string, string> = {
 }
 
 const PRIORITY_BADGE: Record<string, string> = {
-  urgente: 'bg-red-100 text-red-800 border-transparent',
-  alta: 'bg-amber-100 text-amber-800 border-transparent',
-  normal: 'bg-slate-100 text-slate-600 border-transparent',
-  baixa: 'bg-slate-50 text-slate-400 border-transparent',
+  urgente: 'bg-destructive/10 text-destructive dark:bg-destructive/20 border-transparent',
+  alta: 'bg-warning/15 text-amber-800 dark:text-warning dark:bg-warning/20 border-transparent',
+  normal: 'bg-muted text-muted-foreground border-transparent',
+  baixa: 'bg-muted/50 text-muted-foreground/70 border-transparent',
 }
 
 export function TaskCard({ task, usuarios, selected, onToggleSelected, onUpdated }: TaskCardProps) {
@@ -157,7 +157,7 @@ export function TaskCard({ task, usuarios, selected, onToggleSelected, onUpdated
                   )}
                 >
                   {prioridade === 'urgente' && (
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-600 animate-pulse" />
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-destructive animate-pulse" />
                   )}
                   <span className="capitalize">{prioridade}</span>
                 </span>
@@ -169,7 +169,7 @@ export function TaskCard({ task, usuarios, selected, onToggleSelected, onUpdated
 
             {/* SLA critical badge */}
             {isSLACritical && (
-              <span className="sla-critical inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+              <span className="sla-critical inline-flex items-center gap-1 rounded-full bg-warning/15 dark:bg-warning/20 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:text-warning">
                 <AlertTriangle className="h-3 w-3" />
                 48h
               </span>

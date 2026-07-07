@@ -1074,7 +1074,7 @@ export default function ClienteDetailPage() {
                       const x2 = PAD + ((i + 1) / Math.max(total - 1, 1)) * (W - PAD * 2)
                       const y1 = H - PAD - (s1 === 'concluida' ? H - PAD * 2 : s1 === 'em_andamento' ? (H - PAD * 2) * 0.5 : (H - PAD * 2) * 0.15)
                       const y2 = H - PAD - (s2 === 'concluida' ? H - PAD * 2 : s2 === 'em_andamento' ? (H - PAD * 2) * 0.5 : (H - PAD * 2) * 0.15)
-                      return <line key={`l${i}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#e2e8f0" strokeWidth="1.5" />
+                      return <line key={`l${i}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--border)" strokeWidth="1.5" />
                     })}
                   </svg>
                   <div className="flex items-center justify-between text-[10px] text-muted-foreground">
