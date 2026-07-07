@@ -4,8 +4,9 @@ import { useState, Suspense, Fragment } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
+import { toast } from 'sonner'
 import { formatCpfCnpj, formatCurrency } from '@/lib/utils'
-import { buttonVariants } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { ClienteStatusBadge } from '@/components/ui/status-badge'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
@@ -20,7 +21,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import {
   Plus, Users, MoreHorizontal, CheckSquare, Layers, Receipt, Pencil,
-  ShieldCheck, ShieldAlert, AlertTriangle, MessageCircle,
+  ShieldCheck, ShieldAlert, AlertTriangle, MessageCircle, FileDown,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useClientesList } from '@/features/clientes/hooks'
@@ -88,6 +89,133 @@ function SaudeBadge({ nivel, motivo }: { nivel: SaudeNivel; motivo: string }) {
   )
 }
 
+const STATUS_LABELS_PDF: Record<string, string> = {
+  ativo: 'Ativo',
+  inativo: 'Inativo',
+  suspenso: 'Suspenso',
+}
+
+function escapeHtmlPdf(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
+}
+
+function exportClientesListaPdf(clientes: ClienteRecord[]) {
+  const now = new Date()
+  const printWindow = window.open('', '_blank', 'width=1100,height=1400')
+
+  if (!printWindow) {
+    toast.error('Não foi possível abrir a janela de impressão. Verifique o bloqueador de pop-ups.')
+    return
+  }
+
+  printWindow.opener = null
+
+  const linhas = clientes.map((c) => {
+    const nome = escapeHtmlPdf((c.razaoSocial as string) ?? '—')
+    const fantasia = c.nomeFantasia ? escapeHtmlPdf(c.nomeFantasia as string) : ''
+    const documento = c.cpfCnpj ? escapeHtmlPdf(formatCpfCnpj(c.cpfCnpj as string)) : '—'
+    const regimeLabel = c.regimeTributario ? (REGIME_LABELS[c.regimeTributario as string] ?? String(c.regimeTributario)) : '—'
+    const mensalidade = c.mensalidade != null ? formatCurrency(c.mensalidade as number) : '—'
+    const statusLabel = STATUS_LABELS_PDF[(c.status as string) ?? ''] ?? String(c.status ?? '—')
+    return `
+      <tr>
+        <td>${nome}${fantasia ? `<div class="sub">${fantasia}</div>` : ''}</td>
+        <td>${documento}</td>
+        <td>${escapeHtmlPdf(regimeLabel)}</td>
+        <td class="num">${escapeHtmlPdf(mensalidade)}</td>
+        <td>${escapeHtmlPdf(statusLabel)}</td>
+      </tr>
+    `
+  }).join('')
+
+  printWindow.document.write(`
+    <!doctype html>
+    <html lang="pt-BR">
+      <head>
+        <meta charset="utf-8" />
+        <title>Lista de clientes</title>
+        <style>
+          @page { size: A4 landscape; margin: 12mm; }
+          * { box-sizing: border-box; }
+          body {
+            margin: 0;
+            color: #111827;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
+            line-height: 1.35;
+          }
+          header {
+            display: flex;
+            justify-content: space-between;
+            gap: 24px;
+            border-bottom: 2px solid #111827;
+            padding-bottom: 10px;
+            margin-bottom: 12px;
+          }
+          h1 { margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 0.02em; }
+          .meta { text-align: right; color: #4b5563; white-space: nowrap; }
+          table { width: 100%; border-collapse: collapse; }
+          thead th {
+            text-align: left;
+            padding: 6px 8px;
+            background: #f3f4f6;
+            border-bottom: 1px solid #d1d5db;
+            font-size: 10px;
+            text-transform: uppercase;
+          }
+          tbody td {
+            padding: 5px 8px;
+            vertical-align: top;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          tbody tr:nth-child(even) { background: #fafafa; }
+          .sub { color: #6b7280; font-size: 10px; }
+          .num { text-align: right; white-space: nowrap; }
+          @media print {
+            body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>
+        <header>
+          <div>
+            <h1>Lista de clientes</h1>
+            <div>${clientes.length} cliente${clientes.length !== 1 ? 's' : ''}</div>
+          </div>
+          <div class="meta">
+            <div>Emitido em ${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+            <div>Documento interno</div>
+          </div>
+        </header>
+        <table>
+          <thead>
+            <tr>
+              <th>Nome / Razão Social</th>
+              <th>CPF / CNPJ</th>
+              <th>Regime</th>
+              <th class="num">Mensalidade</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>${linhas}</tbody>
+        </table>
+        <script>
+          window.addEventListener('load', () => {
+            window.focus();
+            setTimeout(() => window.print(), 200);
+          });
+        </script>
+      </body>
+    </html>
+  `)
+  printWindow.document.close()
+}
+
 function ClientesContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -100,7 +228,7 @@ function ClientesContent() {
     ? result.data
     : { busca: '', status: '', page: 1 }
   const regime = searchParams.get('regime') ?? ''
-  const { paginados, total, totalPages, isLoading, isError } = useClientesList({ busca, status, page })
+  const { paginados, filteredClientes, total, totalPages, isLoading, isError } = useClientesList({ busca, status, page })
   const [modalClienteId,   setModalClienteId]   = useState<string | null>(null)
   const [modalClienteNome, setModalClienteNome] = useState('')
   const [filterSheetOpen,  setFilterSheetOpen]  = useState(false)
@@ -108,6 +236,10 @@ function ClientesContent() {
   const paginadosFiltrados = regime
     ? paginados.filter(c => (c.regimeTributario as string | undefined) === regime)
     : paginados
+
+  const todosFiltrados = regime
+    ? filteredClientes.filter(c => (c.regimeTributario as string | undefined) === regime)
+    : filteredClientes
 
   return (
     <div>
@@ -120,6 +252,16 @@ function ClientesContent() {
               onClick={() => setFilterSheetOpen(true)}
               activeCount={(status ? 1 : 0) + (regime ? 1 : 0)}
             />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-10 rounded-xl"
+              disabled={isLoading || todosFiltrados.length === 0}
+              onClick={() => exportClientesListaPdf(todosFiltrados)}
+            >
+              <FileDown className="w-4 h-4" />
+              Exportar PDF
+            </Button>
             <Link href="/clientes/novo" className={buttonVariants({ size: 'sm', className: 'h-10 rounded-xl' })}>
               <Plus className="w-4 h-4" />
               Novo Cliente
