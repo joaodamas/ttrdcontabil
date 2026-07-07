@@ -20,9 +20,15 @@ import type {
 } from '../types'
 
 const SPEDY_API_PRODUCAO = 'https://api.spedy.com.br/v1'
-// Sandbox (https://sandbox-api.spedy.com.br/v1) exige uma conta separada
-// (Plano Desenvolvedor, gratuito) com sua própria chave — não usado ainda
-// porque o escritório só tem a conta real. Ver baseUrl() abaixo.
+// Sandbox real da Spedy: conta SEPARADA da de produção, criada em
+// stage-app.spedy.com.br (Plano Desenvolvedor, gratuito), com sua própria
+// X-API Key — só funciona no host abaixo (confirmado em 2026-07-07: uma
+// chave de stage dá 401 em api.spedy.com.br, e vice-versa). A doc pública
+// (docs.spedy.com.br) menciona "sandbox-api.spedy.com.br", que está
+// desatualizada/errada — o nome real é "stage-api", confirmado por teste
+// direto (curl sem credencial retornou 401, não erro de DNS) e pelo guia
+// oficial "API Spedy — ambiente de testes.pdf".
+const SPEDY_API_STAGE = 'https://stage-api.spedy.com.br/v1'
 
 // Status "em andamento" — segue no polling. Qualquer outro valor é terminal.
 const STATUS_EM_ANDAMENTO = new Set(['enqueued', 'created', 'received', 'inContingent'])
@@ -32,15 +38,7 @@ const POLL_INTERVALO_MS = 2500
 const POLL_MAX_TENTATIVAS = 10 // ~25s de polling, dentro do timeout de 60s da function
 
 function baseUrl(config: ConfigFiscalCliente): string {
-  // O sandbox da Spedy (sandbox-api.spedy.com.br) é uma CONTA separada da de
-  // produção — precisa de cadastro próprio no Plano Desenvolvedor, com chave
-  // de API própria. Enquanto o escritório não tiver essa conta de sandbox,
-  // toda chave configurada é de conta real, e só autentica no host de
-  // produção (uma chave de conta real gera 401 no host de sandbox). A
-  // segurança do teste vem do toggle "Ambiente: Simulação" de cada empresa
-  // dentro do próprio backoffice da Spedy, não da escolha de host aqui.
-  void config
-  return SPEDY_API_PRODUCAO
+  return config.ambienteEmissao === 'homologacao' ? SPEDY_API_STAGE : SPEDY_API_PRODUCAO
 }
 
 function decryptApiKey(raw: string | undefined): string {
