@@ -163,6 +163,49 @@ async function seedBaseData() {
       clienteId: 'cliente-a',
       dasStatus: 'pendente',
     })
+    // [Matriz de transição] competencias/tarefas em cada estado, usadas para
+    // testar competenciaTransicaoPermitida()/tarefaTransicaoPermitida().
+    await setDoc(doc(db, 'competencias/comp-aberta'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      mes: 1,
+      ano: 2026,
+      status: 'aberta',
+    })
+    await setDoc(doc(db, 'competencias/comp-concluida'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      mes: 2,
+      ano: 2026,
+      status: 'concluida',
+    })
+    await setDoc(doc(db, 'competencias/comp-cancelada'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      mes: 3,
+      ano: 2026,
+      status: 'cancelada',
+    })
+    await setDoc(doc(db, 'tarefas/tarefa-pendente'), {
+      tenantId: 'tenant-a',
+      titulo: 'Tarefa pendente',
+      prioridade: 'normal',
+      status: 'pendente',
+    })
+    await setDoc(doc(db, 'tarefas/tarefa-concluida'), {
+      tenantId: 'tenant-a',
+      titulo: 'Tarefa concluida',
+      prioridade: 'normal',
+      status: 'concluida',
+      responsavelId: 'operacional-a',
+    })
+    await setDoc(doc(db, 'tarefas/tarefa-cancelada'), {
+      tenantId: 'tenant-a',
+      titulo: 'Tarefa cancelada',
+      prioridade: 'normal',
+      status: 'cancelada',
+      responsavelId: 'operacional-a',
+    })
   })
 }
 
@@ -457,5 +500,62 @@ describeIfEmulator('firestore.rules', () => {
   it('fechamentos: update bloqueado no mes travado; liberado em mes sem revisao', async () => {
     await assertFails(updateDoc(doc(dbAs('operacional-a'), 'fechamentos/fechamento-travado'), { dasStatus: 'ok' }))
     await assertSucceeds(updateDoc(doc(dbAs('operacional-a'), 'fechamentos/fechamento-aberto'), { dasStatus: 'ok' }))
+  })
+
+  // ─── Matriz de transição de status: competencias e tarefas ──────────────────
+  // Espelha src/lib/status-transitions.ts — ver competenciaTransicaoPermitida()
+  // e tarefaTransicaoPermitida() em firestore.rules.
+
+  it('competencias: fluxo normal (aberta -> em_andamento -> concluida/cancelada) livre para operacional', async () => {
+    await assertSucceeds(updateDoc(doc(dbAs('operacional-a'), 'competencias/comp-aberta'), { status: 'em_andamento' }))
+    await assertSucceeds(updateDoc(doc(dbAs('operacional-a'), 'competencias/comp-aberta'), { status: 'concluida' }))
+  })
+
+  it('competencias: reabrir concluida bloqueado para nao-admin, permitido para admin', async () => {
+    await assertFails(updateDoc(doc(dbAs('operacional-a'), 'competencias/comp-concluida'), { status: 'em_andamento' }))
+    // operacional-telas-fiscal também é perfil 'operacional' (isOperacional() == true)
+    // — usado para garantir que a restrição é especificamente "precisa ser admin",
+    // não apenas "não é o perfil certo para editar a coleção".
+    await assertFails(updateDoc(doc(dbAs('operacional-telas-fiscal'), 'competencias/comp-concluida'), { status: 'aberta' }))
+    await assertSucceeds(updateDoc(doc(dbAs('admin-a'), 'competencias/comp-concluida'), { status: 'em_andamento' }))
+  })
+
+  it('competencias: salvar outros campos sem trocar status nao exige admin', async () => {
+    await assertSucceeds(updateDoc(doc(dbAs('operacional-a'), 'competencias/comp-concluida'), {
+      status: 'concluida',
+      observacoes: 'nota qualquer',
+    }))
+  })
+
+  it('competencias: ressuscitar cancelada exige admin, e nunca direto para concluida', async () => {
+    await assertFails(updateDoc(doc(dbAs('operacional-a'), 'competencias/comp-cancelada'), { status: 'aberta' }))
+    // Mesmo admin não pode pular direto de 'cancelada' para 'concluida' — precisa
+    // reabrir primeiro. Verificado antes da próxima asserção mudar o doc de fato.
+    await assertFails(updateDoc(doc(dbAs('admin-a'), 'competencias/comp-cancelada'), { status: 'concluida' }))
+    await assertSucceeds(updateDoc(doc(dbAs('admin-a'), 'competencias/comp-cancelada'), { status: 'aberta' }))
+  })
+
+  it('tarefas: fluxo normal (pendente -> em_andamento/concluida) livre para operacional', async () => {
+    await assertSucceeds(updateDoc(doc(dbAs('operacional-a'), 'tarefas/tarefa-pendente'), { status: 'em_andamento' }))
+    await assertSucceeds(updateDoc(doc(dbAs('admin-a'), 'tarefas/tarefa-pendente'), { status: 'concluida' }))
+  })
+
+  it('tarefas: reabrir concluida bloqueada para quem nao e admin nem responsavel', async () => {
+    // operacional-telas-financeiro é perfil 'operacional' (isOperacional() == true)
+    // mas não é admin nem o responsável ('operacional-a') pela tarefa.
+    await assertFails(updateDoc(doc(dbAs('operacional-telas-financeiro'), 'tarefas/tarefa-concluida'), { status: 'pendente' }))
+  })
+
+  it('tarefas: o responsavel atual pode reabrir a propria tarefa concluida', async () => {
+    await assertSucceeds(updateDoc(doc(dbAs('operacional-a'), 'tarefas/tarefa-concluida'), { status: 'pendente' }))
+  })
+
+  it('tarefas: admin pode reabrir/ressuscitar tarefa de qualquer responsavel', async () => {
+    await assertSucceeds(updateDoc(doc(dbAs('admin-a'), 'tarefas/tarefa-concluida'), { status: 'em_andamento' }))
+    await assertSucceeds(updateDoc(doc(dbAs('admin-a'), 'tarefas/tarefa-cancelada'), { status: 'pendente' }))
+  })
+
+  it('tarefas: nunca permite ir de cancelada direto para concluida', async () => {
+    await assertFails(updateDoc(doc(dbAs('admin-a'), 'tarefas/tarefa-cancelada'), { status: 'concluida' }))
   })
 })

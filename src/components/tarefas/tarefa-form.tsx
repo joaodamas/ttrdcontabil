@@ -24,6 +24,9 @@ import { getClientes, getUsuarios, createDocument, updateDocument } from '@/lib/
 import { getErrorMessage } from '@/lib/error-message'
 import { SELECT_NONE_VALUE } from '@/lib/select-values'
 import { toDateInputValue } from '@/lib/form-dates'
+import { useAuth } from '@/contexts/auth-context'
+import { opcoesStatusTarefa, tarefaPodeTransicionar } from '@/lib/status-transitions'
+import type { StatusTarefa } from '@/types/firestore'
 
 const tarefaSchema = z.object({
   clienteId:     z.string().optional().nullable(),
@@ -35,6 +38,13 @@ const tarefaSchema = z.object({
   responsavelId: z.string().optional().nullable(),
   dataPrazo:     z.string().optional().nullable(),
 })
+
+const STATUS_LABELS: Record<StatusTarefa, string> = {
+  pendente:     'Pendente',
+  em_andamento: 'Em andamento',
+  concluida:    'Concluída',
+  cancelada:    'Cancelada',
+}
 
 type TarefaFormData = z.input<typeof tarefaSchema>
 type TarefaPayload = Omit<TarefaFormData, 'dataPrazo'> & {
@@ -56,10 +66,18 @@ interface TarefaFormProps {
 export function TarefaForm({ initialData, onSuccess, onClose }: TarefaFormProps) {
   const router = useRouter()
   const isEditing = !!initialData?.id
+  const { usuario } = useAuth()
 
   const [clientes, setClientes] = useState<ClienteItem[]>([])
   const [usuarios, setUsuarios] = useState<UsuarioItem[]>([])
   const [loading, setLoading]   = useState(true)
+
+  // Status de origem para a matriz de transição (@/lib/status-transitions):
+  // numa tarefa nova não há "de-status" real, tratamos como se partisse de
+  // 'pendente'. isResponsavelAtual libera reabrir/ressuscitar a própria
+  // tarefa mesmo sem ser admin (ver decisão sinalizada no relatório de entrega).
+  const statusOrigem: StatusTarefa = (isEditing ? initialData?.status : undefined) ?? 'pendente'
+  const isResponsavelAtual = isEditing && !!usuario?.uid && initialData?.responsavelId === usuario.uid
 
   // initialData vem do doc cru do Firestore: dataPrazo pode ser um Timestamp,
   // mas o input é type="date" e o schema espera string 'YYYY-MM-DD'.
@@ -89,6 +107,18 @@ export function TarefaForm({ initialData, onSuccess, onClose }: TarefaFormProps)
   }, [])
 
   async function onSubmit(data: TarefaFormData) {
+    // Guarda de defesa em profundidade: a UI já restringe as opções do Select
+    // (ver render abaixo), mas revalida aqui contra a mesma matriz de
+    // transição para cobrir qualquer mudança de estado entre o carregamento
+    // do formulário e o submit.
+    const statusDestino: StatusTarefa = data.status ?? 'pendente'
+    if (statusDestino !== statusOrigem
+      && !tarefaPodeTransicionar(statusOrigem, statusDestino, { perfil: usuario?.perfil, isResponsavel: isResponsavelAtual })
+    ) {
+      toast.error('Você não tem permissão para essa mudança de status.')
+      return
+    }
+
     const payload = buildPayload(data, clientes, usuarios, initialData?.status)
 
     try {
@@ -151,17 +181,34 @@ export function TarefaForm({ initialData, onSuccess, onClose }: TarefaFormProps)
               <Controller
                 name="status"
                 control={control}
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pendente">Pendente</SelectItem>
-                      <SelectItem value="em_andamento">Em andamento</SelectItem>
-                      <SelectItem value="concluida">Concluída</SelectItem>
-                      <SelectItem value="cancelada">Cancelada</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
+                render={({ field }) => {
+                  // Matriz de transição (@/lib/status-transitions): reabrir uma
+                  // tarefa concluída ou ressuscitar uma cancelada exige ser
+                  // admin ou o responsável atual pela tarefa.
+                  const opcoes = opcoesStatusTarefa(statusOrigem, { perfil: usuario?.perfil, isResponsavel: isResponsavelAtual })
+                  const estadoTravado = isEditing && opcoes.length === 1 && opcoes[0] === statusOrigem
+                    && (statusOrigem === 'concluida' || statusOrigem === 'cancelada')
+
+                  return (
+                    <>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {opcoes.map((s) => (
+                            <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {estadoTravado && (
+                        <p className="text-xs text-muted-foreground">
+                          {statusOrigem === 'concluida'
+                            ? 'Apenas o responsável ou um administrador pode reabrir esta tarefa.'
+                            : 'Apenas o responsável ou um administrador pode ressuscitar esta tarefa.'}
+                        </p>
+                      )}
+                    </>
+                  )
+                }}
               />
             </div>
           </div>

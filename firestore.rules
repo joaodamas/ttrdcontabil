@@ -122,6 +122,40 @@ service cloud.firestore {
       return status in ['pendente', 'em_andamento', 'concluida', 'cancelada'];
     }
 
+    function statusCompetenciaValido(status) {
+      return status in ['aberta', 'em_andamento', 'concluida', 'cancelada'];
+    }
+
+    // [MATRIZ DE TRANSIÇÃO] Espelha src/lib/status-transitions.ts — mantenha as
+    // duas implementações em sincronia. Reabrir uma competência concluída ou
+    // ressuscitar uma cancelada exige admin; nunca é permitido ir direto de
+    // 'cancelada' para 'concluida' (precisa reabrir primeiro). Doc sem
+    // 'status' anterior (dado legado) não é bloqueado por esta regra — apenas
+    // a validação de payload acima já exige o campo em toda escrita nova.
+    function competenciaTransicaoPermitida() {
+      return !('status' in resource.data)
+        || resource.data.status == request.resource.data.status
+        || !(resource.data.status in ['concluida', 'cancelada'])
+        || (resource.data.status == 'concluida' && isAdmin())
+        || (resource.data.status == 'cancelada' && isAdmin() && request.resource.data.status != 'concluida');
+    }
+
+    // [MATRIZ DE TRANSIÇÃO] Idem para tarefas, mas reabrir/ressuscitar também é
+    // permitido para o responsável atual pela tarefa (não só admin) — tarefas
+    // são mais operacionais que competências fiscais.
+    function tarefaResponsavelAtual() {
+      return ('responsavelId' in resource.data) && resource.data.responsavelId == request.auth.uid;
+    }
+
+    function tarefaTransicaoPermitida() {
+      return !('status' in resource.data)
+        || resource.data.status == request.resource.data.status
+        || !(resource.data.status in ['concluida', 'cancelada'])
+        || (resource.data.status == 'concluida' && (isAdmin() || tarefaResponsavelAtual()))
+        || (resource.data.status == 'cancelada' && (isAdmin() || tarefaResponsavelAtual())
+            && request.resource.data.status != 'concluida');
+    }
+
     function clientePayloadValido() {
       return ('status' in request.resource.data)
         && clienteStatusValido(request.resource.data.status)
@@ -142,6 +176,14 @@ service cloud.firestore {
         && prioridadeTarefaValida(request.resource.data.prioridade)
         && ('status' in request.resource.data)
         && statusTarefaValido(request.resource.data.status);
+    }
+
+    // [MATRIZ DE TRANSIÇÃO] Exige 'status' válido em toda escrita de
+    // competência — pré-requisito para competenciaTransicaoPermitida() acima
+    // conseguir avaliar o campo com segurança.
+    function competenciaPayloadValido() {
+      return ('status' in request.resource.data)
+        && statusCompetenciaValido(request.resource.data.status);
     }
 
     // ─── Usuários ─────────────────────────────────────────────────────────────
@@ -197,8 +239,11 @@ service cloud.firestore {
 
     match /competencias/{id} {
       allow read: if canRead() && sameTenantExisting();
-      allow create: if isOperacional() && sameTenantWrite();
-      allow update: if isOperacional() && sameTenantUpdate();
+      allow create: if isOperacional() && competenciaPayloadValido() && sameTenantWrite();
+      // [MATRIZ DE TRANSIÇÃO] Reabrir concluída/ressuscitar cancelada exige
+      // admin (competenciaTransicaoPermitida) — ver auditoria 2026-07-02.
+      allow update: if isOperacional() && competenciaPayloadValido() && sameTenantUpdate()
+        && competenciaTransicaoPermitida();
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
@@ -208,7 +253,10 @@ service cloud.firestore {
       allow read: if canRead() && sameTenantExisting();
       // Todos os ativos podem criar e atualizar tarefas (payload validado).
       allow create: if isOperacional() && tarefaPayloadValido() && sameTenantWrite();
-      allow update: if isOperacional() && tarefaPayloadValido() && sameTenantUpdate();
+      // [MATRIZ DE TRANSIÇÃO] Reabrir concluída/ressuscitar cancelada exige
+      // admin ou o responsável atual (tarefaTransicaoPermitida).
+      allow update: if isOperacional() && tarefaPayloadValido() && sameTenantUpdate()
+        && tarefaTransicaoPermitida();
       // [MELHORIA 2] Delete separado: apenas operacional+ pode deletar tarefas.
       allow delete: if isOperacional() && sameTenantExisting();
     }

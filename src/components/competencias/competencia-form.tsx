@@ -6,7 +6,7 @@ import { useForm, Controller, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { FirebaseError } from 'firebase/app'
-import { Timestamp } from 'firebase/firestore'
+import { Timestamp, where } from 'firebase/firestore'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -27,10 +27,14 @@ import {
   getUsuarios,
   getClienteServicos,
   getServicos,
+  listDocuments,
   setDocument,
   updateDocument,
 } from '@/lib/firestore-client'
 import { SELECT_NONE_VALUE } from '@/lib/select-values'
+import { useAuth } from '@/contexts/auth-context'
+import { competenciaPodeTransicionar, opcoesStatusCompetencia } from '@/lib/status-transitions'
+import type { StatusCompetencia } from '@/types/firestore'
 
 const competenciaSchema = z.object({
   clienteId:        z.string().min(1, 'Selecione o cliente'),
@@ -43,6 +47,13 @@ const competenciaSchema = z.object({
 })
 
 type CompetenciaFormData = z.input<typeof competenciaSchema>
+
+const STATUS_LABELS: Record<StatusCompetencia, string> = {
+  aberta:       'Aberta',
+  em_andamento: 'Em andamento',
+  concluida:    'Concluída',
+  cancelada:    'Cancelada',
+}
 
 interface ClienteItem { id: string; razaoSocial: string }
 interface ServicoItem { id: string; servicoId?: string; servicoNome: string; servicoCodigo?: string | null }
@@ -57,6 +68,7 @@ interface CompetenciaFormProps {
 export function CompetenciaForm({ initialData, onSuccess, onClose }: CompetenciaFormProps) {
   const router = useRouter()
   const isEditing = !!initialData?.id
+  const { usuario } = useAuth()
 
   const [clientes, setClientes]             = useState<ClienteItem[]>([])
   const [servicosState, setServicosState]   = useState<{ clienteId: string; items: ServicoItem[] }>({
@@ -65,8 +77,15 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
   })
   const [usuarios, setUsuarios]             = useState<UsuarioItem[]>([])
   const [loadingClientes, setLoadingClientes] = useState(true)
+  // Contagem de tarefas ainda abertas (pendente/em_andamento) vinculadas a esta
+  // competência — usada para bloquear a conclusão manual enquanto houver
+  // pendência (ver matriz de transição em '@/lib/status-transitions').
+  const [tarefasAbertas, setTarefasAbertas] = useState(0)
 
   const hoje = new Date()
+  // Status de origem para fins de matriz de transição: numa competência nova
+  // não há "de-status" real, tratamos como se partisse de 'aberta'.
+  const statusOrigem: StatusCompetencia = (isEditing ? initialData?.status : undefined) ?? 'aberta'
 
   const {
     register,
@@ -102,6 +121,28 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
       setLoadingClientes(false)
     })
   }, [])
+
+  // Pré-condição para concluir: não deixa concluir a competência enquanto
+  // houver tarefa vinculada ainda pendente/em_andamento (ver auditoria —
+  // hoje era possível concluir com tarefas abertas). Checagem best-effort no
+  // client; a garantia forte fica registrada como pendência para o dono do
+  // produto (ver relatório de entrega).
+  useEffect(() => {
+    if (!isEditing || !initialData?.id) return
+    let mounted = true
+    listDocuments<{ status?: string }>('tarefas', [where('competenciaId', '==', initialData.id)])
+      .then((tarefas) => {
+        if (!mounted) return
+        const abertas = tarefas.filter((t) => t.status !== 'concluida' && t.status !== 'cancelada').length
+        setTarefasAbertas(abertas)
+      })
+      .catch(() => {
+        if (mounted) setTarefasAbertas(0)
+      })
+    return () => {
+      mounted = false
+    }
+  }, [isEditing, initialData?.id])
 
   useEffect(() => {
     if (!clienteId) {
@@ -154,6 +195,24 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
   }, [clienteId, setValue])
 
   async function onSubmit(data: CompetenciaFormData) {
+    // Guarda de defesa em profundidade: a UI já restringe as opções do Select
+    // (ver render abaixo), mas revalida aqui contra a mesma matriz de
+    // transição para cobrir qualquer mudança de estado entre o carregamento
+    // do formulário e o submit.
+    const statusDestino: StatusCompetencia = data.status ?? 'aberta'
+    if (statusDestino !== statusOrigem) {
+      if (!competenciaPodeTransicionar(statusOrigem, statusDestino, usuario?.perfil)) {
+        toast.error('Você não tem permissão para essa mudança de status.')
+        return
+      }
+      if (statusDestino === 'concluida' && tarefasAbertas > 0) {
+        toast.error(
+          `Não é possível concluir: ${tarefasAbertas} tarefa(s) aberta(s) vinculada(s) a esta competência.`
+        )
+        return
+      }
+    }
+
     const cliente = clientes.find((c) => c.id === data.clienteId)
     const servico = servicos.find((s) => s.id === data.clienteServicoId)
     const responsavel = data.responsavelId ? usuarios.find((u) => u.id === data.responsavelId) : null
@@ -309,17 +368,45 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
             <Controller
               name="status"
               control={control}
-              render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="aberta">Aberta</SelectItem>
-                    <SelectItem value="em_andamento">Em andamento</SelectItem>
-                    <SelectItem value="concluida">Concluída</SelectItem>
-                    <SelectItem value="cancelada">Cancelada</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
+              render={({ field }) => {
+                // Matriz de transição (@/lib/status-transitions): filtra as opções
+                // de destino conforme o status atual e o perfil do usuário —
+                // reabrir uma competência concluída ou ressuscitar uma cancelada
+                // exige admin; concluir exige não haver tarefa vinculada aberta.
+                const opcoesPermitidas = opcoesStatusCompetencia(statusOrigem, usuario?.perfil)
+                const bloqueiaConclusao = opcoesPermitidas.includes('concluida')
+                  && tarefasAbertas > 0 && statusOrigem !== 'concluida'
+                const opcoes = bloqueiaConclusao
+                  ? opcoesPermitidas.filter((s) => s !== 'concluida')
+                  : opcoesPermitidas
+                const estadoTravado = isEditing && opcoesPermitidas.length === 1 && opcoesPermitidas[0] === statusOrigem
+                  && (statusOrigem === 'concluida' || statusOrigem === 'cancelada')
+
+                return (
+                  <>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {opcoes.map((s) => (
+                          <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {bloqueiaConclusao && (
+                      <p className="text-xs text-warning">
+                        Não é possível concluir: {tarefasAbertas} tarefa(s) aberta(s) vinculada(s) a esta competência.
+                      </p>
+                    )}
+                    {estadoTravado && (
+                      <p className="text-xs text-muted-foreground">
+                        {statusOrigem === 'concluida'
+                          ? 'Apenas administradores podem reabrir uma competência concluída.'
+                          : 'Apenas administradores podem ressuscitar uma competência cancelada.'}
+                      </p>
+                    )}
+                  </>
+                )
+              }}
             />
           </div>
 
