@@ -8,6 +8,7 @@ export type NotaFiscalRecord = Record<string, unknown> & {
   valorServico?: number
   status?: string
   _origem?: 'rascunho'
+  origemEmissao?: 'automatica' | 'manual'
 }
 
 export type FiscalSnapshot = {
@@ -29,6 +30,7 @@ export type FiscalReadinessCliente = {
   bloqueios: string[]
   prontoRascunho: boolean
   prontoEmissao: boolean
+  emissaoAutomatica: boolean
 }
 
 export type FiscalReadiness = {
@@ -36,5 +38,6 @@ export type FiscalReadiness = {
   prontosRascunho: number
   prontosEmissao: number
   bloqueados: number
+  emissaoAutomaticaCount: number
   clientes: FiscalReadinessCliente[]
 }

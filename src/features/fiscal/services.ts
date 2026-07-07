@@ -174,6 +174,7 @@ export async function fetchFiscalReadiness(): Promise<FiscalReadiness> {
         bloqueios,
         prontoRascunho: bloqueiosRascunho.length === 0,
         prontoEmissao: bloqueiosRascunho.length === 0 && bloqueiosEmissao.length === 0,
+        emissaoAutomatica: fiscal?.emissaoAutomatica === true,
       }
     })
     .sort((a, b) => a.clienteNome.localeCompare(b.clienteNome, 'pt-BR'))
@@ -183,6 +184,7 @@ export async function fetchFiscalReadiness(): Promise<FiscalReadiness> {
     prontosRascunho: rows.filter((row) => row.prontoRascunho).length,
     prontosEmissao: rows.filter((row) => row.prontoEmissao).length,
     bloqueados: rows.filter((row) => !row.prontoRascunho || !row.prontoEmissao).length,
+    emissaoAutomaticaCount: rows.filter((row) => row.emissaoAutomatica).length,
     clientes: rows,
   }
 }

@@ -71,6 +71,12 @@ export interface ConfigFiscalCliente {
   // sem depender de conector caseiro); default 'municipio' preserva o
   // comportamento atual (conector direto por IBGE).
   provedorNfse?: 'municipio' | 'spedy'
+  // Opt-in explícito por cliente: quando true, o cron diário
+  // (processarNfseRecorrenteDiaria) emite a NFS-e recorrente sem revisão
+  // humana, no dia configurado em clientes.diaEmissaoNFSe. Default false —
+  // decisão de reverter a trava "sem emissão automática" (ver
+  // docs_dev/checklist-ajustes-producao.md) é por cliente, não global.
+  emissaoAutomatica?: boolean
   // Credenciais por municipio (salvas em Firestore — campo credenciais)
   credenciais?: CredenciaisConector
 }

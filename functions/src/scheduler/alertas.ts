@@ -87,11 +87,49 @@ export const enviarAlertasDiarios = onSchedule(
       }
     }
 
+    // ── 3b. Recupera rascunhos travados em 'processando' ──────────────────────
+    // Se a function de emissão (manual ou automática) morrer no meio — timeout,
+    // crash — o rascunho fica em 'processando' pra sempre: invisível em todo
+    // KPI/lista/alerta, e trava qualquer nova tentativa pra aquele cliente
+    // naquela competência (emitir.ts rejeita reprocessar rascunho 'processando').
+    // Aqui, qualquer rascunho travado há mais de 30min é revertido para
+    // 'erro_integracao' — libera nova tentativa e cai automaticamente na seção
+    // "Rascunhos NFS-e pendentes" abaixo (mesma query, roda depois deste passo).
+    const LIMITE_PROCESSANDO_MIN = 30
+    const processandoSnap = await db().collection('nfse_rascunhos').where('status', '==', 'processando').get()
+    let batchTravados = db().batch()
+    let travados = 0
+    for (const doc of processandoSnap.docs) {
+      const atualizadoEm = doc.data().atualizadoEm as FirebaseFirestore.Timestamp | undefined
+      const minutosParado = atualizadoEm ? (hoje.getTime() - atualizadoEm.toMillis()) / 60000 : Infinity
+      if (minutosParado < LIMITE_PROCESSANDO_MIN) continue
+      batchTravados.update(doc.ref, {
+        status: 'erro_integracao',
+        erroUltimaTentativa: `Emissão não concluiu em tempo hábil (travado em 'processando' por ${Math.round(minutosParado)}min) — revertido automaticamente, libere para nova tentativa.`,
+        atualizadoEm: Timestamp.now(),
+      })
+      travados++
+    }
+    if (travados > 0) {
+      await batchTravados.commit()
+      console.log(`[alertas] ${travados} rascunho(s) travado(s) em 'processando' revertido(s) para 'erro_integracao'.`)
+    }
+
     // ── 4. Alertas NFS-e ─────────────────────────────────────────────────────
-    const [nfseErroSnap, nfseCancelamentoSnap, nfseRascunhosSnap] = await Promise.all([
+    const inicioDoDia = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())
+    const [nfseErroSnap, nfseCancelamentoSnap, nfseRascunhosSnap, rascunhosGeradosHojeSnap] = await Promise.all([
       db().collection('nfse_emitidas').where('status', 'in', ['erro_integracao', 'rejeitada']).limit(50).get(),
       db().collection('nfse_emitidas').where('status', '==', 'cancelamento_pendente').limit(50).get(),
       db().collection('nfse_rascunhos').where('status', 'in', ['aguardando_emissao', 'erro_integracao']).limit(50).get(),
+      // Semi-automático: rascunhos que o cron gerou HOJE e que aguardam revisão
+      // humana (requerRevisao === true — não conta os de emissaoAutomatica, que
+      // já saem emitidos e aparecem em nfse_erros/histórico, não aqui).
+      db().collection('nfse_rascunhos')
+        .where('origem', '==', 'nfse_recorrente')
+        .where('requerRevisao', '==', true)
+        .where('criadoEm', '>=', Timestamp.fromDate(inicioDoDia))
+        .limit(100)
+        .get(),
     ])
 
     // Se nada a alertar, não envia email
@@ -102,6 +140,7 @@ export const enviarAlertasDiarios = onSchedule(
       && nfseErroSnap.empty
       && nfseCancelamentoSnap.empty
       && nfseRascunhosSnap.empty
+      && rascunhosGeradosHojeSnap.empty
     ) {
       console.log('[alertas] Nenhum alerta para enviar hoje.')
       return
@@ -198,6 +237,23 @@ export const enviarAlertasDiarios = onSchedule(
       )
     }
 
+    if (!rascunhosGeradosHojeSnap.empty) {
+      html += tableHtml(
+        `📋 Rascunhos gerados automaticamente hoje, aguardando revisão (${rascunhosGeradosHojeSnap.size})`,
+        ['Cliente', 'Competência', 'Valor previsto'],
+        rascunhosGeradosHojeSnap.docs.map((d) => {
+          const n = d.data()
+          const dados = (n.dados ?? {}) as Record<string, unknown>
+          return [
+            n.clienteNome as string ?? n.titulo as string ?? '—',
+            n.competencia as string ?? '—',
+            fmtMoney(Number(dados.valorServico ?? 0)),
+          ]
+        })
+      )
+      html += `<p style="font-size:13px;color:#555;margin-top:-8px">Revise e emita esses rascunhos na tela Fiscal — eles não são enviados sozinhos.</p>`
+    }
+
     html += `<p style="font-size:12px;color:#888;margin-top:24px">TTRD Contábil — alerta automático. Não responda este email.</p></div>`
 
     const totalAlertas =
@@ -207,12 +263,13 @@ export const enviarAlertasDiarios = onSchedule(
       + nfseErroSnap.size
       + nfseCancelamentoSnap.size
       + nfseRascunhosSnap.size
+      + rascunhosGeradosHojeSnap.size
     await sendEmail({
       subject: `[TTRD] ${totalAlertas} alerta(s) para hoje — ${hoje.toLocaleDateString('pt-BR')}`,
       html,
     })
 
-    console.log(`[alertas] Email enviado. Tarefas: ${tarefasAlerta.length}, Lançamentos: ${lancamentosSnap.size}, Certs: ${certAlertas.length}, NFS-e erro: ${nfseErroSnap.size}, cancelamento: ${nfseCancelamentoSnap.size}, rascunhos: ${nfseRascunhosSnap.size}`)
+    console.log(`[alertas] Email enviado. Tarefas: ${tarefasAlerta.length}, Lançamentos: ${lancamentosSnap.size}, Certs: ${certAlertas.length}, NFS-e erro: ${nfseErroSnap.size}, cancelamento: ${nfseCancelamentoSnap.size}, rascunhos: ${nfseRascunhosSnap.size}, gerados hoje: ${rascunhosGeradosHojeSnap.size}, travados recuperados: ${travados}`)
   }
 )
 

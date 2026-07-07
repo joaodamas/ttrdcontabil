@@ -12,7 +12,7 @@ import { isProducaoLiberadaPorConfigOuConector } from './conectores'
 import { pfxBase64FromStorageBuffer } from './certificado'
 import { assertCanAccessCliente } from '../authz'
 import { validarPayloadFiscal } from './validacao'
-import { writeAuditLog, type AuditActor } from '../audit'
+import { writeAuditLog, SYSTEM_ACTOR, type AuditActor } from '../audit'
 import { requireEnvironmentTenant } from '../tenant'
 import type {
   EmitirNfseInput, ConfigFiscalCliente,
@@ -253,6 +253,10 @@ export async function processarEmissao(input: EmitirNfseInput, uid: string) {
       dataEmissao:       now,
       criadoEm:          now,
       criadoPorId:       uid,
+      // Distingue emissão pelo cron de recorrência automática (uid === SYSTEM_ACTOR.id)
+      // de emissão disparada por um humano (clique em Emitir NFS-e) — usado no
+      // histórico/logs pra mostrar a origem de cada nota.
+      origemEmissao:     uid === SYSTEM_ACTOR.id ? 'automatica' : 'manual',
       ambienteEmissao:   config.ambienteEmissao,
       valorDeducoes:     input.servico.valorDeducoes ?? 0,
     })
@@ -296,6 +300,7 @@ export async function processarEmissao(input: EmitirNfseInput, uid: string) {
       inputResumo: resumoNfseInput(input),
       criadoEm:    now,
       criadoPorId: uid,
+      origemEmissao: uid === SYSTEM_ACTOR.id ? 'automatica' : 'manual',
     })
     if (input.rascunhoId) {
       await db().collection('nfse_rascunhos').doc(input.rascunhoId).update({

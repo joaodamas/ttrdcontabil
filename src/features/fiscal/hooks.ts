@@ -21,6 +21,7 @@ export function useFiscalReadiness() {
     prontosRascunho: query.data?.prontosRascunho ?? 0,
     prontosEmissao: query.data?.prontosEmissao ?? 0,
     bloqueados: query.data?.bloqueados ?? 0,
+    emissaoAutomaticaCount: query.data?.emissaoAutomaticaCount ?? 0,
     clientes: query.data?.clientes ?? [],
   }
 }

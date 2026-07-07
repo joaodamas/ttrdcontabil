@@ -11,7 +11,7 @@ export {
 
 export { emitirNfseLote } from './nfse/emitir-lote'
 export { cancelarNfse, consultarNfse, retryNfse } from './nfse/ciclo'
-export { gerarRascunhosNfseMensais } from './nfse/rascunhos'
+export { gerarRascunhosNfseMensais, processarNfseRecorrenteDiaria } from './nfse/rascunhos'
 export { gerarFechamentoMensal } from './fechamento'
 export { recalcularDashboardKpis } from './dashboard'
 
