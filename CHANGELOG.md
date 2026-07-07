@@ -19,8 +19,7 @@ Convenção para novas entradas:
 - Bump do Next.js — fecha as 7 vulnerabilidades restantes do `npm audit`, mas é major/risco de quebra.
 - TTL de documentos/coleções — precisa configuração no console do Firebase.
 - Rotação de uma senha de admin que vazou no histórico do git (rotação manual, fora do código — valor não reproduzido aqui de propósito).
-- Homologação fiscal por município antes de deployar as Functions de NFS-e (emite nota real).
-- **Deploy das Firestore rules — NÃO FAZER AINDA (avaliado em 2026-07-07):** risco concreto de regressão para o perfil `financeiro`, que pode perder leitura de `clientes_fiscal`/`clientes_fiscal_integracao` se o doc `usuarios/{uid}` não tiver o array `telas` (usuários criados via `seed.ts` não gravam esse campo) — os dois pontos de leitura (`clientes/[id]/fiscal` e o widget de prontidão fiscal em `/fiscal`) não tratam erro e ficam em branco sem aviso. Também falta teste de `financeiro` contra essas coleções (por isso os 31/31 não pegam o gap). Ver detalhes na auditoria de rules de 2026-07-07.
+- **Monitorar o perfil `financeiro` em produção pós-deploy das rules (2026-07-07):** risco identificado de regressão de leitura em `clientes_fiscal`/`clientes_fiscal_integracao` se algum `usuarios/{uid}` não tiver o array `telas` (usuários criados via `seed.ts` não gravam esse campo). O dono decidiu deployar mesmo assim; falta ainda adicionar `financeiro` em `canReadFiscalConfig()` (ou confirmar que todo `financeiro` ativo tem `telas`), cobrir com teste, e colocar `.catch` nos dois `Promise.all` sem tratamento (`clientes/[id]/fiscal/page-client.tsx`, `features/fiscal/services.ts`) para que uma leitura negada não deixe a tela em branco sem aviso.
 
 ### Gaps conhecidos (backlog, não bloqueiam)
 - A checagem de "sem tarefas abertas" para concluir competência só existe no client — Firestore rules não faz query em coleção, só valida documento por path. Fechar de vez exige uma Cloud Function (o trigger `functions/src/triggers/tarefa-concluida.ts` já tem a lógica de referência e pode ser reaproveitado).
@@ -29,10 +28,14 @@ Convenção para novas entradas:
 
 ---
 
-## [Lote 7] — 2026-07-07 (commits `7eb554f`, `0256f78`)
+## [Lote 7] — 2026-07-07 (commits `7eb554f`, `0256f78`, `1ce2998`)
 ### Adicionado
 - **Matriz de transição de status** para competência e tarefa (`src/lib/status-transitions.ts`), aplicada no `<Select>` de `competencia-form.tsx`/`tarefa-form.tsx` (filtra opções por papel do usuário, bloqueia "concluir" com tarefa aberta) e reforçada em `firestore.rules` (não pode ser burlada via API direta). 17/17 testes unitários + 40/40 `test:rules` (31 originais + 9 novos). Regra confirmada com o dono em 2026-07-07: reabrir/ressuscitar **competência** concluída/cancelada é **admin-only**; em **tarefa** também vale para o responsável atual.
 - **Dark mode ligado** (`ThemeProvider` do `next-themes`, já era dependência instalada mas nunca usada) + toggle Claro/Escuro/Sistema na TopBar. Corrigido contraste em: FAB mobile, badges de prioridade/SLA de tarefas, chips de regime tributário, aviso de credenciais no cadastro de cliente, linha do gráfico de tendência do cliente.
+- `CHANGELOG.md` criado e `AGENTS.md` limpo (removido conteúdo enganoso sobre versão do Next.js).
+
+### Deploy — 2026-07-07
+Publicado em produção (`ttrdcontabil-jpproject`): **hosting** (frontend com a matriz de status + dark mode), **Firestore rules** (RBAC do Lote 4 + reforço da matriz de status do Lote 7), **storage rules** (sem mudança de conteúdo) e **todas as Cloud Functions** — incluindo `emitirNfse`/`emitirNfseLote`/`retryNfse` com o `numeroRps` persistido do Lote 3, cuja **homologação por município foi confirmada pelo dono do produto antes do deploy**.
 
 ---
 
