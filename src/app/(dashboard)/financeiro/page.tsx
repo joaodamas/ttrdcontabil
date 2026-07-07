@@ -18,7 +18,8 @@ import { LancamentoBaixar } from '@/components/financeiro/lancamento-baixar'
 import { FilaCobrancaItem } from '@/components/financeiro/fila-cobranca'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useAuth } from '@/contexts/auth-context'
-import { Download, Plus, TrendingUp, CheckCircle, AlertTriangle, Receipt, Trash2, Clock } from 'lucide-react'
+import { Download, Plus, TrendingUp, CheckCircle, AlertTriangle, Receipt, Trash2, Clock, MoreHorizontal, Send, Pause, Play, CalendarClock, History } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { FilterSheet, FilterSheetTrigger } from '@/components/ui/filter-sheet'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
@@ -323,7 +324,7 @@ function FinanceiroContent() {
       ) : null}
 
       <DataTableShell density="compact">
-        <table className="min-w-[1480px] w-full text-sm">
+        <table className="min-w-[1180px] w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
               <th className="px-4 py-3 text-left section-label">Pagador</th>
@@ -430,9 +431,9 @@ function FinanceiroContent() {
                       {proximaAcao ? formatDateTime(proximaAcao) : '—'}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-2">
-                        <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" title="Ver timeline" onClick={() => setTimelineLancamento(l as Record<string, unknown>)}>
-                          <Clock className="h-3 w-3" />
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground" title="Ver timeline" onClick={() => setTimelineLancamento(l as Record<string, unknown>)}>
+                          <Clock className="h-3.5 w-3.5" />
                         </Button>
                         {l.status === 'pendente' ? (
                           <LancamentoBaixar
@@ -444,28 +445,38 @@ function FinanceiroContent() {
                             onBaixado={() => void refreshFinanceiro()}
                           />
                         ) : null}
-                        {l.tipo === 'receita' ? (
-                          <>
-                            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => void handleWhatsappAction('send', l.id as string)}>
-                              Enviar agora
-                            </Button>
-                            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => void handleWhatsappAction(whatsappPausado ? 'resume' : 'pause', l.id as string)}>
-                              {whatsappPausado ? 'Retomar régua' : 'Pausar régua'}
-                            </Button>
-                            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => void handleWhatsappAction('reschedule', l.id as string)}>
-                              Reagendar
-                            </Button>
-                            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => void openWhatsappHistory(l.id as string)}>
-                              Histórico
-                            </Button>
-                          </>
-                        ) : null}
-                        {usuario?.perfil === 'admin' ? (
-                          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setDeleteId(l.id as string)}>
-                            <Trash2 className="mr-1 h-3 w-3" />
-                            Excluir
-                          </Button>
-                        ) : null}
+                        {(l.tipo === 'receita' || usuario?.perfil === 'admin') && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
+                              <MoreHorizontal className="h-3.5 w-3.5" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {l.tipo === 'receita' ? (
+                                <>
+                                  <DropdownMenuItem onClick={() => void handleWhatsappAction('send', l.id as string)}>
+                                    <Send className="h-3.5 w-3.5 mr-2" />Enviar cobrança agora
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => void handleWhatsappAction(whatsappPausado ? 'resume' : 'pause', l.id as string)}>
+                                    {whatsappPausado ? <Play className="h-3.5 w-3.5 mr-2" /> : <Pause className="h-3.5 w-3.5 mr-2" />}
+                                    {whatsappPausado ? 'Retomar régua' : 'Pausar régua'}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => void handleWhatsappAction('reschedule', l.id as string)}>
+                                    <CalendarClock className="h-3.5 w-3.5 mr-2" />Reagendar régua
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => void openWhatsappHistory(l.id as string)}>
+                                    <History className="h-3.5 w-3.5 mr-2" />Histórico WhatsApp
+                                  </DropdownMenuItem>
+                                </>
+                              ) : null}
+                              {l.tipo === 'receita' && usuario?.perfil === 'admin' ? <DropdownMenuSeparator /> : null}
+                              {usuario?.perfil === 'admin' ? (
+                                <DropdownMenuItem onClick={() => setDeleteId(l.id as string)} className="text-destructive">
+                                  <Trash2 className="h-3.5 w-3.5 mr-2" />Excluir
+                                </DropdownMenuItem>
+                              ) : null}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </div>
                     </td>
                   </tr>
