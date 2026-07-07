@@ -67,6 +67,10 @@ export interface ConfigFiscalCliente {
   naturezaOperacao?: string
   ambienteEmissao: 'producao' | 'homologacao'
   producaoLiberada?: boolean
+  // 'spedy' delega a emissão a uma API agregadora (cobre qualquer município,
+  // sem depender de conector caseiro); default 'municipio' preserva o
+  // comportamento atual (conector direto por IBGE).
+  provedorNfse?: 'municipio' | 'spedy'
   // Credenciais por municipio (salvas em Firestore — campo credenciais)
   credenciais?: CredenciaisConector
 }
@@ -92,6 +96,9 @@ export interface CredenciaisConector {
   // Cotia (GIAP)
   giaplogin?: string
   giapSenha?: string
+
+  // Spedy (provedorNfse === 'spedy') — chave de API por empresa
+  spedyApiKey?: string
 }
 
 // ─── Payload de entrada da Cloud Function ────────────────────────────────────

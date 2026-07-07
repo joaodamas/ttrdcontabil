@@ -24,6 +24,13 @@ export async function rotearEmissao(
   prestador: Prestador,
   cert?:     CertificadoA1,
 ): Promise<ResultadoEmissao> {
+  // Spedy é agnóstico de município (cobre 1.200+ via API própria) — quando
+  // configurado, ignora o roteamento por IBGE e o conector caseiro inteiro.
+  if (config.provedorNfse === 'spedy') {
+    const { SpedyConector } = await import('../provedores/spedy')
+    return new SpedyConector().emitir(input, config, prestador)
+  }
+
   const ibge = prestador.municipioIbge
 
   // Valida certificado A1 para municípios que exigem
@@ -143,6 +150,9 @@ export async function rotearConsulta(
   prestador: Prestador,
   cert?: CertificadoA1,
 ): Promise<ResultadoOperacaoNfse> {
+  if (config.provedorNfse === 'spedy') {
+    return { sucesso: false, codigoErro: 'CONSULTA_NAO_IMPLEMENTADA', erro: 'Consulta via Spedy ainda não implementada — só a emissão está integrada por enquanto.' }
+  }
   const conector = await carregarConector(prestador.municipioIbge)
   if (!conector) {
     return { sucesso: false, erro: `Município com código IBGE ${prestador.municipioIbge} ainda não integrado.` }
@@ -159,6 +169,9 @@ export async function rotearCancelamento(
   prestador: Prestador,
   cert?: CertificadoA1,
 ): Promise<ResultadoOperacaoNfse> {
+  if (config.provedorNfse === 'spedy') {
+    return { sucesso: false, codigoErro: 'CANCELAMENTO_NAO_IMPLEMENTADO', erro: 'Cancelamento via Spedy ainda não implementado — só a emissão está integrada por enquanto.' }
+  }
   const conector = await carregarConector(prestador.municipioIbge)
   if (!conector) {
     return { sucesso: false, erro: `Município com código IBGE ${prestador.municipioIbge} ainda não integrado.` }
