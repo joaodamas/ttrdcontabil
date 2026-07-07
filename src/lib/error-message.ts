@@ -27,10 +27,22 @@ function getFirebaseErrorMessage(code: string, fallback: string): string {
 
 export function getErrorMessage(error: unknown, fallback: string): string {
   const code = (error as { code?: unknown } | null)?.code
+  const message = error instanceof Error && error.message.trim() ? error.message : undefined
+
   if (typeof code === 'string' && code.trim()) {
+    // Erros de Cloud Functions (httpsCallable) chegam com code prefixado
+    // ("functions/failed-precondition"), nunca batendo com as chaves sem
+    // prefixo de FIREBASE_ERROR_MESSAGES (usadas pelos erros crus do SDK
+    // do Firestore). Sem isso, a mensagem específica que a function monta
+    // (HttpsError(code, mensagem)) era sempre descartada em favor do
+    // fallback genérico — mesmo quando o backend já explicava exatamente
+    // o que deu errado.
+    if (code.startsWith('functions/')) {
+      return message ?? getFirebaseErrorMessage(code.slice('functions/'.length), fallback)
+    }
     return getFirebaseErrorMessage(code, fallback)
   }
-  if (error instanceof Error && error.message.trim()) return error.message
+  if (message) return message
   if (typeof error === 'string' && error.trim()) return error
   return fallback
 }
