@@ -1,0 +1,284 @@
+<title>Auditoria — JP Fiscal / TTRD Contábil · 2026-07-13</title>
+<style>
+  :root{
+    --paper:#fbfbf9; --card:#ffffff; --ink:#16202c; --ink2:#4b5a6b; --faint:#7b8794; --rule:#e4e7eb; --rule2:#cdd4dc;
+    --accent:#2563eb; --accent-soft:rgba(37,99,235,.08);
+    --crit:#b91c1c; --crit-bg:rgba(185,28,28,.07);
+    --alto:#c2410c; --alto-bg:rgba(194,65,12,.07);
+    --medio:#a16207; --medio-bg:rgba(161,98,7,.08);
+    --baixo:#64748b; --baixo-bg:rgba(100,116,139,.08);
+    --bom:#15803d; --bom-bg:rgba(21,128,61,.08);
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,system-ui,sans-serif;
+    --mono:"SF Mono",ui-monospace,"Roboto Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#10151c; --card:#161d26; --ink:#e8ecf1; --ink2:#a8b4c0; --faint:#75828f; --rule:#26303c; --rule2:#37424f;
+      --accent:#5b8def; --accent-soft:rgba(91,141,239,.12);
+      --crit:#f07171; --crit-bg:rgba(240,113,113,.1);
+      --alto:#f0954f; --alto-bg:rgba(240,149,79,.1);
+      --medio:#e3b341; --medio-bg:rgba(227,179,65,.1);
+      --baixo:#94a3b8; --baixo-bg:rgba(148,163,184,.1);
+      --bom:#4ade80; --bom-bg:rgba(74,222,128,.1);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#10151c; --card:#161d26; --ink:#e8ecf1; --ink2:#a8b4c0; --faint:#75828f; --rule:#26303c; --rule2:#37424f;
+    --accent:#5b8def; --accent-soft:rgba(91,141,239,.12);
+    --crit:#f07171; --crit-bg:rgba(240,113,113,.1);
+    --alto:#f0954f; --alto-bg:rgba(240,149,79,.1);
+    --medio:#e3b341; --medio-bg:rgba(227,179,65,.1);
+    --baixo:#94a3b8; --baixo-bg:rgba(148,163,184,.1);
+    --bom:#4ade80; --bom-bg:rgba(74,222,128,.1);
+  }
+  :root[data-theme="light"]{
+    --paper:#fbfbf9; --card:#ffffff; --ink:#16202c; --ink2:#4b5a6b; --faint:#7b8794; --rule:#e4e7eb; --rule2:#cdd4dc;
+    --accent:#2563eb; --accent-soft:rgba(37,99,235,.08);
+    --crit:#b91c1c; --crit-bg:rgba(185,28,28,.07);
+    --alto:#c2410c; --alto-bg:rgba(194,65,12,.07);
+    --medio:#a16207; --medio-bg:rgba(161,98,7,.08);
+    --baixo:#64748b; --baixo-bg:rgba(100,116,139,.08);
+    --bom:#15803d; --bom-bg:rgba(21,128,61,.08);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.65;font-size:15px;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;}
+  .wrap{max-width:880px;margin:0 auto;padding:40px 24px 80px;}
+  h1{font-size:clamp(26px,4vw,36px);font-weight:800;letter-spacing:-.02em;line-height:1.1;margin:0;text-wrap:balance;}
+  h2{font-size:21px;font-weight:800;letter-spacing:-.015em;margin:52px 0 14px;padding-top:22px;border-top:1px solid var(--rule);}
+  h3{font-size:15px;font-weight:700;margin:24px 0 8px;}
+  p{margin:0 0 12px;max-width:72ch;}
+  .kicker{font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin-bottom:10px;}
+  .meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px 22px;margin:22px 0 0;padding:16px 18px;background:var(--card);border:1px solid var(--rule);border-radius:12px;}
+  .meta .k{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);}
+  .meta .v{font-size:13px;font-weight:600;margin-top:2px;}
+  .meta .v code{font-family:var(--mono);font-size:12px;}
+
+  .frame{background:var(--card);border:1px solid var(--rule);border-radius:12px;padding:18px 20px;margin:14px 0;}
+  .frame .k{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:4px;}
+  .frame p:last-child{margin-bottom:0;}
+
+  .verdict{border-left:4px solid var(--accent);background:var(--accent-soft);border-radius:0 12px 12px 0;padding:18px 22px;margin:18px 0;}
+  .verdict p:last-child{margin-bottom:0;}
+  .score-big{font-size:40px;font-weight:800;line-height:1;font-family:var(--mono);}
+  .score-big small{font-size:16px;color:var(--ink2);font-weight:600;}
+  .delta-up{color:var(--bom);font-weight:700;}
+
+  .tblwrap{overflow-x:auto;border:1px solid var(--rule);border-radius:12px;margin:14px 0;background:var(--card);}
+  table{width:100%;border-collapse:collapse;min-width:560px;font-size:13.5px;}
+  th{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);font-weight:700;text-align:left;padding:10px 14px;border-bottom:1px solid var(--rule);}
+  td{padding:9px 14px;border-bottom:1px solid var(--rule);vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  td.num{font-family:var(--mono);font-weight:700;white-space:nowrap;}
+  .ok{color:var(--bom);font-weight:700;} .no{color:var(--crit);font-weight:700;} .warn{color:var(--medio);font-weight:700;}
+
+  .chip{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border-radius:99px;padding:2px 10px;white-space:nowrap;}
+  .chip.crit{color:var(--crit);background:var(--crit-bg);border:1px solid var(--crit);}
+  .chip.alto{color:var(--alto);background:var(--alto-bg);border:1px solid var(--alto);}
+  .chip.medio{color:var(--medio);background:var(--medio-bg);border:1px solid var(--medio);}
+  .chip.baixo{color:var(--baixo);background:var(--baixo-bg);border:1px solid var(--baixo);}
+  .chip.bom{color:var(--bom);background:var(--bom-bg);border:1px solid var(--bom);}
+
+  .finding{background:var(--card);border:1px solid var(--rule);border-radius:12px;padding:16px 20px;margin:12px 0;border-left-width:4px;}
+  .finding.f-crit{border-left-color:var(--crit);}
+  .finding.f-alto{border-left-color:var(--alto);}
+  .finding.f-medio{border-left-color:var(--medio);}
+  .finding.f-baixo{border-left-color:var(--baixo);}
+  .finding .hd{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px;}
+  .finding .t{font-weight:700;font-size:14.5px;}
+  .finding .ev{font-family:var(--mono);font-size:11.5px;color:var(--ink2);background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:2px 8px;display:inline-block;margin:2px 0 8px;word-break:break-all;}
+  .finding p{font-size:13.5px;margin-bottom:8px;}
+  .finding .fix{font-size:13px;color:var(--ink2);}
+  .finding .fix b{color:var(--ink);}
+  .esf{font-size:11px;color:var(--faint);font-weight:600;text-transform:uppercase;letter-spacing:.06em;}
+
+  ul{margin:0 0 14px;padding-left:22px;max-width:74ch;}
+  li{margin-bottom:6px;font-size:14px;}
+  li::marker{color:var(--faint);}
+  .mini{font-size:12.5px;color:var(--faint);}
+  .goodlist li{margin-bottom:8px;}
+  .goodlist b{color:var(--bom);}
+
+  .prio{display:flex;gap:14px;flex-direction:column;margin:14px 0;}
+  .prio .p{display:flex;gap:16px;background:var(--card);border:1px solid var(--rule);border-radius:12px;padding:16px 20px;}
+  .prio .n{font-family:var(--mono);font-weight:800;font-size:22px;color:var(--accent);line-height:1.2;flex-shrink:0;}
+  .prio .t{font-weight:700;margin-bottom:3px;}
+  .prio p{font-size:13.5px;margin:0;}
+
+  @media (max-width:640px){ .wrap{padding:28px 16px 60px;} }
+  @media print{ body{background:#fff;} .finding,.frame,.tblwrap{page-break-inside:avoid;} }
+</style>
+
+<div class="wrap">
+  <div class="kicker">Auditoria completa · modo combinado</div>
+  <h1>JP Fiscal / TTRD Contábil — raio-x da plataforma</h1>
+  <div class="meta">
+    <div><div class="k">Data</div><div class="v">13 de julho de 2026</div></div>
+    <div><div class="k">Commit auditado</div><div class="v"><code>master @ c7548ab</code></div></div>
+    <div><div class="k">Método</div><div class="v">3 varreduras de código (frontend, backend, segurança) + docs + histórico + baseline 02/07</div></div>
+    <div><div class="k">Baseline</div><div class="v">Auditoria 2026-07-02 · nota 3,1/5</div></div>
+  </div>
+
+  <h2>1 · Objeto, objetivo e critérios</h2>
+  <div class="frame"><div class="k">Objeto</div><p>Plataforma JP Fiscal (ttrdcontabil): SaaS de gestão de escritório contábil — Next.js 16 (static export) + Firebase. 14 módulos, 9 rotinas automáticas, 8 conectores municipais de NFS-e + Spedy, infra de cobrança WhatsApp. Single-tenant operando a carteira da TTRD (~119 clientes).</p></div>
+  <div class="frame"><div class="k">Objetivo</div><p>Sustentar a operação diária do escritório com automação confiável (obrigações, honorários, NFS-e, cobrança) e <b>abrir o gate comercial</b> — condição definida em 02/07: nota ≥ 3,5 e zero achado crítico aberto.</p></div>
+  <div class="frame"><div class="k">Critérios de sucesso</div><p>(a) Nenhum achado crítico explorável; (b) as automações vendidas <b>rodando de verdade em produção</b>, não só deployadas; (c) dado fiscal sensível (certificados A1, credenciais de prefeitura) protegido de ponta a ponta; (d) falha operacional gera alerta, não silêncio.</p></div>
+
+  <h2>2 · Veredito direto</h2>
+  <div class="verdict">
+    <p><span class="score-big">3,5<small> / 5</small></span> &nbsp;<span class="delta-up">▲ +0,4 desde 02/07</span></p>
+    <p><b>A plataforma deu um salto real em 11 dias:</b> os 5 achados críticos da auditoria anterior foram corrigidos e validados (RBAC nas rules com 40/40 testes, RPS persistido em transação, fila WhatsApp com retry, cliente excluído não é mais cobrado), o e-mail de alerta diário funcionou de ponta a ponta pela primeira vez, e a emissão via Spedy foi validada com nota real. O núcleo operacional está maduro e coeso.</p>
+    <p><b>Mas o gate comercial continua fechado — por três motivos novos.</b> (1) Um achado <b>crítico</b> inédito: qualquer usuário edita o próprio campo <code>telas</code> e se dá acesso de leitura a dados fiscais, financeiros e IR de todos os clientes. (2) As duas automações-vitrine <b>não operam de fato</b>: a régua de WhatsApp está pronta no código mas o app da Meta nunca foi criado (token vazio), e o cron de emissão automática de NFS-e não declara o secret de criptografia que precisa — vai falhar ao descriptografar credenciais. (3) A senha de admin vazada no histórico do git segue sem rotação desde 02/07. A boa notícia: os três cabem num sprint curto.</p>
+  </div>
+
+  <h3>Pode vender para…?</h3>
+  <div class="tblwrap"><table>
+    <tr><th>Segmento</th><th>Veredito</th><th>Condição</th></tr>
+    <tr><td>Demo / apresentação</td><td class="ok">✅ Sim</td><td>Visual forte, manual pronto, fluxo fiscal real. Não demonstrar régua WhatsApp ao vivo (inoperante).</td></tr>
+    <tr><td>Piloto interno (operação TTRD)</td><td class="ok">✅ Sim, com ressalva</td><td>Corrigir o crítico do <code>telas</code> antes de dar acesso a mais usuários; ativar o WhatsApp como piloto.</td></tr>
+    <tr><td>Escritório pagante operando sozinho</td><td class="no">🚫 Ainda não</td><td>Crítico + WhatsApp/emissão automática operantes + Sentry + rotação da senha. Estimativa: 1 sprint.</td></tr>
+    <tr><td>Multi-escritório / white-label</td><td class="no">🚫 Não</td><td>Isolamento de tenant nas queries/rules, App Check, provisionamento server-side, escala das listagens (limit 500).</td></tr>
+  </table></div>
+
+  <h3>Score por dimensão</h3>
+  <div class="tblwrap"><table>
+    <tr><th>Dimensão</th><th>02/07</th><th>13/07</th><th>Comentário</th></tr>
+    <tr><td>Segurança &amp; dados</td><td class="num">3,0</td><td class="num">3,2</td><td>RBAC server-side entrou e é testado; mas o crítico do <code>telas</code> anula parte do ganho até ser corrigido.</td></tr>
+    <tr><td>Processos &amp; negócio</td><td class="num">2,5</td><td class="num">3,8</td><td>Todos os P0 de processo corrigidos: cliente excluído, matriz de status, trava de fechamento, honorários com competência.</td></tr>
+    <tr><td>Cloud Functions</td><td class="num">3,3</td><td class="num">3,8</td><td>RPS transacional + consulta prévia no retry é acima da média. Desconto pelo secret ausente no cron novo.</td></tr>
+    <tr><td>Telas &amp; UX</td><td class="num">2,8</td><td class="num">3,6</td><td>Erro-vira-vazio corrigido nas telas principais, dark mode, edição com data consertada, manual escrito (mas não linkado).</td></tr>
+    <tr><td>UI / Design system</td><td class="num">3,4</td><td class="num">3,8</td><td>DS consolidado, identidade aplicada, dark mode aprovado pelo dono.</td></tr>
+    <tr><td>Qualidade técnica</td><td class="num">3,3</td><td class="num">3,3</td><td>Rules com 40/40 testes é ótimo; Functions fiscais seguem com zero teste unitário; xlsx com CVE entrou com a importação.</td></tr>
+    <tr><td>Observabilidade</td><td class="num">2,0</td><td class="num">2,8</td><td>Alerta diário finalmente roda, backup alerta falha, rascunho travado se recupera sozinho. Sentry segue sem DSN.</td></tr>
+    <tr><td>Testes</td><td class="num">2,0</td><td class="num">2,6</td><td>40 testes de rules rodando + 17 de transição de status. Núcleo fiscal (emissão, criptografia, XML) sem cobertura.</td></tr>
+  </table></div>
+
+  <h2>3 · Mapa de reconciliação — sintoma × causa</h2>
+  <p class="mini">Sintomas observados em uso real (registrados no manual de 07/07 e no changelog) ligados à causa confirmada no código.</p>
+  <div class="tblwrap"><table>
+    <tr><th>Sintoma (de fora)</th><th>Causa (de dentro)</th><th>Severidade</th></tr>
+    <tr><td>"Cloud API do WhatsApp desligada" nos Parâmetros; nenhuma cobrança sai</td><td>App Meta nunca criado — <code>WHATSAPP_CLOUD_API_TOKEN</code> e <code>APP_SECRET</code> vazios; templates não aprovados</td><td><span class="chip alto">Alto</span></td></tr>
+    <tr><td>Emissão automática ligada, mas nota não sai às 6h30 (previsto)</td><td>Cron <code>processarNfseRecorrenteDiaria</code> não declara <code>secrets: credentialSecrets</code> — descriptografia falha em runtime</td><td><span class="chip alto">Alto</span></td></tr>
+    <tr><td>Erro de permissão na tela Produtividade mesmo como Admin (manual, 07/07)</td><td>Tela registrada sob <code>telaKey: 'admin'</code> + leitura de <code>tarefas_timers</code> nas rules</td><td><span class="chip medio">Médio</span></td></tr>
+    <tr><td>Usuário restrito enxergando além do esperado (risco, não incidente)</td><td><code>telas</code> auto-editável nas rules + gates de leitura por <code>hasTela()</code></td><td><span class="chip crit">Crítico</span></td></tr>
+    <tr><td>Ninguém encontra o manual do usuário</td><td><code>public/manual.html</code> publicado mas sem nenhum link dentro do app</td><td><span class="chip medio">Médio</span></td></tr>
+    <tr><td>Alerta diário "nunca chegou" até 07/07</td><td>Índice errado + secret SMTP + Titan com acesso externo bloqueado — os três já corrigidos; monitorar recorrência</td><td><span class="chip baixo">Baixo</span></td></tr>
+  </table></div>
+
+  <h2>4 · Achados por severidade</h2>
+
+  <div class="finding f-crit">
+    <div class="hd"><span class="t">Escalação de privilégio: qualquer usuário edita o próprio <code>telas</code> e lê tudo</span><span class="chip crit">Crítico</span></div>
+    <span class="ev">firestore.rules:202-205 (auto-update de usuarios) + :44-62 (hasTela)</span>
+    <p>O auto-update do próprio doc de usuário bloqueia <code>perfil</code>, <code>ativo</code>, <code>criadoEm</code>, <code>tenantId</code> — mas <b>não bloqueia <code>telas</code></b>. Como as leituras sensíveis (fiscal, financeiro, IR, fechamento) liberam por <code>hasTela()</code>, uma conta de perfil <code>leitura</code> consegue, via SDK no console do navegador, gravar <code>telas: ['fiscal','financeiro','ir']</code> no próprio doc e passar a ler credenciais de config fiscal, lançamentos e declarações de IR de toda a carteira. Era um P2 teórico em 02/07; com o RBAC por <code>telas</code> ativado, virou explorável.</p>
+    <p class="fix"><b>Correção:</b> incluir <code>'telas'</code> na lista de <code>affectedKeys</code> bloqueadas no auto-update (só admin altera) + 1 teste de rules cobrindo o caso. <span class="esf">Esforço: baixo (horas)</span></p>
+  </div>
+
+  <div class="finding f-alto">
+    <div class="hd"><span class="t">A régua de cobrança WhatsApp está pronta — e inoperante</span><span class="chip alto">Alto</span></div>
+    <span class="ev">functions/.env.example (tokens vazios) · whatsapp/webhook.ts:17-21 · core.ts:60 (aprovadoProvider: false)</span>
+    <p>Fila idempotente, retry, webhook com HMAC fail-closed, consentimento LGPD por cliente, pausar/retomar/reagendar — tudo implementado e corrigido pós-auditoria. Mas o app na Meta nunca foi criado: <code>WHATSAPP_CLOUD_API_TOKEN</code> e <code>WHATSAPP_APP_SECRET</code> vazios, templates não submetidos pra aprovação. Resultado: o agendador enfileira jobs que falham no despacho, e a funcionalidade mais vendável da plataforma não existe na prática.</p>
+    <p class="fix"><b>Correção:</b> criar o app Meta Business + número, submeter os 5 templates, configurar secrets, rodar o piloto com 3–5 clientes (fase 4 do checklist já escrito em <code>docs_dev/checklist-whatsapp-cobranca.md</code>). <span class="esf">Esforço: médio (mais espera de aprovação Meta que código)</span></p>
+  </div>
+
+  <div class="finding f-alto">
+    <div class="hd"><span class="t">Emissão automática de NFS-e vai falhar: cron sem o secret de criptografia</span><span class="chip alto">Alto</span></div>
+    <span class="ev">functions/src/nfse/rascunhos.ts:368-375 (onSchedule sem `secrets`) vs. emitir.ts:346 (callable declara)</span>
+    <p>O cron <code>processarNfseRecorrenteDiaria</code> (6h30, diário) chama <code>processarEmissao</code>, que descriptografa senha de certificado e credenciais com <code>CREDENTIAL_KEY</code> — mas o cron <b>não declara</b> <code>secrets: credentialSecrets</code> nas opções (as callables declaram). Sem o secret montado, a emissão automática quebra na descriptografia pra todo cliente com o flag ligado. O mesmo vale pro callable <code>gerarRascunhosNfseMensais</code> quando emite pra clientes automáticos. O erro cai em <code>nfse_erros</code> e aparece no alerta diário — falha "barulhenta", mas falha todo dia.</p>
+    <p class="fix"><b>Correção:</b> adicionar <code>secrets: credentialSecrets</code> nas opções do cron e do callable; testar com o cliente cobaia (JPProject). <span class="esf">Esforço: baixo (1 linha + deploy + teste)</span></p>
+  </div>
+
+  <div class="finding f-alto">
+    <div class="hd"><span class="t">Senha real de admin segue no histórico do git, sem rotação</span><span class="chip alto">Alto</span></div>
+    <span class="ev">CHANGELOG.md:29 — pendência aberta desde 02/07</span>
+    <p>O código foi limpo em 02/07, mas a rotação da senha (ação manual do dono) e a purga do histórico nunca aconteceram. Qualquer pessoa com acesso ao repositório — incluindo colaboradores futuros — recupera a senha com um <code>git log -p</code>. Se ela for reutilizada em outros serviços, o raio de dano é maior que a plataforma.</p>
+    <p class="fix"><b>Correção:</b> trocar a senha no Firebase Auth (e em qualquer serviço onde seja reutilizada) hoje; depois purgar o histórico (<code>git filter-repo</code>) quando conveniente. <span class="esf">Esforço: baixo (minutos pra rotação)</span></p>
+  </div>
+
+  <div class="finding f-alto">
+    <div class="hd"><span class="t">Dependências vulneráveis no caminho de dados do usuário</span><span class="chip alto">Alto</span></div>
+    <span class="ev">package.json:58 (xlsx@0.18.5) · CHANGELOG.md:27 (7 vulns aguardando bump do Next)</span>
+    <p>A importação em massa processa planilhas enviadas pelo usuário com <code>xlsx@0.18.5</code> — versão com Prototype Pollution (CVE-2023-30533) e ReDoS (CVE-2024-22363), <b>sem correção publicada no npm</b>. Além disso, as 7 vulnerabilidades restantes do <code>npm audit</code> dependem do bump major do Next.js, adiado por risco de quebra.</p>
+    <p class="fix"><b>Correção:</b> trocar <code>xlsx</code> pelo build oficial do SheetJS (CDN) ou <code>exceljs</code>; agendar o bump do Next como tarefa isolada com smoke test das 31 rotas. <span class="esf">Esforço: médio</span></p>
+  </div>
+
+  <div class="finding f-alto">
+    <div class="hd"><span class="t">Zero teste unitário no núcleo fiscal</span><span class="chip alto">Alto</span></div>
+    <span class="ev">functions/src/** — 45 arquivos, nenhum teste; __tests__/ cobre rules + 3 libs do front</span>
+    <p>Emissão de NFS-e, criptografia AES-256-GCM, assinatura XML com A1, conectores municipais, Spedy, webhook WhatsApp — nada disso tem teste unitário. Num sistema que assina documento fiscal em nome de cliente, qualquer refactor é um salto sem rede: a homologação manual por município vira o único gate.</p>
+    <p class="fix"><b>Correção:</b> começar pelo mais barato e crítico: <code>encrypt.ts</code> (roundtrip + formato), alocação de RPS (transação), validação de payload e o mapeamento de status do webhook. ~15–20 testes já mudam o patamar. <span class="esf">Esforço: médio</span></p>
+  </div>
+
+  <div class="finding f-medio">
+    <div class="hd"><span class="t">Certificado A1 (.pfx) armazenado sem cifra de aplicação</span><span class="chip medio">Médio</span></div>
+    <span class="ev">functions/src/nfse/emitir.ts:401-408</span>
+    <p>O <code>.pfx</code> vai pro Storage só em base64, protegido por rules <code>if false</code> e criptografia at-rest do GCS. A senha é cifrada, o arquivo não. Quem tiver acesso ao bucket + <code>CREDENTIAL_KEY</code> reconstitui o par completo do ativo mais sensível do sistema.</p>
+    <p class="fix"><b>Correção:</b> cifrar o blob com a mesma <code>CREDENTIAL_KEY</code> antes de gravar (migração: recifrar os existentes). <span class="esf">Esforço: médio</span></p>
+  </div>
+
+  <div class="finding f-medio">
+    <div class="hd"><span class="t">Fallback de credencial legada em texto puro</span><span class="chip medio">Médio</span></div>
+    <span class="ev">functions/src/nfse/municipios/credenciais.ts:9-13</span>
+    <p><code>lerCredencial</code> aceita e usa valor não criptografado se existir no Firestore (formato legado). O caminho Spedy e a senha de certificado já rejeitam legado — os conectores municipais não. Pode haver segredo em claro persistido.</p>
+    <p class="fix"><b>Correção:</b> varrer as coleções por valores sem o formato <code>iv:tag:cipher</code>, migrar, e remover o fallback. <span class="esf">Esforço: baixo</span></p>
+  </div>
+
+  <div class="finding f-medio">
+    <div class="hd"><span class="t">Backup não cobre o Storage — certificados A1 sem cópia</span><span class="chip medio">Médio</span></div>
+    <span class="ev">functions/src/backup.ts (só export de Firestore; pré-requisitos gcloud manuais; restauração nunca testada)</span>
+    <p>O export semanal cobre só o Firestore. Os <code>.pfx</code> dos clientes e documentos anexados vivem num único bucket sem rotina de cópia — perda ou corrupção é irreversível (e recuperar A1 de 119 clientes é semanas de operação). A restauração do backup existente também nunca foi ensaiada.</p>
+    <p class="fix"><b>Correção:</b> transfer job GCS→GCS semanal pro bucket de backup + um ensaio de restauração documentado. <span class="esf">Esforço: baixo/médio</span></p>
+  </div>
+
+  <div class="finding f-medio">
+    <div class="hd"><span class="t">Sessão fail-open + logs da Spedy sem redação de PII</span><span class="chip medio">Médio</span></div>
+    <span class="ev">src/lib/auth-client.ts:31-58 · functions/src/nfse/provedores/spedy.ts:63,84</span>
+    <p>Dois irmãos menores dos achados de segurança: (a) se a leitura do perfil falha no login, a sessão abre como <code>leitura</code> em vez de negar — as rules seguram os dados, mas a UI abre; (b) o conector Spedy loga preview de payload/resposta no Cloud Logging sem passar pela redação de PII usada na trilha de auditoria.</p>
+    <p class="fix"><b>Correção:</b> negar sessão sem perfil resolvido; aplicar <code>redactAuditData</code> (ou rebaixar pra debug) nos logs da Spedy. <span class="esf">Esforço: baixo</span></p>
+  </div>
+
+  <div class="finding f-medio">
+    <div class="hd"><span class="t">Manual pronto, mas invisível — e onboarding inexistente</span><span class="chip medio">Médio</span></div>
+    <span class="ev">public/manual.html (590 linhas) · grep por "/manual" em src/ = 0 resultados</span>
+    <p>O manual tela a tela existe e está publicado, mas nenhum ponto do app linka pra ele — só acha quem digitar a URL. Pra proposta comercial, "manual do usuário completo" é argumento de venda; hoje é feature fantasma.</p>
+    <p class="fix"><b>Correção:</b> item "Ajuda / Manual" na sidebar ou no menu do usuário (link estático, 30 min de trabalho). <span class="esf">Esforço: baixo</span></p>
+  </div>
+
+  <div class="finding f-medio">
+    <div class="hd"><span class="t">Operação WhatsApp sem telas de gestão + catálogo de serviços com dados de teste</span><span class="chip medio">Médio</span></div>
+    <span class="ev">docs_dev/checklist-whatsapp-cobranca.md §3.4/§6 (pendentes) · CHANGELOG.md:33 (COB01-07 são teste)</span>
+    <p>Quando o WhatsApp ligar, o operador não terá as visões "Cobranças de hoje", "Falhas de entrega" e "Clientes que responderam", nem tela de admin pra editar a régua (os valores D-7/D-3/D0/D+3/D+7 só existem como dados no Firestore). E o catálogo de Tipos de Serviço segue com 7 registros de teste — os honorários gerados automaticamente herdam essa base irreal.</p>
+    <p class="fix"><b>Correção:</b> ver o plano de automação (documento separado desta entrega) — as telas entram na fase 2; o catálogo real depende da planilha de importação preenchida. <span class="esf">Esforço: médio</span></p>
+  </div>
+
+  <div class="finding f-baixo">
+    <div class="hd"><span class="t">Baixos (registro)</span><span class="chip baixo">Baixo</span></div>
+    <p><b>Escala com teto conhecido:</b> listagens com <code>limit(500)</code> e filtro client-side; agendador WhatsApp varre 150 lançamentos/hora — ok pra 119 clientes, precisa revisão antes de multi-escritório. · <b>firebase-admin v12 nas functions vs. v13 na raiz.</b> · <b>Spedy só emite</b> (consulta/cancelamento não implementados; sem webhook de status). · <b>UI premium duplicada atrás de flags</b> desligadas (dashboard V1/V2 no mesmo arquivo). · <b>IR é CRUD manual</b>, sem automação. · <b>Provisionamento de usuário client-side</b> (app Firebase secundário no browser). · <b>Perfil <code>financeiro</code>:</b> risco de regressão de leitura em <code>clientes_fiscal</code> pra usuários sem array <code>telas</code> (pendência conhecida do changelog).</p>
+  </div>
+
+  <h2>5 · O que está bem feito</h2>
+  <ul class="goodlist">
+    <li><b>Fiscal de verdade:</b> 8 conectores municipais com XML assinado por A1, RPS alocado em transação antes do envio, consulta prévia no retry, gate de produção por homologação — acima da média até de players estabelecidos.</li>
+    <li><b>Os 5 críticos de 02/07 foram corrigidos e provados:</b> RBAC de leitura nas rules com 40/40 testes no emulador, cascata de exclusão de cliente, fila WhatsApp com retry/esgotamento auditado.</li>
+    <li><b>Criptografia certa onde importa:</b> AES-256-GCM via Secret Manager pra credenciais fiscais, webhook com HMAC constant-time fail-closed, trilha de auditoria append-only com redação de PII.</li>
+    <li><b>Automação desenhada com freio humano:</b> emissão automática é opt-in por cliente, semi-automática por padrão, com visibilidade ponta a ponta (badge "Auto", e-mail diário, recuperação de rascunho travado).</li>
+    <li><b>Consentimento LGPD nativo na cobrança:</b> a régua só dispara com <code>aceiteWhatsAppCobranca</code> ativo, com origem e data registradas — raro em produto desse porte.</li>
+    <li><b>Documentação viva:</b> changelog disciplinado, auditorias anteriores, manual tela a tela, checklists de homologação — o projeto se conhece.</li>
+  </ul>
+
+  <h2>6 · Top 3 prioridades</h2>
+  <div class="prio">
+    <div class="p"><div class="n">1</div><div><div class="t">Fechar o crítico do <code>telas</code> + rotacionar a senha vazada</div><p>Uma linha nas rules + um teste + trocar uma senha. Elimina os dois únicos riscos exploráveis hoje. Sem isso, nenhum acesso novo deveria ser criado.</p></div></div>
+    <div class="p"><div class="n">2</div><div><div class="t">Ligar as automações que já existem</div><p>Uma linha no cron da NFS-e automática (secret) + criar o app Meta e aprovar templates. É a diferença entre "plataforma com automação" e "plataforma que promete automação" — e é o que a proposta comercial vende.</p></div></div>
+    <div class="p"><div class="n">3</div><div><div class="t">Rede de segurança mínima: deps + testes do núcleo fiscal + Sentry</div><p>Trocar o xlsx, agendar o bump do Next, ~20 testes em encrypt/RPS/webhook, e o DSN do Sentry que está pendente desde maio. Destrava o "pagante operando sozinho".</p></div></div>
+  </div>
+
+  <h2>7 · O que falta verificar</h2>
+  <ul>
+    <li><b>Uso real assistido:</b> esta rodada foi caixa-branca (código + docs). Falta navegar a plataforma ao vivo com dados reais — especialmente importação em massa (o passo final de gravação nunca foi exercitado com escrita real) e o fluxo do perfil <code>financeiro</code> pós-deploy das rules.</li>
+    <li><b>Homologação fiscal por município</b> pra qualquer mudança no fluxo de emissão (regra do projeto, segue valendo).</li>
+    <li><b>Piloto WhatsApp com clientes reais</b> — consentimento, qualidade do número, taxa de entrega (fases 4–5 do checklist).</li>
+    <li><b>Unit economics:</b> sem dados de preço/custo por cliente não dá pra auditar margem da operação SaaS — a proposta comercial desta entrega assume valores que o dono precisa confirmar.</li>
+  </ul>
+
+  <p class="mini" style="margin-top:40px;border-top:1px solid var(--rule);padding-top:16px;">Auditoria executada em 2026-07-13 por leitura direta de código (frontend, Cloud Functions, rules, storage), documentação do repositório e histórico de commits, contra o baseline de 2026-07-02. Achados sem evidência executável foram marcados como hipótese. Documentos-irmãos desta entrega: <b>Proposta comercial (condição de fundador)</b> e <b>Plano de automação + avisos WhatsApp</b>.</p>
+</div>

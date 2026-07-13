@@ -1,0 +1,147 @@
+<title>Automação + Avisos WhatsApp — TTRD Contábil</title>
+<style>
+  :root{
+    --paper:#fbfbf9; --card:#ffffff; --ink:#16202c; --ink2:#4b5a6b; --faint:#7b8794; --rule:#e4e7eb;
+    --accent:#2563eb; --accent-soft:rgba(37,99,235,.08);
+    --go:#15803d; --go-bg:rgba(21,128,61,.08);
+    --build:#c2410c; --build-bg:rgba(194,65,12,.07);
+    --wait:#a16207; --wait-bg:rgba(161,98,7,.08);
+    --wa:#128c4b;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,system-ui,sans-serif;
+    --mono:"SF Mono",ui-monospace,"Roboto Mono",Menlo,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --paper:#10151c; --card:#161d26; --ink:#e8ecf1; --ink2:#a8b4c0; --faint:#75828f; --rule:#26303c;
+      --accent:#5b8def; --accent-soft:rgba(91,141,239,.12);
+      --go:#4ade80; --go-bg:rgba(74,222,128,.1); --build:#f0954f; --build-bg:rgba(240,149,79,.1);
+      --wait:#e3b341; --wait-bg:rgba(227,179,65,.1); --wa:#35c76f; }
+  }
+  :root[data-theme="dark"]{ --paper:#10151c; --card:#161d26; --ink:#e8ecf1; --ink2:#a8b4c0; --faint:#75828f; --rule:#26303c;
+    --accent:#5b8def; --accent-soft:rgba(91,141,239,.12);
+    --go:#4ade80; --go-bg:rgba(74,222,128,.1); --build:#f0954f; --build-bg:rgba(240,149,79,.1);
+    --wait:#e3b341; --wait-bg:rgba(227,179,65,.1); --wa:#35c76f; }
+  :root[data-theme="light"]{ --paper:#fbfbf9; --card:#ffffff; --ink:#16202c; --ink2:#4b5a6b; --faint:#7b8794; --rule:#e4e7eb;
+    --accent:#2563eb; --accent-soft:rgba(37,99,235,.08);
+    --go:#15803d; --go-bg:rgba(21,128,61,.08); --build:#c2410c; --build-bg:rgba(194,65,12,.07);
+    --wait:#a16207; --wait-bg:rgba(161,98,7,.08); --wa:#128c4b; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.65;font-size:15px;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;}
+  .wrap{max-width:880px;margin:0 auto;padding:40px 24px 80px;}
+  h1{font-size:clamp(26px,4vw,36px);font-weight:800;letter-spacing:-.02em;line-height:1.1;margin:0;text-wrap:balance;}
+  h2{font-size:21px;font-weight:800;letter-spacing:-.015em;margin:52px 0 14px;padding-top:22px;border-top:1px solid var(--rule);}
+  h3{font-size:15px;font-weight:700;margin:24px 0 8px;}
+  p{margin:0 0 12px;max-width:72ch;}
+  .kicker{font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin-bottom:10px;}
+  .lead{color:var(--ink2);font-size:15.5px;max-width:68ch;}
+  code{font-family:var(--mono);font-size:.88em;}
+  ul{margin:0 0 14px;padding-left:22px;max-width:74ch;}
+  li{margin-bottom:6px;font-size:14px;}
+  li::marker{color:var(--faint);}
+  .mini{font-size:12.5px;color:var(--faint);}
+
+  .tblwrap{overflow-x:auto;border:1px solid var(--rule);border-radius:12px;margin:14px 0;background:var(--card);}
+  table{width:100%;border-collapse:collapse;min-width:600px;font-size:13.5px;}
+  th{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);font-weight:700;text-align:left;padding:10px 14px;border-bottom:1px solid var(--rule);}
+  td{padding:9px 14px;border-bottom:1px solid var(--rule);vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  td code{background:var(--paper);border:1px solid var(--rule);border-radius:5px;padding:1px 6px;font-size:11.5px;}
+
+  .chip{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border-radius:99px;padding:2px 10px;white-space:nowrap;}
+  .chip.go{color:var(--go);background:var(--go-bg);border:1px solid var(--go);}
+  .chip.build{color:var(--build);background:var(--build-bg);border:1px solid var(--build);}
+  .chip.wait{color:var(--wait);background:var(--wait-bg);border:1px solid var(--wait);}
+
+  .phase{background:var(--card);border:1px solid var(--rule);border-radius:14px;padding:20px 24px;margin:16px 0;}
+  .phase .hd{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:10px;}
+  .phase .num{font-family:var(--mono);font-weight:800;font-size:13px;color:var(--accent);background:var(--accent-soft);border-radius:8px;padding:4px 10px;}
+  .phase .t{font-weight:800;font-size:17px;}
+  .phase .eff{margin-left:auto;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);}
+  .phase p{font-size:14px;}
+  .phase ul{margin-bottom:6px;}
+
+  .msg{max-width:420px;background:var(--go-bg);border:1px solid var(--rule);border-radius:14px;border-top-left-radius:4px;padding:12px 16px;font-size:13.5px;margin:10px 0 16px;line-height:1.55;}
+  .msg .from{font-size:10.5px;font-weight:700;color:var(--wa);margin-bottom:4px;letter-spacing:.04em;}
+  .msg b{font-weight:700;}
+
+  @media (max-width:640px){ .wrap{padding:28px 16px 60px;} }
+  @media print{ body{background:#fff;} .phase,.tblwrap{page-break-inside:avoid;} }
+</style>
+
+<div class="wrap">
+  <div class="kicker">Plano de execução · 13 jul 2026</div>
+  <h1>O contador no piloto automático — automações + avisos por WhatsApp</h1>
+  <p class="lead" style="margin-top:14px;">A plataforma já tem 9 rotinas automáticas e uma infraestrutura de WhatsApp quase completa (fila com retry, régua configurável, webhook seguro, consentimento por cliente). Este plano organiza o que falta em 4 fases: <b>ligar o que existe</b>, <b>pilotar a cobrança</b>, <b>avisar o contador</b> e <b>avisar o cliente</b>.</p>
+
+  <h2>1 · O que já roda sozinho hoje</h2>
+  <div class="tblwrap"><table>
+    <tr><th>Rotina</th><th>Quando</th><th>O que faz</th><th>Status real</th></tr>
+    <tr><td>Competências + tarefas do mês</td><td>Dia 1º, 01h</td><td>Cria as obrigações de cada cliente/serviço ativo</td><td><span class="chip go">Operante</span></td></tr>
+    <tr><td>Honorários a receber</td><td>Dia 1º, 06h</td><td>Gera os lançamentos de cobrança do mês</td><td><span class="chip go">Operante</span></td></tr>
+    <tr><td>E-mail de alerta diário</td><td>Todo dia, 07h</td><td>Tarefas vencendo, atrasos, certificados a vencer, NFS-e com erro, rascunhos aguardando revisão</td><td><span class="chip go">Operante desde 07/07</span></td></tr>
+    <tr><td>Rascunhos NFS-e + emissão automática</td><td>Todo dia, 06h30</td><td>Gera rascunhos no dia certo; emite sozinho pra quem tem opt-in</td><td><span class="chip build">Quebrado — falta 1 linha (secret)</span></td></tr>
+    <tr><td>Régua de cobrança WhatsApp</td><td>Hora em hora + fila a cada 10 min</td><td>D-7 · D-3 · D0 · D+3 · D+7, com consentimento e retry</td><td><span class="chip wait">Pronta, inoperante (sem app Meta)</span></td></tr>
+    <tr><td>Inadimplência + prazo crítico</td><td>Semanal / diário</td><td>Marca clientes em risco e tarefas com prazo em 48h</td><td><span class="chip go">Operante</span></td></tr>
+    <tr><td>Backup do Firestore</td><td>Domingo, 02h</td><td>Export semanal com alerta de falha</td><td><span class="chip go">Operante</span></td></tr>
+  </table></div>
+
+  <h2>2 · As quatro fases</h2>
+
+  <div class="phase">
+    <div class="hd"><span class="num">FASE 0</span><span class="t">Destravar o que já existe</span><span class="eff">~1 dia de código + espera da Meta</span></div>
+    <p>Nada de funcionalidade nova — só ligar o que está construído:</p>
+    <ul>
+      <li><b>Corrigir o secret do cron de NFS-e automática</b> (<code>secrets: credentialSecrets</code> em <code>processarNfseRecorrenteDiaria</code> e <code>gerarRascunhosNfseMensais</code>) — 1 linha, destrava a emissão automática.</li>
+      <li><b>Criar o app na Meta</b> (WhatsApp Business Platform): número dedicado do escritório, Business Manager verificado, token e app secret nos secrets das functions.</li>
+      <li><b>Submeter os 5 templates de cobrança</b> pra aprovação (categoria utility, pt_BR) + o de confirmação de pagamento que já existe no código e nunca foi ligado.</li>
+      <li><b>Fechar o achado crítico do <code>telas</code></b> (auditoria) antes de dar acesso a mais gente.</li>
+    </ul>
+    <p class="mini">Dependência externa: aprovação de templates pela Meta costuma levar de horas a poucos dias.</p>
+  </div>
+
+  <div class="phase">
+    <div class="hd"><span class="num">FASE 1</span><span class="t">Piloto da cobrança automática</span><span class="eff">~1 semana de acompanhamento</span></div>
+    <p>Rodar o que o checklist técnico já previa (fases 4–5 de <code>docs_dev/checklist-whatsapp-cobranca.md</code>):</p>
+    <ul>
+      <li>3–5 clientes com consentimento real registrado, régua completa D-7 → D+7.</li>
+      <li>Validar entrega, leitura e resposta via webhook; pausa imediata ao registrar pagamento.</li>
+      <li><b>Editor da régua</b> na tela de Parâmetros (hoje os dias/horários só existem como dados no Firestore — sem tela pra ajustar).</li>
+      <li>Só depois do piloto: ligar pra toda a carteira elegível e monitorar 5 dias úteis.</li>
+    </ul>
+    <div class="msg"><div class="from">TTRD Contábil · WhatsApp</div>Olá, <b>Maria</b>! O honorário de <b>Contabilidade Mensal</b> no valor de <b>R$ 890,00</b> vence em <b>3 dias</b> (15/08). Qualquer dúvida, é só responder por aqui. 😊</div>
+  </div>
+
+  <div class="phase">
+    <div class="hd"><span class="num">FASE 2</span><span class="t">Avisos operacionais — o WhatsApp do contador</span><span class="eff">~2–3 semanas de desenvolvimento</span></div>
+    <p>Hoje o único canal do contador é o e-mail das 07h. A fase 2 leva os avisos críticos pro WhatsApp <b>da equipe</b> (não do cliente), onde eles são vistos na hora. Exige uma generalização pequena da fila: hoje <code>whatsapp_jobs</code> é amarrada a <code>lancamentoId</code>; ganha um campo <code>tipoAviso</code> + referência genérica, reaproveitando fila, retry, dedup e webhook como estão.</p>
+    <div class="tblwrap"><table>
+      <tr><th>Aviso</th><th>Gatilho</th><th>Quem recebe</th><th>Reaproveita</th></tr>
+      <tr><td><b>Resumo do dia</b> (espelho do e-mail das 07h)</td><td>Cron diário existente</td><td>Dono / equipe</td><td><code>enviarAlertasDiarios</code> — só acrescenta o despacho</td></tr>
+      <tr><td><b>NFS-e automática falhou</b></td><td>Escrita em <code>nfse_erros</code> com <code>origemEmissao: automatica</code></td><td>Responsável fiscal</td><td>Trigger novo + fila existente</td></tr>
+      <tr><td><b>Rascunhos aguardando revisão</b></td><td>Cron das 06h30 (contagem &gt; 0)</td><td>Responsável fiscal</td><td>Retorno do próprio cron</td></tr>
+      <tr><td><b>Certificado A1 vence em 30/15/7 dias</b></td><td>Checagem que já existe no alerta diário</td><td>Dono</td><td>Query pronta em <code>alertas.ts</code></td></tr>
+      <tr><td><b>Cobrança esgotou tentativas</b></td><td>Job WhatsApp → <code>esgotado</code></td><td>Financeiro</td><td>Audit de severidade alta já gravado</td></tr>
+      <tr><td><b>Fechamento com pendência no fim do mês</b></td><td>Cron novo (D-3 do fim do mês)</td><td>Dono / operacional</td><td>Query do painel de fechamento</td></tr>
+    </table></div>
+    <p>Junto, as três telas operacionais que o checklist já previa: <b>Cobranças de hoje</b>, <b>Falhas de entrega</b> e <b>Clientes que responderam</b> — pra régua não virar caixa-preta.</p>
+  </div>
+
+  <div class="phase">
+    <div class="hd"><span class="num">FASE 3</span><span class="t">Avisos ao cliente do escritório</span><span class="eff">~1–2 semanas, após fase 2 estável</span></div>
+    <ul>
+      <li><b>Confirmação de pagamento recebido</b> — o template <code>cobranca_baixa_confirmada</code> já existe no código, só não é disparado; ligar ao evento de baixa.</li>
+      <li><b>NFS-e emitida</b> — aviso ao tomador com número/valor da nota (e, por e-mail, o XML anexado — pendência já mapeada no changelog, depende de suporte a anexo no <code>sendEmail</code>).</li>
+      <li><b>Lembrete de documentos do IR</b> — na época da declaração, checklist pendente vira lembrete gentil.</li>
+    </ul>
+    <p class="mini">Regra de ouro mantida do módulo de cobrança: só template aprovado, só com consentimento registrado, com pausa/opt-out imediatos — isso é requisito da Meta e da LGPD, não opção.</p>
+  </div>
+
+  <h2>3 · Decisões que são suas</h2>
+  <ul>
+    <li><b>Número do WhatsApp:</b> um número novo dedicado do escritório (recomendado — não mistura com o pessoal e protege a qualidade do número na Meta).</li>
+    <li><b>Tom das mensagens:</b> os templates precisam ser aprovados pela Meta — vale revisar o texto de cada etapa da régua antes de submeter (mudança depois exige nova aprovação).</li>
+    <li><b>Quem recebe o quê na fase 2:</b> o mapeamento aviso → pessoa (dono, fiscal, financeiro) acima é proposta, não decisão.</li>
+    <li><b>Catálogo de serviços real:</b> os honorários automáticos hoje nascem de 7 registros de teste — a régua de cobrança vai cobrar com base neles. Preencher o catálogo real antes de ligar a cobrança pra carteira toda.</li>
+  </ul>
+
+  <p class="mini" style="margin-top:40px;border-top:1px solid var(--rule);padding-top:16px;">Plano elaborado em 2026-07-13 a partir do código em <code>master @ c7548ab</code>, do checklist técnico de cobrança (<code>docs_dev/checklist-whatsapp-cobranca.md</code>) e da auditoria completa desta mesma entrega. Esforços são estimativas de planejamento, não compromisso contratual.</p>
+</div>
