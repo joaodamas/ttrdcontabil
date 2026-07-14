@@ -12,12 +12,24 @@ function clean(value: string | undefined, fallback: string) {
   return trimmed ? trimmed : fallback
 }
 
+// Iniciais para o monograma (fallback quando o cliente não tem logo próprio).
+function monogram(short: string, name: string) {
+  const src = (short || name || '').trim()
+  const words = src.split(/\s+/).filter(Boolean)
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase()
+  return src.slice(0, 2).toUpperCase()
+}
+
+const name = clean(env.appName, 'TTRD Contábil')
+const shortName = clean(env.appShortName, 'TTRD')
+
 export const appConfig = {
-  name: clean(env.appName, 'TTRD Contábil'),
-  shortName: clean(env.appShortName, 'TTRD'),
+  name,
+  shortName,
   tagline: clean(env.appTagline, 'Gestão Contábil Integrada'),
   tenantId: clean(env.tenantId, 'ttrd'),
   brandPrimary: clean(env.brandPrimary, '#2243A5'),
   logoUrl: env.logoUrl?.trim() || null,
+  monogram: monogram(shortName, name),
 }
 

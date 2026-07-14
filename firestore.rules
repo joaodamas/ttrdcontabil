@@ -200,8 +200,10 @@ service cloud.firestore {
       // compartilhado entre tenants, trocar por leitura por-doc/denormalização.
       allow list: if canRead();
       allow update: if (isAuth() && request.auth.uid == uid
+          // 'telas' controla acesso de leitura a coleções sensíveis (via hasTela);
+          // sem bloquear aqui, qualquer usuário se autoconcede acesso. Só admin altera.
           && !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['perfil', 'ativo', 'criadoEm', 'tenantId']))
+              .hasAny(['perfil', 'ativo', 'criadoEm', 'tenantId', 'telas']))
         || (isAdmin() && sameTenantUpdate());
       allow create: if isAdmin() && sameTenantNew();
       allow delete: if isAdmin() && sameTenantExisting();
@@ -362,6 +364,15 @@ service cloud.firestore {
 
     match /clientes_fiscal_integracao/{id} {
       // [P1] Mesma gate de leitura de clientes_fiscal (mesma tela 'fiscal').
+      allow read: if canReadFiscalConfig() && sameTenantExisting();
+      allow create: if isFiscal() && sameTenantWrite();
+      allow update: if isFiscal() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
+    }
+
+    // Catálogo de produtos (NF-e/NFC-e): ficha fiscal por produto, preenchida
+    // pelo contador. Mesmo gate de dado fiscal (tela 'fiscal').
+    match /produtos/{id} {
       allow read: if canReadFiscalConfig() && sameTenantExisting();
       allow create: if isFiscal() && sameTenantWrite();
       allow update: if isFiscal() && sameTenantUpdate();

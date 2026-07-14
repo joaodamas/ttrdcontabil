@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
 import { appConfig } from '@/lib/app-config'
+import { onBrand } from '@/lib/brand-theme'
 import { canAccessTela, type TelaKey } from '@/lib/permissions'
 import { getInitials } from '@/lib/utils'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
@@ -79,6 +80,8 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: '/fiscal',           label: 'Emissão NFS-e',    icon: Receipt,   telaKey: 'fiscal' },
       { href: '/fiscal/historico', label: 'Histórico NFS-e',  icon: History,   telaKey: 'fiscal' },
+      { href: '/fiscal/produtos',  label: 'Produtos (NF-e)',  icon: Package2,  telaKey: 'fiscal' },
+      { href: '/fiscal/emitir-nfe', label: 'Emitir NF-e',     icon: Receipt,   telaKey: 'fiscal' },
       { href: '/ir',               label: 'Imposto de Renda', icon: FileText,  telaKey: 'ir' },
     ],
   },
@@ -198,9 +201,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     // eslint-disable-next-line @next/next/no-img-element
     <img src={appConfig.logoUrl} alt="" className="h-7 w-7 rounded-lg object-contain" />
   ) : (
-    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white">
-      <span style={{ fontFamily: 'inherit', fontWeight: 800, fontStyle: 'italic', letterSpacing: '-0.1em', lineHeight: 1, fontSize: 13 }}>
-        <span style={{ color: '#2243A5' }}>J</span><span style={{ color: '#13A877' }}>P</span>
+    <div className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ background: appConfig.brandPrimary, color: onBrand }}>
+      <span style={{ fontFamily: 'inherit', fontWeight: 800, fontStyle: 'italic', letterSpacing: '-0.06em', lineHeight: 1, fontSize: 12 }}>
+        {appConfig.monogram}
       </span>
     </div>
   )

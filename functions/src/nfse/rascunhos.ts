@@ -5,6 +5,7 @@ import { Timestamp } from 'firebase-admin/firestore'
 import { requireEnvironmentTenant, DEFAULT_TENANT_ID } from '../tenant'
 import { SYSTEM_ACTOR } from '../audit'
 import { processarEmissao } from './emitir'
+import { credentialSecrets } from './secrets'
 import type { EmitirNfseInput } from './types'
 
 const db = () => admin.firestore()
@@ -302,6 +303,7 @@ export const gerarRascunhosNfseMensais = onCall(
     region: 'southamerica-east1',
     memory: '256MiB',
     timeoutSeconds: 300,
+    secrets: credentialSecrets,
   },
   async (request) => {
     if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Autenticação necessária.')
@@ -372,6 +374,7 @@ export const processarNfseRecorrenteDiaria = onSchedule(
     region: 'southamerica-east1',
     memory: '256MiB',
     timeoutSeconds: 300,
+    secrets: credentialSecrets,
   },
   async () => {
     const hoje = new Date()

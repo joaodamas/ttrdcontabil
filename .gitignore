@@ -51,3 +51,7 @@ next-env.d.ts
 # certificados
 *.pfx
 *.p12
+
+# dados exportados de clientes (PII — não versionar; geráveis pelos scripts de export)
+scripts/clientes-*.csv
+scripts/clientes-*.json

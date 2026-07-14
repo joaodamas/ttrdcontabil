@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { signIn } from '@/lib/auth-client'
 import { getClientAuth } from '@/lib/firebase'
 import { appConfig } from '@/lib/app-config'
+import { brandRgba, brandLight } from '@/lib/brand-theme'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -31,13 +32,13 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.input<typeof loginSchema>
 
-const BRAND_BLUE  = '#2243A5'
+const BRAND_BLUE  = appConfig.brandPrimary
 const BRAND_GREEN = '#13A877'
 
 const STATS = [
   { label: 'Clientes ativos',       value: '200+',  icon: Users,       color: BRAND_BLUE },
   { label: 'Fechamentos/mês',        value: '99%',   icon: CheckCircle2, color: BRAND_GREEN },
-  { label: 'Obrigações entregues',   value: '100%',  icon: FileCheck2,  color: '#4f7df0' },
+  { label: 'Obrigações entregues',   value: '100%',  icon: FileCheck2,  color: brandLight },
 ]
 
 const FEATURES = [
@@ -129,18 +130,18 @@ export function LoginForm() {
         className="hidden lg:flex lg:w-[52%] flex-col relative overflow-hidden"
         style={{ background: '#070d22' }}
       >
-        {/* Grid de pontos azuis */}
+        {/* Grid de pontos da marca */}
         <div
           className="absolute inset-0"
           style={{
-            backgroundImage: `radial-gradient(circle, rgba(34,67,165,0.18) 1px, transparent 1px)`,
+            backgroundImage: `radial-gradient(circle, ${brandRgba(0.18)} 1px, transparent 1px)`,
             backgroundSize: '28px 28px',
           }}
         />
-        {/* Glow azul superior direito */}
+        {/* Glow da marca superior direito */}
         <div
           className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(34,67,165,0.22) 0%, transparent 70%)' }}
+          style={{ background: `radial-gradient(circle, ${brandRgba(0.22)} 0%, transparent 70%)` }}
         />
         {/* Glow verde inferior esquerdo */}
         <div
@@ -151,7 +152,7 @@ export function LoginForm() {
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            background: 'linear-gradient(135deg, transparent 0%, transparent 49.5%, rgba(34,67,165,0.07) 49.5%, rgba(34,67,165,0.07) 50.5%, transparent 50.5%)',
+            background: `linear-gradient(135deg, transparent 0%, transparent 49.5%, ${brandRgba(0.07)} 49.5%, ${brandRgba(0.07)} 50.5%, transparent 50.5%)`,
           }}
         />
 
@@ -167,8 +168,8 @@ export function LoginForm() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={appConfig.logoUrl} alt="" className="h-7 w-7 object-contain" />
               ) : (
-                <span style={{ fontWeight: 800, fontStyle: 'italic', letterSpacing: '-0.1em', lineHeight: 1, fontSize: 16 }}>
-                  <span style={{ color: BRAND_BLUE }}>J</span><span style={{ color: BRAND_GREEN }}>P</span>
+                <span style={{ fontWeight: 800, fontStyle: 'italic', letterSpacing: '-0.06em', lineHeight: 1, fontSize: 15, color: BRAND_BLUE }}>
+                  {appConfig.monogram}
                 </span>
               )}
             </div>
@@ -183,7 +184,7 @@ export function LoginForm() {
             <div className="space-y-4">
               <div
                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border"
-                style={{ borderColor: 'rgba(34,67,165,0.4)', color: '#4f7df0', background: 'rgba(34,67,165,0.10)' }}
+                style={{ borderColor: brandRgba(0.4), color: brandLight, background: brandRgba(0.10) }}
               >
                 <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: BRAND_GREEN }} />
                 Sistema em operação
@@ -192,7 +193,7 @@ export function LoginForm() {
               <h1 className="text-4xl font-bold leading-[1.15] text-white">
                 Sua contabilidade<br />
                 <span style={{
-                  background: `linear-gradient(90deg, #4f7df0, ${BRAND_GREEN})`,
+                  background: `linear-gradient(90deg, ${brandLight}, ${BRAND_GREEN})`,
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                 }}>
@@ -271,7 +272,7 @@ export function LoginForm() {
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            backgroundImage: `radial-gradient(circle, rgba(34,67,165,0.05) 1px, transparent 1px)`,
+            backgroundImage: `radial-gradient(circle, ${brandRgba(0.05)} 1px, transparent 1px)`,
             backgroundSize: '20px 20px',
           }}
         />
@@ -333,7 +334,7 @@ export function LoginForm() {
                 placeholder="seu@email.com"
                 autoComplete="email"
                 autoFocus
-                className="h-11 bg-gray-50 border-gray-200 focus:border-[#2243A5] focus:ring-[#2243A5]/20 text-[#0a0a0a] placeholder:text-gray-400 rounded-xl transition-all"
+                className="h-11 bg-gray-50 border-gray-200 focus:border-primary focus:ring-primary/20 text-[#0a0a0a] placeholder:text-gray-400 rounded-xl transition-all"
                 {...register('email')}
               />
               {errors.email && (
@@ -355,7 +356,7 @@ export function LoginForm() {
                   type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
                   autoComplete="current-password"
-                  className="h-11 bg-gray-50 border-gray-200 focus:border-[#2243A5] focus:ring-[#2243A5]/20 text-[#0a0a0a] placeholder:text-gray-400 rounded-xl pr-10 transition-all"
+                  className="h-11 bg-gray-50 border-gray-200 focus:border-primary focus:ring-primary/20 text-[#0a0a0a] placeholder:text-gray-400 rounded-xl pr-10 transition-all"
                   {...register('senha')}
                 />
                 <button
@@ -379,7 +380,7 @@ export function LoginForm() {
                   type="button"
                   onClick={handleForgotPassword}
                   disabled={resetLoading}
-                  className="text-xs font-medium text-gray-500 hover:text-[#2243A5] transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="text-xs font-medium text-gray-500 hover:text-primary transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {resetLoading ? 'Enviando...' : 'Esqueci minha senha'}
                 </button>
@@ -408,7 +409,7 @@ export function LoginForm() {
               className="w-full h-11 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer mt-2 text-white"
               style={{
                 background: isSubmitting ? '#1b3585' : BRAND_BLUE,
-                boxShadow: isSubmitting ? 'none' : '0 4px 16px rgba(34,67,165,0.35)',
+                boxShadow: isSubmitting ? 'none' : `0 4px 16px ${brandRgba(0.35)}`,
               }}
             >
               {isSubmitting ? (

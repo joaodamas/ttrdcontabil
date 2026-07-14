@@ -14,9 +14,13 @@
 import { decrypt, isEncrypted } from '../encrypt'
 import type {
   ConfigFiscalCliente,
+  EmitirConsumidorInput,
   EmitirNfseInput,
+  EmitirProdutoInput,
+  ItemProdutoFiscal,
   Prestador,
   ResultadoEmissao,
+  Tomador,
 } from '../types'
 
 const SPEDY_API_PRODUCAO = 'https://api.spedy.com.br/v1'
@@ -123,15 +127,144 @@ function buildServiceInvoicePayload(input: EmitirNfseInput, config: ConfigFiscal
   }
 }
 
-async function pollAteTerminal(config: ConfigFiscalCliente, id: string): Promise<SpedyResposta | null> {
+async function pollAteTerminal(config: ConfigFiscalCliente, id: string, resource = 'service-invoices'): Promise<SpedyResposta | null> {
   for (let tentativa = 0; tentativa < POLL_MAX_TENTATIVAS; tentativa++) {
-    const resultado = await spedyFetch(config, `/service-invoices/${id}`, { method: 'GET' })
+    const resultado = await spedyFetch(config, `/${resource}/${id}`, { method: 'GET' })
     if (!resultado.resp.ok) return resultado
     const status = (resultado.body?.status as string | undefined) ?? 'enqueued'
     if (!STATUS_EM_ANDAMENTO.has(status)) return resultado
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVALO_MS))
   }
   return null
+}
+
+// ── NF-e (produto) e NFC-e (consumidor) — builders + emissão genérica ─────────
+// Fundação da Fase B. Reaproveita spedyFetch/polling do NFS-e e NÃO altera o
+// caminho `emitir` (NFS-e), já validado. Ainda sem catálogo/tela/homologação —
+// não emite ponta a ponta até isso existir. Totais e agregação de imposto podem
+// precisar de ajuste contra uma emissão real de homologação da Spedy.
+function buildReceiver(tomador: Tomador | undefined, prestador: Prestador) {
+  if (!tomador) return undefined
+  const endereco = tomador.endereco
+  return {
+    name: tomador.razaoSocial,
+    federalTaxNumber: tomador.cpfCnpj.replace(/\D/g, ''),
+    email: tomador.email || undefined,
+    address: endereco
+      ? {
+          street: endereco.logradouro || undefined,
+          number: endereco.numero || undefined,
+          district: endereco.bairro || undefined,
+          postalCode: endereco.cep?.replace(/\D/g, '') || undefined,
+          city: { code: endereco.municipioIbge ?? prestador.municipioIbge, state: endereco.uf || undefined },
+        }
+      : undefined,
+  }
+}
+
+function rateFrac(aliquota: number | undefined): number | undefined {
+  return aliquota != null ? Number((aliquota / 100).toFixed(4)) : undefined
+}
+
+function buildItens(itens: ItemProdutoFiscal[]) {
+  return itens.map((it) => ({
+    code: it.codigo,
+    description: it.descricao,
+    ncm: it.ncm.replace(/\D/g, ''),
+    cfop: it.cfop.replace(/\D/g, ''),
+    unit: it.unidade,
+    quantity: it.quantidade,
+    unitAmount: it.valorUnitario,
+    totalAmount: Number((it.quantidade * it.valorUnitario).toFixed(2)),
+    taxes: {
+      icms: {
+        origin: it.icms.origem,
+        cst: it.icms.cst,
+        csosn: it.icms.csosn,
+        baseTax: it.icms.baseCalculo,
+        rate: rateFrac(it.icms.aliquota),
+        amount: it.icms.valor,
+        baseStRetentionAmount: it.icms.stBaseRetencao,
+        stRetentionAmount: it.icms.stValorRetido,
+      },
+      pis: it.pis ? { cst: it.pis.cst, baseTax: it.pis.baseCalculo, rate: rateFrac(it.pis.aliquota), amount: it.pis.valor } : undefined,
+      cofins: it.cofins ? { cst: it.cofins.cst, baseTax: it.cofins.baseCalculo, rate: rateFrac(it.cofins.aliquota), amount: it.cofins.valor } : undefined,
+      ipi: it.ipi ? { cst: it.ipi.cst, rate: rateFrac(it.ipi.aliquota), amount: it.ipi.valor } : undefined,
+    },
+  }))
+}
+
+function buildProductInvoicePayload(input: EmitirProdutoInput, prestador: Prestador) {
+  return {
+    operationType: 'outgoing',
+    destination: input.destino ?? 'internal',
+    operationNature: input.naturezaOperacao,
+    receiver: buildReceiver(input.tomador, prestador),
+    items: buildItens(input.itens),
+    payments: input.pagamentos?.map((p) => ({ method: p.metodo, amount: p.valor })),
+  }
+}
+
+function buildConsumerInvoicePayload(input: EmitirConsumidorInput, prestador: Prestador) {
+  return {
+    isFinalCustomer: true,
+    destination: 'internal',
+    presenceType: input.presencial ? 'presence' : 'internet',
+    operationNature: input.naturezaOperacao,
+    receiver: buildReceiver(input.tomador, prestador),
+    items: buildItens(input.itens),
+    payments: input.pagamentos.map((p) => ({ method: p.metodo, amount: p.valor })),
+  }
+}
+
+// Mesmo POST + polling + interpretação do NFS-e, parametrizado pelo recurso.
+// Duplicado de propósito para não tocar em `emitir` (o caminho já validado).
+async function emitirDocumento(config: ConfigFiscalCliente, resource: string, payload: unknown): Promise<ResultadoEmissao> {
+  try {
+    const criacao = await spedyFetch(config, `/${resource}`, { method: 'POST', body: JSON.stringify(payload) })
+    if (!criacao.resp.ok) {
+      return {
+        sucesso: false,
+        codigoErro: `SPEDY_HTTP_${criacao.resp.status}`,
+        erro: (criacao.body?.message as string | undefined) ?? `Spedy retornou HTTP ${criacao.resp.status}.`,
+        detalhes: criacao.bodyText.slice(0, 1000),
+      }
+    }
+    const id = criacao.body?.id as string | undefined
+    if (!id) {
+      return { sucesso: false, erro: 'Resposta da Spedy não trouxe o identificador da nota.', detalhes: criacao.bodyText.slice(0, 1000) }
+    }
+    const final = await pollAteTerminal(config, id, resource)
+    if (!final) {
+      return { sucesso: false, codigoErro: 'SPEDY_PROCESSANDO', erro: 'A Spedy ainda está processando a nota. Consulte novamente em instantes.', detalhes: id }
+    }
+    if (!final.resp.ok) {
+      return {
+        sucesso: false,
+        codigoErro: `SPEDY_HTTP_${final.resp.status}`,
+        erro: (final.body?.message as string | undefined) ?? `Spedy retornou HTTP ${final.resp.status}.`,
+        detalhes: final.bodyText.slice(0, 1000),
+      }
+    }
+    const status = (final.body?.status as string | undefined) ?? 'erro'
+    const detalheProcessamento = final.body?.processingDetail as Record<string, unknown> | undefined
+    if (status !== STATUS_SUCESSO) {
+      return {
+        sucesso: false,
+        codigoErro: (detalheProcessamento?.code as string | undefined) ?? status,
+        erro: (detalheProcessamento?.message as string | undefined) ?? `Spedy recusou a nota (status: ${status}).`,
+        detalhes: final.bodyText.slice(0, 1000),
+      }
+    }
+    const autorizacao = final.body?.authorization as Record<string, unknown> | undefined
+    return {
+      sucesso: true,
+      numeroNfse: (final.body?.number as string | number | undefined)?.toString(),
+      codigoVerificacao: (autorizacao?.protocol as string | undefined) ?? undefined,
+    }
+  } catch (err) {
+    return { sucesso: false, erro: err instanceof Error ? err.message : String(err) }
+  }
 }
 
 export class SpedyConector {
@@ -206,6 +339,68 @@ export class SpedyConector {
       }
     } catch (err) {
       return { sucesso: false, erro: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /** NF-e (produto, modelo 55). Fundação — depende de catálogo/tela/homologação. */
+  async emitirProduto(input: EmitirProdutoInput, config: ConfigFiscalCliente, prestador: Prestador): Promise<ResultadoEmissao> {
+    return emitirDocumento(config, 'product-invoices', buildProductInvoicePayload(input, prestador))
+  }
+
+  /** NFC-e (consumidor, modelo 65). Exige CSC/tokenId configurados na empresa (SEFAZ). */
+  async emitirConsumidor(input: EmitirConsumidorInput, config: ConfigFiscalCliente, prestador: Prestador): Promise<ResultadoEmissao> {
+    return emitirDocumento(config, 'consumer-invoices', buildConsumerInvoicePayload(input, prestador))
+  }
+
+  /**
+   * Envia o certificado A1 (.pfx) da empresa para a Spedy assinar as notas
+   * (a Spedy exige o certificado carregado p/ NF-e modelo 55). É a peça que leva
+   * o certificado guardado na plataforma até a Spedy: a plataforma vira o cofre
+   * único e alimenta a Spedy — o contador gerencia o A1 num lugar só.
+   *
+   * `POST /companies/{id}/certificates` é multipart/form-data (campos file +
+   * password, conforme o schema) — por isso NÃO passa por spedyFetch, que envia
+   * JSON. A auth usa a X-Api-Key da própria empresa (que já a identifica); o
+   * companyId vem de config.spedyCompanyId (setado no provisionamento).
+   *
+   * ⚠️ Nomes dos campos multipart (file/password) e o uso da chave da empresa (vs
+   * a Owner) são o melhor mapeamento do schema público; confirmar contra um upload
+   * real de homologação antes de tratar como garantido.
+   */
+  async subirCertificado(
+    config: ConfigFiscalCliente,
+    companyId: string,
+    pfxBase64: string,
+    senha: string,
+  ): Promise<{ sucesso: boolean; status: number; erro?: string; detalhes?: string }> {
+    try {
+      const apiKey = decryptApiKey(config.credenciais?.spedyApiKey)
+      const url = `${baseUrl(config)}/companies/${encodeURIComponent(companyId)}/certificates`
+      const pfxBytes = Buffer.from(pfxBase64, 'base64')
+      const form = new FormData()
+      form.append('file', new Blob([pfxBytes], { type: 'application/x-pkcs12' }), 'certificado.pfx')
+      form.append('password', senha)
+      // Sem Content-Type manual: o fetch/undici define o boundary do multipart.
+      const resp = await fetch(url, { method: 'POST', headers: { 'X-Api-Key': apiKey }, body: form })
+      const bodyText = await resp.text()
+      console.log('[Spedy] upload certificado', { url, status: resp.status, ok: resp.ok, bodyPreview: bodyText.slice(0, 300) })
+      if (!resp.ok) {
+        let msg: string | undefined
+        try {
+          msg = (JSON.parse(bodyText) as Record<string, unknown>)?.message as string | undefined
+        } catch {
+          // resposta não-JSON — bodyText cru segue em detalhes
+        }
+        return {
+          sucesso: false,
+          status: resp.status,
+          erro: msg ?? `Spedy retornou HTTP ${resp.status} ao subir o certificado.`,
+          detalhes: bodyText.slice(0, 500),
+        }
+      }
+      return { sucesso: true, status: resp.status }
+    } catch (err) {
+      return { sucesso: false, status: 0, erro: err instanceof Error ? err.message : String(err) }
     }
   }
 }

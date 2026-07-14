@@ -12,6 +12,12 @@ export {
 export { emitirNfseLote } from './nfse/emitir-lote'
 export { cancelarNfse, consultarNfse, retryNfse } from './nfse/ciclo'
 export { gerarRascunhosNfseMensais, processarNfseRecorrenteDiaria } from './nfse/rascunhos'
+// Provisionamento em massa na Spedy — DEFERIDO: exige o secret SPEDY_OWNER_API_KEY
+// (rodar `firebase functions:secrets:set SPEDY_OWNER_API_KEY` antes) e o
+// provisionamento está pausado. Reativar este export quando for provisionar em massa.
+// export { provisionarEmpresasSpedy } from './nfse/provisionar-spedy'
+export { emitirNfeProduto } from './nfse/emitir-produto'
+export { enviarCertificadoSpedy } from './nfse/spedy-certificado'
 export { gerarFechamentoMensal } from './fechamento'
 export { recalcularDashboardKpis } from './dashboard'
 

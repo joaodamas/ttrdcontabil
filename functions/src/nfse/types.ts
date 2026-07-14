@@ -119,6 +119,63 @@ export interface EmitirNfseInput {
   serieRps?: string
 }
 
+// ─── NF-e (produto) e NFC-e (consumidor) — Fase B ─────────────────────────────
+// Fundação da emissão de MERCADORIA via Spedy. Importante: a Spedy TRANSMITE mas
+// NÃO calcula imposto — CFOP/NCM/CST(ou CSOSN)/alíquotas vêm determinados daqui
+// (preenchidos pelo contador no catálogo de produtos, que ainda será construído).
+// MVP: operação interna, sem ST/DIFAL/IPI. Suporta Simples (CSOSN) e regime
+// normal (CST). Nada disso emite ponta a ponta até existirem catálogo, tela e
+// homologação na SEFAZ.
+export interface ImpostoItem {
+  cst?: string          // regime normal (Lucro Presumido/Real)
+  csosn?: string        // Simples Nacional
+  origem?: string       // 0–8, origem da mercadoria (usado no ICMS)
+  baseCalculo?: number
+  aliquota?: number     // em % (ex.: 18)
+  valor?: number        // se ausente, a Spedy calcula a partir da alíquota
+  // ICMS-ST (substituição tributária) — só ICMS. O contador informa; a Spedy
+  // NÃO calcula MVA. Mapeiam p/ baseStRetentionAmount / stRetentionAmount.
+  stBaseRetencao?: number
+  stValorRetido?: number
+}
+
+export interface ItemProdutoFiscal {
+  codigo: string
+  descricao: string
+  ncm: string
+  cfop: string
+  unidade: string       // ex.: "UN"
+  quantidade: number
+  valorUnitario: number
+  icms: ImpostoItem     // origem obrigatória
+  pis?: ImpostoItem
+  cofins?: ImpostoItem
+  ipi?: ImpostoItem     // indústria — nome do campo na Spedy a confirmar em homologação
+}
+
+// NF-e (modelo 55) — produto/mercadoria
+export interface EmitirProdutoInput {
+  clienteId: string
+  rascunhoId?: string
+  naturezaOperacao: string   // ex.: "Venda de mercadoria"
+  destino?: 'internal' | 'interstate'  // default internal; a Spedy infere as UFs
+  tomador: Tomador
+  itens: ItemProdutoFiscal[]
+  pagamentos?: { metodo: string; valor: number }[]
+}
+
+// NFC-e (modelo 65) — consumidor final. Tomador é opcional (venda anônima);
+// sempre interna e presencial/online.
+export interface EmitirConsumidorInput {
+  clienteId: string
+  rascunhoId?: string
+  naturezaOperacao: string
+  tomador?: Tomador
+  presencial: boolean        // true = presence, false = internet
+  itens: ItemProdutoFiscal[]
+  pagamentos: { metodo: string; valor: number }[]
+}
+
 // ─── Resultado da emissão ─────────────────────────────────────────────────────
 export interface ResultadoEmissao {
   sucesso: boolean

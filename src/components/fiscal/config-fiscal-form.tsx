@@ -96,7 +96,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       ambienteEmissao:  'homologacao',
       optanteSimples:   true,
       naturezaOperacao: '1',
-      provedorNfse:     'municipio',
+      provedorNfse:     'spedy',
       emissaoAutomatica:false,
     },
   })
@@ -107,7 +107,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       ambienteEmissao:  'homologacao',
       optanteSimples:   true,
       naturezaOperacao: '1',
-      provedorNfse:     'municipio',
+      provedorNfse:     'spedy',
       ...defaultValues,
       // Credenciais NUNCA são pré-preenchidas: o que vem de defaultValues.credenciais
       // já está criptografado (formato iv:authTag:ciphertext). Preencher o campo com
@@ -127,7 +127,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
   }, [open, defaultValues, reset])
 
   const municipioIbge = watch('municipioIbge')
-  const provedorNfse = watch('provedorNfse') ?? 'municipio'
+  const provedorNfse = watch('provedorNfse') ?? 'spedy'
   const tipo = MUNICIPIO_TIPO[municipioIbge]
   const municipioNome = MUNICIPIOS.find(m => m.ibge === municipioIbge)?.nome ?? ''
   const credenciais = (defaultValues?.credenciais ?? {}) as Record<string, unknown>
@@ -161,7 +161,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
         cnae:                 data.cnae              || null,
         aliquotaPadrao:       data.aliquotaPadrao    ?? null,
         issRetidoPadrao:      data.issRetidoPadrao   ?? false,
-        provedorNfse:         data.provedorNfse ?? 'municipio',
+        provedorNfse:         data.provedorNfse ?? 'spedy',
         emissaoAutomatica:    data.emissaoAutomatica ?? false,
       }
 
