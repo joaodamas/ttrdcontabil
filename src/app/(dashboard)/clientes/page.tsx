@@ -44,6 +44,20 @@ const REGIME_BADGE: Record<string, string> = {
   isento:           'bg-muted text-muted-foreground border-border',
 }
 
+// Tipo de documento fiscal que o cliente emite, derivado do CNAE (categoriaFiscal —
+// preenchido pelo script scripts/classificar-clientes-fiscal.mjs). Ausente até o
+// backfill rodar; a coluna mostra "—" nesse meio tempo, sem quebrar nada.
+const DOC_FISCAL_LABEL: Record<string, string> = {
+  servico: 'NFS-e',
+  produto: 'NF-e',
+  transporte: 'CT-e',
+}
+const DOC_FISCAL_BADGE: Record<string, string> = {
+  servico: 'bg-info/10 text-info border-info/20',
+  produto: 'bg-primary/10 text-foreground/70 border-primary/20',
+  transporte: 'bg-warning/10 text-warning border-warning/25',
+}
+
 function clientesFilterHref(params: { busca: string; status: string; regime?: string }) {
   const search = new URLSearchParams()
   if (params.busca) search.set('busca', params.busca)
@@ -343,6 +357,7 @@ function ClientesContent() {
               <th className="text-left px-3 py-2.5 section-label hidden sm:table-cell">CPF / CNPJ</th>
               <th className="text-left px-3 py-2.5 section-label hidden lg:table-cell">Cidade</th>
               <th className="text-left px-3 py-2.5 section-label hidden md:table-cell">Regime</th>
+              <th className="text-left px-3 py-2.5 section-label hidden xl:table-cell">Documento</th>
               <th className="text-right px-3 py-2.5 section-label hidden lg:table-cell">Mensalidade</th>
               <th className="text-left px-3 py-2.5 section-label">Status</th>
               <th className="text-left px-3 py-2.5 section-label">Saúde</th>
@@ -351,17 +366,17 @@ function ClientesContent() {
           </thead>
           <tbody className="divide-y divide-border">
             {isLoading ? (
-              <TableRowSkeleton cols={8} rows={8} />
+              <TableRowSkeleton cols={9} rows={8} />
             ) : isError ? (
               <TableEmptyState
-                colSpan={8}
+                colSpan={9}
                 icon={Users}
                 title="Não foi possível carregar clientes"
                 description="Atualize a página. Se continuar, valide regras e índices do Firestore."
               />
             ) : clientesFiltrados.length === 0 ? (
               <TableEmptyState
-                colSpan={8}
+                colSpan={9}
                 icon={Users}
                 title={busca || status || regime ? 'Nenhum cliente encontrado' : 'Ainda não há clientes'}
                 description={busca || status || regime
@@ -414,6 +429,13 @@ function ClientesContent() {
                     {c.regimeTributario ? (
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${REGIME_BADGE[c.regimeTributario as string] ?? REGIME_BADGE.isento}`}>
                         {REGIME_LABELS[c.regimeTributario as string] ?? (c.regimeTributario as string)}
+                      </span>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td className="px-3 py-2 hidden xl:table-cell">
+                    {c.categoriaFiscal && DOC_FISCAL_LABEL[c.categoriaFiscal as string] ? (
+                      <span title="Derivado do CNAE" className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${DOC_FISCAL_BADGE[c.categoriaFiscal as string]}`}>
+                        {DOC_FISCAL_LABEL[c.categoriaFiscal as string]}
                       </span>
                     ) : <span className="text-muted-foreground">—</span>}
                   </td>
