@@ -46,11 +46,14 @@ function getAccessToken() {
   try {
     const cmd = process.platform === 'win32' ? 'gcloud.cmd' : 'gcloud'
     const token = execFileSync(cmd, ['auth', 'print-access-token', `--project=${PROJECT_ID}`], {
-      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], shell: process.platform === 'win32',
     }).trim()
     if (token) return token
   } catch { /* tenta o firebase abaixo */ }
-  const raw = execFileSync('firebase', ['login:list', '--json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+  const firebaseCmd = process.platform === 'win32' ? 'firebase.cmd' : 'firebase'
+  const raw = execFileSync(firebaseCmd, ['login:list', '--json'], {
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], shell: process.platform === 'win32',
+  })
   const token = JSON.parse(raw)?.result?.[0]?.tokens?.access_token
   if (!token) throw new Error('Sem access_token. Rode: gcloud auth login   (ou  firebase login)')
   return token
