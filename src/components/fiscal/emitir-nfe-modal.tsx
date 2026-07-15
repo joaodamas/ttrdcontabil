@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Loader2, Plus, Trash2, CheckCircle2, Receipt } from 'lucide-react'
 import { toast } from 'sonner'
 import { getErrorMessage } from '@/lib/error-message'
@@ -29,6 +30,7 @@ interface EmitirNfeModalProps {
 export function EmitirNfeModal({ open, onOpenChange, clienteId: initialClienteId, onFinished }: EmitirNfeModalProps) {
   const [clientes, setClientes] = useState<ClienteRecord[]>([])
   const [clienteId, setClienteId] = useState('')
+  const [apenasProduto, setApenasProduto] = useState(true)
   const [produtos, setProdutos] = useState<ProdutoRecord[]>([])
   const [carregandoProdutos, setCarregandoProdutos] = useState(false)
 
@@ -56,8 +58,20 @@ export function EmitirNfeModal({ open, onOpenChange, clienteId: initialClienteId
       setClienteId(initialClienteId ?? '')
       setLinhas([]); setProdutoSel(''); setResultado(null)
       setTomadorCnpj(''); setTomadorNome(''); setTomadorEmail(''); setNatureza('Venda de mercadoria')
+      setApenasProduto(true)
     }
   }, [open, initialClienteId])
+
+  // Se veio de fora com um cliente específico que não é 'produto' (ex: link direto
+  // do cliente 360), não esconde ele por causa do filtro — desliga automaticamente.
+  useEffect(() => {
+    if (!initialClienteId || clientes.length === 0) return
+    const cliente = clientes.find((c) => c.id === initialClienteId)
+    if (cliente && cliente.categoriaFiscal !== 'produto') setApenasProduto(false)
+  }, [initialClienteId, clientes])
+
+  const clientesProduto = clientes.filter((c) => c.categoriaFiscal === 'produto')
+  const clientesExibidos = apenasProduto ? clientesProduto : clientes
 
   const carregarProdutos = useCallback(() => {
     if (!clienteId) { setProdutos([]); return }
@@ -138,11 +152,23 @@ export function EmitirNfeModal({ open, onOpenChange, clienteId: initialClienteId
       <div className="space-y-4">
         <Card className="border-border/65 bg-card/95 p-5 space-y-4">
           <div className="space-y-1.5">
-            <Label>Empresa emissora <span className="text-destructive">*</span></Label>
+            <div className="flex items-center justify-between">
+              <Label>Empresa emissora <span className="text-destructive">*</span></Label>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                <Switch checked={apenasProduto} onCheckedChange={setApenasProduto} className="scale-75" />
+                Só clientes com produto ({clientesProduto.length})
+              </label>
+            </div>
             <Select value={clienteId} onValueChange={(v) => setClienteId(v ?? '')}>
               <SelectTrigger><SelectValue placeholder="Selecione o cliente" /></SelectTrigger>
               <SelectContent>
-                {clientes.map((c) => <SelectItem key={c.id} value={c.id}>{clienteNome(c)}</SelectItem>)}
+                {clientesExibidos.length === 0 ? (
+                  <div className="px-2 py-3 text-xs text-muted-foreground text-center">
+                    Nenhum cliente classificado como &quot;produto&quot; — desligue o filtro acima.
+                  </div>
+                ) : (
+                  clientesExibidos.map((c) => <SelectItem key={c.id} value={c.id}>{clienteNome(c)}</SelectItem>)
+                )}
               </SelectContent>
             </Select>
           </div>
