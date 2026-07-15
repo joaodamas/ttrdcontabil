@@ -207,29 +207,32 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   const visibleSections = NAV_SECTIONS.filter(canSeeSection)
-  const logoNode = appConfig.logoUrl ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={appConfig.logoUrl} alt="" className="h-7 w-7 rounded-lg object-contain" />
-  ) : (
-    <div className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ background: appConfig.brandPrimary, color: onBrand }}>
-      <span style={{ fontFamily: 'inherit', fontWeight: 800, fontStyle: 'italic', letterSpacing: '-0.06em', lineHeight: 1, fontSize: 12 }}>
-        {appConfig.monogram}
-      </span>
-    </div>
-  )
 
   return (
     <div className="flex h-full flex-col">
       {/* Logo */}
-      <div className="flex h-14 items-center gap-2.5 border-b border-border px-4 shrink-0">
-        {logoNode}
-        <div className="min-w-0">
-          <p className="truncate text-sm font-bold tracking-tight leading-none">
-            {appConfig.name}
-          </p>
-          <p className="truncate text-[10px] text-muted-foreground mt-0.5">{appConfig.tagline}</p>
+      {appConfig.logoUrl ? (
+        <div className="flex h-14 items-center border-b border-border px-4 shrink-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={appConfig.logoUrl} alt={appConfig.name} className="hidden h-9 w-auto object-contain dark:block" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={appConfig.logoUrlLight ?? appConfig.logoUrl} alt={appConfig.name} className="block h-9 w-auto object-contain dark:hidden" />
         </div>
-      </div>
+      ) : (
+        <div className="flex h-14 items-center gap-2.5 border-b border-border px-4 shrink-0">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ background: appConfig.brandPrimary, color: onBrand }}>
+            <span style={{ fontFamily: 'inherit', fontWeight: 800, fontStyle: 'italic', letterSpacing: '-0.06em', lineHeight: 1, fontSize: 12 }}>
+              {appConfig.monogram}
+            </span>
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold tracking-tight leading-none">
+              {appConfig.name}
+            </p>
+            <p className="truncate text-[10px] text-muted-foreground mt-0.5">{appConfig.tagline}</p>
+          </div>
+        </div>
+      )}
 
       {/* Hoje — indicadores contextuais */}
       <HojeSummary />

@@ -333,6 +333,7 @@ function ClientesContent() {
             <tr>
               <th className="text-left px-3 py-2.5 section-label">Nome / Razão Social</th>
               <th className="text-left px-3 py-2.5 section-label hidden sm:table-cell">CPF / CNPJ</th>
+              <th className="text-left px-3 py-2.5 section-label hidden lg:table-cell">Cidade</th>
               <th className="text-left px-3 py-2.5 section-label hidden md:table-cell">Regime</th>
               <th className="text-right px-3 py-2.5 section-label hidden lg:table-cell">Mensalidade</th>
               <th className="text-left px-3 py-2.5 section-label">Status</th>
@@ -342,17 +343,17 @@ function ClientesContent() {
           </thead>
           <tbody className="divide-y divide-border">
             {isLoading ? (
-              <TableRowSkeleton cols={7} rows={8} />
+              <TableRowSkeleton cols={8} rows={8} />
             ) : isError ? (
               <TableEmptyState
-                colSpan={7}
+                colSpan={8}
                 icon={Users}
                 title="Não foi possível carregar clientes"
                 description="Atualize a página. Se continuar, valide regras e índices do Firestore."
               />
             ) : clientesFiltrados.length === 0 ? (
               <TableEmptyState
-                colSpan={7}
+                colSpan={8}
                 icon={Users}
                 title={busca || status || regime ? 'Nenhum cliente encontrado' : 'Ainda não há clientes'}
                 description={busca || status || regime
@@ -389,9 +390,7 @@ function ClientesContent() {
                         <div className="flex items-center gap-2 mt-0.5">
                           {c.nomeFantasia
                             ? <p className="text-xs text-muted-foreground truncate">{c.nomeFantasia as string}</p>
-                            : (c.cidade && c.uf)
-                              ? <p className="text-xs text-muted-foreground truncate">{c.cidade as string} · {c.uf as string}</p>
-                              : null}
+                            : null}
                           {vencimento && <span className="text-[10px] text-muted-foreground/70">dia {vencimento}</span>}
                         </div>
                       </div>
@@ -399,6 +398,9 @@ function ClientesContent() {
                   </td>
                   <td className="px-3 py-2 text-muted-foreground font-mono text-xs hidden sm:table-cell">
                     {formatCpfCnpj(c.cpfCnpj as string)}
+                  </td>
+                  <td className="px-3 py-2 text-muted-foreground text-xs hidden lg:table-cell">
+                    {c.cidade && c.uf ? `${c.cidade as string} · ${c.uf as string}` : c.cidade ? (c.cidade as string) : '—'}
                   </td>
                   <td className="px-3 py-2 hidden md:table-cell">
                     {c.regimeTributario ? (

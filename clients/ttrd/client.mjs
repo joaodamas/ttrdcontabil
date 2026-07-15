@@ -32,7 +32,8 @@ export default {
     NEXT_PUBLIC_APP_TAGLINE: "Gestão Contábil Integrada",
     NEXT_PUBLIC_APP_TENANT_ID: "ttrd",
     NEXT_PUBLIC_APP_BRAND_PRIMARY: "#2243A5", // azul TTRD (aplicado em toda a UI via brand-theme)
-    NEXT_PUBLIC_APP_LOGO_URL: "", // vazio → usa o monograma (iniciais na cor da marca)
+    NEXT_PUBLIC_APP_LOGO_URL: "/logo-ttrd.png",
+    NEXT_PUBLIC_APP_LOGO_URL_LIGHT: "/logo-ttrd-light.png",
   },
 
   // Dados do escritório usados pelo seed (scripts/seed-single-tenant.mjs).

@@ -5,6 +5,7 @@ const env = {
   tenantId: process.env.NEXT_PUBLIC_APP_TENANT_ID,
   brandPrimary: process.env.NEXT_PUBLIC_APP_BRAND_PRIMARY,
   logoUrl: process.env.NEXT_PUBLIC_APP_LOGO_URL,
+  logoUrlLight: process.env.NEXT_PUBLIC_APP_LOGO_URL_LIGHT,
 }
 
 function clean(value: string | undefined, fallback: string) {
@@ -30,6 +31,8 @@ export const appConfig = {
   tenantId: clean(env.tenantId, 'ttrd'),
   brandPrimary: clean(env.brandPrimary, '#2243A5'),
   logoUrl: env.logoUrl?.trim() || null,
+  // Variante recolorida pra sidebar/fundo claro. Sem ela, usa a mesma logo do tema escuro.
+  logoUrlLight: env.logoUrlLight?.trim() || env.logoUrl?.trim() || null,
   monogram: monogram(shortName, name),
 }
 
