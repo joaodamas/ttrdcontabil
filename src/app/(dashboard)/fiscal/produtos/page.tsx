@@ -68,11 +68,7 @@ export default function ProdutosPage() {
         <div className="flex items-end gap-2">
           <div className="space-y-1.5">
             <p className="section-label">Empresa emissora</p>
-            <Select
-              items={Object.fromEntries(clientes.map((c) => [c.id, clienteNome(c)]))}
-              value={clienteId}
-              onValueChange={(v) => setClienteId(v ?? '')}
-            >
+            <Select value={clienteId} onValueChange={(v) => setClienteId(v ?? '')}>
               <SelectTrigger className="w-[260px]">
                 <SelectValue placeholder={loadingClientes ? 'Carregando...' : 'Selecione o cliente'} />
               </SelectTrigger>

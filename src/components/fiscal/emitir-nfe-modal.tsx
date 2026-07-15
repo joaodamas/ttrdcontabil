@@ -139,11 +139,7 @@ export function EmitirNfeModal({ open, onOpenChange, clienteId: initialClienteId
         <Card className="border-border/65 bg-card/95 p-5 space-y-4">
           <div className="space-y-1.5">
             <Label>Empresa emissora <span className="text-destructive">*</span></Label>
-            <Select
-              items={Object.fromEntries(clientes.map((c) => [c.id, clienteNome(c)]))}
-              value={clienteId}
-              onValueChange={(v) => setClienteId(v ?? '')}
-            >
+            <Select value={clienteId} onValueChange={(v) => setClienteId(v ?? '')}>
               <SelectTrigger><SelectValue placeholder="Selecione o cliente" /></SelectTrigger>
               <SelectContent>
                 {clientes.map((c) => <SelectItem key={c.id} value={c.id}>{clienteNome(c)}</SelectItem>)}
@@ -159,11 +155,7 @@ export function EmitirNfeModal({ open, onOpenChange, clienteId: initialClienteId
               </div>
               <div className="flex items-end gap-2">
                 <div className="flex-1">
-                  <Select
-                    items={Object.fromEntries(produtos.map((p) => [p.id, `${String(p.codigo ?? '')} · ${String(p.descricao ?? '')}`]))}
-                    value={produtoSel}
-                    onValueChange={(v) => setProdutoSel(v ?? '')}
-                  >
+                  <Select value={produtoSel} onValueChange={(v) => setProdutoSel(v ?? '')}>
                     <SelectTrigger>
                       <SelectValue placeholder={carregandoProdutos ? 'Carregando...' : (produtos.length ? 'Escolha um produto' : 'Nenhum produto no catálogo — cadastre um acima')} />
                     </SelectTrigger>

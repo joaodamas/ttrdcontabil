@@ -6,7 +6,42 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+// Base UI's <Select.Value> only renders the selected item's label if <Select.Root>
+// receives an `items` map — otherwise it falls back to the raw value (e.g. a Firestore
+// doc id) after selection. Every <Select> in this app declares its options as plain
+// <SelectItem> JSX instead of an `items` prop, so we auto-derive that map by walking
+// the children tree — callers that already pass `items` explicitly keep working as-is.
+function collectSelectItems(node: React.ReactNode, acc: Record<string, React.ReactNode>) {
+  React.Children.forEach(node, (child) => {
+    if (!React.isValidElement(child)) return
+    if (child.type === SelectItem) {
+      const props = child.props as { value?: unknown; children?: React.ReactNode }
+      if (props.value != null) acc[String(props.value)] = props.children
+      return
+    }
+    const childProps = child.props as { children?: React.ReactNode } | undefined
+    if (childProps?.children) collectSelectItems(childProps.children, acc)
+  })
+}
+
+function Select<Value = string, Multiple extends boolean | undefined = false>({
+  items,
+  children,
+  ...props
+}: SelectPrimitive.Root.Props<Value, Multiple>) {
+  const autoItems = React.useMemo(() => {
+    if (items) return items
+    const acc: Record<string, React.ReactNode> = {}
+    collectSelectItems(children, acc)
+    return acc as NonNullable<SelectPrimitive.Root.Props<Value, Multiple>["items"]>
+  }, [items, children])
+
+  return (
+    <SelectPrimitive.Root items={autoItems} {...props}>
+      {children}
+    </SelectPrimitive.Root>
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (
