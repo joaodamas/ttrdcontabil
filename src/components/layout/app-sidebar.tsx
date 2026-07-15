@@ -75,14 +75,14 @@ const NAV_SECTIONS: NavSection[] = [
   },
   {
     id: 'fiscal',
-    label: 'Fiscal & NFS-e',
+    label: 'Fiscal',
     icon: Receipt,
     items: [
-      { href: '/fiscal',           label: 'Emissão NFS-e',    icon: Receipt,   telaKey: 'fiscal' },
-      { href: '/fiscal/historico', label: 'Histórico de Emissões', icon: History, telaKey: 'fiscal' },
-      { href: '/fiscal/produtos',  label: 'Produtos (NF-e)',  icon: Package2,  telaKey: 'fiscal' },
-      { href: '/fiscal/emitir-nfe', label: 'Emitir NF-e',     icon: Receipt,   telaKey: 'fiscal' },
-      { href: '/ir',               label: 'Imposto de Renda', icon: FileText,  telaKey: 'ir' },
+      { href: '/fiscal',            label: 'Emitir NFS-e',     icon: Receipt,   telaKey: 'fiscal' },
+      { href: '/fiscal/emitir-nfe', label: 'Emitir NF-e',      icon: Receipt,   telaKey: 'fiscal' },
+      { href: '/fiscal/produtos',   label: 'Produtos (NF-e)',  icon: Package2,  telaKey: 'fiscal' },
+      { href: '/fiscal/historico',  label: 'Histórico de Emissões', icon: History, telaKey: 'fiscal' },
+      { href: '/ir',                label: 'Imposto de Renda', icon: FileText,  telaKey: 'ir' },
     ],
   },
   {

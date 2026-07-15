@@ -51,6 +51,7 @@ const TENANT_SCOPED_COLLECTIONS = new Set([
   'clientes_fiscal',
   'clientes_fiscal_integracao',
   'fiscal_conectores',
+  'produtos',
   'nfse_rascunhos',
   'nfse_emitidas',
   'nfse_eventos',

@@ -58,10 +58,21 @@ function getCredenciaisBloqueios(fiscal: Record<string, unknown>) {
   return []
 }
 
-export async function fetchFiscalSnapshot(): Promise<FiscalSnapshot> {
+function isNfe(doc: Record<string, unknown>): boolean {
+  return doc.tipoDocumento === 'nfe'
+}
+
+function valorDocumento(doc: Record<string, unknown>): number {
+  return Number((doc.valorServico as number | undefined) ?? (doc.valorTotal as number | undefined) ?? 0)
+}
+
+async function fetchFiscalSnapshotByTipo(tipo: 'nfse' | 'nfe'): Promise<FiscalSnapshot> {
   const hoje = new Date()
   const inicioMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
   const fimMes = Timestamp.fromDate(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0, 23, 59, 59))
+  // tipoDocumento não tem índice composto dedicado — filtrado no cliente sobre
+  // um lote maior, em vez de arriscar um FAILED_PRECONDITION em produção.
+  const matchesTipo = (doc: Record<string, unknown>) => (tipo === 'nfe' ? isNfe(doc) : !isNfe(doc))
 
   const [emitidaMesR, pendenteR, erroR, canceladaR, recentesR, rascunhosR] = await Promise.allSettled([
     listDocuments('nfse_emitidas', [
@@ -69,23 +80,23 @@ export async function fetchFiscalSnapshot(): Promise<FiscalSnapshot> {
       where('dataEmissao', '>=', inicioMes),
       where('dataEmissao', '<=', fimMes),
     ]),
-    listDocuments('nfse_emitidas', [where('status', 'in', ['pendente_processamento', 'cancelamento_pendente'])]),
-    listDocuments('nfse_emitidas', [where('status', 'in', ['erro_integracao', 'rejeitada'])]),
+    listDocuments('nfse_emitidas', [where('status', 'in', ['pendente_processamento', 'cancelamento_pendente']), limit(200)]),
+    listDocuments('nfse_emitidas', [where('status', 'in', ['erro_integracao', 'rejeitada']), limit(200)]),
     listDocuments('nfse_emitidas', [
       where('status', '==', 'cancelada'),
       where('dataEmissao', '>=', inicioMes),
       where('dataEmissao', '<=', fimMes),
     ]),
-    listDocuments('nfse_emitidas', [orderBy('criadoEm', 'desc'), limit(5)]),
-    listDocuments('nfse_rascunhos', [where('status', 'in', ['rascunho', 'aguardando_emissao', 'erro_integracao']), limit(10)]),
+    listDocuments('nfse_emitidas', [orderBy('criadoEm', 'desc'), limit(tipo === 'nfe' ? 30 : 5)]),
+    listDocuments('nfse_rascunhos', [where('status', 'in', ['rascunho', 'aguardando_emissao', 'erro_integracao']), limit(30)]),
   ])
 
-  const emitidaMesData = emitidaMesR.status === 'fulfilled' ? emitidaMesR.value : []
-  const pendenteData = pendenteR.status === 'fulfilled' ? pendenteR.value : []
-  const erroData = erroR.status === 'fulfilled' ? erroR.value : []
-  const canceladaData = canceladaR.status === 'fulfilled' ? canceladaR.value : []
-  const recentesData = recentesR.status === 'fulfilled' ? recentesR.value : []
-  const rascunhosData = rascunhosR.status === 'fulfilled' ? rascunhosR.value : []
+  const emitidaMesData = (emitidaMesR.status === 'fulfilled' ? emitidaMesR.value : []).filter(matchesTipo)
+  const pendenteData = (pendenteR.status === 'fulfilled' ? pendenteR.value : []).filter(matchesTipo)
+  const erroData = (erroR.status === 'fulfilled' ? erroR.value : []).filter(matchesTipo)
+  const canceladaData = (canceladaR.status === 'fulfilled' ? canceladaR.value : []).filter(matchesTipo)
+  const recentesData = (recentesR.status === 'fulfilled' ? recentesR.value : []).filter(matchesTipo)
+  const rascunhosData = tipo === 'nfe' ? [] : (rascunhosR.status === 'fulfilled' ? rascunhosR.value : [])
 
   const rascunhosNormalizados = (rascunhosData as NotaFiscalRecord[]).map((r) => {
     const dados = (r.dados ?? {}) as Record<string, unknown>
@@ -100,12 +111,20 @@ export async function fetchFiscalSnapshot(): Promise<FiscalSnapshot> {
 
   return {
     emitidaMesCount: emitidaMesData.length,
-    somaEmitidaMes: (emitidaMesData as NotaFiscalRecord[]).reduce((acc, d) => acc + (d.valorServico ?? 0), 0),
+    somaEmitidaMes: (emitidaMesData as Record<string, unknown>[]).reduce((acc, d) => acc + valorDocumento(d), 0),
     pendenteCount: pendenteData.length + rascunhosData.length,
     erroCount: erroData.length,
     canceladaCount: canceladaData.length,
-    notas: [...rascunhosNormalizados, ...(recentesData as NotaFiscalRecord[])].slice(0, 10),
+    notas: [...rascunhosNormalizados, ...(recentesData as NotaFiscalRecord[])].slice(0, tipo === 'nfe' ? 10 : 10),
   }
+}
+
+export async function fetchFiscalSnapshot(): Promise<FiscalSnapshot> {
+  return fetchFiscalSnapshotByTipo('nfse')
+}
+
+export async function fetchFiscalSnapshotNfe(): Promise<FiscalSnapshot> {
+  return fetchFiscalSnapshotByTipo('nfe')
 }
 
 export async function removeRascunho(id: string) {

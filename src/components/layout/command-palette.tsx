@@ -16,7 +16,7 @@ import {
 import {
   BarChart3, Users, ClipboardList, Layers,
   FolderOpen, Receipt, FileText, Wallet, Settings,
-  Plus, CheckSquare, DollarSign, Clock3, Star,
+  Plus, CheckSquare, DollarSign, Clock3, Star, Package2,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { canAccessTela, type TelaKey } from '@/lib/permissions'
@@ -45,7 +45,9 @@ const NAV_ITEMS: CommandPaletteItem[] = [
   { label: 'Tarefas', href: '/tarefas', icon: ClipboardList, telaKey: 'tarefas' },
   { label: 'Competências', href: '/competencias', icon: Layers, telaKey: 'competencias' },
   { label: 'Fechamento Mensal', href: '/fechamento', icon: FolderOpen, telaKey: 'fechamento' },
-  { label: 'NFS-e / Fiscal', href: '/fiscal', icon: Receipt, telaKey: 'fiscal' },
+  { label: 'Emitir NFS-e', href: '/fiscal', icon: Receipt, telaKey: 'fiscal' },
+  { label: 'Emitir NF-e', href: '/fiscal/emitir-nfe', icon: Receipt, telaKey: 'fiscal' },
+  { label: 'Produtos (NF-e)', href: '/fiscal/produtos', icon: Package2, telaKey: 'fiscal' },
   { label: 'Histórico de Emissões', href: '/fiscal/historico', icon: Receipt, telaKey: 'fiscal' },
   { label: 'Imposto de Renda', href: '/ir', icon: FileText, telaKey: 'ir' },
   { label: 'Financeiro', href: '/financeiro', icon: Wallet, telaKey: 'financeiro' },

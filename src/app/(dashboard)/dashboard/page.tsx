@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { getDocument, listDocuments } from '@/lib/firestore-client'
@@ -15,9 +16,13 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Users, ClipboardList, CheckSquare, TrendingUp,
   AlertTriangle, ArrowRight, CheckCircle2, DollarSign,
   Receipt, Bell, CalendarClock, WalletCards, Gauge, BarChart2, Sparkles,
+  ChevronDown, Package2,
 } from 'lucide-react'
 
 /* ─── Skeleton ──────────────────────────────────────────────────────────── */
@@ -254,6 +259,7 @@ function InsightCard({
 }
 
 function DashboardV2(props: DashboardV2Props) {
+  const router = useRouter()
   const totalUrgente = props.tarefasVencidas.length + props.lancamentosVencidos.length + props.alertasNFSe.length
   const competenciasAbertasMes = props.compCounts.aberta ?? 0
   const tarefasCriticas = props.tarefasVencidas.slice(0, 4)
@@ -275,9 +281,19 @@ function DashboardV2(props: DashboardV2Props) {
           <Link href="/hoje" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
             <CalendarClock className="size-3.5" /> Fila de execução
           </Link>
-          <Link href="/fiscal?emitir=1" className={buttonVariants({ size: 'sm' })}>
-            <Receipt className="size-3.5" /> Emitir NFS-e
-          </Link>
+          <DropdownMenu>
+            <DropdownMenuTrigger className={cn(buttonVariants({ size: 'sm' }), 'gap-1.5')}>
+              <Receipt className="size-3.5" /> Emitir <ChevronDown className="size-3.5" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => router.push('/fiscal?emitir=1')}>
+                <Receipt className="size-3.5" /> NFS-e
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push('/fiscal/emitir-nfe')}>
+                <Package2 className="size-3.5" /> NF-e
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
