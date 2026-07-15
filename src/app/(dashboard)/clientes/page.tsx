@@ -24,7 +24,7 @@ import {
   ShieldCheck, ShieldAlert, AlertTriangle, MessageCircle, FileDown, Upload,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useClientesList } from '@/features/clientes/hooks'
+import { useClientesList, useClientesRisco } from '@/features/clientes/hooks'
 import { clientesFiltroSchema } from '@/features/clientes/schemas'
 import type { ClienteRecord } from '@/features/clientes/types'
 
@@ -60,14 +60,21 @@ function clienteInitials(razaoSocial: string): string {
 
 type SaudeNivel = 'critica' | 'atencao' | 'estavel'
 
-function saudeCliente(c: ClienteRecord): { nivel: SaudeNivel; motivo: string } {
-  if ((c.status as string) === 'suspenso')
-    return { nivel: 'critica', motivo: 'Suspenso' }
-  if ((c.riscoInadimplencia as boolean) === true)
-    return { nivel: 'atencao', motivo: 'Inadimplência' }
-  if ((c.status as string) === 'inativo')
-    return { nivel: 'atencao', motivo: 'Inativo' }
-  return { nivel: 'estavel', motivo: 'Sem alertas' }
+// Saúde reflete risco operacional real (cobrança vencida, tarefa atrasada — mesmo
+// critério do "Clientes em risco" do Painel), não o status administrativo — esse já
+// tem sua própria coluna. Duas colunas mostrando a mesma coisa é ruído, não sinal.
+function saudeCliente(motivosRisco: string[]): { nivel: SaudeNivel; motivo: string } {
+  if (motivosRisco.length === 0) return { nivel: 'estavel', motivo: 'Sem alertas' }
+  return { nivel: motivosRisco.length > 1 ? 'critica' : 'atencao', motivo: motivosRisco.join(' · ') }
+}
+
+// Alguns lançamentos antigos gravaram `clienteId` como o CNPJ em vez do id do
+// documento (achado testando esta tela) — cruza pelos dois pra não perder o sinal.
+function motivosRiscoDoCliente(c: ClienteRecord, riscoMap: Map<string, string[]>): string[] {
+  const porId = riscoMap.get(c.id as string)
+  if (porId) return porId
+  const cnpjDigits = String(c.cpfCnpj ?? '').replace(/\D/g, '')
+  return (cnpjDigits && riscoMap.get(cnpjDigits)) || []
 }
 
 function SaudeBadge({ nivel, motivo }: { nivel: SaudeNivel; motivo: string }) {
@@ -227,6 +234,7 @@ function ClientesContent() {
     : { busca: '', status: '' }
   const regime = searchParams.get('regime') ?? ''
   const { filteredClientes, isLoading, isError } = useClientesList({ busca, status })
+  const riscoMap = useClientesRisco()
   const [modalClienteId,   setModalClienteId]   = useState<string | null>(null)
   const [modalClienteNome, setModalClienteNome] = useState('')
   const [filterSheetOpen,  setFilterSheetOpen]  = useState(false)
@@ -363,7 +371,7 @@ function ClientesContent() {
               />
             ) : (
               clientesFiltrados.map((c) => {
-                const saude = saudeCliente(c)
+                const saude = saudeCliente(motivosRiscoDoCliente(c, riscoMap))
                 const temWhatsApp = !!(c.whatsapp ?? c.whatsappFinanceiro ?? c.aceiteWhatsAppCobranca)
                 const mensalidade = c.mensalidade as number | undefined
                 const vencimento = c.vencimento as string | undefined

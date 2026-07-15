@@ -1,5 +1,6 @@
-import { where, orderBy, limit, type QueryConstraint } from 'firebase/firestore'
+import { where, orderBy, limit, Timestamp, type QueryConstraint } from 'firebase/firestore'
 import { getDocument, listDocuments } from '@/lib/firestore-client'
+import { tsToDate } from '@/lib/utils'
 import type { ClienteRecord, ClienteDetalheData } from './types'
 
 export async function fetchClientes(params: {
@@ -17,6 +18,45 @@ export async function fetchClientes(params: {
       String(a.razaoSocial ?? a.nomeFantasia ?? a.id)
         .localeCompare(String(b.razaoSocial ?? b.nomeFantasia ?? b.id), 'pt-BR')
     )
+}
+
+/** Motivos de risco por cliente — mesmo critério do "Clientes em risco" do Painel
+ *  (cobrança vencida + tarefa atrasada), pra a coluna Saúde da listagem de Clientes
+ *  refletir dado real em vez do campo `riscoInadimplencia`, que nunca é gravado. */
+export async function fetchClientesRiscoMap(): Promise<Map<string, string[]>> {
+  const hoje = new Date()
+  const hojeTs = Timestamp.fromDate(hoje)
+
+  const [lancamentos, tarefas] = await Promise.all([
+    listDocuments<Record<string, unknown>>('lancamentos', [
+      where('tipo', '==', 'receita'),
+      where('status', 'in', ['pendente', 'atrasado']),
+      limit(500),
+    ]),
+    listDocuments<Record<string, unknown>>('tarefas', [
+      where('status', 'in', ['pendente', 'em_andamento']),
+      limit(500),
+    ]),
+  ])
+
+  const map = new Map<string, string[]>()
+  function add(clienteId: unknown, motivo: string) {
+    if (typeof clienteId !== 'string' || !clienteId) return
+    const atual = map.get(clienteId) ?? []
+    if (!atual.includes(motivo)) atual.push(motivo)
+    map.set(clienteId, atual)
+  }
+
+  for (const l of lancamentos) {
+    const vencida = l.status === 'atrasado' || ((l.dataVencimento as Timestamp | undefined)?.toMillis?.() ?? Infinity) < hojeTs.toMillis()
+    if (vencida) add(l.clienteId, 'Cobrança vencida')
+  }
+  for (const t of tarefas) {
+    const prazo = tsToDate(t.dataPrazo as Timestamp | undefined)
+    if (prazo && prazo < hoje) add(t.clienteId, 'Tarefa atrasada')
+  }
+
+  return map
 }
 
 export async function fetchClienteDetail(id: string): Promise<ClienteDetalheData> {

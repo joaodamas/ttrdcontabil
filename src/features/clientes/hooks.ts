@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ClienteRecord } from './types'
-import { useClientesListQuery, useClienteDetailQuery, clientesKeys } from './queries'
+import { useClientesListQuery, useClienteDetailQuery, useClientesRiscoQuery, clientesKeys } from './queries'
 
 function filterClientes(clientes: ClienteRecord[], busca: string): ClienteRecord[] {
   if (!busca) return clientes
@@ -30,6 +30,13 @@ export function useClientesList(params: { busca: string; status: string }) {
     filteredClientes,
     total: filteredClientes.length,
   }
+}
+
+/** Motivos de risco por cliente (cobrança vencida, tarefa atrasada) — mesmo critério
+ *  usado no "Clientes em risco" do Painel. Retorna Map vazio em caso de erro. */
+export function useClientesRisco() {
+  const query = useClientesRiscoQuery()
+  return query.data ?? new Map<string, string[]>()
 }
 
 /** Hook TanStack Query para dados completos do cliente 360°.

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFeatureKeys } from '@/lib/feature-keys'
 import { queryStaleTimes } from '@/lib/query-stale-times'
-import { fetchClientes, fetchClienteDetail } from './services'
+import { fetchClientes, fetchClienteDetail, fetchClientesRiscoMap } from './services'
 
 const base = createFeatureKeys('clientes')
 
@@ -11,6 +11,15 @@ export const clientesKeys = {
     [...base.list('list'), params.status ?? 'todos'] as const,
   detail: (id: string)      => [...base.all, 'detail', id] as const,
   fiscal: (id: string)      => [...base.all, 'fiscal', id] as const,
+  risco:  ()                => [...base.list('risco')] as const,
+}
+
+export function useClientesRiscoQuery() {
+  return useQuery({
+    queryKey: clientesKeys.risco(),
+    queryFn:  fetchClientesRiscoMap,
+    staleTime: queryStaleTimes.operational,
+  })
 }
 
 export function useClientesListQuery(params: { status?: string } = {}) {
