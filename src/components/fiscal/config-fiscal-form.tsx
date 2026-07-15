@@ -14,8 +14,8 @@ import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Loader2 } from 'lucide-react'
-import { createDocument, updateDocument } from '@/lib/firestore-client'
+import { Loader2, Search } from 'lucide-react'
+import { createDocument, updateDocument, getDocument } from '@/lib/firestore-client'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { getFirebaseApp } from '@/lib/firebase'
 import { getErrorMessage } from '@/lib/error-message'
@@ -23,6 +23,7 @@ import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificad
 import { Lc116Picker } from '@/components/fiscal/lc116-picker'
 import { Switch } from '@/components/ui/switch'
 import { AlertTriangle } from 'lucide-react'
+import { buscarDadosCnpj } from '@/lib/cnpj-lookup'
 
 export const MUNICIPIOS = [
   { ibge: '3525904', nome: 'Jundiaí' },
@@ -89,8 +90,9 @@ interface Props {
 
 export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, defaultValues, onSaved }: Props) {
   const [saving, setSaving] = useState(false)
+  const [buscandoCnpj, setBuscandoCnpj] = useState(false)
 
-  const { register, handleSubmit, control, watch, reset, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, control, watch, reset, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       ambienteEmissao:  'homologacao',
@@ -197,6 +199,39 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
     }
   }
 
+  async function buscarCnpj() {
+    setBuscandoCnpj(true)
+    try {
+      const cliente = await getDocument<{ cpfCnpj?: string }>('clientes', clienteId)
+      const cnpj = cliente?.cpfCnpj ?? ''
+      const dados = await buscarDadosCnpj(cnpj)
+
+      if (dados.regimeTributario) setValue('regimeTributario', dados.regimeTributario)
+      setValue('optanteSimples', dados.optanteSimples)
+      if (dados.cnae) setValue('cnae', dados.cnae)
+
+      const municipioConhecido = dados.municipioIbge
+        ? MUNICIPIOS.find(m => m.ibge === dados.municipioIbge)
+        : undefined
+      if (municipioConhecido) setValue('municipioIbge', municipioConhecido.ibge)
+
+      const avisos: string[] = []
+      if (!dados.regimeTributario) avisos.push('regime tributário (Lucro Presumido/Real) precisa ser confirmado manualmente')
+      if (dados.municipioIbge && !municipioConhecido) {
+        avisos.push(`município (${dados.municipio ?? dados.municipioIbge}/${dados.uf ?? '?'}) não tem conector direto — mantenha "Spedy" como provedor`)
+      }
+      toast.success(
+        avisos.length > 0
+          ? `Dados da Receita preenchidos. Falta revisar: ${avisos.join('; ')}.`
+          : 'Dados da Receita preenchidos — revise antes de salvar.'
+      )
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Não foi possível buscar os dados do CNPJ.'))
+    } finally {
+      setBuscandoCnpj(false)
+    }
+  }
+
   return (
     <AppModal
       open={open}
@@ -207,6 +242,11 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       size="lg"
     >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-1">
+
+          <Button type="button" variant="outline" size="sm" onClick={buscarCnpj} disabled={buscandoCnpj} className="gap-1.5">
+            {buscandoCnpj ? <Loader2 className="size-3.5 animate-spin" /> : <Search className="size-3.5" />}
+            Buscar dados do CNPJ
+          </Button>
 
           {/* Provedor de emissão */}
           <div className="space-y-1.5">
