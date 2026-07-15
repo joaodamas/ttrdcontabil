@@ -79,7 +79,7 @@ const NAV_SECTIONS: NavSection[] = [
     icon: Receipt,
     items: [
       { href: '/fiscal',           label: 'Emissão NFS-e',    icon: Receipt,   telaKey: 'fiscal' },
-      { href: '/fiscal/historico', label: 'Histórico NFS-e',  icon: History,   telaKey: 'fiscal' },
+      { href: '/fiscal/historico', label: 'Histórico de Emissões', icon: History, telaKey: 'fiscal' },
       { href: '/fiscal/produtos',  label: 'Produtos (NF-e)',  icon: Package2,  telaKey: 'fiscal' },
       { href: '/fiscal/emitir-nfe', label: 'Emitir NF-e',     icon: Receipt,   telaKey: 'fiscal' },
       { href: '/ir',               label: 'Imposto de Renda', icon: FileText,  telaKey: 'ir' },
@@ -175,8 +175,18 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     return true
   }
 
+  const allNavHrefs = NAV_SECTIONS.flatMap(s => [
+    ...(s.href ? [s.href] : []),
+    ...(s.items?.map(i => i.href) ?? []),
+  ])
+  // Entre hrefs que casam com a rota atual (ex: '/fiscal' e '/fiscal/produtos'
+  // casam ambos em '/fiscal/produtos'), só o mais específico (mais longo) fica ativo.
+  const bestMatchHref = allNavHrefs
+    .filter(href => pathname === href || pathname.startsWith(href + '/'))
+    .sort((a, b) => b.length - a.length)[0]
+
   function isActive(href: string) {
-    return pathname === href || pathname.startsWith(href + '/')
+    return href === bestMatchHref
   }
 
   function isSectionActive(section: NavSection) {

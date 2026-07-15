@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useMemo, useState, useEffect, Suspense, Fragment } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useCallback, useMemo, useState, useEffect, useRef, Suspense, Fragment } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { where, orderBy, Timestamp, type QueryConstraint } from 'firebase/firestore'
 import { getFunctions, httpsCallable } from 'firebase/functions'
@@ -13,14 +13,18 @@ import { exportToCsv } from '@/lib/export-csv'
 import { exportToExcel } from '@/lib/export-excel'
 import { getFirebaseApp } from '@/lib/firebase'
 import { getErrorMessage } from '@/lib/error-message'
+import { fetchClientes } from '@/features/clientes/services'
+import type { ClienteRecord } from '@/features/clientes/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { AppModal } from '@/components/ui/app-modal'
 import { FilterBtn } from '@/components/ui/filter-btn'
 import { DataTableShell } from '@/components/ui/data-table-shell'
 import { Textarea } from '@/components/ui/textarea'
-import { ArrowLeft, Download, Eye, FileText, Loader2, RefreshCw, XCircle, History } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Download, Eye, FileText, Loader2, RefreshCw, Search, XCircle, History } from 'lucide-react'
 import { LogsNfseModal } from '@/components/fiscal/logs-nfse-modal'
 import { HeatmapFiscal } from '@/components/fiscal/heatmap-fiscal'
 
@@ -33,24 +37,57 @@ const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondar
   erro_integracao: { label: 'Erro', variant: 'destructive' },
 }
 
+const TIPO_LABEL: Record<string, string> = { nfe: 'NF-e', nfse: 'NFS-e' }
+
+function tipoDocumentoDe(n: Record<string, unknown>): 'nfe' | 'nfse' {
+  return n.tipoDocumento === 'nfe' ? 'nfe' : 'nfse'
+}
+
+function valorDocumento(n: Record<string, unknown>): number {
+  return Number(n.valorServico ?? n.valorTotal ?? 0)
+}
+
 const PAGE_SIZE = 20
 
 type NotaGroup = { label: string; notas: Array<Record<string, unknown>>; valorTotal: number }
 
 function FiscalHistoricoContent() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const clienteId = searchParams.get('clienteId') ?? ''
   const status = searchParams.get('status') ?? ''
+  const tipo = searchParams.get('tipo') ?? ''
+  const numero = searchParams.get('numero') ?? ''
   const mes = searchParams.get('mes') ? parseInt(searchParams.get('mes')!) : undefined
   const ano = searchParams.get('ano') ? parseInt(searchParams.get('ano')!) : undefined
+  const buscaAtiva = Boolean(numero) || Boolean(tipo)
 
   const [notas, setNotas] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(true)
   const [hasMore, setHasMore] = useState(false)
   const [lastCursor, setLastCursor] = useState<FirestoreCursor | null>(null)
+  const [clientes, setClientes] = useState<ClienteRecord[]>([])
+  const [heatmapOpen, setHeatmapOpen] = useState(false)
+  const numeroTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  useEffect(() => {
+    fetchClientes().then(setClientes).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    return () => { if (numeroTimeoutRef.current) clearTimeout(numeroTimeoutRef.current) }
+  }, [])
+
+  function updateParam(key: string, value: string) {
+    const params = new URLSearchParams(searchParams.toString())
+    if (value) params.set(key, value)
+    else params.delete(key)
+    router.push(`/fiscal/historico?${params.toString()}`)
+  }
+
   const filterKey = useMemo(
-    () => JSON.stringify({ clienteId, status, mes, ano }),
-    [ano, clienteId, mes, status]
+    () => JSON.stringify({ clienteId, status, mes, ano, tipo, numero }),
+    [ano, clienteId, mes, status, tipo, numero]
   )
   const [pagination, setPagination] = useState<{
     filterKey: string
@@ -72,7 +109,7 @@ function FiscalHistoricoContent() {
       const label = dt ? dt.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : 'Sem data'
       const existing = map.get(key) ?? { label, notas: [], valorTotal: 0 }
       existing.notas.push(n)
-      existing.valorTotal += Number(n.valorServico) || 0
+      existing.valorTotal += valorDocumento(n)
       map.set(key, existing)
     }
     return Array.from(map.values())
@@ -85,7 +122,7 @@ function FiscalHistoricoContent() {
 
   const loadNotas = useCallback(() => {
     setLoading(true)
-    const cursor = activePagination.cursorStack[page - 1] ?? null
+    const cursor = buscaAtiva ? null : (activePagination.cursorStack[page - 1] ?? null)
     const hasDateWindow = Boolean(ano && (!mes || (mes >= 1 && mes <= 12)))
     const inicioPeriodo = hasDateWindow
       ? Timestamp.fromDate(new Date(ano!, mes ? mes - 1 : 0, 1))
@@ -101,7 +138,10 @@ function FiscalHistoricoContent() {
         ? [where('dataEmissao', '>=', inicioPeriodo), where('dataEmissao', '<=', fimPeriodo), orderBy('dataEmissao', 'desc')]
         : [orderBy('criadoEm', 'desc')]),
     ]
-    listDocumentsPage<Record<string, unknown>>('nfse_emitidas', constraints, cursor, PAGE_SIZE + 1).then((data) => {
+    // Nº do documento e tipo não têm índice composto dedicado — filtrados no cliente
+    // sobre um lote maior, em vez de arriscar um FAILED_PRECONDITION em produção.
+    const limitRows = buscaAtiva ? 500 : PAGE_SIZE + 1
+    listDocumentsPage<Record<string, unknown>>('nfse_emitidas', constraints, cursor, limitRows).then((data) => {
       let filtered = data.rows
       if ((mes || ano) && !hasDateWindow) {
         filtered = filtered.filter((n) => {
@@ -114,17 +154,30 @@ function FiscalHistoricoContent() {
           return true
         })
       }
-      const pageRows = filtered.slice(0, PAGE_SIZE)
-      setNotas(pageRows)
-      setHasMore(filtered.length > PAGE_SIZE)
-      setLastCursor(filtered.length > PAGE_SIZE ? (data.cursors[PAGE_SIZE - 1] ?? null) : null)
+      if (numero) {
+        const alvo = numero.trim().toLowerCase()
+        filtered = filtered.filter((n) => String(n.numeroNfse ?? '').toLowerCase().includes(alvo))
+      }
+      if (tipo) {
+        filtered = filtered.filter((n) => tipoDocumentoDe(n) === tipo)
+      }
+      if (buscaAtiva) {
+        setNotas(filtered)
+        setHasMore(false)
+        setLastCursor(null)
+      } else {
+        const pageRows = filtered.slice(0, PAGE_SIZE)
+        setNotas(pageRows)
+        setHasMore(filtered.length > PAGE_SIZE)
+        setLastCursor(filtered.length > PAGE_SIZE ? (data.cursors[PAGE_SIZE - 1] ?? null) : null)
+      }
     }).catch((err) => {
-      toast.error(getErrorMessage(err, 'Nao foi possivel carregar o historico de NFS-e. Verifique os filtros e tente novamente.'))
+      toast.error(getErrorMessage(err, 'Nao foi possivel carregar o historico de emissoes. Verifique os filtros e tente novamente.'))
       setNotas([])
       setHasMore(false)
       setLastCursor(null)
     }).finally(() => setLoading(false))
-  }, [activePagination, ano, clienteId, mes, page, status])
+  }, [activePagination, ano, buscaAtiva, clienteId, mes, numero, page, status, tipo])
 
   useEffect(() => {
     queueMicrotask(loadNotas)
@@ -141,7 +194,8 @@ function FiscalHistoricoContent() {
 
   const exportColumns = [
     { key: 'cliente', label: 'Cliente' },
-    { key: 'numero', label: 'Numero NFS-e' },
+    { key: 'tipo', label: 'Tipo' },
+    { key: 'numero', label: 'Numero' },
     { key: 'tomador', label: 'Tomador' },
     { key: 'emissao', label: 'Emissao' },
     { key: 'valor', label: 'Valor' },
@@ -152,10 +206,11 @@ function FiscalHistoricoContent() {
   function montarLinhasExportacao() {
     return notas.map((n) => ({
       cliente: n.clienteNome,
+      tipo: TIPO_LABEL[tipoDocumentoDe(n)],
       numero: n.numeroNfse,
       tomador: n.tomadorNome,
       emissao: n.dataEmissao ? formatDate(tsToDate(n.dataEmissao as Timestamp)) : '',
-      valor: n.valorServico,
+      valor: valorDocumento(n),
       status: n.status,
       origem: n.origemEmissao === 'automatica' ? 'Automática' : 'Manual',
     }))
@@ -217,6 +272,8 @@ function FiscalHistoricoContent() {
     const params = new URLSearchParams({
       ...(clienteId && { clienteId }),
       ...(status && { status }),
+      ...(tipo && { tipo }),
+      ...(numero && { numero }),
       ...(mes && { mes: String(mes) }),
       ...(ano && { ano: String(ano) }),
       ...Object.fromEntries(Object.entries(overrides).map(([k, v]) => [k, String(v)])),
@@ -236,7 +293,7 @@ function FiscalHistoricoContent() {
   const totalPages = hasMore ? page + 1 : page
   const totalEmitidas = notas.filter(n => n.status === 'emitida').length
   const totalRejeitadas = notas.filter(n => ['rejeitada', 'erro_integracao'].includes(n.status as string)).length
-  const valorTotal = notas.reduce((s, n) => s + (Number(n.valorServico) || 0), 0)
+  const valorTotal = notas.reduce((s, n) => s + valorDocumento(n), 0)
 
   return (
     <div className="space-y-5">
@@ -247,9 +304,9 @@ function FiscalHistoricoContent() {
           </Button>
         </Link>
         <div>
-          <h2 className="text-lg font-semibold">Histórico de NFS-e</h2>
+          <h2 className="text-lg font-semibold">Histórico de Emissões</h2>
           <p className="text-sm text-muted-foreground">
-            {total} nota{total !== 1 ? 's' : ''} encontrada{total !== 1 ? 's' : ''}
+            {total} documento{total !== 1 ? 's' : ''} encontrado{total !== 1 ? 's' : ''}
           </p>
         </div>
         <Button variant="outline" size="sm" className="ml-auto h-9 rounded-xl" onClick={exportarExcel}>
@@ -277,13 +334,60 @@ function FiscalHistoricoContent() {
         </div>
       </div>
 
-      {/* Heatmap anual */}
+      {/* Heatmap anual — colapsado por padrão, pouco útil com poucas emissões */}
       {notas.length > 0 && (
-        <div className="rounded-2xl border border-border/65 bg-card/95 p-4 card-shadow">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Atividade de emissões — {ano ?? new Date().getFullYear()}</p>
-          <HeatmapFiscal notas={notas} ano={ano ?? new Date().getFullYear()} />
+        <div className="rounded-2xl border border-border/65 bg-card/95 card-shadow">
+          <button
+            type="button"
+            onClick={() => setHeatmapOpen(v => !v)}
+            className="flex w-full items-center justify-between px-4 py-3 text-left"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Atividade de emissões — {ano ?? new Date().getFullYear()}</p>
+            <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', heatmapOpen && 'rotate-180')} />
+          </button>
+          {heatmapOpen && (
+            <div className="px-4 pb-4">
+              <HeatmapFiscal notas={notas} ano={ano ?? new Date().getFullYear()} />
+            </div>
+          )}
         </div>
       )}
+
+      <div className="surface-subtle flex flex-wrap items-center gap-3 border px-3 py-2.5">
+        <div className="relative flex-1 min-w-48">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar pelo nº do documento..."
+            defaultValue={numero}
+            className="pl-9"
+            onChange={(e) => {
+              const val = e.target.value
+              if (numeroTimeoutRef.current) clearTimeout(numeroTimeoutRef.current)
+              numeroTimeoutRef.current = setTimeout(() => updateParam('numero', val), 400)
+            }}
+          />
+        </div>
+        <Select value={clienteId || 'all'} onValueChange={(v) => updateParam('clienteId', !v || v === 'all' ? '' : v)}>
+          <SelectTrigger className="w-56"><SelectValue placeholder="Todos os clientes" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os clientes</SelectItem>
+            {clientes.map((c) => (
+              <SelectItem key={c.id as string} value={c.id as string}>
+                {String(c.razaoSocial ?? c.nomeFantasia ?? c.id)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="surface-subtle flex flex-wrap items-center gap-2 border px-3 py-2.5">
+        <span className="text-xs text-muted-foreground mr-1">Tipo:</span>
+        {(['', 'nfse', 'nfe'] as const).map(t => (
+          <FilterBtn key={t} href={buildUrl({ tipo: t })} active={tipo === t}>
+            {t === '' ? 'Todos' : TIPO_LABEL[t]}
+          </FilterBtn>
+        ))}
+      </div>
 
       {totalRejeitadas > 0 && (
         <div className="rounded-xl border border-destructive/25 bg-destructive/5 flex items-center gap-3 px-4 py-3">
@@ -311,7 +415,8 @@ function FiscalHistoricoContent() {
           <thead className="bg-muted/50 text-muted-foreground">
             <tr>
               <th className="px-4 py-3 text-left font-medium">Cliente</th>
-              <th className="px-4 py-3 text-left font-medium">Nº NFS-e</th>
+              <th className="px-4 py-3 text-left font-medium">Tipo</th>
+              <th className="px-4 py-3 text-left font-medium">Nº</th>
               <th className="px-4 py-3 text-left font-medium">Tomador</th>
               <th className="px-4 py-3 text-left font-medium">Emissão</th>
               <th className="px-4 py-3 text-right font-medium">Valor</th>
@@ -322,13 +427,13 @@ function FiscalHistoricoContent() {
           <tbody className="divide-y">
             {notas.length === 0 ? (
               <TableEmptyState
-                colSpan={7}
+                colSpan={8}
                 icon={FileText}
-                title="Nenhuma NFS-e encontrada"
-                description={clienteId || status || mes || ano
-                  ? 'Remova filtros para conferir se existem notas em outros períodos ou status.'
+                title="Nenhuma emissão encontrada"
+                description={clienteId || status || mes || ano || tipo || numero
+                  ? 'Remova filtros para conferir se existem documentos em outros períodos, tipos ou status.'
                   : 'Crie um rascunho revisado e emita em homologação antes de liberar produção.'}
-                action={clienteId || status || mes || ano
+                action={clienteId || status || mes || ano || tipo || numero
                   ? { label: 'Limpar filtros', href: '/fiscal/historico' }
                   : { label: 'Emitir NFS-e', href: '/fiscal?emitir=1' }}
               />
@@ -336,8 +441,8 @@ function FiscalHistoricoContent() {
               grouped.map((group) => (
                 <Fragment key={group.label}>
                   <tr>
-                    <td colSpan={7} className="bg-muted/30 px-4 py-2 text-xs font-semibold text-muted-foreground">
-                      {group.label} — {group.notas.length} nota{group.notas.length !== 1 ? 's' : ''} — {formatCurrency(group.valorTotal)}
+                    <td colSpan={8} className="bg-muted/30 px-4 py-2 text-xs font-semibold text-muted-foreground">
+                      {group.label} — {group.notas.length} documento{group.notas.length !== 1 ? 's' : ''} — {formatCurrency(group.valorTotal)}
                     </td>
                   </tr>
                   {group.notas.map((n) => {
@@ -358,6 +463,9 @@ function FiscalHistoricoContent() {
                             )}
                           </div>
                         </td>
+                        <td className="px-4 py-3">
+                          <Badge variant="outline">{TIPO_LABEL[tipoDocumentoDe(n)]}</Badge>
+                        </td>
                         <td className="px-4 py-3 font-mono text-xs">
                           {(n.numeroNfse as string) ?? '—'}
                         </td>
@@ -368,7 +476,7 @@ function FiscalHistoricoContent() {
                           {dataEmissao ? formatDate(tsToDate(dataEmissao)) : '—'}
                         </td>
                         <td className="px-4 py-3 text-right font-medium">
-                          {formatCurrency(n.valorServico as number)}
+                          {formatCurrency(valorDocumento(n))}
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant={st.variant}>{st.label}</Badge>

@@ -269,7 +269,7 @@ function FinanceiroContent() {
           <div className="flex flex-wrap gap-2">
             {(['', 'pendente', 'atrasado', 'pago', 'cancelado', 'estornado'] as const).map(s => (
               <FilterBtn key={s} onClick={() => { setStatus(s); setPagination({ filterKey, page: 1, cursorStack: [null] }) }} active={status === s}>
-                {s === '' ? 'Qualquer' : STATUS_MAP[s]?.label ?? s}
+                {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
               </FilterBtn>
             ))}
           </div>
@@ -278,16 +278,19 @@ function FinanceiroContent() {
 
       <div className="surface-subtle hidden sm:flex flex-wrap items-center gap-3 border px-3 py-2.5">
         <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground mr-1">Tipo:</span>
           {(['', 'receita', 'despesa'] as const).map((t) => (
             <FilterBtn key={t} onClick={() => { setTipo(t); setPagination({ filterKey, page: 1, cursorStack: [null] }) }} active={tipo === t}>
               {t === '' ? 'Todos' : TIPO_MAP[t]?.label ?? t}
             </FilterBtn>
           ))}
         </div>
+        <div className="h-5 w-px bg-border" />
         <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground mr-1">Status:</span>
           {(['', 'pendente', 'atrasado', 'pago', 'cancelado', 'estornado'] as const).map((s) => (
             <FilterBtn key={s} onClick={() => { setStatus(s); setPagination({ filterKey, page: 1, cursorStack: [null] }) }} active={status === s}>
-              {s === '' ? 'Qualquer' : STATUS_MAP[s]?.label ?? s}
+              {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
             </FilterBtn>
           ))}
         </div>
