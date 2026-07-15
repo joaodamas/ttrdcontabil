@@ -44,12 +44,11 @@ const REGIME_BADGE: Record<string, string> = {
   isento:           'bg-muted text-muted-foreground border-border',
 }
 
-function clientesPageHref(params: { busca: string; status: string; regime?: string; page: number }) {
+function clientesFilterHref(params: { busca: string; status: string; regime?: string }) {
   const search = new URLSearchParams()
   if (params.busca) search.set('busca', params.busca)
   if (params.status) search.set('status', params.status)
   if (params.regime) search.set('regime', params.regime)
-  search.set('page', String(params.page))
   return `/clientes?${search.toString()}`
 }
 
@@ -222,22 +221,17 @@ function ClientesContent() {
   const result = clientesFiltroSchema.safeParse({
     busca: searchParams.get('busca') ?? '',
     status: searchParams.get('status') ?? '',
-    page: parseInt(searchParams.get('page') ?? '1'),
   })
-  const { busca, status, page } = result.success
+  const { busca, status } = result.success
     ? result.data
-    : { busca: '', status: '', page: 1 }
+    : { busca: '', status: '' }
   const regime = searchParams.get('regime') ?? ''
-  const { paginados, filteredClientes, total, totalPages, isLoading, isError } = useClientesList({ busca, status, page })
+  const { filteredClientes, isLoading, isError } = useClientesList({ busca, status })
   const [modalClienteId,   setModalClienteId]   = useState<string | null>(null)
   const [modalClienteNome, setModalClienteNome] = useState('')
   const [filterSheetOpen,  setFilterSheetOpen]  = useState(false)
 
-  const paginadosFiltrados = regime
-    ? paginados.filter(c => (c.regimeTributario as string | undefined) === regime)
-    : paginados
-
-  const todosFiltrados = regime
+  const clientesFiltrados = regime
     ? filteredClientes.filter(c => (c.regimeTributario as string | undefined) === regime)
     : filteredClientes
 
@@ -245,7 +239,7 @@ function ClientesContent() {
     <div>
       <PageHeader
         title="Clientes"
-        description={isLoading ? undefined : `${total} cliente${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`}
+        description={isLoading ? undefined : `${clientesFiltrados.length} cliente${clientesFiltrados.length !== 1 ? 's' : ''} encontrado${clientesFiltrados.length !== 1 ? 's' : ''}`}
         action={
           <div className="flex items-center gap-2">
             <FilterSheetTrigger
@@ -256,8 +250,8 @@ function ClientesContent() {
               variant="outline"
               size="sm"
               className="h-10 rounded-xl"
-              disabled={isLoading || todosFiltrados.length === 0}
-              onClick={() => exportClientesListaPdf(todosFiltrados)}
+              disabled={isLoading || clientesFiltrados.length === 0}
+              onClick={() => exportClientesListaPdf(clientesFiltrados)}
             >
               <FileDown className="w-4 h-4" />
               Exportar PDF
@@ -284,7 +278,7 @@ function ClientesContent() {
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</p>
           <div className="flex flex-wrap gap-2">
             {(['', 'ativo', 'inativo', 'suspenso'] as const).map(s => (
-              <FilterBtn key={s} href={clientesPageHref({ busca, status: s, regime, page: 1 })} active={status === s}>
+              <FilterBtn key={s} href={clientesFilterHref({ busca, status: s, regime })} active={status === s}>
                 {s === '' ? 'Todos' : s.charAt(0).toUpperCase() + s.slice(1)}
               </FilterBtn>
             ))}
@@ -300,7 +294,7 @@ function ClientesContent() {
               ['lucro_real',       'L. Real'],
               ['mei',              'MEI'],
             ] as const).map(([val, label]) => (
-              <FilterBtn key={val} href={clientesPageHref({ busca, status, regime: val, page: 1 })} active={regime === val}>
+              <FilterBtn key={val} href={clientesFilterHref({ busca, status, regime: val })} active={regime === val}>
                 {label}
               </FilterBtn>
             ))}
@@ -324,7 +318,7 @@ function ClientesContent() {
           ] as const).map(([val, label]) => (
             <FilterBtn
               key={val}
-              href={clientesPageHref({ busca, status, regime: val, page: 1 })}
+              href={clientesFilterHref({ busca, status, regime: val })}
               active={regime === val}
             >
               {label}
@@ -356,7 +350,7 @@ function ClientesContent() {
                 title="Não foi possível carregar clientes"
                 description="Atualize a página. Se continuar, valide regras e índices do Firestore."
               />
-            ) : paginadosFiltrados.length === 0 ? (
+            ) : clientesFiltrados.length === 0 ? (
               <TableEmptyState
                 colSpan={7}
                 icon={Users}
@@ -367,7 +361,7 @@ function ClientesContent() {
                 action={!busca && !status && !regime ? { label: 'Novo Cliente', href: '/clientes/novo' } : undefined}
               />
             ) : (
-              paginadosFiltrados.map((c) => {
+              clientesFiltrados.map((c) => {
                 const saude = saudeCliente(c)
                 const temWhatsApp = !!(c.whatsapp ?? c.whatsappFinanceiro ?? c.aceiteWhatsAppCobranca)
                 const mensalidade = c.mensalidade as number | undefined
@@ -499,25 +493,6 @@ function ClientesContent() {
           </tbody>
         </table>
       </DataTableShell>
-
-      {/* Paginação */}
-      {totalPages > 1 && (
-        <div className="surface-subtle mt-4 flex items-center justify-between border px-3 py-2.5 text-sm">
-          <span className="text-muted-foreground">Página {page} de {totalPages} · {total} cliente{total !== 1 ? 's' : ''}</span>
-          <div className="flex gap-2">
-            {page > 1 && (
-              <Link href={clientesPageHref({ busca, status, regime, page: page - 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
-                Anterior
-              </Link>
-            )}
-            {page < totalPages && (
-              <Link href={clientesPageHref({ busca, status, regime, page: page + 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
-                Próxima
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
 
       {modalClienteId && (
         <ClienteModal

@@ -6,5 +6,4 @@ export const clientesFiltroSchema = z.object({
     .optional()
     .default('')
     .transform((value) => value === 'all' ? '' : value),
-  page: z.number().int().positive().optional().default(1),
 })

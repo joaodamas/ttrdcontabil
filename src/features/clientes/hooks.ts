@@ -3,8 +3,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { ClienteRecord } from './types'
 import { useClientesListQuery, useClienteDetailQuery, clientesKeys } from './queries'
 
-const PAGE_SIZE = 20
-
 function filterClientes(clientes: ClienteRecord[], busca: string): ClienteRecord[] {
   if (!busca) return clientes
   const buscaLower = busca.toLowerCase()
@@ -13,39 +11,24 @@ function filterClientes(clientes: ClienteRecord[], busca: string): ClienteRecord
     (c) =>
       String(c.razaoSocial ?? '').toLowerCase().includes(buscaLower) ||
       String(c.nomeFantasia ?? '').toLowerCase().includes(buscaLower) ||
-      String(c.cpfCnpj ?? '').includes(documento)
+      (documento !== '' && String(c.cpfCnpj ?? '').includes(documento))
   )
 }
 
-export function useClientesList(params: { busca: string; status: string; page: number }) {
+export function useClientesList(params: { busca: string; status: string }) {
   const status = params.status === 'all' ? '' : params.status
-  const query = useClientesListQuery({
-    status: status || undefined,
-    busca: params.busca,
-    page: params.page,
-    pageSize: PAGE_SIZE,
-  })
+  const query = useClientesListQuery({ status: status || undefined })
 
-  const filtered = useMemo(
+  const filteredClientes = useMemo(
     () => filterClientes((query.data ?? []) as ClienteRecord[], params.busca),
     [query.data, params.busca]
   )
 
-  const hasMore = !params.busca && filtered.length > params.page * PAGE_SIZE
-  const total = params.busca ? filtered.length : Math.min(filtered.length, params.page * PAGE_SIZE)
-  const totalPages = hasMore
-    ? params.page + 1
-    : Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const paginados = filtered.slice((params.page - 1) * PAGE_SIZE, params.page * PAGE_SIZE)
-
   return {
     ...query,
     allClientes: (query.data ?? []) as ClienteRecord[],
-    filteredClientes: filtered,
-    paginados,
-    total,
-    totalPages,
-    pageSize: PAGE_SIZE,
+    filteredClientes,
+    total: filteredClientes.length,
   }
 }
 

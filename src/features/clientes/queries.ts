@@ -7,19 +7,13 @@ const base = createFeatureKeys('clientes')
 
 export const clientesKeys = {
   all:    base.all,
-  list:   (params: { status?: string; busca?: string; page?: number; pageSize?: number } = {}) =>
-    [
-      ...base.list('list'),
-      params.status ?? 'todos',
-      params.busca ?? '',
-      params.page ?? 1,
-      params.pageSize ?? 20,
-    ] as const,
+  list:   (params: { status?: string } = {}) =>
+    [...base.list('list'), params.status ?? 'todos'] as const,
   detail: (id: string)      => [...base.all, 'detail', id] as const,
   fiscal: (id: string)      => [...base.all, 'fiscal', id] as const,
 }
 
-export function useClientesListQuery(params: { status?: string; busca?: string; page?: number; pageSize?: number } = {}) {
+export function useClientesListQuery(params: { status?: string } = {}) {
   return useQuery({
     queryKey: clientesKeys.list(params),
     queryFn:  () => fetchClientes(params),

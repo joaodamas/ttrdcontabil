@@ -4,9 +4,6 @@ import type { ClienteRecord, ClienteDetalheData } from './types'
 
 export async function fetchClientes(params: {
   status?: string
-  busca?: string
-  page?: number
-  pageSize?: number
 } = {}): Promise<ClienteRecord[]> {
   const status = params.status === 'all' ? undefined : params.status
   const constraints: QueryConstraint[] = []
