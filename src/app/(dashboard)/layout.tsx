@@ -59,7 +59,11 @@ function DashboardChrome({ children }: { children: React.ReactNode }) {
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
         <TopBar />
         <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-[1280px]">
+          {/* 1280px deixava ~300px de vão morto de cada lado num monitor de
+              1920 — a sidebar já come 272. Numa ferramenta de tabela (119
+              clientes em 8 colunas) esse espaço é conteúdo, não respiro. O teto
+              agora existe só para não esticar linha de texto em ultrawide. */}
+          <div className="mx-auto w-full max-w-[1600px]">
             <ErrorBoundary>
               {children}
             </ErrorBoundary>

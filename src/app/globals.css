@@ -92,7 +92,10 @@
   --chart-3: oklch(0.577 0.245 27.325);
   --chart-4: oklch(0.6 0.12 230);
   --chart-5: oklch(0.65 0.14 300);
-  --radius: 0.625rem;
+  /* 10px dava a leitura de app de consumo. 7px mantém o canto suave e devolve
+     precisão — é a faixa que Linear, Vercel e Stripe usam em ferramenta densa.
+     A escala derivada (sm/md/lg/xl) acompanha sozinha. */
+  --radius: 0.4375rem;
   /* A sidebar ACOMPANHA o tema. Antes ela era escura mesmo no modo claro, o
      que punha duas linguagens visuais na mesma tela — barra preta colada num
      app branco. No claro ela é superfície branca, e o item ativo vira uma
