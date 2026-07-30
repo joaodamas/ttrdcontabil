@@ -45,5 +45,5 @@ export default {
     ambienteFiscal: "homologacao",
   },
 
-  secrets: ["CREDENTIAL_KEY", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM", "EMAIL_TO"],
+  secrets: ["CREDENTIAL_KEY", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "EMAIL_FROM", "EMAIL_TO", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"],
 };

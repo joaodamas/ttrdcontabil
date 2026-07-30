@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -10,23 +10,28 @@ import { onBrand } from '@/lib/brand-theme'
 import { canAccessTela, type TelaKey } from '@/lib/permissions'
 import { getInitials } from '@/lib/utils'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
-import { Separator } from '@/components/ui/separator'
 import {
   BarChart3, Users, ClipboardList, Layers, FolderOpen,
   Receipt, FileText, Wallet, Settings, LogOut,
   ChevronDown, Menu, History, UserCog,
-  Package2, CheckSquare, Plus, CalendarClock, Plug, SlidersHorizontal,
-  AlertTriangle, LineChart,
+  Package2, CheckSquare, CalendarClock, Plug, SlidersHorizontal,
+  LineChart,
 } from 'lucide-react'
 import { useHojeData } from '@/features/hoje/hooks'
 
 // ── Types ─────────────────────────────────────────────────────
+// `badgeKey` liga o item a um contador vivo (ver useNavCounts). A navegação
+// deixa de ser só um índice de telas e passa a dizer ONDE está o trabalho —
+// sem isso o contador precisa abrir tela por tela pra descobrir o que o espera.
+type BadgeKey = 'atrasadas' | 'hoje'
+type BadgeTone = 'urgente' | 'atencao' | 'neutro'
+
 type NavItem = {
   href: string
   label: string
   icon: React.ComponentType<{ className?: string; size?: number }>
   telaKey?: TelaKey
-  badge?: string
+  badgeKey?: BadgeKey
 }
 type NavSection = {
   id: string
@@ -34,6 +39,7 @@ type NavSection = {
   icon: React.ComponentType<{ className?: string; size?: number }>
   href?: string          // solo link (sem sub-itens)
   telaKey?: TelaKey
+  badgeKey?: BadgeKey
   items?: NavItem[]
 }
 
@@ -47,6 +53,7 @@ const NAV_SECTIONS: NavSection[] = [
     icon: CalendarClock,
     href: '/hoje',
     telaKey: 'hoje',
+    badgeKey: 'atrasadas',
   },
   {
     id: 'painel',
@@ -56,21 +63,20 @@ const NAV_SECTIONS: NavSection[] = [
     telaKey: 'dashboard',
   },
   {
-    id: 'cadastros',
-    label: 'Cadastros',
+    id: 'clientes',
+    label: 'Clientes',
     icon: Users,
-    items: [
-      { href: '/clientes', label: 'Clientes', icon: Users, telaKey: 'clientes' },
-    ],
+    href: '/clientes',
+    telaKey: 'clientes',
   },
   {
     id: 'operacional',
     label: 'Operacional',
     icon: ClipboardList,
     items: [
-      { href: '/tarefas',      label: 'Tarefas',           icon: CheckSquare,   telaKey: 'tarefas' },
-      { href: '/competencias', label: 'Competências',      icon: Layers,        telaKey: 'competencias' },
-      { href: '/fechamento',   label: 'Fechamento Mensal', icon: FolderOpen,    telaKey: 'fechamento' },
+      { href: '/tarefas',      label: 'Tarefas',           icon: CheckSquare, telaKey: 'tarefas', badgeKey: 'hoje' },
+      { href: '/competencias', label: 'Competências',      icon: Layers,      telaKey: 'competencias' },
+      { href: '/fechamento',   label: 'Fechamento Mensal', icon: FolderOpen,  telaKey: 'fechamento' },
     ],
   },
   {
@@ -81,7 +87,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: '/fiscal',            label: 'Emitir NFS-e',     icon: Receipt,   telaKey: 'fiscal' },
       { href: '/fiscal/emitir-nfe', label: 'Emitir NF-e',      icon: Receipt,   telaKey: 'fiscal' },
       { href: '/fiscal/produtos',   label: 'Produtos (NF-e)',  icon: Package2,  telaKey: 'fiscal' },
-      { href: '/fiscal/historico',  label: 'Histórico de Emissões', icon: History, telaKey: 'fiscal' },
+      { href: '/fiscal/historico',  label: 'Histórico',        icon: History,   telaKey: 'fiscal' },
       { href: '/ir',                label: 'Imposto de Renda', icon: FileText,  telaKey: 'ir' },
     ],
   },
@@ -125,37 +131,104 @@ const QUICK_ACTIONS: QuickAction[] = [
   { href: '/fiscal?emitir=1', label: 'NFS-e', icon: Receipt, telaKey: 'fiscal' },
 ]
 
-// ── Hoje summary widget ────────────────────────────────────────
-function HojeSummary() {
+// ── Persistência dos grupos abertos ────────────────────────────
+// Grupos nascem ABERTOS (menos Configurações) e a escolha sobrevive à
+// navegação. Antes eles nasciam fechados e só abriam se a rota casasse — o que
+// custava dois cliques pra chegar em quase tudo e voltava a fechar sozinho.
+// Era a maior parte da sensação de "navegação lerda": não era render, era
+// profundidade de menu.
+//
+// localStorage é uma store EXTERNA ao React, então lemos via
+// useSyncExternalStore: sem setState dentro de efeito, e sem descasar a
+// hidratação (no servidor o snapshot é sempre o default).
+const STORAGE_KEY = 'sidebar:openSections'
+
+const DEFAULT_OPEN: Record<string, boolean> = Object.fromEntries(
+  [...NAV_SECTIONS, ...ADMIN_SECTIONS]
+    .filter((s) => s.items)
+    .map((s) => [s.id, s.id !== 'admin']),
+)
+
+const ouvintes = new Set<() => void>()
+let cacheValor: Record<string, boolean> = DEFAULT_OPEN
+let cacheRaw: string | null | undefined
+
+function lerAberturas(): Record<string, boolean> {
+  let raw: string | null = null
+  try {
+    raw = window.localStorage.getItem(STORAGE_KEY)
+  } catch {
+    raw = null // modo privado / storage bloqueado
+  }
+  // getSnapshot precisa devolver a MESMA referência enquanto nada mudar,
+  // senão o React entra em loop de re-render.
+  if (raw === cacheRaw) return cacheValor
+  cacheRaw = raw
+  let parsed: Record<string, boolean> = {}
+  if (raw) {
+    try {
+      parsed = JSON.parse(raw) as Record<string, boolean>
+    } catch {
+      parsed = {} // json corrompido: volta ao default
+    }
+  }
+  cacheValor = { ...DEFAULT_OPEN, ...parsed }
+  return cacheValor
+}
+
+function lerAberturasServidor(): Record<string, boolean> {
+  return DEFAULT_OPEN
+}
+
+function assinarAberturas(cb: () => void) {
+  ouvintes.add(cb)
+  return () => { ouvintes.delete(cb) }
+}
+
+function gravarAberturas(next: Record<string, boolean>) {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  } catch {
+    // sem persistência: o estado ainda vale para esta sessão
+  }
+  cacheRaw = undefined // força releitura no próximo snapshot
+  ouvintes.forEach((l) => l())
+}
+
+// ── Contadores vivos da navegação ──────────────────────────────
+// Hoje só o cockpit alimenta badges. Os contadores de fiscal e financeiro
+// ficam de fora de propósito: as queries que os produziriam hoje devolvem
+// número errado (agregado calculado sobre a página atual, e status que nunca
+// é gravado) — badge com número mentiroso é pior que badge nenhum.
+function useNavCounts(): Record<BadgeKey, number> {
   const { cockpit } = useHojeData()
   const data = cockpit.data
-  if (!data) return null
-  const atrasadas = data.atrasadas.length
-  const hoje = data.hoje.length
-  const total = atrasadas + hoje
-  if (total === 0) return null
+  return {
+    atrasadas: data?.atrasadas.length ?? 0,
+    hoje: data?.hoje.length ?? 0,
+  }
+}
 
+function toneFor(key: BadgeKey): BadgeTone {
+  if (key === 'atrasadas') return 'urgente'
+  if (key === 'hoje') return 'atencao'
+  return 'neutro'
+}
+
+function NavBadge({ count, tone }: { count: number; tone: BadgeTone }) {
+  if (count <= 0) return null
   return (
-    <Link href="/hoje" className="mx-2 mb-1 block rounded-lg border border-border/70 bg-muted/35 px-3 py-2 transition-colors hover:bg-muted/60">
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Hoje</span>
-        {atrasadas > 0 && <AlertTriangle size={11} className="text-destructive" />}
-      </div>
-      <div className="flex items-center gap-3">
-        {atrasadas > 0 && (
-          <div className="text-center">
-            <p className="text-sm font-bold tabular-nums text-destructive">{atrasadas}</p>
-            <p className="text-[9px] text-muted-foreground">atrasadas</p>
-          </div>
-        )}
-        {hoje > 0 && (
-          <div className="text-center">
-            <p className="text-sm font-bold tabular-nums text-warning">{hoje}</p>
-            <p className="text-[9px] text-muted-foreground">para hoje</p>
-          </div>
-        )}
-      </div>
-    </Link>
+    <span
+      className={cn(
+        'ml-auto inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5',
+        'text-[11px] font-semibold tabular-nums leading-none',
+        tone === 'urgente' && 'bg-destructive text-white',
+        tone === 'atencao' && 'bg-warning/15 text-warning',
+        tone === 'neutro'  && 'bg-muted text-muted-foreground',
+      )}
+    >
+      {count > 99 ? '99+' : count}
+    </span>
   )
 }
 
@@ -163,6 +236,7 @@ function HojeSummary() {
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
   const { usuario, logout } = useAuth()
+  const counts = useNavCounts()
 
   function canSeeItem(item: NavItem) {
     if (item.telaKey) return canAccessTela(usuario, item.telaKey)
@@ -175,7 +249,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     return true
   }
 
-  const allNavHrefs = NAV_SECTIONS.flatMap(s => [
+  const allNavHrefs = [...NAV_SECTIONS, ...ADMIN_SECTIONS].flatMap(s => [
     ...(s.href ? [s.href] : []),
     ...(s.items?.map(i => i.href) ?? []),
   ])
@@ -194,192 +268,152 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     return section.items?.some(i => isActive(i.href)) ?? false
   }
 
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
-    const init: Record<string, boolean> = {}
-    NAV_SECTIONS.forEach(s => {
-      if (s.items) init[s.id] = s.items.some(i => pathname.startsWith(i.href))
-    })
-    return init
-  })
+  const openSections = useSyncExternalStore(assinarAberturas, lerAberturas, lerAberturasServidor)
 
   function toggleSection(id: string) {
-    setOpenSections(prev => ({ ...prev, [id]: !prev[id] }))
+    gravarAberturas({ ...openSections, [id]: !openSections[id] })
   }
 
   const visibleSections = NAV_SECTIONS.filter(canSeeSection)
 
+  /* Linha de navegação — a mesma geometria para link solo, cabeçalho de grupo
+     e sub-item, para o olho ler uma coluna só em vez de três ritmos diferentes. */
+  const rowBase =
+    'group relative flex w-full items-center gap-3 rounded-lg pl-3 pr-2.5 text-sm ' +
+    'min-h-10 transition-colors duration-150 focus-visible:outline-none ' +
+    'focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 focus-visible:ring-offset-card'
+  const rowIdle = 'text-muted-foreground hover:bg-muted hover:text-foreground'
+  const rowActive = 'bg-primary/10 text-primary font-semibold'
+
+  /* Barra de 3px na borda esquerda do item ativo. Dá um plano a mais de
+     profundidade que o preenchimento sozinho não dá, e marca a posição na
+     lista mesmo quando o rótulo está fora do canto do olho. */
+  const activeRail =
+    'before:absolute before:left-0 before:top-1/2 before:h-5 before:w-[3px] ' +
+    'before:-translate-y-1/2 before:rounded-r-full before:bg-primary'
+
+  function renderSection(section: NavSection) {
+    const Icon = section.icon
+    const active = isSectionActive(section)
+
+    /* Solo link */
+    if (section.href) {
+      return (
+        <Link
+          key={section.id}
+          href={section.href}
+          onClick={onNavigate}
+          aria-current={active ? 'page' : undefined}
+          className={cn(rowBase, active ? cn(rowActive, activeRail) : rowIdle)}
+        >
+          <Icon size={18} className="shrink-0" />
+          <span className="truncate">{section.label}</span>
+          {section.badgeKey && <NavBadge count={counts[section.badgeKey]} tone={toneFor(section.badgeKey)} />}
+        </Link>
+      )
+    }
+
+    /* Grupo colapsável */
+    const visibleItems = section.items?.filter(canSeeItem) ?? []
+    if (visibleItems.length === 0) return null
+    const isOpen = openSections[section.id] ?? true
+
+    // A soma dos filhos sobe para o cabeçalho quando o grupo está fechado —
+    // fechar um grupo não pode esconder que existe trabalho lá dentro.
+    const somaFilhos = visibleItems.reduce(
+      (acc, i) => acc + (i.badgeKey ? counts[i.badgeKey] : 0), 0,
+    )
+
+    return (
+      <div key={section.id}>
+        <button
+          type="button"
+          onClick={() => toggleSection(section.id)}
+          aria-expanded={isOpen}
+          className={cn(
+            rowBase,
+            'font-medium',
+            active && !isOpen ? cn(rowActive, activeRail) : rowIdle,
+          )}
+        >
+          <Icon size={18} className="shrink-0" />
+          <span className="flex-1 truncate text-left">{section.label}</span>
+          {!isOpen && somaFilhos > 0 && <NavBadge count={somaFilhos} tone="neutro" />}
+          <ChevronDown
+            size={15}
+            className={cn(
+              'shrink-0 text-muted-foreground/70 transition-transform duration-200',
+              isOpen && 'rotate-180',
+            )}
+          />
+        </button>
+
+        {isOpen && (
+          <div className="relative mt-0.5 space-y-0.5 pl-[26px]">
+            {/* Guia vertical alinhada ao centro dos ícones do nível acima */}
+            <span aria-hidden className="absolute left-[21px] top-1 bottom-1 w-px bg-border" />
+            {visibleItems.map((item) => {
+              const ItemIcon = item.icon
+              const itemActive = isActive(item.href)
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={onNavigate}
+                  aria-current={itemActive ? 'page' : undefined}
+                  className={cn(rowBase, 'gap-2.5', itemActive ? rowActive : rowIdle)}
+                >
+                  <ItemIcon size={16} className="shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                  {item.badgeKey && <NavBadge count={counts[item.badgeKey]} tone={toneFor(item.badgeKey)} />}
+                </Link>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div className="flex h-full flex-col">
-      {/* Logo */}
+    <div className="flex h-full flex-col bg-card">
+      {/* Marca */}
       {appConfig.logoUrl ? (
-        <div className="flex h-14 items-center border-b border-border px-4 shrink-0">
+        <div className="flex h-16 shrink-0 items-center border-b border-border px-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={appConfig.logoUrl} alt={appConfig.name} className="hidden h-9 w-auto object-contain dark:block" />
+          <img src={appConfig.logoUrl} alt={appConfig.name} className="hidden h-10 w-auto object-contain dark:block" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={appConfig.logoUrlLight ?? appConfig.logoUrl} alt={appConfig.name} className="block h-9 w-auto object-contain dark:hidden" />
+          <img src={appConfig.logoUrlLight ?? appConfig.logoUrl} alt={appConfig.name} className="block h-10 w-auto object-contain dark:hidden" />
         </div>
       ) : (
-        <div className="flex h-14 items-center gap-2.5 border-b border-border px-4 shrink-0">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg" style={{ background: appConfig.brandPrimary, color: onBrand }}>
-            <span style={{ fontFamily: 'inherit', fontWeight: 800, fontStyle: 'italic', letterSpacing: '-0.06em', lineHeight: 1, fontSize: 12 }}>
+        <div className="flex h-16 shrink-0 items-center gap-3 border-b border-border px-4">
+          <div
+            className="flex h-9 w-9 items-center justify-center rounded-xl shadow-sm"
+            style={{ background: appConfig.brandPrimary, color: onBrand }}
+          >
+            <span style={{ fontFamily: 'inherit', fontWeight: 800, fontStyle: 'italic', letterSpacing: '-0.06em', lineHeight: 1, fontSize: 14 }}>
               {appConfig.monogram}
             </span>
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-bold tracking-tight leading-none">
-              {appConfig.name}
-            </p>
-            <p className="truncate text-[10px] text-muted-foreground mt-0.5">{appConfig.tagline}</p>
+            <p className="truncate text-[15px] font-bold leading-tight tracking-tight">{appConfig.name}</p>
+            <p className="truncate text-xs text-muted-foreground">{appConfig.tagline}</p>
           </div>
         </div>
       )}
 
-      {/* Hoje — indicadores contextuais */}
-      <HojeSummary />
-
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
-        {visibleSections.map((section) => {
-          const Icon = section.icon
-          const active = isSectionActive(section)
-
-          /* Solo link */
-          if (section.href) {
-            return (
-              <Link
-                key={section.id}
-                href={section.href}
-                onClick={onNavigate}
-                className={cn(
-                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                  active
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                )}
-              >
-                <Icon size={15} className="shrink-0" />
-                {section.label}
-              </Link>
-            )
-          }
-
-          /* Collapsible group */
-          const visibleItems = section.items?.filter(canSeeItem) ?? []
-          if (visibleItems.length === 0) return null
-          const isOpen = openSections[section.id] ?? false
-
-          return (
-            <div key={section.id}>
-              <button
-                type="button"
-                onClick={() => toggleSection(section.id)}
-                className={cn(
-                  'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                  active
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                )}
-              >
-                <Icon size={15} className="shrink-0" />
-                <span className="flex-1 text-left">{section.label}</span>
-                <ChevronDown
-                  size={13}
-                  className={cn('shrink-0 transition-transform duration-200', isOpen && 'rotate-180')}
-                />
-              </button>
-
-              {isOpen && (
-                <div className="ml-4 mt-0.5 space-y-0.5 border-l border-border pl-3">
-                  {visibleItems.map((item) => {
-                    const ItemIcon = item.icon
-                    const itemActive = isActive(item.href)
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={onNavigate}
-                        className={cn(
-                          'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors',
-                          itemActive
-                            ? 'bg-primary/10 text-primary font-medium'
-                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                        )}
-                      >
-                        <ItemIcon size={13} className="shrink-0" />
-                        {item.label}
-                        {item.badge && (
-                          <span className="ml-auto text-[10px] bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 font-semibold">
-                            {item.badge}
-                          </span>
-                        )}
-                      </Link>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )
-        })}
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        {visibleSections.map((s) => renderSection(s))}
       </nav>
 
-      {/* Configurações — rodapé, fora do fluxo operacional */}
-      {ADMIN_SECTIONS.filter(canSeeSection).map((section) => {
-        const visibleItems = section.items?.filter(canSeeItem) ?? []
-        if (visibleItems.length === 0) return null
-        const Icon = section.icon
-        const active = isSectionActive(section)
-        const isOpen = openSections[section.id] ?? false
-        return (
-          <div key={section.id} className="px-2 pb-1 shrink-0">
-            <Separator className="mb-1" />
-            <button
-              type="button"
-              onClick={() => toggleSection(section.id)}
-              className={cn(
-                'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                active ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              )}
-            >
-              <Icon size={15} className="shrink-0" />
-              <span className="flex-1 text-left">{section.label}</span>
-              <ChevronDown size={13} className={cn('shrink-0 transition-transform duration-200', isOpen && 'rotate-180')} />
-            </button>
-            {isOpen && (
-              <div className="ml-4 mt-0.5 space-y-0.5 border-l border-border pl-3">
-                {visibleItems.map((item) => {
-                  const ItemIcon = item.icon
-                  const itemActive = isActive(item.href)
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={onNavigate}
-                      className={cn(
-                        'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors',
-                        itemActive ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                      )}
-                    >
-                      <ItemIcon size={13} className="shrink-0" />
-                      {item.label}
-                    </Link>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )
-      })}
-
-      {/* Quick actions */}
-      <div className="px-2 pb-2 shrink-0">
-        <Separator className="mb-2" />
-        <div className="mb-2 flex items-center justify-between px-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Ações rápidas
-          </span>
-          <Plus size={11} className="text-muted-foreground" />
-        </div>
-        <div className="grid grid-cols-2 gap-1.5">
+      {/* Ações rápidas — uma linha de ícones em vez do grid 2×2, que comia
+          quase 100px de altura para repetir destinos que já estão na nav. */}
+      <div className="shrink-0 border-t border-border px-3 py-3">
+        <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Criar
+        </p>
+        <div className="flex items-center gap-1.5">
           {QUICK_ACTIONS.filter(canSeeItem).map((action) => {
             const ActionIcon = action.icon
             return (
@@ -387,33 +421,45 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 key={action.href}
                 href={action.href}
                 onClick={onNavigate}
-                className="flex min-h-10 flex-col items-center justify-center gap-1 rounded-lg border border-border/70 bg-muted/35 px-2 py-2 text-center text-[11px] font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+                title={action.label}
+                aria-label={`Criar ${action.label}`}
+                className={cn(
+                  'flex h-10 flex-1 items-center justify-center rounded-lg border border-border/70 bg-muted/40',
+                  'text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
+                )}
               >
-                <ActionIcon size={13} />
-                <span className="max-w-full truncate">{action.label}</span>
+                <ActionIcon size={16} />
               </Link>
             )
           })}
         </div>
       </div>
 
-      {/* User footer */}
-      <div className="border-t border-border px-3 py-3 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[11px] font-bold text-primary">
+      {/* Configurações + usuário */}
+      <div className="shrink-0 border-t border-border px-3 py-3 space-y-1">
+        {ADMIN_SECTIONS.filter(canSeeSection).map((s) => renderSection(s))}
+
+        <div className="flex items-center gap-3 rounded-lg px-3 py-2">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
             {usuario ? getInitials(usuario.nome) : '—'}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold">{usuario?.nome ?? '—'}</p>
-            <p className="truncate text-[10px] capitalize text-muted-foreground">{usuario?.perfil ?? ''}</p>
+            <p className="truncate text-sm font-semibold leading-tight">{usuario?.nome ?? '—'}</p>
+            <p className="truncate text-xs capitalize text-muted-foreground">{usuario?.perfil ?? ''}</p>
           </div>
           <button
             type="button"
             onClick={logout}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+            aria-label="Sair"
             title="Sair"
+            className={cn(
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors',
+              'hover:bg-destructive/10 hover:text-destructive',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40',
+            )}
           >
-            <LogOut size={13} />
+            <LogOut size={16} />
           </button>
         </div>
       </div>
@@ -424,7 +470,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 // ── Desktop sidebar ────────────────────────────────────────────
 export function AppSidebar() {
   return (
-    <aside className="hidden md:flex w-56 shrink-0 flex-col border-r border-border bg-card h-screen sticky top-0">
+    <aside className="hidden md:flex w-[272px] shrink-0 flex-col border-r border-border bg-card h-screen sticky top-0">
       <SidebarContent />
     </aside>
   )
@@ -436,10 +482,13 @@ export function MobileSidebarTrigger() {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger className="flex md:hidden h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label="Abrir menu">
-        <Menu size={16} />
+      <SheetTrigger
+        className="flex md:hidden h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+        aria-label="Abrir menu"
+      >
+        <Menu size={20} />
       </SheetTrigger>
-      <SheetContent side="left" className="w-56 p-0">
+      <SheetContent side="left" className="w-[300px] p-0">
         <SidebarContent onNavigate={() => setOpen(false)} />
       </SheetContent>
     </Sheet>

@@ -45,6 +45,8 @@ const produtoSchema = z.object({
   pisAliquota: z.number().min(0).max(100).optional().nullable(),
   cofinsCst:   z.string().optional().nullable(),
   cofinsAliquota: z.number().min(0).max(100).optional().nullable(),
+  ibsCbsCst:   z.string().optional().nullable(),
+  cClassTrib:  z.string().optional().nullable(),
   ativo:       z.boolean().default(true),
 })
 
@@ -88,6 +90,8 @@ export function ProdutoForm({ clienteId, produto, onSaved }: ProdutoFormProps) {
           pisAliquota:   produto.pisAliquota != null ? Number(produto.pisAliquota) : undefined,
           cofinsCst:     (produto.cofinsCst as string) ?? '',
           cofinsAliquota: produto.cofinsAliquota != null ? Number(produto.cofinsAliquota) : undefined,
+          ibsCbsCst:     (produto.ibsCbsCst as string) ?? '',
+          cClassTrib:    (produto.cClassTrib as string) ?? '',
           ativo:         produto.ativo !== false,
         }
       : { unidade: 'UN', origem: '0', ativo: true },
@@ -262,6 +266,27 @@ export function ProdutoForm({ clienteId, produto, onSaved }: ProdutoFormProps) {
                   <Input id="cofinsAliquota" type="number" step="0.0001" min="0" placeholder="7,6"
                     {...register('cofinsAliquota', { setValueAs: asNum })} className="font-mono" />
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Reforma Tributária ── */}
+          <div className="space-y-3 border-t pt-4">
+            <div>
+              <p className="section-label">Reforma Tributária (IBS/CBS)</p>
+              <p className="text-[11px] text-amber-600 mt-1">
+                ⚠ Ainda não é enviado ao emissor — a Spedy ainda não aceita esses campos na API de NF-e.
+                Preencha pra deixar pronto; a transmissão real depende do provedor liberar isso do lado deles.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="ibsCbsCst">CST da Reforma</Label>
+                <Input id="ibsCbsCst" {...register('ibsCbsCst')} placeholder="Ex: 000" className="font-mono" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cClassTrib">Classificação Tributária (cClassTrib)</Label>
+                <Input id="cClassTrib" {...register('cClassTrib')} placeholder="Ex: 000001" className="font-mono" />
               </div>
             </div>
           </div>

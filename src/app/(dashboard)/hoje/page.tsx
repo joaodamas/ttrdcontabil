@@ -29,6 +29,9 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { InlineAlert } from '@/components/ui/inline-alert'
+import { EmptyState } from '@/components/ui/empty-state'
+import { getErrorMessage } from '@/lib/error-message'
 import { formatDate, tsToDate, cn } from '@/lib/utils'
 import { TaskTimer } from '@/components/tarefas/task-timer'
 import { useAuth } from '@/contexts/auth-context'
@@ -364,6 +367,16 @@ export default function HojePage() {
   const [saving, setSaving] = useState(false)
 
   const { cockpit, usuarios, isLoading } = useHojeData(responsavelId === 'todos' ? undefined : responsavelId)
+  /**
+   * Armadilha: quando o cockpit falha, `cockpit.data` fica undefined e todo o
+   * resto degrada para 0 / lista vazia. A primeira tela do menu passava a
+   * afirmar "nenhuma tarefa acionável para hoje" com um check verde — ou seja,
+   * a falha de leitura era apresentada como fim de expediente. Enquanto o dado
+   * não voltar, contador vira "—" (ausência de informação, não zero) e o vazio
+   * vira erro explícito com "Tentar novamente".
+   * Só o estado do cockpit manda aqui: `usuarios` alimenta seletores, não os KPIs.
+   */
+  const semDados = cockpit.isLoading || cockpit.isError
   const filaBase = useMemo(() => buildFila(cockpit.data), [cockpit.data])
   const fila = useMemo(() => {
     let result = filaBase
@@ -522,6 +535,15 @@ export default function HojePage() {
         }
       />
 
+      {cockpit.isError ? (
+        <InlineAlert
+          tone="danger"
+          title="Não foi possível carregar a fila de hoje."
+          description={getErrorMessage(cockpit.error, 'Ocorreu um erro ao buscar as tarefas. Os contadores abaixo não refletem a operação real.')}
+          action={{ label: 'Tentar novamente', onClick: () => void refresh() }}
+        />
+      ) : null}
+
       {/* Filtros de prioridade */}
       <div className="flex flex-wrap gap-1.5">
         {(['todos', 'urgente', 'alta', 'normal', 'baixa'] as const).map((p) => (
@@ -551,7 +573,9 @@ export default function HojePage() {
           <CardContent className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground">Atrasadas</p>
-              <p className="text-2xl font-bold text-destructive">{cockpit.data?.atrasadas.length ?? 0}</p>
+              <p className={cn('text-2xl font-bold', semDados ? 'text-muted-foreground' : 'text-destructive')}>
+                {semDados ? '—' : cockpit.data?.atrasadas.length ?? 0}
+              </p>
             </div>
             <AlertTriangle className="h-5 w-5 text-destructive" />
           </CardContent>
@@ -560,7 +584,9 @@ export default function HojePage() {
           <CardContent className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground">Hoje</p>
-              <p className="text-2xl font-bold text-warning">{cockpit.data?.hoje.length ?? 0}</p>
+              <p className={cn('text-2xl font-bold', semDados ? 'text-muted-foreground' : 'text-warning')}>
+                {semDados ? '—' : cockpit.data?.hoje.length ?? 0}
+              </p>
             </div>
             <CalendarClock className="h-5 w-5 text-warning" />
           </CardContent>
@@ -569,7 +595,7 @@ export default function HojePage() {
           <CardContent className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground">Proximos 7 dias</p>
-              <p className="text-2xl font-bold">{cockpit.data?.proximos7Dias.length ?? 0}</p>
+              <p className="text-2xl font-bold">{semDados ? '—' : cockpit.data?.proximos7Dias.length ?? 0}</p>
             </div>
             <ClipboardList className="h-5 w-5 text-muted-foreground" />
           </CardContent>
@@ -578,7 +604,7 @@ export default function HojePage() {
           <CardContent className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground">Bloqueios fechamento</p>
-              <p className="text-2xl font-bold">{bloqueios.length}</p>
+              <p className="text-2xl font-bold">{semDados ? '—' : bloqueios.length}</p>
             </div>
             <FolderOpen className="h-5 w-5 text-muted-foreground" />
           </CardContent>
@@ -617,7 +643,11 @@ export default function HojePage() {
                 <div key={g.id} className="flex items-center gap-3 px-4 py-2.5">
                   <Icon className={`h-4 w-4 shrink-0 ${g.cor}`} />
                   <p className="flex-1 text-xs text-muted-foreground">{g.texto}</p>
-                  <Link href="/hoje" className="text-[11px] font-medium text-primary hover:underline shrink-0">{g.acao}</Link>
+                  {/* Os três rótulos apontavam para "/hoje": clicar só recarregava esta
+                      mesma tela. Não existe rota que filtre "sem responsável" ou "sem
+                      prazo", então o rótulo fica como instrução em vez de fingir ser um
+                      atalho. A ação real está na própria linha da tarefa, na fila abaixo. */}
+                  <span className="text-[11px] font-medium text-muted-foreground shrink-0">{g.acao}</span>
                 </div>
               )
             })}
@@ -705,6 +735,16 @@ export default function HojePage() {
                 </div>
               ))}
             </div>
+          ) : cockpit.isError ? (
+            /* Antes de tudo: erro nunca cai no EmptyCockpit. O check verde de lá
+               é uma afirmação sobre a operação ("não há o que fazer"), e a query
+               nem chegou a responder. */
+            <EmptyState
+              icon={AlertTriangle}
+              title="Não foi possível carregar a fila"
+              description="A fila está vazia porque a leitura falhou — isso não significa que não há tarefas pendentes."
+              action={{ label: 'Tentar novamente', variant: 'outline', onClick: () => void refresh() }}
+            />
           ) : fila.length === 0 ? (
             <EmptyCockpit />
           ) : (

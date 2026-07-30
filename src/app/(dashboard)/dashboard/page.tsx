@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import {
   Users, ClipboardList, CheckSquare, TrendingUp,
-  AlertTriangle, ArrowRight, CheckCircle2, DollarSign,
+  AlertTriangle, AlertCircle, ArrowRight, CheckCircle2, DollarSign,
   Receipt, Bell, CalendarClock, WalletCards, Gauge, BarChart2, Sparkles,
   ChevronDown, Package2,
 } from 'lucide-react'
@@ -114,6 +114,17 @@ type ClienteRisco = {
   score: number
 }
 
+/* Quais blocos vieram de query rejeitada. Sem isso o [] do allSettled é
+   indistinguível de "nada pendente" — e um é ausência de dado, o outro é
+   afirmação sobre o mundo. */
+type SecoesComFalha = {
+  competencias: boolean
+  lancamentos: boolean
+  fechamentos: boolean
+}
+
+const SEM_FALHA: SecoesComFalha = { competencias: false, lancamentos: false, fechamentos: false }
+
 type DashboardV2Props = {
   hoje: Date
   mesAtual: number
@@ -135,6 +146,8 @@ type DashboardV2Props = {
   completedByDay: Record<number, number>
   totalFechamentos: number
   erro: unknown
+  erroParcial: unknown
+  secoesComFalha: SecoesComFalha
   onRetry: () => void
 }
 
@@ -267,6 +280,9 @@ function DashboardV2(props: DashboardV2Props) {
   const fiscalCritico = props.alertasNFSe.slice(0, 4)
   const totalComp = (props.compCounts.aberta ?? 0) + (props.compCounts.em_andamento ?? 0) + (props.compCounts.concluida ?? 0)
   const pctConcluida = totalComp > 0 ? Math.round(((props.compCounts.concluida ?? 0) / totalComp) * 100) : 0
+  // Com a query de lançamentos rejeitada, o zero de cobranças vem da falha e não
+  // da carteira limpa: não dá para afirmar ausência de alerta nem carimbar check verde.
+  const podeAfirmarSemAlerta = totalUrgente === 0 && !props.secoesComFalha.lancamentos
 
   return (
     <div className="space-y-5">
@@ -306,6 +322,15 @@ function DashboardV2(props: DashboardV2Props) {
         />
       ) : null}
 
+      {!props.erro && props.erroParcial ? (
+        <InlineAlert
+          tone="danger"
+          title="Parte do painel não pôde ser carregada."
+          description={getErrorMessage(props.erroParcial, 'Alguns blocos ficaram sem dado. O que aparece como “—” não foi verificado.')}
+          action={{ label: 'Tentar novamente', onClick: props.onRetry }}
+        />
+      ) : null}
+
       {props.erro ? null : (
       <>
       <section className="rounded-2xl border border-border/70 bg-card/95 p-4 card-shadow">
@@ -313,16 +338,24 @@ function DashboardV2(props: DashboardV2Props) {
           <div className="flex items-start gap-3">
             <div className={cn(
               'flex size-11 shrink-0 items-center justify-center rounded-xl',
-              totalUrgente > 0 ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success'
+              totalUrgente > 0 ? 'bg-destructive/10 text-destructive'
+                : podeAfirmarSemAlerta ? 'bg-success/10 text-success'
+                : 'bg-muted text-muted-foreground'
             )}>
-              {totalUrgente > 0 ? <AlertTriangle className="size-5" /> : <CheckCircle2 className="size-5" />}
+              {totalUrgente > 0 ? <AlertTriangle className="size-5" />
+                : podeAfirmarSemAlerta ? <CheckCircle2 className="size-5" />
+                : <AlertCircle className="size-5" />}
             </div>
             <div>
               <h2 className="text-base font-semibold">
-                {totalUrgente > 0 ? `${totalUrgente} ponto(s) pedem ação` : 'Operação sem alerta crítico imediato'}
+                {totalUrgente > 0 ? `${totalUrgente} ponto(s) pedem ação`
+                  : podeAfirmarSemAlerta ? 'Operação sem alerta crítico imediato'
+                  : 'Não foi possível verificar os alertas'}
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Prioridade calculada por tarefas vencidas, cobranças atrasadas e emissão fiscal próxima.
+                {podeAfirmarSemAlerta || totalUrgente > 0
+                  ? 'Prioridade calculada por tarefas vencidas, cobranças atrasadas e emissão fiscal próxima.'
+                  : 'As cobranças não foram carregadas — o que aparece como “—” não foi verificado.'}
               </p>
             </div>
           </div>
@@ -332,7 +365,9 @@ function DashboardV2(props: DashboardV2Props) {
               <p className="text-[11px] text-muted-foreground">tarefas</p>
             </Link>
             <Link href="/financeiro?status=pendente" className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2 hover:bg-muted/45">
-              <p className="text-lg font-bold tabular-nums text-destructive">{props.lancamentosVencidos.length}</p>
+              <p className={cn('text-lg font-bold tabular-nums', props.secoesComFalha.lancamentos ? 'text-muted-foreground' : 'text-destructive')}>
+                {props.secoesComFalha.lancamentos ? '—' : props.lancamentosVencidos.length}
+              </p>
               <p className="text-[11px] text-muted-foreground">cobranças</p>
             </Link>
             <Link href="/fiscal" className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2 hover:bg-muted/45">
@@ -406,7 +441,11 @@ function DashboardV2(props: DashboardV2Props) {
                 {financeiroCritico.length > 0 && `${financeiroCritico.length} cobrança(s) em atraso`}
                 {(tarefasCriticas.length > 0 || financeiroCritico.length > 0) && fiscalCritico.length > 0 && ' · '}
                 {fiscalCritico.length > 0 && `${fiscalCritico.length} NFS-e a emitir`}
-                {tarefasCriticas.length === 0 && financeiroCritico.length === 0 && fiscalCritico.length === 0 && 'Nenhuma ação crítica no momento.'}
+                {tarefasCriticas.length === 0 && financeiroCritico.length === 0 && fiscalCritico.length === 0 && (
+                  props.secoesComFalha.lancamentos
+                    ? 'Cobranças não carregadas — não é possível afirmar que não há pendência.'
+                    : 'Nenhuma ação crítica no momento.'
+                )}
               </p>
             </div>
             <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground group-hover:text-primary">
@@ -522,11 +561,15 @@ function DashboardV2(props: DashboardV2Props) {
             </div>
           )}
 
-          <CurvaSFechamento
-            completedByDay={props.completedByDay}
-            totalFechamentos={props.totalFechamentos}
-            hoje={props.hoje}
-          />
+          {/* Sem a coleção de fechamentos a curva desenharia 0% de execução e o
+              selo de atraso — omitimos o gráfico em vez de inventar a linha. */}
+          {props.secoesComFalha.fechamentos ? null : (
+            <CurvaSFechamento
+              completedByDay={props.completedByDay}
+              totalFechamentos={props.totalFechamentos}
+              hoje={props.hoje}
+            />
+          )}
 
           <div className="rounded-2xl border border-border/70 bg-card/95 p-4 card-shadow">
             <h2 className="text-sm font-semibold">Atalhos executivos</h2>
@@ -576,6 +619,10 @@ export default function DashboardPage() {
   const [completedByDay,       setCompletedByDay]       = useState<Record<number, number>>({})
   const [totalFechamentos,     setTotalFechamentos]     = useState(0)
   const [erro,                 setErro]                 = useState<unknown>(null)
+  // Falha parcial: o painel continua de pé, mas as seções afetadas precisam
+  // dizer que não sabem em vez de herdar o [] da query rejeitada.
+  const [erroParcial,          setErroParcial]          = useState<unknown>(null)
+  const [secoesComFalha,       setSecoesComFalha]       = useState<SecoesComFalha>(SEM_FALHA)
   const [reloadToken,          setReloadToken]          = useState(0)
 
   const AVISO_DIAS = 5 // janela de alerta em dias
@@ -586,6 +633,8 @@ export default function DashboardPage() {
 
     setLoading(true)
     setErro(null)
+    setErroParcial(null)
+    setSecoesComFalha(SEM_FALHA)
 
     async function load() {
       const tenantId = usuario?.tenantId ?? appConfig.tenantId
@@ -627,18 +676,31 @@ export default function DashboardPage() {
     }
 
     load().then(({ kpiErro, results }) => {
-      // Critério de falha crítica: KPI indisponível (doc + recálculo falharam),
-      // ou as buscas fundamentais (clientes/tarefas) rejeitaram, ou todas as
-      // 5 listas rejeitaram. Peças secundárias isoladas (ex.: só fechamentos)
-      // não disparam o alerta — mantemos o fallback silencioso pra elas.
+      // Critério de falha crítica: KPI indisponível (doc + recálculo falharam)
+      // ou as buscas fundamentais (clientes/tarefas) rejeitaram. Sem elas o
+      // painel inteiro seria chute, então o corpo nem é renderizado.
       const clientesResult = results[0]
       const tarefasResult  = results[1]
-      const todasRejeitaram = results.every((r) => r.status === 'rejected')
+      const compResult     = results[2]
+      const lancResult     = results[3]
+      const fechResult     = results[4]
       const falhaCritica = kpiErro
         ?? (clientesResult.status === 'rejected' ? clientesResult.reason : null)
         ?? (tarefasResult.status === 'rejected' ? tarefasResult.reason : null)
-        ?? (todasRejeitaram ? (results.find((r) => r.status === 'rejected') as PromiseRejectedResult).reason : null)
       if (falhaCritica) setErro(falhaCritica)
+
+      // Falha em competências, lançamentos ou fechamentos não derruba o painel,
+      // mas também não pode passar batida: Promise.allSettled devolve [] para a
+      // query rejeitada, e lista vazia era lida como "está tudo em dia" com
+      // check verde. Cada seção afetada passa a admitir que não sabe.
+      const falhaSecundaria = [compResult, lancResult, fechResult]
+        .find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined
+      if (!falhaCritica && falhaSecundaria) setErroParcial(falhaSecundaria.reason)
+      setSecoesComFalha({
+        competencias: compResult.status === 'rejected',
+        lancamentos:  lancResult.status === 'rejected',
+        fechamentos:  fechResult.status === 'rejected',
+      })
 
       function get<T>(idx: number): T[] {
         const r = results[idx]
@@ -655,9 +717,13 @@ export default function DashboardPage() {
       const byDay: Record<number, number> = {}
       for (const f of fechamentosData) {
         if (!DONE_STATUS.has(f.dasStatus as string)) continue
-        const updatedAt = tsToDate(f.updatedAt as Parameters<typeof tsToDate>[0])
-        if (!updatedAt) continue
-        const day = updatedAt.getDate()
+        // A coleção fechamentos grava 'atualizadoEm' (padrão do firestore-client).
+        // 'updatedAt' nunca existiu no banco: tsToDate devolvia null, o loop dava
+        // continue em todo documento e a curva ficava travada em zero — exibindo
+        // selo vermelho de atraso mesmo com o mês 100% fechado.
+        const atualizadoEm = tsToDate(f.atualizadoEm as Parameters<typeof tsToDate>[0])
+        if (!atualizadoEm) continue
+        const day = atualizadoEm.getDate()
         byDay[day] = (byDay[day] ?? 0) + 1
       }
       setCompletedByDay(byDay)
@@ -766,6 +832,8 @@ export default function DashboardPage() {
         completedByDay={completedByDay}
         totalFechamentos={totalFechamentos}
         erro={erro}
+        erroParcial={erroParcial}
+        secoesComFalha={secoesComFalha}
         onRetry={() => setReloadToken((t) => t + 1)}
       />
     )
@@ -788,6 +856,15 @@ export default function DashboardPage() {
           tone="danger"
           title="Não foi possível carregar o painel."
           description={getErrorMessage(erro, 'Ocorreu um erro ao carregar os dados executivos. Tente novamente.')}
+          action={{ label: 'Tentar novamente', onClick: () => setReloadToken((t) => t + 1) }}
+        />
+      ) : null}
+
+      {!erro && erroParcial ? (
+        <InlineAlert
+          tone="danger"
+          title="Parte do painel não pôde ser carregada."
+          description={getErrorMessage(erroParcial, 'Alguns blocos ficaram sem dado. O que não carregou não está sendo exibido como “em dia”.')}
           action={{ label: 'Tentar novamente', onClick: () => setReloadToken((t) => t + 1) }}
         />
       ) : null}
@@ -993,7 +1070,18 @@ export default function DashboardPage() {
                 Ver todas <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
-            {competenciasAbertas.length === 0 ? (
+            {/* A query rejeitada devolve [], e [] aqui significava "todos em dia"
+                com check verde. Sem o dado a tela não afirma nada. */}
+            {secoesComFalha.competencias ? (
+              <div className="px-5 py-5">
+                <InlineAlert
+                  tone="danger"
+                  title="Não foi possível carregar os fechamentos."
+                  description="Não dá para afirmar que o mês anterior está em dia — o dado não chegou."
+                  action={{ label: 'Tentar novamente', onClick: () => setReloadToken((t) => t + 1) }}
+                />
+              </div>
+            ) : competenciasAbertas.length === 0 ? (
               <div className="px-5 py-8 flex flex-col items-center gap-2">
                 <CheckCircle2 className="h-8 w-8 text-success/50" />
                 <p className="text-sm text-muted-foreground">Todos os fechamentos em dia</p>
@@ -1028,7 +1116,16 @@ export default function DashboardPage() {
                 Ver todas <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
-            {lancamentosVencidos.length === 0 ? (
+            {secoesComFalha.lancamentos ? (
+              <div className="px-5 py-5">
+                <InlineAlert
+                  tone="danger"
+                  title="Não foi possível carregar as cobranças."
+                  description="Pode haver cobrança vencida que a tela não está mostrando."
+                  action={{ label: 'Tentar novamente', onClick: () => setReloadToken((t) => t + 1) }}
+                />
+              </div>
+            ) : lancamentosVencidos.length === 0 ? (
               <div className="px-5 py-8 flex flex-col items-center gap-2">
                 <CheckCircle2 className="h-8 w-8 text-success/50" />
                 <p className="text-sm text-muted-foreground">Sem cobranças em atraso</p>

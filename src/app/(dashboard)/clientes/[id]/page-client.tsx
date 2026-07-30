@@ -12,6 +12,7 @@ import { formatCpfCnpj, formatDate, formatCurrency, formatMesAno, tsToDate, cn }
 import { getErrorMessage } from '@/lib/error-message'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
+import { InlineAlert } from '@/components/ui/inline-alert'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -23,11 +24,13 @@ import {
   ArrowLeft, Mail, MapPin, Pencil, ShieldCheck, ShieldAlert, ShieldOff,
   AlertTriangle, Plus, Receipt, Wallet, AlertCircle, Bell, FileDown,
   CheckSquare, DollarSign, BookOpen, Loader2, Save, Send, MessageSquarePlus, Trash2,
+  Package, Truck,
 } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
+import { EmitirNfeModal } from '@/components/fiscal/emitir-nfe-modal'
 import { useAuth } from '@/contexts/auth-context'
 import { canAccessTela } from '@/lib/permissions'
 import { getPathSegmentAfter } from '@/lib/route-params'
@@ -133,6 +136,13 @@ const REPRESENTANTE_CREDENCIAIS_FIELDS = [
   ['responsavelSenhaWebPrefeitura', 'Senha WEB Prefeitura'],
   ['responsavelSenhaPinCertificadoDigitalCpf', 'Senha PIN CPF'],
 ] as const
+
+/* Cada bloco de dados do cliente vem de uma query independente. Sem saber qual
+   delas rejeitou, o null do catch virava lista vazia e a tela lia lista vazia
+   como "nada pendente" — R$ 0,00 e badge verde "Em dia" em cima de erro. */
+type SecaoCliente =
+  | 'cliente' | 'servicos' | 'competencias' | 'lancamentos' | 'tarefas'
+  | 'rascunhos' | 'fiscal' | 'pop' | 'comentarios' | 'popNotas'
 
 function fieldValue(data: Record<string, unknown>, key: string) {
   const value = data[key]
@@ -349,12 +359,15 @@ export default function ClienteDetailPage() {
   const [rascunhos,    setRascunhos]    = useState<Array<Record<string, unknown>>>([])
   const [fiscal,       setFiscal]       = useState<Record<string, unknown> | null>(null)
   const [loading,      setLoading]      = useState(true)
+  const [erroCarga,    setErroCarga]    = useState<unknown>(null)
+  const [secoesComFalha, setSecoesComFalha] = useState<Partial<Record<SecaoCliente, boolean>>>({})
   const [configOpen,   setConfigOpen]   = useState(false)
   const [servicoDialogOpen, setServicoDialogOpen] = useState(false)
   const [comentarios,  setComentarios]  = useState<Array<Record<string, unknown>>>([])
   const [commentText,  setCommentText]  = useState('')
   const [commentSaving, setCommentSaving] = useState(false)
   const [emitirOpen, setEmitirOpen] = useState(false)
+  const [nfeOpen, setNfeOpen] = useState(false)
   const [timelineFilter, setTimelineFilter] = useState<TimelineEventType | 'todos'>('todos')
   const [deleteOpen, setDeleteOpen] = useState(false)
 
@@ -372,20 +385,35 @@ export default function ClienteDetailPage() {
 
   const loadClienteContext = useCallback(() => {
     if (!id) return Promise.resolve()
-    function get<T>(p: Promise<T>): Promise<T | null> { return p.catch(() => null) }
+    // safe() engolia todo erro em null e a tela tratava null como "veio vazio".
+    // Guardamos qual seção falhou para que ela mostre "—" em vez de zero.
+    const erros = new Map<SecaoCliente, unknown>()
+    function get<T>(secao: SecaoCliente, p: Promise<T>): Promise<T | null> {
+      return p.catch((err) => { erros.set(secao, err); return null })
+    }
     setLoading(true)
+    setErroCarga(null)
+    setSecoesComFalha({})
     return Promise.all([
-      get(getDocument('clientes', id)),
-      get(listDocuments('clientes_servicos', [where('clienteId', '==', id), limit(50)])),
-      get(listDocuments('competencias', [where('clienteId', '==', id), orderBy('ano', 'desc'), orderBy('mes', 'desc'), limit(20)])),
-      get(listDocuments('lancamentos', [where('clienteId', '==', id), orderBy('dataVencimento', 'desc'), limit(20)])),
-      get(listDocuments('tarefas', [where('clienteId', '==', id), limit(30)])),
-      get(listDocuments('nfse_rascunhos', [where('clienteId', '==', id), limit(20)])),
-      get(listDocuments('clientes_fiscal', [where('clienteId', '==', id), limit(1)])),
-      get(listDocuments('clientes_pop', [where('clienteId', '==', id), limit(1)])),
-      get(listDocuments('clientes_comentarios', [where('clienteId', '==', id), orderBy('criadoEm', 'desc'), limit(30)])),
-      get(listDocuments('clientes_pop_notas', [where('clienteId', '==', id), orderBy('criadoEm', 'desc'), limit(50)])),
+      get('cliente',      getDocument('clientes', id)),
+      get('servicos',     listDocuments('clientes_servicos', [where('clienteId', '==', id), limit(50)])),
+      get('competencias', listDocuments('competencias', [where('clienteId', '==', id), orderBy('ano', 'desc'), orderBy('mes', 'desc'), limit(20)])),
+      get('lancamentos',  listDocuments('lancamentos', [where('clienteId', '==', id), orderBy('dataVencimento', 'desc'), limit(20)])),
+      get('tarefas',      listDocuments('tarefas', [where('clienteId', '==', id), limit(30)])),
+      get('rascunhos',    listDocuments('nfse_rascunhos', [where('clienteId', '==', id), limit(20)])),
+      get('fiscal',       listDocuments('clientes_fiscal', [where('clienteId', '==', id), limit(1)])),
+      get('pop',          listDocuments('clientes_pop', [where('clienteId', '==', id), limit(1)])),
+      get('comentarios',  listDocuments('clientes_comentarios', [where('clienteId', '==', id), orderBy('criadoEm', 'desc'), limit(30)])),
+      get('popNotas',     listDocuments('clientes_pop_notas', [where('clienteId', '==', id), orderBy('criadoEm', 'desc'), limit(50)])),
     ]).then(([clienteData, servicosData, competenciasData, lancamentosData, tarefasData, rascunhosData, fiscalData, popData, comentariosData, popNotasData]) => {
+      const falhas: Partial<Record<SecaoCliente, boolean>> = {}
+      for (const secao of erros.keys()) falhas[secao] = true
+      setSecoesComFalha(falhas)
+      setErroCarga([...erros.values()][0] ?? null)
+
+      // Falhar ao buscar o cliente é diferente de o cliente não existir:
+      // redirecionar aqui esconderia o erro e tiraria o usuário da tela.
+      if (erros.has('cliente')) return
       if (!clienteData) { router.push('/clientes'); return }
       setCliente(clienteData as Record<string, unknown>)
       setServicos(((servicosData ?? []) as Array<Record<string, unknown>>).sort((a, b) => {
@@ -496,7 +524,13 @@ export default function ClienteDetailPage() {
     const events: TimelineEvent[] = []
 
     for (const c of competencias) {
-      const ts = tsToDate((c.updatedAt ?? c.createdAt) as Timestamp | undefined) ?? new Date()
+      // Os campos gravados são atualizadoEm/criadoEm. Com updatedAt/createdAt
+      // (que não existem no banco) tsToDate devolvia null, o fallback new Date()
+      // sempre vencia e toda competência aparecia como "agora", empilhada no
+      // topo da timeline acima dos lançamentos, que têm data real. Sem nenhuma
+      // das duas datas o evento é omitido — datar de hoje seria inventar histórico.
+      const ts = tsToDate((c.atualizadoEm ?? c.criadoEm) as Timestamp | undefined)
+      if (!ts) continue
       const status = c.status as string
       events.push({
         id:          `comp-${c.id as string}`,
@@ -523,7 +557,9 @@ export default function ClienteDetailPage() {
       })
     }
     for (const t of tarefas) {
-      const ts = tsToDate((t.updatedAt ?? t.createdAt) as Timestamp | undefined) ?? new Date()
+      // Mesma armadilha das competências: o banco grava atualizadoEm/criadoEm.
+      const ts = tsToDate((t.atualizadoEm ?? t.criadoEm) as Timestamp | undefined)
+      if (!ts) continue
       const status = t.status as string
       const prazo = tsToDate(t.dataPrazo as Timestamp | undefined)
       const vencida = prazo ? prazo < hoje && ['pendente', 'em_andamento'].includes(status) : false
@@ -582,18 +618,29 @@ export default function ClienteDetailPage() {
   const fiscalIbge = fiscal?.municipioIbge as string | undefined
   const fiscalTipo = fiscalIbge ? MUNICIPIO_TIPO[fiscalIbge] : undefined
 
+  /* Query que falhou deixou a lista vazia — e vazio aqui era lido como "não há
+     pendência". Zero é uma afirmação sobre o mundo; "—" é ausência de informação. */
+  const semServicos     = secoesComFalha.servicos     === true
+  const semCompetencias = secoesComFalha.competencias === true
+  const semLancamentos  = secoesComFalha.lancamentos  === true
+  const semTarefas      = secoesComFalha.tarefas      === true
+  const semRascunhos    = secoesComFalha.rascunhos    === true
+  const semFiscal       = secoesComFalha.fiscal       === true
+
   /* ── proximosPassos ───────────────────────────────────── */
   const proximosPassos = useMemo(() => {
     const hoje = new Date()
     const list: Array<{ id: string; titulo: string; descricao: string; severidade: 'danger' | 'warning'; href?: string }> = []
-    if (servicos.length === 0) list.push({ id: 'servico-ausente', titulo: 'Sem serviço contratado', descricao: 'Vincule pelo menos um serviço para gerar competências, tarefas e honorários.', severidade: 'danger' })
+    // Alertas por ausência (sem serviço / sem config fiscal) só valem se a query
+    // respondeu — senão viram alarme falso em cima de erro de carga.
+    if (!semServicos && servicos.length === 0) list.push({ id: 'servico-ausente', titulo: 'Sem serviço contratado', descricao: 'Vincule pelo menos um serviço para gerar competências, tarefas e honorários.', severidade: 'danger' })
     const competenciaAberta = competencias.find(c => (c.status as string) === 'aberta')
     if (competenciaAberta) list.push({ id: 'comp-aberta', titulo: 'Competência em aberto', descricao: `Pendente em ${formatMesAno(competenciaAberta.mes as number, competenciaAberta.ano as number)}.`, severidade: 'warning', href: `/competencias/${competenciaAberta.id as string}` })
     const tarefaAtrasada = tarefas.find(t => { if (!['pendente', 'em_andamento'].includes((t.status as string) ?? '')) return false; const v = tsToDate(t.dataPrazo); return !!v && v < hoje })
     if (tarefaAtrasada) list.push({ id: 'tarefa-atrasada', titulo: 'Tarefa atrasada', descricao: (tarefaAtrasada.titulo as string | undefined) ?? 'Tarefa pendente com prazo vencido.', severidade: 'danger', href: `/tarefas/${tarefaAtrasada.id as string}` })
     const lancAtrasado = lancamentos.find(l => { if ((l.status as string) !== 'pendente') return false; const v = tsToDate(l.dataVencimento); return !!v && v < hoje })
     if (lancAtrasado) list.push({ id: 'lanc-atrasado', titulo: 'Cobrança em atraso', descricao: `Lançamento vencido: ${(lancAtrasado.descricao as string) ?? 'sem descrição'}.`, severidade: 'danger', href: '/financeiro' })
-    if (!fiscal) list.push({ id: 'fiscal-config', titulo: 'Configuração fiscal pendente', descricao: 'Cliente sem configuração NFS-e.', severidade: 'warning' })
+    if (!semFiscal && !fiscal) list.push({ id: 'fiscal-config', titulo: 'Configuração fiscal pendente', descricao: 'Cliente sem configuração NFS-e.', severidade: 'warning' })
     const certVencimento = fiscalCredenciais.certVencimento as string | undefined
     if (fiscal && !certVencimento && (fiscalTipo === 'abrasf_a1' || fiscalTipo === 'geisweb_a1')) list.push({ id: 'cert-ausente', titulo: 'Certificado A1 ausente', descricao: 'Envie o certificado para liberar integração fiscal A1.', severidade: 'warning' })
     if (certVencimento) {
@@ -604,7 +651,7 @@ export default function ClienteDetailPage() {
     const rascunhoPendente = rascunhos.find(r => ['rascunho', 'pronto_para_emitir', 'aguardando_emissao', 'erro_integracao'].includes((r.status as string) ?? ''))
     if (rascunhoPendente) list.push({ id: 'nfse-rascunho', titulo: 'Rascunho NFS-e pendente', descricao: `Status: ${(rascunhoPendente.status as string) ?? 'rascunho'}.`, severidade: 'warning', href: '/fiscal' })
     return list
-  }, [competencias, fiscal, fiscalCredenciais, fiscalTipo, lancamentos, rascunhos, servicos.length, tarefas])
+  }, [competencias, fiscal, fiscalCredenciais, fiscalTipo, lancamentos, rascunhos, semFiscal, semServicos, servicos.length, tarefas])
 
   const competenciaAberta   = competencias.find(c => (c.status as string) === 'aberta')
   const lancamentoAtrasado  = lancamentos.find(l => { const v = tsToDate(l.dataVencimento); return (l.status as string) === 'pendente' && !!v && v < new Date() })
@@ -614,7 +661,10 @@ export default function ClienteDetailPage() {
   const HEALTH_DIMS = 6
   const healthScore = (servicos.length > 0 ? 1 : 0) + (fiscal ? 1 : 0) + (!competenciaAberta ? 1 : 0) + (!lancamentoAtrasado ? 1 : 0) + (!tarefaAtrasada ? 1 : 0) + (!rascunhoCritico ? 1 : 0)
   const healthPct   = Math.round((healthScore / HEALTH_DIMS) * 100)
-  const healthTone  = healthPct >= 83 ? 'text-success' : healthPct >= 50 ? 'text-warning' : 'text-destructive'
+  // Dimensão que não carregou pontuava como saudável (o `!undefined` vira true) e
+  // inflava o score. Sem as 6 confiáveis o percentual é omitido, não arredondado.
+  const saudeConfiavel = !semServicos && !semFiscal && !semCompetencias && !semLancamentos && !semTarefas && !semRascunhos
+  const healthTone  = !saudeConfiavel ? 'text-muted-foreground' : healthPct >= 83 ? 'text-success' : healthPct >= 50 ? 'text-warning' : 'text-destructive'
 
   /* ── financial KPIs (right panel) ────────────────────── */
   const hoje2 = new Date()
@@ -668,9 +718,30 @@ export default function ClienteDetailPage() {
     </div>
   )
 
-  if (!cliente) return null
+  // Sem o cadastro não há tela para montar. Antes isso era um branco silencioso
+  // (ou um redirect) mesmo quando a causa foi erro de carga, não cliente inexistente.
+  if (!cliente) return erroCarga ? (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <Link href="/clientes">
+          <Button variant="ghost" size="icon" className="h-9 w-9"><ArrowLeft className="h-4 w-4" /></Button>
+        </Link>
+        <h1 className="text-lg font-semibold">Cliente</h1>
+      </div>
+      <InlineAlert
+        tone="danger"
+        title="Não foi possível carregar o cliente."
+        description={getErrorMessage(erroCarga, 'Ocorreu um erro ao buscar o cadastro. Tente novamente.')}
+        action={{ label: 'Tentar novamente', onClick: () => { void loadClienteContext() } }}
+      />
+    </div>
+  ) : null
 
   const statusInfo = STATUS_LABELS[cliente.status as string] ?? { label: String(cliente.status), variant: 'outline' as const }
+  // Tipo de documento fiscal que o cliente emite, derivado do CNAE (categoriaFiscal —
+  // ver scripts/classificar-clientes-fiscal.mjs). A aba Fiscal era fixada em NFS-e
+  // pra todo mundo; clientes 'produto' (ex.: distribuidoras) emitem NF-e, não NFS-e.
+  const categoriaFiscal = (cliente.categoriaFiscal as string) ?? 'servico'
   const creds      = fiscalCredenciais
   const ibge       = fiscalIbge
   const tipo       = fiscalTipo
@@ -715,6 +786,15 @@ export default function ClienteDetailPage() {
           </Button>
         )}
       </div>
+
+      {erroCarga ? (
+        <InlineAlert
+          tone="danger"
+          title="Parte dos dados deste cliente não foi carregada."
+          description={getErrorMessage(erroCarga, 'Os blocos marcados com “—” não puderam ser verificados. Não considere esta tela completa.')}
+          action={{ label: 'Tentar novamente', onClick: () => { void loadClienteContext() } }}
+        />
+      ) : null}
 
       {/* ── 70/30 grid ──────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_300px] items-start">
@@ -840,7 +920,14 @@ export default function ClienteDetailPage() {
                 </div>
               </CardHeader>
               <CardContent className="px-4 pb-4">
-                {competencias.length === 0
+                {semCompetencias
+                  ? <InlineAlert
+                      tone="danger"
+                      title="Não foi possível carregar as competências."
+                      description="A lista abaixo estaria vazia por erro de carga, não por ausência de competências."
+                      action={{ label: 'Tentar novamente', onClick: () => { void loadClienteContext() } }}
+                    />
+                  : competencias.length === 0
                   ? <EmptyState size="sm" title="Nenhuma competência" description="Crie uma competência para este cliente." action={{ label: 'Nova competência', href: `/competencias/nova?clienteId=${id}` }} />
                   : <div className="divide-y">
                       {competencias.map(c => (
@@ -869,7 +956,14 @@ export default function ClienteDetailPage() {
                 <Button size="xs" onClick={() => setServicoDialogOpen(true)}><Plus className="h-3 w-3" />Serviço</Button>
               </CardHeader>
               <CardContent className="px-4 pb-4">
-                {servicos.length === 0
+                {semServicos
+                  ? <InlineAlert
+                      tone="danger"
+                      title="Não foi possível carregar os serviços."
+                      description="Não dá para afirmar que o cliente está sem serviço contratado."
+                      action={{ label: 'Tentar novamente', onClick: () => { void loadClienteContext() } }}
+                    />
+                  : servicos.length === 0
                   ? <EmptyState size="sm" title="Nenhum serviço vinculado" description="Vincule um serviço para gerar competências e honorários." action={{ label: 'Vincular serviço', onClick: () => setServicoDialogOpen(true) }} />
                   : <div className="divide-y">
                       {servicos.map(s => (
@@ -891,54 +985,100 @@ export default function ClienteDetailPage() {
 
           {/* Fiscal */}
           <TabsContent value="fiscal" className="space-y-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
-                <div className="flex items-center gap-2">
-                  <CardTitle className="text-sm">Configuração NFS-e</CardTitle>
-                  {fiscal?.emissaoAutomatica === true && (
-                    <Badge variant="destructive" className="gap-1 text-[10px]" title="Emite sem revisão humana, sozinho, no dia configurado">
-                      <AlertTriangle className="h-2.5 w-2.5" /> Emissão automática
-                    </Badge>
-                  )}
-                </div>
-                <Button size="sm" variant="outline" onClick={() => setConfigOpen(true)}>
-                  <Pencil className="h-3.5 w-3.5" />{fiscal ? 'Editar' : 'Configurar'}
-                </Button>
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                {!fiscal
-                  ? <div className="text-center py-6 space-y-3">
-                      <EmptyState size="sm" title="Sem configuração fiscal" description="Configure os dados de NFS-e deste cliente." />
-                      <Button size="sm" onClick={() => setConfigOpen(true)}>Configurar NFS-e</Button>
-                    </div>
-                  : <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
-                      <div><dt className="text-xs text-muted-foreground">Município</dt><dd className="font-medium">{municipioNome}</dd></div>
-                      <div><dt className="text-xs text-muted-foreground">Ambiente</dt><dd><Badge variant={fiscal.ambienteEmissao === 'producao' ? 'default' : 'secondary'}>{fiscal.ambienteEmissao === 'producao' ? 'Produção' : 'Homologação'}</Badge></dd></div>
-                      <div><dt className="text-xs text-muted-foreground">Insc. Municipal</dt><dd className="font-medium">{(fiscal.inscricaoMunicipal as string) ?? '—'}</dd></div>
-                      <div><dt className="text-xs text-muted-foreground">Regime</dt><dd className="font-medium">{REGIME_MAP[fiscal.regimeTributario as string] ?? '—'}</dd></div>
-                      <div><dt className="text-xs text-muted-foreground">Optante Simples</dt><dd className="font-medium">{fiscal.optanteSimples ? 'Sim' : 'Não'}</dd></div>
-                      <div><dt className="text-xs text-muted-foreground">Alíquota ISS</dt><dd className="font-medium">{fiscal.aliquotaPadrao != null ? `${fiscal.aliquotaPadrao}%` : '—'}</dd></div>
-                    </dl>
-                }
-              </CardContent>
-            </Card>
+            {categoriaFiscal === 'produto' ? (
+              <>
+                <Card>
+                  <CardHeader className="flex flex-row items-center gap-2 py-3 px-4">
+                    <Package className="h-4 w-4 text-primary" />
+                    <CardTitle className="text-sm">NF-e (produto)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    <p className="text-sm text-muted-foreground">
+                      Este cliente foi classificado pelo CNAE como emissor de <strong>NF-e</strong> (nota fiscal
+                      de produto/mercadoria) — não usa a configuração municipal de NFS-e. O catálogo de
+                      produtos e o destinatário são preenchidos direto na emissão.
+                    </p>
+                  </CardContent>
+                </Card>
 
-            {fiscal && (tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
+                {podeAcessarFiscal && (
+                  <div className="flex justify-end">
+                    <Button size="sm" onClick={() => setNfeOpen(true)}><Receipt className="h-3.5 w-3.5" />Emitir NF-e</Button>
+                  </div>
+                )}
+              </>
+            ) : categoriaFiscal === 'transporte' ? (
               <Card>
                 <CardHeader className="flex flex-row items-center gap-2 py-3 px-4">
-                  {certInfo ? certInfo.valido ? <ShieldCheck className="h-4 w-4 text-success" /> : <ShieldAlert className="h-4 w-4 text-destructive" /> : <ShieldOff className="h-4 w-4 text-muted-foreground" />}
-                  <CardTitle className="text-sm">Certificado Digital A1</CardTitle>
+                  <Truck className="h-4 w-4 text-warning" />
+                  <CardTitle className="text-sm">CT-e (transporte)</CardTitle>
                 </CardHeader>
                 <CardContent className="px-4 pb-4">
-                  <CertificadoUpload clienteId={id} certInfo={certInfo} onUploaded={() => loadFiscal()} />
+                  <p className="text-sm text-muted-foreground">
+                    Este cliente foi classificado pelo CNAE como emissor de <strong>CT-e</strong> (conhecimento de
+                    transporte). A Spedy não emite CT-e — este cliente autoemite por fora da plataforma.
+                  </p>
                 </CardContent>
               </Card>
-            )}
+            ) : (
+              <>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-sm">Configuração NFS-e</CardTitle>
+                      {fiscal?.emissaoAutomatica === true && (
+                        <Badge variant="destructive" className="gap-1 text-[10px]" title="Emite sem revisão humana, sozinho, no dia configurado">
+                          <AlertTriangle className="h-2.5 w-2.5" /> Emissão automática
+                        </Badge>
+                      )}
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => setConfigOpen(true)}>
+                      <Pencil className="h-3.5 w-3.5" />{fiscal ? 'Editar' : 'Configurar'}
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    {semFiscal
+                      ? <InlineAlert
+                          tone="danger"
+                          title="Não foi possível carregar a configuração fiscal."
+                          description="Não configure de novo por cima: o dado existente pode estar lá e não ter sido lido."
+                          action={{ label: 'Tentar novamente', onClick: () => { void loadClienteContext() } }}
+                        />
+                      : !fiscal
+                      ? <div className="text-center py-6 space-y-3">
+                          <EmptyState size="sm" title="Sem configuração fiscal" description="Configure os dados de NFS-e deste cliente." />
+                          <Button size="sm" onClick={() => setConfigOpen(true)}>Configurar NFS-e</Button>
+                        </div>
+                      : <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
+                          <div><dt className="text-xs text-muted-foreground">Município</dt><dd className="font-medium">{municipioNome}</dd></div>
+                          <div><dt className="text-xs text-muted-foreground">Ambiente</dt><dd><Badge variant={fiscal.ambienteEmissao === 'producao' ? 'default' : 'secondary'}>{fiscal.ambienteEmissao === 'producao' ? 'Produção' : 'Homologação'}</Badge></dd></div>
+                          <div><dt className="text-xs text-muted-foreground">Insc. Municipal</dt><dd className="font-medium">{(fiscal.inscricaoMunicipal as string) ?? '—'}</dd></div>
+                          <div><dt className="text-xs text-muted-foreground">Regime</dt><dd className="font-medium">{REGIME_MAP[fiscal.regimeTributario as string] ?? '—'}</dd></div>
+                          <div><dt className="text-xs text-muted-foreground">Optante Simples</dt><dd className="font-medium">{fiscal.optanteSimples ? 'Sim' : 'Não'}</dd></div>
+                          <div><dt className="text-xs text-muted-foreground">Alíquota ISS</dt><dd className="font-medium">{fiscal.aliquotaPadrao != null ? `${fiscal.aliquotaPadrao}%` : '—'}</dd></div>
+                        </dl>
+                    }
+                  </CardContent>
+                </Card>
 
-            {fiscal && podeAcessarFiscal && (
-              <div className="flex justify-end">
-                <Button size="sm" onClick={() => setEmitirOpen(true)}><Receipt className="h-3.5 w-3.5" />Emitir NFS-e</Button>
-              </div>
+                {fiscal && (tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
+                  <Card>
+                    <CardHeader className="flex flex-row items-center gap-2 py-3 px-4">
+                      {certInfo ? certInfo.valido ? <ShieldCheck className="h-4 w-4 text-success" /> : <ShieldAlert className="h-4 w-4 text-destructive" /> : <ShieldOff className="h-4 w-4 text-muted-foreground" />}
+                      <CardTitle className="text-sm">Certificado Digital A1</CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-4">
+                      <CertificadoUpload clienteId={id} certInfo={certInfo} onUploaded={() => loadFiscal()} />
+                    </CardContent>
+                  </Card>
+                )}
+
+                {fiscal && podeAcessarFiscal && (
+                  <div className="flex justify-end">
+                    <Button size="sm" onClick={() => setEmitirOpen(true)}><Receipt className="h-3.5 w-3.5" />Emitir NFS-e</Button>
+                  </div>
+                )}
+              </>
             )}
           </TabsContent>
 
@@ -1038,10 +1178,10 @@ export default function ClienteDetailPage() {
             </CardHeader>
             <CardContent className="px-4 pb-4 space-y-2">
               {[
-                ['Serviços ativos',       String(servicos.filter(s => (s.status as string) === 'ativo').length),         ''],
-                ['Competências (hist.)',  String(competencias.length),                                                    ''],
-                ['Tarefas abertas',       String(tarefasAbertas),                                                        tarefasAbertas > 0 ? 'text-warning font-semibold' : ''],
-                ['Atraso financeiro',     formatCurrency(receitaAtrasada),                                               receitaAtrasada > 0 ? 'text-destructive font-semibold' : ''],
+                ['Serviços ativos',       semServicos     ? '—' : String(servicos.filter(s => (s.status as string) === 'ativo').length), ''],
+                ['Competências (hist.)',  semCompetencias ? '—' : String(competencias.length),                            ''],
+                ['Tarefas abertas',       semTarefas      ? '—' : String(tarefasAbertas),                                 !semTarefas && tarefasAbertas > 0 ? 'text-warning font-semibold' : ''],
+                ['Atraso financeiro',     semLancamentos  ? '—' : formatCurrency(receitaAtrasada),                        !semLancamentos && receitaAtrasada > 0 ? 'text-destructive font-semibold' : ''],
                 ...(diaEmissaoNFSe != null ? [['Dia emissão NFS-e', `Dia ${diaEmissaoNFSe}`, 'text-primary']] : []),
               ].map(([label, value, cls]) => (
                 <div key={label} className="flex items-center justify-between">
@@ -1129,15 +1269,15 @@ export default function ClienteDetailPage() {
           <div className="grid grid-cols-3 gap-2">
             <div className="rounded-lg border border-border bg-card px-3 py-2.5 text-center">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Honorários</p>
-              <p className="mt-1 text-base font-bold tabular-nums">{formatCurrency(receitaTotal)}</p>
+              <p className="mt-1 text-base font-bold tabular-nums">{semLancamentos ? '—' : formatCurrency(receitaTotal)}</p>
             </div>
-            <div className={cn('rounded-lg border px-3 py-2.5 text-center', receitaAtrasada > 0 ? 'border-destructive/30 bg-destructive/5' : 'border-border bg-card')}>
+            <div className={cn('rounded-lg border px-3 py-2.5 text-center', !semLancamentos && receitaAtrasada > 0 ? 'border-destructive/30 bg-destructive/5' : 'border-border bg-card')}>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Atraso</p>
-              <p className={cn('mt-1 text-base font-bold tabular-nums', receitaAtrasada > 0 ? 'text-destructive' : 'text-muted-foreground')}>{formatCurrency(receitaAtrasada)}</p>
+              <p className={cn('mt-1 text-base font-bold tabular-nums', !semLancamentos && receitaAtrasada > 0 ? 'text-destructive' : 'text-muted-foreground')}>{semLancamentos ? '—' : formatCurrency(receitaAtrasada)}</p>
             </div>
-            <div className={cn('rounded-lg border px-3 py-2.5 text-center', tarefasAbertas > 0 ? 'border-warning/30 bg-warning/5' : 'border-border bg-card')}>
+            <div className={cn('rounded-lg border px-3 py-2.5 text-center', !semTarefas && tarefasAbertas > 0 ? 'border-warning/30 bg-warning/5' : 'border-border bg-card')}>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Tarefas</p>
-              <p className={cn('mt-1 text-base font-bold tabular-nums', tarefasAbertas > 0 ? 'text-warning' : 'text-muted-foreground')}>{tarefasAbertas}</p>
+              <p className={cn('mt-1 text-base font-bold tabular-nums', !semTarefas && tarefasAbertas > 0 ? 'text-warning' : 'text-muted-foreground')}>{semTarefas ? '—' : tarefasAbertas}</p>
             </div>
           </div>
 
@@ -1146,33 +1286,47 @@ export default function ClienteDetailPage() {
             <CardHeader className="py-3 px-4">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Saúde do Cliente</CardTitle>
-                <span className={cn('text-sm font-bold tabular-nums', healthTone)}>{healthPct}%</span>
+                <span className={cn('text-sm font-bold tabular-nums', healthTone)}>{saudeConfiavel ? `${healthPct}%` : '—'}</span>
               </div>
             </CardHeader>
+            {/* Cada dimensão só se declara "Em dia" se a query dela respondeu.
+                Badge verde em cima de erro é o pior desfecho possível aqui. */}
             <CardContent className="px-4 pb-4 space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-sm"><Plus className="h-3.5 w-3.5 text-muted-foreground" />Serviços</span>
-                <Badge variant={servicos.length > 0 ? 'success' : 'destructive'}>{servicos.length > 0 ? 'Vinculado' : 'Pendente'}</Badge>
+                {semServicos
+                  ? <Badge variant="neutral">Sem dado</Badge>
+                  : <Badge variant={servicos.length > 0 ? 'success' : 'destructive'}>{servicos.length > 0 ? 'Vinculado' : 'Pendente'}</Badge>}
               </div>
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-sm"><Receipt className="h-3.5 w-3.5 text-muted-foreground" />Fiscal NFS-e</span>
-                <Badge variant={fiscal ? 'success' : 'destructive'}>{fiscal ? 'Configurado' : 'Pendente'}</Badge>
+                {semFiscal
+                  ? <Badge variant="neutral">Sem dado</Badge>
+                  : <Badge variant={fiscal ? 'success' : 'destructive'}>{fiscal ? 'Configurado' : 'Pendente'}</Badge>}
               </div>
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-sm"><AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />Competências</span>
-                <Badge variant={competenciaAberta ? 'warning' : 'success'}>{competenciaAberta ? 'Em aberto' : 'Em dia'}</Badge>
+                {semCompetencias
+                  ? <Badge variant="neutral">Sem dado</Badge>
+                  : <Badge variant={competenciaAberta ? 'warning' : 'success'}>{competenciaAberta ? 'Em aberto' : 'Em dia'}</Badge>}
               </div>
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-sm"><Wallet className="h-3.5 w-3.5 text-muted-foreground" />Financeiro</span>
-                <Badge variant={lancamentoAtrasado ? 'destructive' : 'success'}>{lancamentoAtrasado ? 'Inadimplente' : 'Em dia'}</Badge>
+                {semLancamentos
+                  ? <Badge variant="neutral">Sem dado</Badge>
+                  : <Badge variant={lancamentoAtrasado ? 'destructive' : 'success'}>{lancamentoAtrasado ? 'Inadimplente' : 'Em dia'}</Badge>}
               </div>
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-sm"><CheckSquare className="h-3.5 w-3.5 text-muted-foreground" />Tarefas</span>
-                <Badge variant={tarefaAtrasada ? 'destructive' : 'success'}>{tarefaAtrasada ? 'Atrasada' : 'Em dia'}</Badge>
+                {semTarefas
+                  ? <Badge variant="neutral">Sem dado</Badge>
+                  : <Badge variant={tarefaAtrasada ? 'destructive' : 'success'}>{tarefaAtrasada ? 'Atrasada' : 'Em dia'}</Badge>}
               </div>
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-sm"><DollarSign className="h-3.5 w-3.5 text-muted-foreground" />NFS-e rascunho</span>
-                <Badge variant={rascunhoCritico ? 'warning' : 'success'}>{rascunhoCritico ? 'Pendente' : 'OK'}</Badge>
+                {semRascunhos
+                  ? <Badge variant="neutral">Sem dado</Badge>
+                  : <Badge variant={rascunhoCritico ? 'warning' : 'success'}>{rascunhoCritico ? 'Pendente' : 'OK'}</Badge>}
               </div>
               {/* Alerta emissão NFS-e */}
               {nfseAlerta && (
@@ -1194,9 +1348,9 @@ export default function ClienteDetailPage() {
               <div className="pt-2 border-t border-border/50">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs text-muted-foreground">Saúde geral</span>
-                  <span className="text-xs font-semibold tabular-nums">{healthScore}/{HEALTH_DIMS}</span>
+                  <span className="text-xs font-semibold tabular-nums">{saudeConfiavel ? `${healthScore}/${HEALTH_DIMS}` : `— / ${HEALTH_DIMS}`}</span>
                 </div>
-                <Progress value={healthPct} className="h-1.5" />
+                <Progress value={saudeConfiavel ? healthPct : 0} className="h-1.5" />
               </div>
             </CardContent>
           </Card>
@@ -1290,6 +1444,15 @@ export default function ClienteDetailPage() {
         clienteId={id}
         onFinished={async () => {
           setEmitirOpen(false)
+          await loadClienteContext()
+        }}
+      />
+      <EmitirNfeModal
+        open={nfeOpen}
+        onOpenChange={setNfeOpen}
+        clienteId={id}
+        onFinished={async () => {
+          setNfeOpen(false)
           await loadClienteContext()
         }}
       />

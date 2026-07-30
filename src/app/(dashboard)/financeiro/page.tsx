@@ -17,6 +17,7 @@ import { KpiCard } from '@/components/ui/kpi-card'
 import { LancamentoBaixar } from '@/components/financeiro/lancamento-baixar'
 import { FilaCobrancaItem } from '@/components/financeiro/fila-cobranca'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { InlineAlert } from '@/components/ui/inline-alert'
 import { useAuth } from '@/contexts/auth-context'
 import { Download, Plus, TrendingUp, CheckCircle, AlertTriangle, Receipt, Trash2, Clock, MoreHorizontal, Send, Pause, Play, CalendarClock, History } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -87,8 +88,18 @@ function FinanceiroContent() {
   const page = activePagination.page
   const cursor = activePagination.cursorStack[page - 1] ?? null
   const cursorKey = cursor?.id ?? 'first-page'
-  const { lancamentos, filteredLancamentos, total, totalPages, hasMore, lastCursor, somaAReceber, somaRecebidoMes, somaEmAtraso, isLoading } =
+  const { lancamentos, filteredLancamentos, total, totalPages, hasMore, lastCursor, somaAReceber, somaRecebidoMes, somaEmAtraso, isLoading, isError, error, refetch } =
     useFinanceiroList({ clienteId, competenciaId, tipo, status, page, cursor, cursorKey })
+  /**
+   * Armadilha: em falha o hook devolve as somas como 0 e a lista como vazia —
+   * são defaults de leitura, não fatos sobre o caixa do escritório. Exibir
+   * "R$ 0,00 em atraso" quando a query morreu afirma que ninguém deve nada, e
+   * alguém decide não cobrar em cima disso. Enquanto o dado não for confiável,
+   * todo número vira "—" (ausência de informação) e o export fica travado,
+   * porque uma planilha de inadimplência vazia é a mesma mentira em arquivo.
+   */
+  const semDados = isLoading || isError
+  const exportDisabled = semDados || filteredLancamentos.length === 0
   const agora = new Date()
   const filaCobranca = [...filteredLancamentos]
     .filter((l) => l.tipo === 'receita' && l.status === 'pendente')
@@ -214,7 +225,7 @@ function FinanceiroContent() {
         <div>
           <h2 className="text-lg font-semibold">Financeiro</h2>
           <p className="text-sm text-muted-foreground">
-            {total} lançamento{total !== 1 ? 's' : ''}
+            {semDados ? '—' : `${total} lançamento${total !== 1 ? 's' : ''}`}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -222,11 +233,11 @@ function FinanceiroContent() {
             onClick={() => setFilterSheetOpen(true)}
             activeCount={(tipo ? 1 : 0) + (status ? 1 : 0)}
           />
-          <Button variant="outline" size="sm" className="h-10 rounded-xl" onClick={exportarLancamentos}>
+          <Button variant="outline" size="sm" className="h-10 rounded-xl" disabled={exportDisabled} onClick={exportarLancamentos}>
             <Download className="w-4 h-4 mr-1" />
             Exportar lista
           </Button>
-          <Button variant="outline" size="sm" className="h-10 rounded-xl" onClick={exportarInadimplencia}>
+          <Button variant="outline" size="sm" className="h-10 rounded-xl" disabled={exportDisabled} onClick={exportarInadimplencia}>
             <Download className="w-4 h-4 mr-1" />
             Inadimplência
           </Button>
@@ -239,10 +250,19 @@ function FinanceiroContent() {
         </div>
       </div>
 
+      {isError ? (
+        <InlineAlert
+          tone="danger"
+          title="Não foi possível carregar o financeiro."
+          description={getErrorMessage(error, 'Ocorreu um erro ao buscar os lançamentos. Os valores abaixo não representam a situação real do escritório.')}
+          action={{ label: 'Tentar novamente', onClick: () => void refetch() }}
+        />
+      ) : null}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <KpiCard label="A Receber" value={formatCurrency(somaAReceber)} icon={TrendingUp} />
-        <KpiCard label="Recebido no Mês" value={formatCurrency(somaRecebidoMes)} icon={CheckCircle} tone="success" />
-        <KpiCard label="Em Atraso" value={formatCurrency(somaEmAtraso)} icon={AlertTriangle} tone="danger" />
+        <KpiCard label="A Receber" value={semDados ? '—' : formatCurrency(somaAReceber)} icon={TrendingUp} />
+        <KpiCard label="Recebido no Mês" value={semDados ? '—' : formatCurrency(somaRecebidoMes)} icon={CheckCircle} tone="success" />
+        <KpiCard label="Em Atraso" value={semDados ? '—' : formatCurrency(somaEmAtraso)} icon={AlertTriangle} tone="danger" />
       </div>
 
       <CentralCobranca lancamentos={filteredLancamentos as Record<string, unknown>[]} agora={agora} />
@@ -346,6 +366,16 @@ function FinanceiroContent() {
           <tbody className="divide-y">
             {isLoading ? (
               <TableRowSkeleton cols={11} rows={8} />
+            ) : isError ? (
+              /* Sem este ramo a tabela caía no vazio genérico e convidava a criar
+                 lançamento — como se a base estivesse limpa, e não ilegível. */
+              <TableEmptyState
+                colSpan={11}
+                icon={AlertTriangle}
+                title="Não foi possível carregar os lançamentos"
+                description="A lista está vazia por falha de leitura, não porque não existem lançamentos."
+                action={{ label: 'Tentar novamente', variant: 'outline', onClick: () => void refetch() }}
+              />
             ) : lancamentos.length === 0 ? (
               <TableEmptyState
                 colSpan={11}

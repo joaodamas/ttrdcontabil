@@ -9,10 +9,11 @@ import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, Loader2, Pencil, Plus, ShieldCheck, ShieldAlert, ShieldOff, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Loader2, Pencil, Plus, ShieldCheck, ShieldAlert, ShieldOff, AlertTriangle, Package, Truck } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
+import { EmitirNfeModal } from '@/components/fiscal/emitir-nfe-modal'
 import { getPathSegmentAfter } from '@/lib/route-params'
 
 const REGIME_LABELS: Record<string, string> = {
@@ -42,6 +43,7 @@ export default function ClienteFiscalPage() {
   const [loading,   setLoading]   = useState(true)
   const [configOpen, setConfigOpen] = useState(false)
   const [emitirOpen, setEmitirOpen] = useState(false)
+  const [nfeOpen, setNfeOpen] = useState(false)
 
   const load = useCallback(() => {
     if (!id) return
@@ -72,6 +74,9 @@ export default function ClienteFiscalPage() {
 
   if (!cliente) return null
 
+  // Ver mesma lógica em ../page-client.tsx: categoriaFiscal vem do CNAE
+  // (scripts/classificar-clientes-fiscal.mjs) e decide NFS-e × NF-e × CT-e.
+  const categoriaFiscal = (cliente.categoriaFiscal as string) ?? 'servico'
   const creds       = (fiscal?.credenciais ?? {}) as Record<string, unknown>
   const ibge        = fiscal?.municipioIbge as string | undefined
   const tipo        = ibge ? MUNICIPIO_TIPO[ibge] : undefined
@@ -119,15 +124,55 @@ export default function ClienteFiscalPage() {
           </Link>
           <div>
             <h2 className="text-lg font-semibold">Fiscal — {cliente.razaoSocial as string}</h2>
-            <p className="text-sm text-muted-foreground">Configurações fiscais e NFS-e emitidas</p>
+            <p className="text-sm text-muted-foreground">
+              {categoriaFiscal === 'produto' ? 'Configurações fiscais e NF-e emitidas'
+                : categoriaFiscal === 'transporte' ? 'CT-e — autoemitido fora da plataforma'
+                : 'Configurações fiscais e NFS-e emitidas'}
+            </p>
           </div>
         </div>
-        <Button size="sm" onClick={() => setEmitirOpen(true)}>
-          <Plus className="w-4 h-4 mr-1" />
-          Emitir NFS-e
-        </Button>
+        {categoriaFiscal === 'produto' ? (
+          <Button size="sm" onClick={() => setNfeOpen(true)}>
+            <Plus className="w-4 h-4 mr-1" />
+            Emitir NF-e
+          </Button>
+        ) : categoriaFiscal === 'transporte' ? null : (
+          <Button size="sm" onClick={() => setEmitirOpen(true)}>
+            <Plus className="w-4 h-4 mr-1" />
+            Emitir NFS-e
+          </Button>
+        )}
       </div>
 
+      {categoriaFiscal === 'produto' ? (
+        <Card>
+          <CardHeader className="flex flex-row items-center gap-2">
+            <Package className="w-4 h-4 text-primary" />
+            <CardTitle className="text-sm">NF-e (produto)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Este cliente foi classificado pelo CNAE como emissor de <strong>NF-e</strong> (nota fiscal de
+              produto/mercadoria) — não usa a configuração municipal de NFS-e abaixo. O catálogo de produtos
+              e o destinatário são preenchidos direto na emissão.
+            </p>
+          </CardContent>
+        </Card>
+      ) : categoriaFiscal === 'transporte' ? (
+        <Card>
+          <CardHeader className="flex flex-row items-center gap-2">
+            <Truck className="w-4 h-4 text-warning" />
+            <CardTitle className="text-sm">CT-e (transporte)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Este cliente foi classificado pelo CNAE como emissor de <strong>CT-e</strong> (conhecimento de
+              transporte). A Spedy não emite CT-e — este cliente autoemite por fora da plataforma.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+      <>
       {/* Dados Fiscais */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -282,6 +327,8 @@ export default function ClienteFiscalPage() {
           )}
         </CardContent>
       </Card>
+      </>
+      )}
 
       {/* Config Form Dialog */}
       <ConfigFiscalForm
@@ -298,6 +345,15 @@ export default function ClienteFiscalPage() {
         clienteId={id}
         onFinished={async () => {
           setEmitirOpen(false)
+          load()
+        }}
+      />
+      <EmitirNfeModal
+        open={nfeOpen}
+        onOpenChange={setNfeOpen}
+        clienteId={id}
+        onFinished={async () => {
+          setNfeOpen(false)
           load()
         }}
       />
