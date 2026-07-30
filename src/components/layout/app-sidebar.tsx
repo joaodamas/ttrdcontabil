@@ -279,6 +279,12 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
   const visibleSections = NAV_SECTIONS.filter(canSeeSection)
 
+  /* prefetch nos Links acima: o padrão do App Router é prefetch PARCIAL — ele
+     busca só até a fronteira de loading.tsx, e não o chunk da própria tela.
+     Como cada tela custa de 111 KB (Painel) a 600 KB (Clientes) de JS
+     incremental, esse download acontecia depois do clique. Com prefetch
+     explícito ele acontece antes, enquanto a sidebar está parada na tela. */
+
   /* Linha de navegação — a mesma geometria para link solo, cabeçalho de grupo
      e sub-item, para o olho ler uma coluna só em vez de três ritmos diferentes.
      Tudo em tokens --sidebar-*, para a barra acompanhar claro/escuro. */
@@ -303,6 +309,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           key={section.id}
           href={section.href}
           onClick={onNavigate}
+          prefetch
           aria-current={active ? 'page' : undefined}
           className={cn(rowBase, active ? cn(rowActive, activeRail) : rowIdle)}
         >
@@ -360,6 +367,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                   key={item.href}
                   href={item.href}
                   onClick={onNavigate}
+                  prefetch
                   aria-current={itemActive ? 'page' : undefined}
                   className={cn(rowBase, 'gap-2.5', itemActive ? rowActive : rowIdle)}
                 >
