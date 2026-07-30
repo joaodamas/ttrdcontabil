@@ -93,15 +93,18 @@
   --chart-4: oklch(0.6 0.12 230);
   --chart-5: oklch(0.65 0.14 300);
   --radius: 0.625rem;
-  /* Sidebar kept dark */
-  --sidebar: oklch(0.155 0.012 260);
-  --sidebar-foreground: oklch(0.95 0 0);
-  --sidebar-primary: #4f7df0;
+  /* A sidebar ACOMPANHA o tema. Antes ela era escura mesmo no modo claro, o
+     que punha duas linguagens visuais na mesma tela — barra preta colada num
+     app branco. No claro ela é superfície branca, e o item ativo vira uma
+     pílula azul suave em vez de um bloco escuro. */
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.13 0.008 260);
+  --sidebar-primary: #2243A5;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: oklch(0.22 0.016 260);
-  --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(0.28 0.012 260);
-  --sidebar-ring: #4f7df0;
+  --sidebar-accent: oklch(0.949 0.021 252);
+  --sidebar-accent-foreground: #2243A5;
+  --sidebar-border: oklch(0.916 0.004 250);
+  --sidebar-ring: #2243A5;
   /* Design system v1 tokens */
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -124,19 +127,22 @@
 }
 
 .dark {
-  --background: oklch(0.145 0.014 260);
+  /* Navy, não cinza. O croma antigo (0.012–0.014) era quase neutro: lia como
+     cinza sujo, não como uma escolha. Subir para ~0.03 no mesmo matiz azul dá
+     um fundo com identidade, e ainda deixa o azul de marca destacar em cima. */
+  --background: oklch(0.163 0.028 254);
   --foreground: oklch(0.97 0 0);
-  --card: oklch(0.19 0.012 260);
+  --card: oklch(0.208 0.028 254);
   --card-foreground: oklch(0.97 0 0);
-  --popover: oklch(0.18 0 0);
+  --popover: oklch(0.208 0.028 254);
   --popover-foreground: oklch(0.97 0 0);
   --primary: #4f7df0;
   --primary-foreground: #ffffff;
-  --secondary: oklch(0.24 0 0);
+  --secondary: oklch(0.255 0.026 254);
   --secondary-foreground: oklch(0.97 0 0);
-  --muted: oklch(0.24 0.01 260);
-  --muted-foreground: oklch(0.72 0.01 260);
-  --accent: oklch(0.25 0.01 260);
+  --muted: oklch(0.253 0.026 254);
+  --muted-foreground: oklch(0.735 0.022 254);
+  --accent: oklch(0.272 0.028 254);
   --accent-foreground: oklch(0.97 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --success: oklch(0.65 0.15 145);
@@ -155,17 +161,19 @@
   --chart-3: oklch(0.704 0.191 22.216);
   --chart-4: oklch(0.6 0.12 230);
   --chart-5: oklch(0.65 0.14 300);
-  --sidebar: oklch(0.125 0.01 260);
+  /* Sidebar um degrau MAIS ESCURA que o fundo, não mais clara: ancora a
+     coluna e faz o conteúdo parecer flutuar sobre ela. */
+  --sidebar: oklch(0.132 0.03 254);
   --sidebar-foreground: oklch(0.97 0 0);
   --sidebar-primary: #4f7df0;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: oklch(0.20 0.01 260);
-  --sidebar-accent-foreground: oklch(0.97 0 0);
-  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-accent: oklch(0.268 0.032 254);
+  --sidebar-accent-foreground: oklch(0.98 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: #4f7df0;
-  --surface-1: oklch(0.19 0.012 260);
-  --surface-2: oklch(0.22 0.013 260);
-  --surface-3: oklch(0.25 0.014 260);
+  --surface-1: oklch(0.208 0.028 254);
+  --surface-2: oklch(0.238 0.028 254);
+  --surface-3: oklch(0.268 0.028 254);
   --app-gradient-1: oklch(0.22 0.03 88 / 0.18);
   --app-gradient-2: oklch(0.2 0.022 240 / 0.18);
 }

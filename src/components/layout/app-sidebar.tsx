@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useTheme } from 'next-themes'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -10,10 +11,12 @@ import { onBrand } from '@/lib/brand-theme'
 import { canAccessTela, type TelaKey } from '@/lib/permissions'
 import { getInitials } from '@/lib/utils'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
 import {
   BarChart3, Users, ClipboardList, Layers, FolderOpen,
   Receipt, FileText, Wallet, Settings, LogOut,
-  ChevronDown, Menu, History, UserCog,
+  ChevronDown, Menu, History, UserCog, Moon, Sun,
   Package2, CheckSquare, CalendarClock, Plug, SlidersHorizontal,
   LineChart,
 } from 'lucide-react'
@@ -277,20 +280,17 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const visibleSections = NAV_SECTIONS.filter(canSeeSection)
 
   /* Linha de navegação — a mesma geometria para link solo, cabeçalho de grupo
-     e sub-item, para o olho ler uma coluna só em vez de três ritmos diferentes. */
+     e sub-item, para o olho ler uma coluna só em vez de três ritmos diferentes.
+     Tudo em tokens --sidebar-*, para a barra acompanhar claro/escuro. */
   const rowBase =
-    'group relative flex w-full items-center gap-3 rounded-lg pl-3 pr-2.5 text-sm ' +
-    'min-h-10 transition-colors duration-150 focus-visible:outline-none ' +
-    'focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 focus-visible:ring-offset-card'
-  const rowIdle = 'text-muted-foreground hover:bg-muted hover:text-foreground'
-  const rowActive = 'bg-primary/10 text-primary font-semibold'
-
-  /* Barra de 3px na borda esquerda do item ativo. Dá um plano a mais de
-     profundidade que o preenchimento sozinho não dá, e marca a posição na
-     lista mesmo quando o rótulo está fora do canto do olho. */
-  const activeRail =
-    'before:absolute before:left-0 before:top-1/2 before:h-5 before:w-[3px] ' +
-    'before:-translate-y-1/2 before:rounded-r-full before:bg-primary'
+    'group relative flex w-full items-center gap-3 rounded-xl px-3 text-sm ' +
+    'min-h-11 transition-colors duration-150 focus-visible:outline-none ' +
+    'focus-visible:ring-2 focus-visible:ring-sidebar-ring/60 focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar'
+  const rowIdle = 'text-sidebar-foreground/65 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground'
+  /* Item ativo é uma PÍLULA preenchida de ponta a ponta, não um texto colorido:
+     o bloco de cor é o que se enxerga de relance, antes de ler o rótulo. */
+  const rowActive = 'bg-sidebar-accent text-sidebar-accent-foreground font-semibold'
+  const activeRail = ''
 
   function renderSection(section: NavSection) {
     const Icon = section.icon
@@ -342,7 +342,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           <ChevronDown
             size={15}
             className={cn(
-              'shrink-0 text-muted-foreground/70 transition-transform duration-200',
+              'shrink-0 text-sidebar-foreground/45 transition-transform duration-200',
               isOpen && 'rotate-180',
             )}
           />
@@ -351,7 +351,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         {isOpen && (
           <div className="relative mt-0.5 space-y-0.5 pl-[26px]">
             {/* Guia vertical alinhada ao centro dos ícones do nível acima */}
-            <span aria-hidden className="absolute left-[21px] top-1 bottom-1 w-px bg-border" />
+            <span aria-hidden className="absolute left-[21px] top-1 bottom-1 w-px bg-sidebar-border" />
             {visibleItems.map((item) => {
               const ItemIcon = item.icon
               const itemActive = isActive(item.href)
@@ -376,17 +376,17 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   return (
-    <div className="flex h-full flex-col bg-card">
+    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       {/* Marca */}
       {appConfig.logoUrl ? (
-        <div className="flex h-16 shrink-0 items-center border-b border-border px-4">
+        <div className="flex h-16 shrink-0 items-center border-b border-sidebar-border px-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={appConfig.logoUrl} alt={appConfig.name} className="hidden h-10 w-auto object-contain dark:block" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={appConfig.logoUrlLight ?? appConfig.logoUrl} alt={appConfig.name} className="block h-10 w-auto object-contain dark:hidden" />
         </div>
       ) : (
-        <div className="flex h-16 shrink-0 items-center gap-3 border-b border-border px-4">
+        <div className="flex h-16 shrink-0 items-center gap-3 border-b border-sidebar-border px-4">
           <div
             className="flex h-9 w-9 items-center justify-center rounded-xl shadow-sm"
             style={{ background: appConfig.brandPrimary, color: onBrand }}
@@ -397,7 +397,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           </div>
           <div className="min-w-0">
             <p className="truncate text-[15px] font-bold leading-tight tracking-tight">{appConfig.name}</p>
-            <p className="truncate text-xs text-muted-foreground">{appConfig.tagline}</p>
+            <p className="truncate text-xs text-sidebar-foreground/55">{appConfig.tagline}</p>
           </div>
         </div>
       )}
@@ -409,8 +409,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
       {/* Ações rápidas — uma linha de ícones em vez do grid 2×2, que comia
           quase 100px de altura para repetir destinos que já estão na nav. */}
-      <div className="shrink-0 border-t border-border px-3 py-3">
-        <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className="shrink-0 px-3 pb-3">
+        <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/45">
           Criar
         </p>
         <div className="flex items-center gap-1.5">
@@ -424,9 +424,9 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 title={action.label}
                 aria-label={`Criar ${action.label}`}
                 className={cn(
-                  'flex h-10 flex-1 items-center justify-center rounded-lg border border-border/70 bg-muted/40',
-                  'text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
+                  'flex h-10 flex-1 items-center justify-center rounded-xl bg-sidebar-accent/50',
+                  'text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/60',
                 )}
               >
                 <ActionIcon size={16} />
@@ -436,33 +436,74 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         </div>
       </div>
 
-      {/* Configurações + usuário */}
-      <div className="shrink-0 border-t border-border px-3 py-3 space-y-1">
+      {/* Configurações, tema, usuário e sair */}
+      <div className="shrink-0 border-t border-sidebar-border px-3 py-3 space-y-1">
         {ADMIN_SECTIONS.filter(canSeeSection).map((s) => renderSection(s))}
 
-        <div className="flex items-center gap-3 rounded-lg px-3 py-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
+        <ThemeRow />
+
+        <div className="flex items-center gap-3 rounded-xl px-3 py-2">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-accent text-xs font-bold text-sidebar-accent-foreground">
             {usuario ? getInitials(usuario.nome) : '—'}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold leading-tight">{usuario?.nome ?? '—'}</p>
-            <p className="truncate text-xs capitalize text-muted-foreground">{usuario?.perfil ?? ''}</p>
+            <p className="truncate text-sm font-semibold leading-tight text-sidebar-foreground">{usuario?.nome ?? '—'}</p>
+            <p className="truncate text-xs capitalize text-sidebar-foreground/55">{usuario?.perfil ?? ''}</p>
           </div>
-          <button
-            type="button"
-            onClick={logout}
-            aria-label="Sair"
-            title="Sair"
-            className={cn(
-              'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors',
-              'hover:bg-destructive/10 hover:text-destructive',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40',
-            )}
-          >
-            <LogOut size={16} />
-          </button>
         </div>
+
+        {/* Sair como botão preenchido, não como ícone perdido no canto: é uma
+            ação destrutiva de sessão e merece peso próprio. */}
+        <button
+          type="button"
+          onClick={logout}
+          className={cn(
+            'flex w-full items-center gap-3 rounded-xl bg-sidebar-accent/70 px-3 min-h-11',
+            'text-sm font-medium text-sidebar-foreground/80 transition-colors',
+            'hover:bg-destructive/12 hover:text-destructive',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40',
+          )}
+        >
+          <LogOut size={18} className="shrink-0" />
+          Sair
+        </button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Alternador claro/escuro no rodapé da sidebar.
+ *
+ * Estava só num ícone da barra superior, onde ninguém achava — e como o tema
+ * padrão seguia o sistema operacional, quem tinha o Windows no escuro abria o
+ * app escuro sem saber onde desfazer. Aqui ele é um interruptor rotulado.
+ */
+function ThemeRow() {
+  const { resolvedTheme, setTheme } = useTheme()
+  // O tema resolvido só existe no client; até montar, renderiza o estado claro
+  // para não descasar a hidratação.
+  const [montado, setMontado] = useState(false)
+  useEffect(() => setMontado(true), []) // eslint-disable-line react-hooks/set-state-in-effect
+
+  const escuro = montado && resolvedTheme === 'dark'
+
+  return (
+    <div className="flex items-center gap-3 rounded-xl px-3 min-h-11">
+      {escuro ? (
+        <Moon size={18} className="shrink-0 text-sidebar-foreground/70" />
+      ) : (
+        <Sun size={18} className="shrink-0 text-sidebar-foreground/70" />
+      )}
+      <Label htmlFor="tema-escuro" className="flex-1 cursor-pointer text-sm font-medium text-sidebar-foreground/70">
+        Modo escuro
+      </Label>
+      <Switch
+        id="tema-escuro"
+        checked={escuro}
+        onCheckedChange={(v) => setTheme(v ? 'dark' : 'light')}
+        aria-label="Alternar entre modo claro e escuro"
+      />
     </div>
   )
 }
@@ -470,7 +511,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 // ── Desktop sidebar ────────────────────────────────────────────
 export function AppSidebar() {
   return (
-    <aside className="hidden md:flex w-[272px] shrink-0 flex-col border-r border-border bg-card h-screen sticky top-0">
+    <aside className="hidden md:flex w-[272px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar h-screen sticky top-0">
       <SidebarContent />
     </aside>
   )

@@ -5,7 +5,6 @@ import { AuthGuard } from '@/components/auth/auth-guard'
 import { AppSidebar, MobileSidebarTrigger } from '@/components/layout/app-sidebar'
 import { CommandPalette } from '@/components/layout/command-palette'
 import { MobileFab } from '@/components/layout/mobile-fab'
-import { ThemeToggle } from '@/components/layout/theme-toggle'
 import { Toaster } from '@/components/ui/sonner'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { QueryProvider } from '@/components/providers/query-provider'
@@ -31,7 +30,6 @@ function TopBar() {
           ⌘K
         </kbd>
       </button>
-      <ThemeToggle />
       {usuario && (
         <Link
           href="/fiscal?emitir=1"
