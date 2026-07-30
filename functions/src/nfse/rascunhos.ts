@@ -14,6 +14,9 @@ type GerarRascunhosInput = {
   mes?: number
   ano?: number
   clienteId?: string
+  // Contrato com a tela (fiscal/page.tsx sempre manda true): no mês corrente,
+  // ignora quem ainda não chegou no dia de emissão. Aqui dentro vira
+  // 'ate_hoje' | 'todos' — o cron usa um terceiro modo, 'somente_hoje'.
   gerarAteHoje?: boolean
 }
 
@@ -53,32 +56,79 @@ function onlyDigits(value: unknown) {
 
 type Actor = { uid: string; nome: string; tenantId: string }
 
+/**
+ * Como o `diaEmissaoNFSe` de cada cliente restringe a varredura:
+ *  - 'somente_hoje': só quem faz aniversário HOJE. É o modo do cron diário —
+ *    sem ele, a varredura pega o mês inteiro e emite de verdade, no dia 1º, a
+ *    nota do cliente que só deveria ser emitido no dia 25. Vale pra CRIAR item
+ *    novo; rascunho pendente de um dia anterior é retomado em qualquer modo.
+ *  - 'ate_hoje': no mês corrente, ignora quem ainda não chegou no dia. É o que
+ *    o botão "Preparar mês" sempre fez.
+ *  - 'todos': o mês inteiro, sem olhar o dia — quando a tela pede
+ *    explicitamente `gerarAteHoje: false` (mês fechado, correção manual).
+ */
+type FiltroDia = 'somente_hoje' | 'ate_hoje' | 'todos'
+
+/**
+ * Status de rascunho que ainda representam TRABALHO PENDENTE. Existir não é
+ * dedup suficiente: o cron que cria 40 rascunhos, emite 12 e morre no 13º por
+ * timeout precisa terminar o serviço na rodada seguinte, e não olhar os 40
+ * documentos e concluir "nada pendente" — os 27 restantes nunca mais sairiam.
+ * Fora da lista de propósito: 'emitida' e 'processando' (nota já saiu ou está
+ * sob o lock da transação em emitir.ts) e os estados de revisão humana
+ * ('rascunho', 'pronto_para_emitir', ...), que são do operador — recriar
+ * apagaria o que ele editou na tela.
+ */
+const STATUS_REPROCESSAVEIS = new Set(['aguardando_emissao', 'erro_integracao'])
+
+/**
+ * Teto de tentativas automáticas por rascunho. Erro transitório (rede, 429,
+ * prefeitura fora do ar) se resolve em poucas rodadas; erro permanente
+ * (certificado errado, município mal configurado, payload inválido) não se
+ * resolve nunca — e sem teto o cron reemitiria todo dia, para sempre, gerando
+ * um `nfse_erros` por dia e escondendo o problema real no volume.
+ * Estourado o teto, o rascunho sai da fila automática e espera um humano: ele
+ * continua visível na tela Fiscal em 'erro_integracao'.
+ */
+const MAX_TENTATIVAS_AUTOMATICAS = 3
+
+function podeReprocessar(status: string | undefined, tentativas: number): boolean {
+  return status !== undefined
+    && STATUS_REPROCESSAVEIS.has(status)
+    && tentativas < MAX_TENTATIVAS_AUTOMATICAS
+}
+
 type ItemPendente = {
   ref: FirebaseFirestore.DocumentReference
   clienteId: string
   clienteNome: string
   emissaoAutomatica: boolean
+  competenciaId: string
+  // Documento já existe num status reprocessável: pode ser reemitido, mas NÃO
+  // pode ser recriado (ver processarItens).
+  reprocessar: boolean
   dados: Record<string, unknown>
 }
 
 /**
  * Levanta, para uma competência, todos os pares cliente+serviço elegíveis
  * pra gerar rascunho (ou emitir direto, se `emissaoAutomatica` estiver
- * ligado na config fiscal do cliente) — e que ainda não têm registro pra
- * essa competência (dedup pelo mesmo ID determinístico usado nos rascunhos).
+ * ligado na config fiscal do cliente) — e cujo trabalho ainda não foi feito:
+ * a dedup usa o ID determinístico do rascunho MAIS o status do documento
+ * (ver STATUS_REPROCESSAVEIS).
  *
  * Compartilhado entre o botão manual "Gerar rascunhos" e o cron diário —
  * o comportamento por cliente (rascunho vs. emissão automática) é o mesmo
- * nos dois casos; o que muda é só quando cada um roda.
+ * nos dois casos; o que muda é quando cada um roda e o `filtroDia`.
  */
 async function listarPendentes(params: {
   tenantId: string
   mes: number
   ano: number
   clienteId?: string
-  gerarAteHoje: boolean
+  filtroDia: FiltroDia
 }) {
-  const { tenantId, mes, ano, clienteId, gerarAteHoje } = params
+  const { tenantId, mes, ano, clienteId, filtroDia } = params
   const hoje = new Date()
 
   const clientesSnap = clienteId
@@ -123,14 +173,39 @@ async function listarPendentes(params: {
     servicosByCliente.get(clienteIdDoServico)!.push(doc)
   })
 
+  // Sem .catch aqui, de propósito: uma falha transitória do Firestore devolvia
+  // lista vazia, e "não existe nada" faz o batch reescrever (merge: false) até
+  // rascunho já emitido — apagando inclusive o RPS consumido na prefeitura.
+  // Falha fechado: aborta a rodada e tenta de novo amanhã.
   const existentesSnap = await db()
     .collection('nfse_rascunhos')
     .where('tenantId', '==', tenantId)
     .where('competenciaMes', '==', mes)
     .where('competenciaAno', '==', ano)
     .get()
-    .catch(() => null)
-  const existentes = new Set((existentesSnap?.docs ?? []).map((doc) => doc.id))
+  // Guarda status E tentativas: sozinho, o status não distingue "falhou agora"
+  // de "falha há duas semanas pelo mesmo motivo" — e é essa diferença que
+  // decide se vale reemitir (ver MAX_TENTATIVAS_AUTOMATICAS).
+  const existentes = new Map<string, { status: string; tentativas: number }>(
+    existentesSnap.docs.map((doc) => [doc.id, {
+      status: (doc.data().status as string | undefined) ?? '',
+      tentativas: (doc.data().tentativas as number | undefined) ?? 0,
+    }]),
+  )
+  // Quem tem trabalho pela metade nesta competência. Serve pra deixar o cliente
+  // passar pelo filtro de dia: o rascunho que o cron de ontem criou e não
+  // conseguiu emitir precisa ser retomado hoje, mesmo que o aniversário dele
+  // tenha sido ontem. Isso NÃO libera criar item novo fora do dia — a checagem
+  // por item, mais abaixo, continua exigindo `diaBate` pra quem ainda não existe.
+  const clientesComPendencia = new Set<string>()
+  existentesSnap.docs.forEach((doc) => {
+    const data = doc.data()
+    const clienteIdDoRascunho = data.clienteId as string | undefined
+    const jaTentou = (data.tentativas as number | undefined) ?? 0
+    if (clienteIdDoRascunho && podeReprocessar(data.status as string, jaTentou)) {
+      clientesComPendencia.add(clienteIdDoRascunho)
+    }
+  })
 
   const itens: ItemPendente[] = []
   let ignorados = 0
@@ -147,7 +222,23 @@ async function listarPendentes(params: {
       motivos.push(`${clienteNome}: sem dia de emissão NFS-e.`)
       continue
     }
-    if (gerarAteHoje && ano === hoje.getFullYear() && mes === hoje.getMonth() + 1 && diaEmissao > hoje.getDate()) {
+    // Dia contratado normalizado pro tamanho do mês (31 num mês de 30 = dia 30),
+    // senão esse cliente nunca "faz aniversário" em abril, junho, setembro,
+    // novembro e fevereiro — e a nota dele simplesmente não sai. Mesmo clamp que
+    // já era usado na dataEmissaoPrevista.
+    const diaEfetivo = clampDay(ano, mes, diaEmissao)
+    const mesCorrente = ano === hoje.getFullYear() && mes === hoje.getMonth() + 1
+
+    const diaBate =
+      filtroDia === 'somente_hoje' ? mesCorrente && diaEfetivo === hoje.getDate()
+        : filtroDia === 'ate_hoje' ? !(mesCorrente && diaEfetivo > hoje.getDate())
+          : true
+
+    // Só pula o cliente inteiro se, além de não ser o dia dele, não houver
+    // rascunho pendente pra retomar. A ordem importa: esse corte vem antes das
+    // checagens de configuração fiscal justamente pra não encher `motivos` com
+    // os outros 118 clientes todo dia.
+    if (!diaBate && !clientesComPendencia.has(clienteIdAtual)) {
       ignorados++
       continue
     }
@@ -173,6 +264,8 @@ async function listarPendentes(params: {
       continue
     }
 
+    const emissaoAutomatica = fiscal.emissaoAutomatica === true
+
     for (const servicoDoc of servicos) {
       const servico = servicoDoc.data()
       const valor = Number(servico.valor ?? servico.valorPadrao ?? 0)
@@ -183,17 +276,37 @@ async function listarPendentes(params: {
       }
 
       const ref = db().collection('nfse_rascunhos').doc(`${tenantId}_${ano}_${String(mes).padStart(2, '0')}_${clienteIdAtual}_${servicoDoc.id}`)
-      if (existentes.has(ref.id)) {
+      const registroExistente = existentes.get(ref.id)
+      const statusAtual = registroExistente?.status
+      if (statusAtual === undefined) {
+        // Item novo: respeita o dia contratado. É aqui que o cron diário deixa
+        // de criar (e emitir) a nota de quem só é faturado dia 25.
+        if (!diaBate) {
+          ignorados++
+          continue
+        }
+      } else if (!(emissaoAutomatica && podeReprocessar(statusAtual, registroExistente?.tentativas ?? 0))) {
+        // Documento já existe: só é trabalho pendente se o STATUS disser que é —
+        // e só o cliente com emissão automática volta pra fila sozinho, porque
+        // nos demais quem emite é um humano na tela.
         ignorados++
         continue
       }
 
-      const dataEmissaoPrevista = new Date(ano, mes - 1, clampDay(ano, mes, diaEmissao), 12, 0, 0)
+      // Mesma chave determinística que criarCompetenciasMensais usa para o
+      // documento em `competencias` (scheduler/competencias.ts) — é o que permite
+      // conciliar a nota emitida com a competência. Sem propagar isso, toda nota
+      // automática gravava competenciaId: null em nfse_emitidas.
+      const competenciaId = `${clienteIdAtual}_${servicoDoc.id}_${ano}_${String(mes).padStart(2, '0')}`
+
+      const dataEmissaoPrevista = new Date(ano, mes - 1, diaEfetivo, 12, 0, 0)
       itens.push({
         ref,
         clienteId: clienteIdAtual,
         clienteNome,
-        emissaoAutomatica: fiscal.emissaoAutomatica === true,
+        emissaoAutomatica,
+        competenciaId,
+        reprocessar: statusAtual !== undefined,
         dados: {
           tenantId,
           clienteId: clienteIdAtual,
@@ -201,6 +314,7 @@ async function listarPendentes(params: {
           competencia: comp,
           competenciaMes: mes,
           competenciaAno: ano,
+          competenciaId,
           clienteServicoId: servicoDoc.id,
           titulo: `NFS-e ${comp} - ${clienteNome}`,
           dataEmissaoPrevista: Timestamp.fromDate(dataEmissaoPrevista),
@@ -226,21 +340,57 @@ async function listarPendentes(params: {
 
 /**
  * Processa uma lista de itens pendentes: cria o rascunho no Firestore (em
- * batch) e, pros clientes com emissão automática ligada, emite de verdade
- * logo em seguida — reaproveitando processarEmissao(input, rascunhoId), que
+ * batch — exceto os marcados como `reprocessar`, que já existem) e, pros
+ * clientes com emissão automática ligada, emite de verdade logo em
+ * seguida — reaproveitando processarEmissao(input, rascunhoId), que
  * já tem a transação de alocação/reuso de RPS e a gravação em
  * nfse_emitidas/nfse_erros. Emissão é sequencial (não em paralelo) pra não
  * estourar limite de taxa dos conectores/Spedy.
  */
+/**
+ * Interruptor geral da emissão automática, em `configuracoes/escritorio`.
+ *
+ * O switch `emissaoAutomatica` do cliente diz QUEM pode ser emitido sozinho;
+ * este diz SE alguém pode. Existe porque desligar cliente a cliente, no meio de
+ * um incidente, é lento demais — e o que está em jogo é nota fiscal real.
+ *
+ * Falha FECHADO de propósito: campo ausente, documento ausente ou erro de
+ * leitura devolvem `false`. Não emitir por engano é reversível (o rascunho
+ * continua na fila); emitir por engano exige cancelamento na prefeitura.
+ */
+async function emissaoAutomaticaLiberadaNoEscritorio(): Promise<boolean> {
+  try {
+    const snap = await db().collection('configuracoes').doc('escritorio').get()
+    return snap.exists && snap.data()?.emissaoAutomaticaNfseHabilitada === true
+  } catch {
+    return false
+  }
+}
+
 async function processarItens(itens: ItemPendente[], actor: Actor) {
   let criados = 0
+  let reprocessados = 0
   let ops = 0
   let batch = db().batch()
 
   for (const item of itens) {
+    // Item reprocessado já tem documento — e esse documento guarda o RPS que
+    // uma tentativa anterior alocou (dados.numeroRps). Reescrever com
+    // merge: false apagaria o número, e o retry pediria um RPS novo à
+    // prefeitura, arriscando nota duplicada. Aqui a gente só reemite; quem mexe
+    // no status é a transação de lock dentro de processarEmissao.
+    if (item.reprocessar) {
+      reprocessados++
+      continue
+    }
     batch.set(item.ref, {
       ...item.dados,
-      status: item.emissaoAutomatica ? 'processando' : 'rascunho',
+      // 'aguardando_emissao' e NÃO 'processando': quem marca 'processando' é a
+      // transação de lock dentro de processarEmissao, que rejeita rascunho já
+      // nesse estado (emitir.ts). Marcar aqui fazia o cron travar a si mesmo —
+      // toda emissão automática morria com "já está em processamento", e o
+      // rascunho ficava preso num status que nenhuma tela lista.
+      status: item.emissaoAutomatica ? 'aguardando_emissao' : 'rascunho',
       origem: 'nfse_recorrente',
       requerRevisao: !item.emissaoAutomatica,
       criadoEm: Timestamp.now(),
@@ -262,11 +412,31 @@ async function processarItens(itens: ItemPendente[], actor: Actor) {
   let falhasEmissao = 0
   const motivosEmissao: string[] = []
 
-  for (const item of itens.filter((i) => i.emissaoAutomatica)) {
+  const automaticos = itens.filter((i) => i.emissaoAutomatica)
+
+  // O interruptor é conferido DEPOIS de criar/atualizar os rascunhos e ANTES de
+  // emitir: com ele desligado o trabalho da competência continua sendo
+  // preparado e fica visível na tela Fiscal, esperando um humano clicar. Ligar
+  // o interruptor depois não perde nada — os rascunhos já estão lá.
+  if (automaticos.length > 0 && !(await emissaoAutomaticaLiberadaNoEscritorio())) {
+    return {
+      criados,
+      reprocessados,
+      emitidos: 0,
+      falhasEmissao: 0,
+      motivosEmissao: [
+        `Emissão automática desligada em Configurações → Parâmetros: ${automaticos.length} nota(s) ficaram como rascunho para revisão manual.`,
+      ],
+      pendentesRevisao: itens.length,
+    }
+  }
+
+  for (const item of automaticos) {
     const dados = item.dados.dados as Record<string, unknown>
     const input: EmitirNfseInput = {
       clienteId: item.clienteId,
       rascunhoId: item.ref.id,
+      competenciaId: item.competenciaId,
       tomador: {
         razaoSocial: dados.tomadorNome as string,
         cpfCnpj: dados.tomadorCpfCnpj as string,
@@ -295,7 +465,12 @@ async function processarItens(itens: ItemPendente[], actor: Actor) {
     }
   }
 
-  return { criados, emitidos, falhasEmissao, motivosEmissao }
+  // Rascunho parado esperando revisão humana = os não-automáticos criados
+  // agora. Antes isso era `criados - emitidos - falhasEmissao`, conta que passa
+  // a dar negativo assim que existe item reprocessado (emitido sem ser criado).
+  const pendentesRevisao = itens.filter((i) => !i.emissaoAutomatica).length
+
+  return { criados, reprocessados, emitidos, falhasEmissao, motivosEmissao, pendentesRevisao }
 }
 
 export const gerarRascunhosNfseMensais = onCall(
@@ -327,10 +502,13 @@ export const gerarRascunhosNfseMensais = onCall(
       mes,
       ano,
       clienteId: input.clienteId,
-      gerarAteHoje,
+      // A geração manual continua varrendo o mês inteiro (recortado no dia de
+      // hoje quando a tela pede). 'somente_hoje' é exclusivo do cron diário.
+      filtroDia: gerarAteHoje ? 'ate_hoje' : 'todos',
     })
 
-    const { criados, emitidos, falhasEmissao, motivosEmissao } = await processarItens(itens, actor)
+    const { criados, reprocessados, emitidos, falhasEmissao, motivosEmissao, pendentesRevisao } =
+      await processarItens(itens, actor)
 
     await db().collection('logs_auditoria').add({
       tenantId: actor.tenantId,
@@ -339,16 +517,17 @@ export const gerarRascunhosNfseMensais = onCall(
       acao: 'gerar_rascunhos_nfse_mensais',
       entidade: 'nfse_rascunhos',
       data: Timestamp.now(),
-      detalhes: { mes, ano, criados, emitidos, falhasEmissao, ignorados, motivos: [...motivos, ...motivosEmissao].slice(0, 50) },
+      detalhes: { mes, ano, criados, reprocessados, emitidos, falhasEmissao, ignorados, motivos: [...motivos, ...motivosEmissao].slice(0, 50) },
       origem: 'cloud_function',
     })
 
     return {
       criados,
+      reprocessados,
       emitidos,
       falhasEmissao,
       ignorados,
-      pendentesRevisao: criados - emitidos - falhasEmissao,
+      pendentesRevisao,
       motivos: [...motivos, ...motivosEmissao].slice(0, 20),
     }
   }
@@ -359,7 +538,9 @@ export const gerarRascunhosNfseMensais = onCall(
  * `emissaoAutomatica: true` na config fiscal, emite de verdade sem
  * intervenção humana. Roda todo dia (não só dia 1) porque cada cliente tem
  * seu próprio `diaEmissaoNFSe` — o filtro de dia fica dentro de
- * listarPendentes (gerarAteHoje: false = só quem faz aniversário hoje).
+ * listarPendentes, no modo `filtroDia: 'somente_hoje'`: só entra quem faz
+ * aniversário hoje. Qualquer outro modo aqui significa emitir nota real de
+ * cliente antes da data contratada — no dia 1º, a base inteira de uma vez.
  *
  * ATENÇÃO: emissão automática é uma decisão explícita do dono do produto em
  * 2026-07-07 — reverte, pra quem tiver o flag ligado, a trava de revisão
@@ -386,7 +567,7 @@ export const processarNfseRecorrenteDiaria = onSchedule(
       tenantId,
       mes,
       ano,
-      gerarAteHoje: false,
+      filtroDia: 'somente_hoje',
     })
 
     if (itens.length === 0) {
@@ -394,13 +575,13 @@ export const processarNfseRecorrenteDiaria = onSchedule(
       return
     }
 
-    const { criados, emitidos, falhasEmissao, motivosEmissao } = await processarItens(itens, {
+    const { criados, reprocessados, emitidos, falhasEmissao, motivosEmissao } = await processarItens(itens, {
       uid: SYSTEM_ACTOR.id,
       nome: SYSTEM_ACTOR.nome,
       tenantId,
     })
 
-    console.log('[nfse-recorrente] processado', { mes, ano, criados, emitidos, falhasEmissao, ignorados })
+    console.log('[nfse-recorrente] processado', { mes, ano, criados, reprocessados, emitidos, falhasEmissao, ignorados })
 
     await db().collection('logs_auditoria').add({
       tenantId,
@@ -409,7 +590,7 @@ export const processarNfseRecorrenteDiaria = onSchedule(
       acao: 'nfse_recorrente_diaria',
       entidade: 'nfse_rascunhos',
       data: Timestamp.now(),
-      detalhes: { mes, ano, criados, emitidos, falhasEmissao, ignorados, motivos: [...motivos, ...motivosEmissao].slice(0, 50) },
+      detalhes: { mes, ano, criados, reprocessados, emitidos, falhasEmissao, ignorados, motivos: [...motivos, ...motivosEmissao].slice(0, 50) },
       origem: 'cloud_function',
     })
   }

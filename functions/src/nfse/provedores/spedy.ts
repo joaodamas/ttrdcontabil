@@ -11,6 +11,7 @@
  * pipeline (ResultadoEmissao). Um webhook para atualização tardia fica como
  * follow-up caso o polling estoure o timeout da function.
  */
+import { createHash } from 'node:crypto'
 import { decrypt, isEncrypted } from '../encrypt'
 import type {
   ConfigFiscalCliente,
@@ -40,6 +41,9 @@ const STATUS_SUCESSO = 'authorized'
 
 const POLL_INTERVALO_MS = 2500
 const POLL_MAX_TENTATIVAS = 10 // ~25s de polling, dentro do timeout de 60s da function
+// Teto para a espera ditada pelo x-rate-limit-reset: um reset distante (ou um
+// relógio fora de sincronia) prenderia a function até o timeout sem esse limite.
+const POLL_ESPERA_MAX_MS = 10_000
 
 function baseUrl(config: ConfigFiscalCliente): string {
   return config.ambienteEmissao === 'homologacao' ? SPEDY_API_STAGE : SPEDY_API_PRODUCAO
@@ -89,6 +93,27 @@ async function spedyFetch(config: ConfigFiscalCliente, path: string, init: Reque
   return { resp, body, bodyText }
 }
 
+/**
+ * Chave de idempotência da nota na Spedy (campo integrationId, máx. 36 chars).
+ *
+ * Precisa ser ESTÁVEL entre tentativas da mesma nota: é ela que permite, depois
+ * de um polling que estourou, perguntar `GET /service-invoices?integrationId=x`
+ * antes de reemitir — em vez de mandar um POST às cegas e duplicar a nota na
+ * prefeitura. Sem isso a Spedy não tem como deduplicar (o numeroRps, que é a
+ * proteção usada nos conectores municipais, não existe no payload dela).
+ *
+ * O rascunho é a identidade natural (um rascunho = uma nota). Mas o id
+ * determinístico da recorrência é `tenant_ano_mes_cliente_servico` (ver
+ * rascunhos.ts) e passa fácil dos 36 caracteres — daí o hash quando não cabe.
+ * Emissão avulsa, sem rascunho, cai no par série+número do RPS.
+ */
+function integrationIdDe(input: { rascunhoId?: string; numeroRps?: string; serieRps?: string }): string | undefined {
+  const base = input.rascunhoId
+    ?? (input.numeroRps ? `${input.serieRps ?? 'RPS'}-${input.numeroRps}` : undefined)
+  if (!base) return undefined
+  return base.length <= 36 ? base : createHash('sha1').update(base).digest('hex').slice(0, 32)
+}
+
 function buildServiceInvoicePayload(input: EmitirNfseInput, config: ConfigFiscalCliente, prestador: Prestador) {
   const aliquota = input.servico.aliquota ?? config.aliquotaPadrao ?? 0
   const valor = input.servico.valorServico
@@ -96,6 +121,7 @@ function buildServiceInvoicePayload(input: EmitirNfseInput, config: ConfigFiscal
   const endereco = input.tomador.endereco
 
   return {
+    integrationId: integrationIdDe(input),
     effectiveDate: new Date().toISOString().slice(0, 19),
     description: input.servico.discriminacao,
     federalServiceCode: input.servico.itemListaServico ?? config.itemListaServico ?? undefined,
@@ -127,10 +153,134 @@ function buildServiceInvoicePayload(input: EmitirNfseInput, config: ConfigFiscal
   }
 }
 
+// 429 (rate limit) e 5xx são transitórios. Desistir neles é o pior desfecho
+// possível aqui: o POST já foi aceito, a nota EXISTE na Spedy, e reportar "erro"
+// leva o operador a reemitir — duplicando a nota na prefeitura. Só 4xx que não
+// seja 429 é resposta terminal.
+function ehTransitorio(status: number): boolean {
+  return status === 429 || status >= 500
+}
+
+// x-rate-limit-reset vem como data/hora UTC (não como segundos restantes, ao
+// contrário do Retry-After usual). Respeitamos o tempo indicado, com teto, e
+// caímos no intervalo padrão se vier ausente ou ilegível.
+function esperaMs(resp: Response): number {
+  const reset = resp.headers.get('x-rate-limit-reset')
+  if (reset) {
+    const faltam = Date.parse(reset) - Date.now()
+    if (Number.isFinite(faltam) && faltam > 0) return Math.min(faltam, POLL_ESPERA_MAX_MS)
+  }
+  return POLL_INTERVALO_MS
+}
+
+/**
+ * Procura na Spedy uma nota já criada com este integrationId.
+ *
+ * É a metade que faltava da idempotência: mandar o integrationId no POST não
+ * impede duplicata sozinho — a Spedy não recusa dois POSTs com a mesma chave.
+ * Quem impede é PERGUNTAR antes de criar.
+ *
+ * O caso que isso mata: o polling estoura (~25s) numa nota que a Spedy aceitou
+ * e vai autorizar segundos depois; a emissão devolve SPEDY_PROCESSANDO, o
+ * rascunho vira 'erro_integracao', e o cron do dia seguinte reprocessa. Sem
+ * esta consulta, cada rodada emitia OUTRA nota fiscal real da mesma competência.
+ *
+ * Falha na consulta devolve `undefined` (desconhecido), não `null` (não existe)
+ * — quem chama precisa distinguir "não achei" de "não consegui olhar", porque
+ * seguir para o POST no segundo caso é justamente o que duplica a nota.
+ */
+async function buscarNotaPorIntegrationId(
+  config: ConfigFiscalCliente,
+  integrationId: string,
+  resource: string,
+): Promise<Record<string, unknown> | null | undefined> {
+  const busca = await spedyFetch(
+    config,
+    `/${resource}?integrationId=${encodeURIComponent(integrationId)}&pageSize=5`,
+    { method: 'GET' },
+  ).catch(() => null)
+
+  if (!busca || !busca.resp.ok) return undefined
+
+  const itens = (busca.body?.items as Record<string, unknown>[] | undefined) ?? []
+  // A busca por integrationId é um filtro, não uma chave — conferimos a
+  // igualdade exata para não reaproveitar a nota errada num prefixo qualquer.
+  const nota = itens.find((i) => i.integrationId === integrationId)
+  return nota ?? null
+}
+
+/**
+ * Obtém o id da nota na Spedy: reaproveita a que já existe para este
+ * integrationId, ou cria uma nova. É o único ponto por onde os dois caminhos de
+ * emissão (serviço e produto/consumidor) podem fazer POST.
+ *
+ * Quando não dá para consultar (rede fora, 5xx, 429), RECUSA em vez de criar.
+ * É deliberado: falhar uma emissão é reversível — basta reprocessar; emitir uma
+ * segunda nota fiscal da mesma competência não é, porque exige cancelamento
+ * na prefeitura, uma a uma.
+ */
+type ResultadoCriacao = { id: string; reaproveitada: boolean } | { erro: ResultadoEmissao }
+
+async function obterOuCriarNota(
+  config: ConfigFiscalCliente,
+  resource: string,
+  payload: { integrationId?: string } & Record<string, unknown>,
+): Promise<ResultadoCriacao> {
+  const integrationId = payload.integrationId
+
+  if (integrationId) {
+    const existente = await buscarNotaPorIntegrationId(config, integrationId, resource)
+
+    if (existente === undefined) {
+      return {
+        erro: {
+          sucesso: false,
+          codigoErro: 'SPEDY_CONSULTA_INDISPONIVEL',
+          erro: 'Não foi possível confirmar na Spedy se esta nota já existe. A emissão foi interrompida para não gerar nota duplicada — tente novamente em instantes.',
+          detalhes: integrationId,
+        },
+      }
+    }
+
+    if (existente) {
+      const id = existente.id as string | undefined
+      if (id) return { id, reaproveitada: true }
+    }
+  }
+
+  const criacao = await spedyFetch(config, `/${resource}`, { method: 'POST', body: JSON.stringify(payload) })
+  if (!criacao.resp.ok) {
+    return {
+      erro: {
+        sucesso: false,
+        codigoErro: `SPEDY_HTTP_${criacao.resp.status}`,
+        erro: (criacao.body?.message as string | undefined) ?? `Spedy retornou HTTP ${criacao.resp.status} ao criar a nota.`,
+        detalhes: criacao.bodyText.slice(0, 1000),
+      },
+    }
+  }
+
+  const id = criacao.body?.id as string | undefined
+  if (!id) {
+    return {
+      erro: {
+        sucesso: false,
+        erro: 'Resposta da Spedy não trouxe o identificador da nota.',
+        detalhes: criacao.bodyText.slice(0, 1000),
+      },
+    }
+  }
+  return { id, reaproveitada: false }
+}
+
 async function pollAteTerminal(config: ConfigFiscalCliente, id: string, resource = 'service-invoices'): Promise<SpedyResposta | null> {
   for (let tentativa = 0; tentativa < POLL_MAX_TENTATIVAS; tentativa++) {
     const resultado = await spedyFetch(config, `/${resource}/${id}`, { method: 'GET' })
-    if (!resultado.resp.ok) return resultado
+    if (!resultado.resp.ok) {
+      if (!ehTransitorio(resultado.resp.status)) return resultado
+      await new Promise((resolve) => setTimeout(resolve, esperaMs(resultado.resp)))
+      continue
+    }
     const status = (resultado.body?.status as string | undefined) ?? 'enqueued'
     if (!STATUS_EM_ANDAMENTO.has(status)) return resultado
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVALO_MS))
@@ -221,19 +371,9 @@ function buildConsumerInvoicePayload(input: EmitirConsumidorInput, prestador: Pr
 // Duplicado de propósito para não tocar em `emitir` (o caminho já validado).
 async function emitirDocumento(config: ConfigFiscalCliente, resource: string, payload: unknown): Promise<ResultadoEmissao> {
   try {
-    const criacao = await spedyFetch(config, `/${resource}`, { method: 'POST', body: JSON.stringify(payload) })
-    if (!criacao.resp.ok) {
-      return {
-        sucesso: false,
-        codigoErro: `SPEDY_HTTP_${criacao.resp.status}`,
-        erro: (criacao.body?.message as string | undefined) ?? `Spedy retornou HTTP ${criacao.resp.status}.`,
-        detalhes: criacao.bodyText.slice(0, 1000),
-      }
-    }
-    const id = criacao.body?.id as string | undefined
-    if (!id) {
-      return { sucesso: false, erro: 'Resposta da Spedy não trouxe o identificador da nota.', detalhes: criacao.bodyText.slice(0, 1000) }
-    }
+    const criacao = await obterOuCriarNota(config, resource, payload as { integrationId?: string } & Record<string, unknown>)
+    if ('erro' in criacao) return criacao.erro
+    const id = criacao.id
     const final = await pollAteTerminal(config, id, resource)
     if (!final) {
       return { sucesso: false, codigoErro: 'SPEDY_PROCESSANDO', erro: 'A Spedy ainda está processando a nota. Consulte novamente em instantes.', detalhes: id }
@@ -271,28 +411,12 @@ export class SpedyConector {
   async emitir(input: EmitirNfseInput, config: ConfigFiscalCliente, prestador: Prestador): Promise<ResultadoEmissao> {
     try {
       const payload = buildServiceInvoicePayload(input, config, prestador)
-      const criacao = await spedyFetch(config, '/service-invoices', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      })
-
-      if (!criacao.resp.ok) {
-        return {
-          sucesso: false,
-          codigoErro: `SPEDY_HTTP_${criacao.resp.status}`,
-          erro: (criacao.body?.message as string | undefined) ?? `Spedy retornou HTTP ${criacao.resp.status} ao criar a NFS-e.`,
-          detalhes: criacao.bodyText.slice(0, 1000),
-        }
-      }
-
-      const id = criacao.body?.id as string | undefined
-      if (!id) {
-        return {
-          sucesso: false,
-          erro: 'Resposta da Spedy não trouxe o identificador da nota.',
-          detalhes: criacao.bodyText.slice(0, 1000),
-        }
-      }
+      // Nunca faz POST direto: obterOuCriarNota consulta o integrationId antes,
+      // e reaproveita a nota que a rodada anterior deixou em processamento em
+      // vez de emitir outra. Ver o comentário de buscarNotaPorIntegrationId.
+      const criacao = await obterOuCriarNota(config, 'service-invoices', payload)
+      if ('erro' in criacao) return criacao.erro
+      const id = criacao.id
 
       const final = await pollAteTerminal(config, id)
       if (!final) {

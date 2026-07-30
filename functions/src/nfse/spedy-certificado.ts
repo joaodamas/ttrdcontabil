@@ -14,6 +14,9 @@
  *  - spedyCompanyId (empresa já criada na Spedy — via provisionamento)
  *  - credenciais.spedyApiKey (chave da empresa)
  *  - certificado A1 já carregado (credenciais.certificadoStoragePath + senha)
+ *
+ * Acesso: perfil 'admin'. É a operação que exporta a chave privada do cliente
+ * para fora da plataforma, então não basta ser do fiscal.
  */
 import * as admin from 'firebase-admin'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
@@ -21,7 +24,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { decrypt, isEncrypted } from './encrypt'
 import { credentialSecrets } from './secrets'
-import { pfxBase64FromStorageBuffer } from './certificado'
+import { assertCaminhoCertificado, pfxBase64FromStorageBuffer } from './certificado'
 import { SpedyConector } from './provedores/spedy'
 import { assertCanAccessCliente } from '../authz'
 import { writeAuditLog, type AuditActor } from '../audit'
@@ -67,7 +70,10 @@ export const enviarCertificadoSpedy = onCall(
     const clienteId = String((request.data as { clienteId?: string } | undefined)?.clienteId ?? '')
     if (!clienteId) throw new HttpsError('invalid-argument', 'clienteId é obrigatório.')
 
-    const acesso = await assertCanAccessCliente(uid, clienteId, 'fiscal')
+    // Exige 'admin', não 'fiscal': esta callable é a única que tira o .pfx e a
+    // senha em texto puro do cofre e entrega a um terceiro (Spedy). Quem opera o
+    // dia a dia fiscal emite nota, mas não exporta a chave privada do cliente.
+    const acesso = await assertCanAccessCliente(uid, clienteId, 'admin')
     const actor: AuditActor = { id: uid, nome: acesso.usuario.nome, email: null }
 
     const fiscalSnap = await getFiscalSnap(clienteId)
@@ -88,11 +94,14 @@ export const enviarCertificadoSpedy = onCall(
       throw new HttpsError('failed-precondition', 'Cliente sem chave de API da Spedy configurada.')
     }
 
-    const path = config.credenciais?.certificadoStoragePath
-    if (!path) {
+    const pathPersistido = config.credenciais?.certificadoStoragePath
+    if (!pathPersistido) {
       throw new HttpsError('failed-precondition', 'Nenhum certificado carregado para este cliente. Suba o A1 na ficha fiscal antes.')
     }
-    const file = getStorage().bucket().file(path as string)
+    // O campo só diz SE existe certificado; QUAL arquivo baixar é derivado do
+    // clienteId no servidor. Ver assertCaminhoCertificado em ./certificado.
+    const caminhoCertificado = assertCaminhoCertificado(clienteId, pathPersistido)
+    const file = getStorage().bucket().file(caminhoCertificado)
     const [exists] = await file.exists()
     if (!exists) throw new HttpsError('failed-precondition', 'Arquivo do certificado não encontrado no Storage.')
     const [buffer] = await file.download()

@@ -9,7 +9,7 @@ import { rotearEmissao } from './municipios/router'
 import { encrypt, decrypt, isEncrypted } from './encrypt'
 import { credentialSecrets } from './secrets'
 import { isProducaoLiberadaPorConfigOuConector } from './conectores'
-import { pfxBase64FromStorageBuffer } from './certificado'
+import { assertCaminhoCertificado, pfxBase64FromStorageBuffer } from './certificado'
 import { assertCanAccessCliente } from '../authz'
 import { validarPayloadFiscal } from './validacao'
 import { writeAuditLog, SYSTEM_ACTOR, type AuditActor } from '../audit'
@@ -105,10 +105,15 @@ function decryptSenhaCertificado(senhaRaw: string | undefined): string {
 }
 
 async function getCertificado(clienteId: string, config: ConfigFiscalCliente): Promise<CertificadoA1 | undefined> {
-  const path = config.credenciais?.certificadoStoragePath
-  if (!path) return undefined
+  const pathPersistido = config.credenciais?.certificadoStoragePath
+  // Sem certificado é caminho legítimo (município por token, ou Spedy assinando
+  // do lado dela) — segue sem A1. Mas se HÁ caminho, ele não pode ser usado cru:
+  // assertCaminhoCertificado confere contra o derivado de clienteId e devolve o
+  // derivado. Ver a armadilha documentada em certificado.ts.
+  if (!pathPersistido) return undefined
+  const path = assertCaminhoCertificado(clienteId, pathPersistido)
   const bucket = getStorage().bucket()
-  const file   = bucket.file(path as string)
+  const file   = bucket.file(path)
   const [exists] = await file.exists()
   if (!exists) return undefined
   const [buffer] = await file.download()

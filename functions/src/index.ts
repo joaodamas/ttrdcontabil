@@ -50,5 +50,6 @@ export {
   pausarCobrancaWhatsappLancamento,
   retomarCobrancaWhatsappLancamento,
   reagendarCobrancaWhatsappLancamento,
+  atualizarTemplateWhatsapp,
 } from './whatsapp/callables'
 export { webhookWhatsapp } from './whatsapp/webhook'

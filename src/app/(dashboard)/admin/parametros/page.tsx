@@ -14,6 +14,8 @@ import {
   saveParametrosEscritorio,
 } from '@/features/admin/services'
 import type { ParametrosEscritorio } from '@/features/admin/types'
+import { fetchWhatsappTemplates, updateWhatsappTemplate } from '@/features/whatsapp/services'
+import type { WhatsappTemplate } from '@/features/whatsapp/types'
 import {
   UI_FEATURE_FLAG_KEYS,
   UI_FEATURE_FLAG_META,
@@ -30,6 +32,11 @@ export default function AdminParametrosPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
+  const [templates, setTemplates] = useState<WhatsappTemplate[]>([])
+  const [templatesLoading, setTemplatesLoading] = useState(true)
+  const [savingTemplateKey, setSavingTemplateKey] = useState<string | null>(null)
+  const [draftContentSid, setDraftContentSid] = useState<Record<string, string>>({})
+
   useEffect(() => {
     let mounted = true
     fetchParametrosEscritorio(usuario?.tenantId)
@@ -42,6 +49,29 @@ export default function AdminParametrosPage() {
       .finally(() => mounted && setLoading(false))
     return () => { mounted = false }
   }, [usuario?.tenantId])
+
+  useEffect(() => {
+    let mounted = true
+    fetchWhatsappTemplates()
+      .then((rows) => mounted && setTemplates(rows))
+      .catch(() => toast.error('Não foi possível carregar o catálogo de mensagens.'))
+      .finally(() => mounted && setTemplatesLoading(false))
+    return () => { mounted = false }
+  }, [])
+
+  async function saveTemplateField(template: WhatsappTemplate, patch: Partial<Pick<WhatsappTemplate, 'providerContentSid' | 'ativo' | 'aprovadoProvider'>>) {
+    if (!template.templateKey) return
+    setSavingTemplateKey(template.templateKey)
+    try {
+      await updateWhatsappTemplate({ templateKey: template.templateKey, ...patch })
+      setTemplates((prev) => prev.map((item) => (item.id === template.id ? { ...item, ...patch } : item)))
+      toast.success('Template atualizado.')
+    } catch {
+      toast.error('Não foi possível atualizar o template. Verifique seu perfil de acesso.')
+    } finally {
+      setSavingTemplateKey(null)
+    }
+  }
 
   function update<K extends keyof ParametrosEscritorio>(key: K, value: ParametrosEscritorio[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -148,15 +178,53 @@ export default function AdminParametrosPage() {
               </Select>
             </div>
 
+            {/* Interruptor geral da emissão automática. Fica aqui, e não na ficha
+                de cada cliente, porque o caso de uso é justamente o oposto do
+                switch por cliente: desligar TUDO de uma vez, no meio de um
+                incidente, sem precisar abrir 119 fichas. */}
+            <div className="sm:col-span-2 rounded-lg border border-border p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="emissao-automatica-geral" className="text-sm font-semibold">
+                    Emitir NFS-e automaticamente
+                  </Label>
+                  <p className="text-xs text-muted-foreground max-w-prose">
+                    Com isto ligado, o robô diário emite de verdade as notas dos clientes que
+                    também tiverem a emissão automática ativada na ficha fiscal. Desligado, os
+                    rascunhos continuam sendo preparados todo dia e ficam em Fiscal esperando
+                    alguém revisar e emitir — nada é perdido.
+                  </p>
+                  {form.emissaoAutomaticaNfseHabilitada && (
+                    <p className="text-xs font-medium text-warning pt-1">
+                      Ligado: notas fiscais reais podem sair sem revisão humana.
+                    </p>
+                  )}
+                </div>
+                <Select
+                  value={form.emissaoAutomaticaNfseHabilitada ? 'sim' : 'nao'}
+                  onValueChange={(value) => update('emissaoAutomaticaNfseHabilitada', value === 'sim')}
+                  disabled={loading}
+                >
+                  <SelectTrigger id="emissao-automatica-geral" className="w-32 shrink-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nao">Desligado</SelectItem>
+                    <SelectItem value="sim">Ligado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div className="space-y-1.5 sm:col-span-2 pt-2">
               <h3 className="text-sm font-semibold">Cobrança por WhatsApp</h3>
               <p className="text-xs text-muted-foreground">
-                Configuração base da régua automática e do canal oficial da Cloud API.
+                Configuração base da régua automática e do canal via Twilio.
               </p>
             </div>
 
             <div className="space-y-1.5">
-              <Label>Cloud API habilitada</Label>
+              <Label>Canal habilitado</Label>
               <Select
                 value={form.whatsappCloudApiEnabled ? 'sim' : 'nao'}
                 onValueChange={(value) => update('whatsappCloudApiEnabled', value === 'sim')}
@@ -189,33 +257,14 @@ export default function AdminParametrosPage() {
               </Select>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="whatsappBusinessAccountId">Business Account ID</Label>
-              <Input
-                id="whatsappBusinessAccountId"
-                value={form.whatsappBusinessAccountId}
-                disabled={loading}
-                onChange={(event) => update('whatsappBusinessAccountId', event.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="whatsappPhoneNumberId">Phone Number ID</Label>
-              <Input
-                id="whatsappPhoneNumberId"
-                value={form.whatsappPhoneNumberId}
-                disabled={loading}
-                onChange={(event) => update('whatsappPhoneNumberId', event.target.value)}
-              />
-            </div>
-
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="whatsappWebhookVerifyToken">Webhook verify token</Label>
+              <Label htmlFor="whatsappTwilioFromNumber">Número Twilio (WhatsApp)</Label>
               <Input
-                id="whatsappWebhookVerifyToken"
-                value={form.whatsappWebhookVerifyToken}
+                id="whatsappTwilioFromNumber"
+                placeholder="+5511999999999"
+                value={form.whatsappTwilioFromNumber}
                 disabled={loading}
-                onChange={(event) => update('whatsappWebhookVerifyToken', event.target.value)}
+                onChange={(event) => update('whatsappTwilioFromNumber', event.target.value)}
               />
             </div>
 
@@ -277,6 +326,83 @@ export default function AdminParametrosPage() {
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-3xl border-border/65 bg-card/95 card-shadow">
+        <CardHeader>
+          <CardTitle className="text-base">Catálogo de mensagens WhatsApp</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Vincule cada chave interna ao ContentSid do template aprovado no Content API da Twilio.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {templatesLoading && <p className="text-sm text-muted-foreground">Carregando catálogo...</p>}
+          {!templatesLoading && templates.length === 0 && (
+            <p className="text-sm text-muted-foreground">Nenhum template encontrado.</p>
+          )}
+          {templates.map((template) => {
+            const key = template.templateKey ?? template.id
+            const isSaving = savingTemplateKey === template.templateKey
+            const contentSidValue = draftContentSid[key] ?? template.providerContentSid ?? ''
+            return (
+              <div key={template.id} className="grid gap-3 border-b border-border/60 pb-4 last:border-0 last:pb-0 sm:grid-cols-2">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label className="font-mono text-xs text-muted-foreground">{key}</Label>
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor={`contentSid-${key}`}>ContentSid da Twilio</Label>
+                  <Input
+                    id={`contentSid-${key}`}
+                    placeholder="HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                    value={contentSidValue}
+                    disabled={isSaving}
+                    onChange={(event) => setDraftContentSid((prev) => ({ ...prev, [key]: event.target.value }))}
+                    onBlur={() => {
+                      if (contentSidValue !== (template.providerContentSid ?? '')) {
+                        void saveTemplateField(template, { providerContentSid: contentSidValue })
+                      }
+                    }}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Ativo</Label>
+                  <Select
+                    value={template.ativo ? 'sim' : 'nao'}
+                    onValueChange={(value) => void saveTemplateField(template, { ativo: value === 'sim' })}
+                    disabled={isSaving}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sim">Sim</SelectItem>
+                      <SelectItem value="nao">Não</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Aprovado pela Meta</Label>
+                  <Select
+                    value={template.aprovadoProvider ? 'sim' : 'nao'}
+                    onValueChange={(value) => void saveTemplateField(template, { aprovadoProvider: value === 'sim' })}
+                    disabled={isSaving}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sim">Sim</SelectItem>
+                      <SelectItem value="nao">Não</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )
+          })}
         </CardContent>
       </Card>
     </div>

@@ -61,6 +61,18 @@ service cloud.firestore {
     function canReadFinanceiro()   { return isFinanceiro() || hasTela('financeiro'); }
     function canReadFechamento()   { return isOperacional() || isFiscal() || hasTela('fechamento'); }
 
+    // [P0-B] Quem produz conteúdo no Cliente 360 (POP, notas internas e
+    // comentários da timeline). Não dá para usar isOperacional() aqui: o POP tem
+    // uma seção Fiscal e uma Financeiro, e quem preenche cada uma é justamente o
+    // perfil correspondente — 'fiscal' ficaria trancado fora do próprio campo.
+    // Fica de fora só 'leitura', que enxerga a tela 'clientes' mas não escreve.
+    function podeColaborarCliente() { return isOperacional() || isFiscal() || isFinanceiro(); }
+
+    // [P0-B] Relatório de produtividade cruza o tempo de TODO mundo, então a
+    // leitura de tarefas_timers segue a tela em que ele está pendurado ('admin',
+    // ver app-sidebar.tsx), não o perfil de quem cronometra.
+    function canReadProdutividade() { return isAdmin() || hasTela('admin'); }
+
     // [P1] Update de fechamento_revisoes que REABRE o mês (seta travado explicitamente
     // para false) exige admin. Ausência do campo `travado` no payload (não deveria
     // ocorrer — salvarRevisao sempre grava travado:true/false) NÃO é tratada como
@@ -186,6 +198,35 @@ service cloud.firestore {
         && statusCompetenciaValido(request.resource.data.status);
     }
 
+    // [P0-A] Campos de clientes_fiscal que SÓ a Cloud Function pode gravar (o
+    // Admin SDK ignora estas regras, então lá continuam graváveis). `credenciais`
+    // guarda a chave de API da Spedy, o caminho do .pfx no Storage e a senha do
+    // certificado A1; `spedyCompanyId` decide para qual empresa da Spedy o
+    // enviarCertificadoSpedy manda esse .pfx.
+    // A armadilha: `allow update: if isFiscal() && sameTenantUpdate()` não olhava
+    // campo nenhum, então um perfil 'fiscal' apontava spedyCompanyId para uma
+    // empresa dele, gravava a própria spedyApiKey via salvarCredenciaisFiscais e
+    // recebia o certificado A1 do cliente na conta dele — A1 vazado emite nota
+    // fiscal em nome da empresa da vítima. O formulário
+    // (config-fiscal-form.tsx) nunca grava nenhum destes campos: as credenciais
+    // sobem cifradas pela callable salvarCredenciaisFiscais.
+    function camposFiscalDoServidor() {
+      return ['credenciais', 'spedyCompanyId', 'spedyProvisionadoEm', 'spedyCertificadoEnviadoEm'];
+    }
+
+    // Armadilha: no create não existe resource.data para o diff() comparar. Se só
+    // o update fosse protegido, bastava CRIAR um segundo clientes_fiscal para o
+    // mesmo clienteId já com spedyCompanyId e credenciais forjados — as functions
+    // buscam a config por `where('clienteId','==',...).limit(1)`.
+    function fiscalCreateSemCampoDeServidor() {
+      return !request.resource.data.keys().hasAny(camposFiscalDoServidor());
+    }
+
+    function fiscalUpdateSemCampoDeServidor() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(camposFiscalDoServidor());
+    }
+
     // ─── Usuários ─────────────────────────────────────────────────────────────
 
     match /usuarios/{uid} {
@@ -228,6 +269,47 @@ service cloud.firestore {
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
+    // ─── Cliente 360: POP, notas internas e comentários ───────────────────────
+    // [P0-B] Três coleções em uso pelo app (clientes/[id]/page-client.tsx) que não
+    // tinham regra nenhuma. O Firestore nega por padrão o que não está declarado,
+    // então as abas POP, Notas internas e Comentários da timeline morreriam com
+    // permission-denied no primeiro dia.
+    //
+    // NOTA DE ISOLAMENTO: nenhuma delas está em TENANT_SCOPED_COLLECTIONS
+    // (src/lib/firestore-client.ts), então `listDocuments` NÃO injeta
+    // `where('tenantId','==',...)` na query — exigir tenantId no `list` derrubaria
+    // a query inteira, não filtraria nada. Vale o mesmo raciocínio já documentado
+    // em `usuarios`: o ambiente é single-tenant por deploy. O `get` continua
+    // conferindo tenant e a escrita grava tenantId (withActorMetadata preenche).
+    // Assim que essas coleções entrarem em TENANT_SCOPED_COLLECTIONS, trocar o
+    // `list` por `canRead() && sameTenantExisting()`.
+
+    match /clientes_pop/{id} {
+      allow get: if canRead() && sameTenantExisting();
+      allow list: if canRead();
+      allow create: if podeColaborarCliente() && sameTenantWrite();
+      allow update: if podeColaborarCliente() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
+    }
+
+    // Notas internas do POP: a UI é append-only (textarea que só acrescenta).
+    // Reescrever ou apagar histórico fica com o admin, igual tarefas_comentarios.
+    match /clientes_pop_notas/{id} {
+      allow get: if canRead() && sameTenantExisting();
+      allow list: if canRead();
+      allow create: if podeColaborarCliente() && sameTenantNew();
+      allow update: if isAdmin() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
+    }
+
+    match /clientes_comentarios/{id} {
+      allow get: if canRead() && sameTenantExisting();
+      allow list: if canRead();
+      allow create: if podeColaborarCliente() && sameTenantNew();
+      allow update: if isAdmin() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
+    }
+
     // ─── Serviços (tipos cadastrais do escritório) ────────────────────────────
 
     match /servicos/{id} {
@@ -267,6 +349,25 @@ service cloud.firestore {
       allow read: if canRead() && sameTenantExisting();
       allow create: if isOperacional() && sameTenantNew();
       allow update: if isAdmin() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
+    }
+
+    // [P0-B] Sessões do timer por tarefa (task-timer.tsx → relatório de
+    // produtividade). Estava sem regra nenhuma, ou seja: negada por padrão.
+    // Mesma NOTA DE ISOLAMENTO das coleções do Cliente 360 acima — tarefas_timers
+    // não está em TENANT_SCOPED_COLLECTIONS, a query da tela Produtividade não
+    // manda tenantId, e exigir tenantId no `list` derrubaria o relatório inteiro.
+    match /tarefas_timers/{id} {
+      allow get: if canReadProdutividade() && sameTenantExisting();
+      allow list: if canReadProdutividade();
+      // Qualquer usuário ativo cronometra a própria tarefa no cockpit Hoje (tela
+      // 'hoje' é default de todos os perfis), mas só em nome de si mesmo: sem
+      // amarrar usuarioId ao uid, dava para inflar a produtividade de terceiros.
+      allow create: if isAtivo() && sameTenantNew()
+        && ('usuarioId' in request.resource.data)
+        && request.resource.data.usuarioId == request.auth.uid;
+      // Registro de tempo é fato consumado: não se edita depois de gravado.
+      allow update: if false;
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
@@ -349,8 +450,11 @@ service cloud.firestore {
       // concedida via override — dado fiscal sensível, hoje legível por qualquer
       // ativo (inclusive 'leitura') via canRead().
       allow read: if canReadFiscalConfig() && sameTenantExisting();
-      allow create: if isFiscal() && sameTenantWrite();
-      allow update: if isFiscal() && sameTenantUpdate();
+      // [P0-A] O navegador escreve só a configuração declarativa (município,
+      // regime, alíquota, provedor). Credenciais e IDs da Spedy são território
+      // exclusivo das Cloud Functions — ver camposFiscalDoServidor().
+      allow create: if isFiscal() && sameTenantWrite() && fiscalCreateSemCampoDeServidor();
+      allow update: if isFiscal() && sameTenantUpdate() && fiscalUpdateSemCampoDeServidor();
       // Configuração fiscal nunca deve ser deletada sem supervisão admin.
       allow delete: if isAdmin() && sameTenantExisting();
     }

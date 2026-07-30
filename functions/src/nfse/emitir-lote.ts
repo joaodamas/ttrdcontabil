@@ -18,7 +18,7 @@ import { rotearEmissao } from './municipios/router'
 import { decrypt, isEncrypted } from './encrypt'
 import { credentialSecrets } from './secrets'
 import { isProducaoLiberadaPorConfigOuConector } from './conectores'
-import { pfxBase64FromStorageBuffer } from './certificado'
+import { assertCaminhoCertificado, pfxBase64FromStorageBuffer } from './certificado'
 import { assertCanAccessCliente } from '../authz'
 import { validarPayloadFiscal } from './validacao'
 import { requireEnvironmentTenant } from '../tenant'
@@ -96,9 +96,12 @@ function decryptSenhaCertificado(senhaRaw: string | undefined): string {
 }
 
 async function getCertificado(config: ConfigFiscalCliente): Promise<CertificadoA1 | undefined> {
-  const path = config.credenciais?.certificadoStoragePath
-  if (!path) return undefined
-  const file = getStorage().bucket().file(path as string)
+  const pathPersistido = config.credenciais?.certificadoStoragePath
+  // Nunca baixa pelo campo cru — ver a armadilha em certificado.ts. Cliente sem
+  // certificado continua sendo caminho válido e segue sem A1.
+  if (!pathPersistido) return undefined
+  const path = assertCaminhoCertificado(config.clienteId, pathPersistido)
+  const file = getStorage().bucket().file(path)
   const [exists] = await file.exists()
   if (!exists) return undefined
   const [buffer] = await file.download()

@@ -25,10 +25,11 @@ export const DEFAULT_PARAMETROS_ESCRITORIO: ParametrosEscritorio = {
   tenantId: appConfig.tenantId,
   diaVencimentoPadrao: 10,
   ambienteFiscalPadrao: 'homologacao',
+  // Default DESLIGADO: ligar emissao automatica e uma decisao explicita do
+  // escritorio, nunca um efeito colateral de deploy ou de doc ausente.
+  emissaoAutomaticaNfseHabilitada: false,
   whatsappCloudApiEnabled: false,
-  whatsappBusinessAccountId: '',
-  whatsappPhoneNumberId: '',
-  whatsappWebhookVerifyToken: '',
+  whatsappTwilioFromNumber: '',
   whatsappJanelaHoraMinima: '08:00',
   whatsappJanelaHoraMaxima: '18:00',
   whatsappUsaDiasUteis: true,
@@ -113,6 +114,7 @@ export async function fetchParametrosEscritorio(tenantId?: string) {
       tenantId: tenantId ?? DEFAULT_PARAMETROS_ESCRITORIO.tenantId,
       ...data,
       diaVencimentoPadrao: Number(data.diaVencimentoPadrao ?? DEFAULT_PARAMETROS_ESCRITORIO.diaVencimentoPadrao),
+      emissaoAutomaticaNfseHabilitada: data.emissaoAutomaticaNfseHabilitada === true,
       whatsappCloudApiEnabled: Boolean(data.whatsappCloudApiEnabled),
       whatsappUsaDiasUteis: data.whatsappUsaDiasUteis ?? DEFAULT_PARAMETROS_ESCRITORIO.whatsappUsaDiasUteis,
       uiFeatureFlags: normalizeUiFeatureFlags(data.uiFeatureFlags),
@@ -126,6 +128,9 @@ export async function saveParametrosEscritorio(exists: boolean, form: Parametros
     diaVencimentoPadrao: Math.min(28, Math.max(1, Number(form.diaVencimentoPadrao) || 10)),
     whatsappJanelaHoraMinima: form.whatsappJanelaHoraMinima || '08:00',
     whatsappJanelaHoraMaxima: form.whatsappJanelaHoraMaxima || '18:00',
+    // === true e nao Boolean(): mantem o fail-closed do backend, onde ausente
+    // e indefinido significam desligado.
+    emissaoAutomaticaNfseHabilitada: form.emissaoAutomaticaNfseHabilitada === true,
     whatsappCloudApiEnabled: Boolean(form.whatsappCloudApiEnabled),
     whatsappUsaDiasUteis: Boolean(form.whatsappUsaDiasUteis),
     uiFeatureFlags: normalizeUiFeatureFlags(form.uiFeatureFlags),
