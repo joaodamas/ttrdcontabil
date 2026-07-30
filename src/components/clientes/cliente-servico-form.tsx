@@ -38,6 +38,11 @@ interface Servico {
   nome: string
   codigo?: string | null
   valorPadrao: number | null
+  // Vem do catálogo (servicos.frequencia) e precisa ser COPIADA para o
+  // contrato: o gerador de cobrança lê clientes_servicos, nunca o catálogo.
+  // Sem ela, serviço anual (IRPF) ou avulso (abertura de empresa) era
+  // faturado todo mês, para sempre.
+  frequencia?: 'mensal' | 'avulso' | 'anual' | 'trimestral'
 }
 
 interface ClienteServicoFormProps {
@@ -88,6 +93,9 @@ export function ClienteServicoForm({
         servicoId:    data.servicoId,
         servicoNome,
         servicoCodigo: servico?.codigo ?? null,
+        // Default 'mensal' só quando o catálogo não disser nada: é o
+        // comportamento que já valia na prática, e não muda contrato existente.
+        frequencia:   servico?.frequencia ?? 'mensal',
         valor:        data.valor,
         diaVencimento: data.diaVencimento ?? null,
         dataInicio:   Timestamp.fromDate(new Date(`${data.dataInicio}T12:00:00`)),

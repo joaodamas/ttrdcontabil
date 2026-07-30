@@ -18,6 +18,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { Timestamp } from 'firebase-admin/firestore'
 import { DEFAULT_TENANT_ID } from '../tenant'
 import { SYSTEM_ACTOR, writeAuditLog } from '../audit'
+import { deveFaturarNoMes, vigenteNoMes } from './recorrencia'
 
 const db = () => admin.firestore()
 
@@ -108,9 +109,28 @@ export const criarLancamentosMensais = onSchedule(
         continue
       }
 
+      if (!deveFaturarNoMes(servico, mes)) {
+        ignorados++
+        continue
+      }
+
+      if (!vigenteNoMes(servico, ano, mes)) {
+        ignorados++
+        continue
+      }
+
       const diaVencimento = (servico.diaVencimento ?? DIA_VENCIMENTO_PADRAO) as number
       const dataVencimento = buildDataVencimento(ano, mes, diaVencimento)
-      const descricao = (servico.descricaoServico ?? servico.nomeServico ?? servico.descricao ?? 'Honorários contábeis') as string
+      // `servicoNome` PRIMEIRO: é o campo que o formulário de contrato grava.
+      // Nenhuma das três chaves antigas existe em documento algum, então toda a
+      // carteira caía no literal genérico — a coluna "Serviço / Referência"
+      // mentia para os 119 clientes. O gerador de competências já lia o campo
+      // certo (scheduler/competencias.ts); este ficou para trás.
+      const descricao = (servico.servicoNome
+        ?? servico.descricaoServico
+        ?? servico.nomeServico
+        ?? servico.descricao
+        ?? 'Honorários contábeis') as string
 
       // Mesmo id determinístico usado por criarCompetenciasMensais (competencias.ts):
       // `${clienteId}_${clienteServicoId}_${ano}_${mes}`. servicoDoc.id aqui é o id do

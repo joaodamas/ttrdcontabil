@@ -99,7 +99,7 @@ export const enviarAlertasDiarios = onSchedule(
     // "Rascunhos NFS-e pendentes" abaixo (mesma query, roda depois deste passo).
     const LIMITE_PROCESSANDO_MIN = 30
     const processandoSnap = await db().collection('nfse_rascunhos').where('status', '==', 'processando').get()
-    let batchTravados = db().batch()
+    const batchTravados = db().batch()
     let travados = 0
     for (const doc of processandoSnap.docs) {
       const atualizadoEm = doc.data().atualizadoEm as FirebaseFirestore.Timestamp | undefined
