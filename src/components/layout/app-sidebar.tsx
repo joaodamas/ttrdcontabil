@@ -106,6 +106,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Relatórios',
     icon: LineChart,
     items: [
+      { href: '/relatorios/carteira',      label: 'Carteira',      icon: Wallet,    telaKey: 'financeiro' },
       { href: '/relatorios/produtividade', label: 'Produtividade', icon: LineChart, telaKey: 'admin' },
     ],
   },
