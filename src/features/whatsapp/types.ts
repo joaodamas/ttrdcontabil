@@ -41,6 +41,7 @@ export type WhatsappTemplate = {
   tenantId?: string
   templateKey?: string
   providerTemplateName?: string
+  providerContentSid?: string
   providerLanguage?: string
   categoria?: string
   ativo?: boolean
@@ -70,9 +71,7 @@ export type WhatsappMessage = {
 
 export type WhatsappEscritorioConfig = {
   whatsappCloudApiEnabled: boolean
-  whatsappBusinessAccountId: string
-  whatsappPhoneNumberId: string
-  whatsappWebhookVerifyToken: string
+  whatsappTwilioFromNumber: string
   whatsappJanelaHoraMinima: string
   whatsappJanelaHoraMaxima: string
   whatsappUsaDiasUteis: boolean

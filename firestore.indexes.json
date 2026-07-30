@@ -4,455 +4,1824 @@
       "collectionGroup": "fiscal_conectores",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tenantId", "order": "ASCENDING" },
-        { "fieldPath": "nome", "order": "ASCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nome",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "clientes",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "deletedAt", "order": "ASCENDING" },
-        { "fieldPath": "razaoSocial", "order": "ASCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "razaoSocial",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "clientes",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "razaoSocial", "order": "ASCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "clientes",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tenantId", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "razaoSocial",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "clientes_comentarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "clientes_pop_notas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "competencias",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "clienteId", "order": "ASCENDING" },
-        { "fieldPath": "ano", "order": "DESCENDING" },
-        { "fieldPath": "mes", "order": "DESCENDING" }
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ano",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "mes",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "competencias",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "mes", "order": "ASCENDING" },
-        { "fieldPath": "ano", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ano",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "mes",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "competencias",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tenantId", "order": "ASCENDING" },
-        { "fieldPath": "mes", "order": "ASCENDING" },
-        { "fieldPath": "ano", "order": "ASCENDING" }
+        {
+          "fieldPath": "mes",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ano",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "competencias",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tenantId", "order": "ASCENDING" },
-        { "fieldPath": "mes", "order": "ASCENDING" },
-        { "fieldPath": "ano", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mes",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ano",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "competencias",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "mes", "order": "ASCENDING" },
-        { "fieldPath": "ano", "order": "ASCENDING" },
-        { "fieldPath": "clienteId", "order": "ASCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mes",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ano",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "competencias",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "mes", "order": "ASCENDING" },
-        { "fieldPath": "ano", "order": "ASCENDING" },
-        { "fieldPath": "clienteNome", "order": "ASCENDING" }
+        {
+          "fieldPath": "mes",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ano",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "competencias",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "mes", "order": "ASCENDING" },
-        { "fieldPath": "ano", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "clienteNome", "order": "ASCENDING" }
+        {
+          "fieldPath": "mes",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ano",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteNome",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "competencias",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "mes", "order": "ASCENDING" },
-        { "fieldPath": "ano", "order": "ASCENDING" },
-        { "fieldPath": "clienteId", "order": "ASCENDING" },
-        { "fieldPath": "clienteNome", "order": "ASCENDING" }
+        {
+          "fieldPath": "mes",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ano",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteNome",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "competencias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "mes",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ano",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteNome",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "competencias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mes",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ano",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteNome",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "competencias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mes",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ano",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteNome",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "competencias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mes",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ano",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteNome",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "competencias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mes",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ano",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteNome",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "lancamentos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "clienteId", "order": "ASCENDING" },
-        { "fieldPath": "dataVencimento", "order": "DESCENDING" }
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "lancamentos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataVencimento", "order": "DESCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "lancamentos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataVencimento", "order": "ASCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "lancamentos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "clienteId", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataVencimento", "order": "DESCENDING" }
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "lancamentos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tipo", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataVencimento", "order": "ASCENDING" }
+        {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "lancamentos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tenantId", "order": "ASCENDING" },
-        { "fieldPath": "tipo", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataVencimento", "order": "ASCENDING" }
+        {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "lancamentos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tipo", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataVencimento", "order": "DESCENDING" }
+        {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "lancamentos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tipo", "order": "ASCENDING" },
-        { "fieldPath": "dataVencimento", "order": "DESCENDING" }
+        {
+          "fieldPath": "competenciaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "lancamentos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "competenciaId", "order": "ASCENDING" },
-        { "fieldPath": "dataVencimento", "order": "DESCENDING" }
+        {
+          "fieldPath": "competenciaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "lancamentos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "competenciaId", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataVencimento", "order": "DESCENDING" }
+        {
+          "fieldPath": "competenciaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "lancamentos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "competenciaId", "order": "ASCENDING" },
-        { "fieldPath": "tipo", "order": "ASCENDING" },
-        { "fieldPath": "dataVencimento", "order": "DESCENDING" }
+        {
+          "fieldPath": "competenciaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "lancamentos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "competenciaId", "order": "ASCENDING" },
-        { "fieldPath": "tipo", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataVencimento", "order": "DESCENDING" }
+        {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPagamento",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "lancamentos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tipo", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataPagamento", "order": "ASCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPagamento",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "competenciaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "competenciaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "competenciaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "competenciaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "competenciaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "tarefas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "responsavelId", "order": "ASCENDING" },
-        { "fieldPath": "dataVencimento", "order": "ASCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrazo",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "tarefas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataPrazo", "order": "ASCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "tarefas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tenantId", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrazo",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "tarefas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tenantId", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataPrazo", "order": "ASCENDING" }
+        {
+          "fieldPath": "prioridade",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrazo",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "tarefas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "prioridade", "order": "ASCENDING" },
-        { "fieldPath": "dataPrazo", "order": "ASCENDING" }
+        {
+          "fieldPath": "responsavelId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrazo",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "tarefas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "responsavelId", "order": "ASCENDING" },
-        { "fieldPath": "dataPrazo", "order": "ASCENDING" }
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrazo",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "tarefas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "clienteId", "order": "ASCENDING" },
-        { "fieldPath": "dataPrazo", "order": "ASCENDING" }
+        {
+          "fieldPath": "competenciaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrazo",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "tarefas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "competenciaId", "order": "ASCENDING" },
-        { "fieldPath": "dataPrazo", "order": "ASCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrazo",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "tarefas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataVencimento", "order": "ASCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "prioridade",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrazo",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "tarefas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "responsavelId", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataVencimento", "order": "ASCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "prioridade",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrazo",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
-      "collectionGroup": "clientes_servicos",
+      "collectionGroup": "tarefas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "clienteId", "order": "ASCENDING" },
-        { "fieldPath": "dataInicio", "order": "DESCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "responsavelId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrazo",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "tarefas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "responsavelId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrazo",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "tarefas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrazo",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "tarefas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "competenciaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrazo",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "tarefas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "competenciaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrazo",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "tarefas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "prioridade",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "competenciaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrazo",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "tarefas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "prioridade",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "competenciaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPrazo",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "tarefas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "titulo",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "tarefas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "competenciaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "tarefas_comentarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tarefaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "fechamentos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "mes", "order": "ASCENDING" },
-        { "fieldPath": "ano", "order": "ASCENDING" },
-        { "fieldPath": "clienteCodigo", "order": "ASCENDING" }
+        {
+          "fieldPath": "mes",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ano",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteCodigo",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "fechamentos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tenantId", "order": "ASCENDING" },
-        { "fieldPath": "mes", "order": "ASCENDING" },
-        { "fieldPath": "ano", "order": "ASCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "mes",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ano",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "fechamentos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "mes", "order": "ASCENDING" },
-        { "fieldPath": "ano", "order": "ASCENDING" },
-        { "fieldPath": "regime", "order": "ASCENDING" },
-        { "fieldPath": "clienteCodigo", "order": "ASCENDING" }
+        {
+          "fieldPath": "mes",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ano",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "regime",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteCodigo",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "nfse_emitidas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tenantId", "order": "ASCENDING" },
-        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "nfse_emitidas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tenantId", "order": "ASCENDING" },
-        { "fieldPath": "dataEmissao", "order": "DESCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataEmissao",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "nfse_emitidas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "clienteId", "order": "ASCENDING" },
-        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "nfse_emitidas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "nfse_emitidas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "clienteId", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "nfse_emitidas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "clienteId", "order": "ASCENDING" },
-        { "fieldPath": "dataEmissao", "order": "DESCENDING" }
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataEmissao",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "nfse_emitidas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataEmissao", "order": "DESCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataEmissao",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "nfse_emitidas",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "clienteId", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "dataEmissao", "order": "DESCENDING" }
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataEmissao",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "nfse_emitidas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "nfse_emitidas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "nfse_emitidas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "nfse_emitidas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "competenciaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "nfse_emitidas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataEmissao",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "nfse_emitidas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataEmissao",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "nfse_emitidas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataEmissao",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "nfse_emitidas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataEmissao",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "nfse_rascunhos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "clienteId", "order": "ASCENDING" },
-        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "nfse_rascunhos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "tenantId", "order": "ASCENDING" },
-        { "fieldPath": "competenciaMes", "order": "ASCENDING" },
-        { "fieldPath": "competenciaAno", "order": "ASCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "nfse_rascunhos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "origem", "order": "ASCENDING" },
-        { "fieldPath": "requerRevisao", "order": "ASCENDING" },
-        { "fieldPath": "criadoEm", "order": "ASCENDING" }
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "nfse_rascunhos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "competenciaMes",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "competenciaAno",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "nfse_rascunhos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "origem",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "requerRevisao",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "nfse_eventos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "nfseId", "order": "ASCENDING" },
-        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+        {
+          "fieldPath": "nfseId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "nfse_eventos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nfseId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "ir_declaracoes",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "clienteId", "order": "ASCENDING" },
-        { "fieldPath": "anoBase", "order": "DESCENDING" }
+        {
+          "fieldPath": "clienteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "anoBase",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "ir_declaracoes",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "anoBase", "order": "DESCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "anoBase",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "ir_declaracoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "anoBase",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteNome",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "ir_declaracoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "anoBase",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "clienteNome",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "ir_checklist",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "declaracaoId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "criadoEm",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "usuarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nome",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "valor",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataPagamento",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "valor",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "lancamentos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataVencimento",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "valor",
+          "order": "ASCENDING"
+        }
       ]
     }
   ],

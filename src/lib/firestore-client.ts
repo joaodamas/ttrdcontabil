@@ -5,7 +5,7 @@
 import {
   collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, limit, serverTimestamp, Timestamp, documentId, setDoc,
-  startAfter,
+  startAfter, getAggregateFromServer, sum,
   type DocumentData,
   type QueryDocumentSnapshot,
   type QueryConstraint,
@@ -163,7 +163,18 @@ async function writeAuditLog(params: {
   const actor = await getAuditActor()
   if (!actor) return
 
+  // Armadilha: a regra de logs_auditoria exige sameTenantNew(), ou seja,
+  // 'tenantId' precisa vir DENTRO do documento. Sem ele todo create era negado
+  // e o auditSafely engolia o erro — a trilha simplesmente não existia.
+  // O tenant sai do mesmo actor que listDocuments usa para escopar as queries.
+  if (!actor.tenantId) {
+    throw new Error(
+      `Usuário ${actor.uid} sem tenantId resolvido — log de auditoria seria negado pelas regras.`
+    )
+  }
+
   await addDoc(collection(getClientDb(), 'logs_auditoria'), {
+    tenantId: actor.tenantId,
     usuarioId: actor.uid,
     usuarioNome: actor.nome,
     usuarioEmail: actor.email,
@@ -246,6 +257,30 @@ export async function listDocumentsPage<T>(
     lastCursor: snap.docs.at(-1) ?? null,
     cursors: snap.docs,
   }
+}
+
+/**
+ * Soma um campo numérico no servidor, via agregação do Firestore.
+ *
+ * Existe porque somar em memória obriga a um limit(): passando do teto o KPI
+ * para de crescer em silêncio, sem erro nenhum na tela. A agregação percorre
+ * a coleção inteira do lado do servidor, respeita as mesmas regras e índices
+ * da query equivalente e não traz documento algum para o cliente.
+ *
+ * Mesma escopagem por tenantId de listDocuments — a agregação é avaliada
+ * pelas regras como um `list`, então o filtro precisa estar presente.
+ */
+export async function sumDocuments(
+  col: string,
+  field: string,
+  constraints: QueryConstraint[] = []
+): Promise<number> {
+  const actor = TENANT_SCOPED_COLLECTIONS.has(col) ? await getAuditActor() : null
+  const tenantConstraint = actor?.tenantId ? [where('tenantId', '==', actor.tenantId)] : []
+  const q = query(collection(getClientDb(), col), ...tenantConstraint, ...constraints)
+  const snap = await getAggregateFromServer(q, { total: sum(field) })
+  const total = snap.data().total
+  return Number.isFinite(total) ? total : 0
 }
 
 function stripUndefined(data: Record<string, unknown>): Record<string, unknown> {

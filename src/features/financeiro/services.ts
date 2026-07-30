@@ -1,5 +1,5 @@
-import { limit, orderBy, Timestamp, where, type QueryConstraint } from 'firebase/firestore'
-import { getClientesByIds, listDocuments, listDocumentsPage } from '@/lib/firestore-client'
+import { orderBy, Timestamp, where, type QueryConstraint } from 'firebase/firestore'
+import { getClientesByIds, listDocumentsPage, sumDocuments } from '@/lib/firestore-client'
 import type { FinanceiroListFilters, FinanceiroSnapshot, LancamentoRecord } from './types'
 
 const DEFAULT_PAGE_SIZE = 20
@@ -25,28 +25,28 @@ export async function fetchFinanceiroSnapshot(filters: FinanceiroListFilters): P
     orderBy('dataVencimento', 'desc'),
   ]
 
-  const [mainPage, aReceberData, recebidoMesData, emAtrasoData] = await Promise.all([
+  // Os três KPIs são somados pelo servidor (agregação), não em memória.
+  // Antes vinham de um listDocuments com limit(500) + reduce: com 119 clientes
+  // o histórico ultrapassa 500 lançamentos em poucos meses e o KPI congelava
+  // sem erro nenhum — o número simplesmente parava de crescer.
+  // Sem orderBy de propósito: em soma ele não ordena nada, só serviria para
+  // exigir índice a mais (e excluir documentos sem o campo).
+  const [mainPage, somaAReceber, somaRecebidoMes, somaEmAtraso] = await Promise.all([
     listDocumentsPage<LancamentoRecord>('lancamentos', constraints, filters.cursor, fetchLimit),
-    listDocuments('lancamentos', [
+    sumDocuments('lancamentos', 'valor', [
       where('tipo', '==', 'receita'),
       where('status', '==', 'pendente'),
-      orderBy('dataVencimento', 'asc'),
-      limit(500),
     ]),
-    listDocuments('lancamentos', [
+    sumDocuments('lancamentos', 'valor', [
       where('tipo', '==', 'receita'),
       where('status', '==', 'pago'),
       where('dataPagamento', '>=', inicioMes),
       where('dataPagamento', '<=', fimMes),
-      orderBy('dataPagamento', 'asc'),
-      limit(500),
     ]),
-    listDocuments('lancamentos', [
+    sumDocuments('lancamentos', 'valor', [
       where('tipo', '==', 'receita'),
       where('status', '==', 'pendente'),
       where('dataVencimento', '<', hojeTs),
-      orderBy('dataVencimento', 'asc'),
-      limit(500),
     ]),
   ])
 
@@ -82,8 +82,8 @@ export async function fetchFinanceiroSnapshot(filters: FinanceiroListFilters): P
     allLancamentos,
     hasMore,
     lastCursor: hasMore ? (mainPage.cursors[pageSize - 1] ?? null) : null,
-    somaAReceber: (aReceberData as LancamentoRecord[]).reduce((acc, d) => acc + (d.valor ?? 0), 0),
-    somaRecebidoMes: (recebidoMesData as LancamentoRecord[]).reduce((acc, d) => acc + (d.valor ?? 0), 0),
-    somaEmAtraso: (emAtrasoData as LancamentoRecord[]).reduce((acc, d) => acc + (d.valor ?? 0), 0),
+    somaAReceber,
+    somaRecebidoMes,
+    somaEmAtraso,
   }
 }
