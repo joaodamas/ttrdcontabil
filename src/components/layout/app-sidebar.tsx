@@ -3,7 +3,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useTheme } from 'next-themes'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
 import { appConfig } from '@/lib/app-config'
@@ -239,6 +239,7 @@ function NavBadge({ count, tone }: { count: number; tone: BadgeTone }) {
 // ── Sidebar content (shared between desktop + mobile Sheet) ───
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
+  const router = useRouter()
   const { usuario, logout } = useAuth()
   const counts = useNavCounts()
 
@@ -280,11 +281,20 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
   const visibleSections = NAV_SECTIONS.filter(canSeeSection)
 
-  /* prefetch nos Links acima: o padrão do App Router é prefetch PARCIAL — ele
-     busca só até a fronteira de loading.tsx, e não o chunk da própria tela.
-     Como cada tela custa de 111 KB (Painel) a 600 KB (Clientes) de JS
-     incremental, esse download acontecia depois do clique. Com prefetch
-     explícito ele acontece antes, enquanto a sidebar está parada na tela. */
+  /* Prefetch no hover, não no mount: o padrão do App Router é prefetch PARCIAL
+     — ele busca só até a fronteira de loading.tsx, e não o chunk da própria
+     tela. Como cada tela custa de 111 KB (Painel) a 600 KB (Clientes) de JS
+     incremental, esse download acontecia depois do clique.
+     A versão anterior usava `prefetch` (full) direto no Link, que o Next
+     dispara assim que o item entra no viewport — como a sidebar inteira
+     aparece de uma vez, isso virava uma rajada de ~20 downloads simultâneos
+     em toda navegação, disputando banda/conexões com a busca de dados real da
+     tela (é isso que deixava telas como Financeiro presas no skeleton).
+     `onMouseEnter` só dispara o prefetch quando existe intenção real de
+     clique — um de cada vez, não vinte. */
+  function prefetchOnHover(href: string) {
+    return { onMouseEnter: () => router.prefetch(href) }
+  }
 
   /* Linha de navegação — a mesma geometria para link solo, cabeçalho de grupo
      e sub-item, para o olho ler uma coluna só em vez de três ritmos diferentes.
@@ -310,7 +320,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           key={section.id}
           href={section.href}
           onClick={onNavigate}
-          prefetch
+          prefetch={false}
+          {...prefetchOnHover(section.href)}
           aria-current={active ? 'page' : undefined}
           className={cn(rowBase, active ? cn(rowActive, activeRail) : rowIdle)}
         >
@@ -368,7 +379,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                   key={item.href}
                   href={item.href}
                   onClick={onNavigate}
-                  prefetch
+                  prefetch={false}
+                  {...prefetchOnHover(item.href)}
                   aria-current={itemActive ? 'page' : undefined}
                   className={cn(rowBase, 'gap-2.5', itemActive ? rowActive : rowIdle)}
                 >
