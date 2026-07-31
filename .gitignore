@@ -55,3 +55,14 @@ next-env.d.ts
 # dados exportados de clientes (PII — não versionar; geráveis pelos scripts de export)
 scripts/clientes-*.csv
 scripts/clientes-*.json
+
+# artefatos de falha do Playwright (screenshots, contexto de erro, .last-run.json)
+# Reproduzíveis rodando a suíte, e o nome da pasta carrega o título do teste —
+# viram lixo permanente no histórico a cada falha.
+/test-results
+/playwright-report
+/blob-report
+
+# cache do Firebase CLI. O hosting.*.cache é regravado a cada deploy e aparecia
+# modificado em TODO diff, escondendo mudança de verdade no meio do ruído.
+.firebase/

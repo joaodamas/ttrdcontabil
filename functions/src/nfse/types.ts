@@ -107,6 +107,92 @@ export interface CredenciaisConector {
   spedyApiKey?: string
 }
 
+// ─── Carteira de tomadores e faturamento recorrente ──────────────────────────
+// A NFS-e é emitida EM NOME DO CLIENTE do escritório: o prestador é o cliente,
+// o tomador é o cliente DELE. `tomadores` é a carteira (fixa, na maioria dos
+// casos) de cada prestador; `nfse_recorrentes` é o contrato de faturamento.
+// NÃO CONFUNDIR com `clientes_servicos`, que é o honorário do ESCRITÓRIO e é
+// consumido por scheduler/lancamentos.ts — foi essa confusão que fez o gerador
+// de rascunhos preencher o tomador com o próprio prestador.
+
+/**
+ * Data do Firestore em forma estrutural, pelo mesmo motivo de
+ * scheduler/recorrencia.ts: este arquivo é só tipo e não deve arrastar o
+ * firebase-admin para dentro de um teste de unidade. É também o formato que
+ * `vigenteNoMes()` já espera, então um NfseRecorrenteDoc entra nela direto.
+ */
+export type DataFirestore = { toDate(): Date }
+
+export interface TomadorEnderecoDoc {
+  cep?: string
+  logradouro?: string
+  numero?: string
+  complemento?: string
+  bairro?: string
+  municipio?: string        // nome do município (exibição)
+  /**
+   * IBGE de 7 dígitos. OBRIGATÓRIO para emitir onde a prefeitura exige o
+   * endereço do tomador — em municipios/cajamar.ts ele vira <Cidade> do tomador
+   * e <MunicipioPrestacaoServico>. Opcional no tipo porque o cadastro pode
+   * nascer sem endereço; quem cobra é a validação de emissão.
+   */
+  municipioIbge?: string
+  uf?: string
+}
+
+/**
+ * Documento da coleção `tomadores`.
+ *
+ * Superset do `Tomador` acima, de propósito: aquele é o PAYLOAD que vai para o
+ * conector (só o que a prefeitura recebe), este é o CADASTRO. Converter um no
+ * outro é responsabilidade de quem monta a emissão — manter os dois separados
+ * evita que campo de tela (telefone, ativo, deletedAt) vaze para dentro do XML.
+ */
+export interface TomadorDoc {
+  tenantId: string
+  clienteId: string          // PRESTADOR: dono desta carteira
+  cpfCnpj: string            // só dígitos
+  razaoSocial: string
+  email?: string
+  telefone?: string
+  inscricaoMunicipal?: string  // usado quando há retenção de ISS
+  endereco?: TomadorEnderecoDoc
+  ativo: boolean
+  deletedAt?: DataFirestore
+  criadoEm: DataFirestore
+  atualizadoEm: DataFirestore
+}
+
+/**
+ * Documento da coleção `nfse_recorrentes` — o contrato: quem fatura quem, de
+ * quanto, em que dia.
+ *
+ * `dataInicio`/`dataFim` usam DataFirestore justamente para este tipo ser
+ * aceito por `vigenteNoMes()` (scheduler/recorrencia.ts) sem conversão.
+ */
+export interface NfseRecorrenteDoc {
+  tenantId: string
+  clienteId: string          // PRESTADOR
+  tomadorId: string          // doc em `tomadores`, da carteira deste clienteId
+  // Denormalizados para o rascunho não precisar de join por contrato.
+  tomadorNome: string
+  tomadorCpfCnpj: string
+  descricao: string          // vira a discriminação da nota
+  valor: number
+  diaEmissao: number         // 1–31; clampar ao tamanho do mês na geração
+  // Vazios herdam de clientes_fiscal (codigoServicoPadrao / itemListaServico /
+  // aliquotaPadrao) — preencher aqui é a exceção, não a regra.
+  itemListaServico?: string
+  codigoServico?: string
+  aliquota?: number          // em % (ex.: 5.00)
+  issRetido: boolean
+  dataInicio: DataFirestore
+  dataFim?: DataFirestore
+  ativo: boolean
+  criadoEm: DataFirestore
+  atualizadoEm: DataFirestore
+}
+
 // ─── Payload de entrada da Cloud Function ────────────────────────────────────
 export interface EmitirNfseInput {
   clienteId: string

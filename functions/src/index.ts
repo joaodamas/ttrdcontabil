@@ -11,6 +11,17 @@ export {
 
 export { emitirNfseLote } from './nfse/emitir-lote'
 export { cancelarNfse, consultarNfse, retryNfse } from './nfse/ciclo'
+// Webhook da Spedy — fecha o ciclo da nota sem depender do polling (nota órfã,
+// teto de lote e valores de IBS/CBS). Ver o cabeçalho de nfse/webhook-spedy.ts.
+//
+// ⚠️ PRÉ-REQUISITO DE DEPLOY: esta function declara o secret
+// SPEDY_WEBHOOK_SECRET. Igual ao bloco do WhatsApp abaixo, o CLI resolve os
+// secrets na fase de análise — sem ele no Secret Manager, o deploy INTEIRO
+// aborta. Antes do próximo deploy:
+//     firebase functions:secrets:set SPEDY_WEBHOOK_SECRET
+// (qualquer string aleatória longa; é a mesma que vai no cadastro do webhook na
+// Spedy via POST /v1/webhooks, como header x-spedy-token ou ?token=).
+export { webhookSpedy } from './nfse/webhook-spedy'
 export { gerarRascunhosNfseMensais, processarNfseRecorrenteDiaria } from './nfse/rascunhos'
 // Provisionamento em massa na Spedy — DEFERIDO: exige o secret SPEDY_OWNER_API_KEY
 // (rodar `firebase functions:secrets:set SPEDY_OWNER_API_KEY` antes) e o

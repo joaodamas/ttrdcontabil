@@ -8,21 +8,38 @@
  *
  * Emissão é assíncrona no lado da Spedy (status inicial "enqueued"); fazemos
  * polling curto aqui para manter o mesmo contrato síncrono do restante do
- * pipeline (ResultadoEmissao). Um webhook para atualização tardia fica como
- * follow-up caso o polling estoure o timeout da function.
+ * pipeline (ResultadoEmissao). O polling deixou de ser a única saída: toda nota
+ * criada aqui vira um registro em `nfse_spedy` (id da Spedy → cliente/rascunho),
+ * que é o que permite ao webhook (../webhook-spedy.ts) fechar depois a nota que
+ * o polling não esperou.
  */
 import { createHash } from 'node:crypto'
+import * as admin from 'firebase-admin'
+import { Timestamp } from 'firebase-admin/firestore'
+import { getStorage } from 'firebase-admin/storage'
 import { decrypt, isEncrypted } from '../encrypt'
+import {
+  caminhoArquivoFiscal,
+  competenciaDaNota,
+  mapearStatusSpedy,
+  COLECAO_REGISTRO_SPEDY,
+  type RecursoSpedy,
+} from './spedy-evento'
 import type {
+  CancelarNfseInput,
   ConfigFiscalCliente,
+  ConsultarNfseInput,
   EmitirConsumidorInput,
   EmitirNfseInput,
   EmitirProdutoInput,
   ItemProdutoFiscal,
   Prestador,
   ResultadoEmissao,
+  ResultadoOperacaoNfse,
   Tomador,
 } from '../types'
+
+const db = () => admin.firestore()
 
 const SPEDY_API_PRODUCAO = 'https://api.spedy.com.br/v1'
 // Sandbox real da Spedy: conta SEPARADA da de produção, criada em
@@ -273,6 +290,73 @@ async function obterOuCriarNota(
   return { id, reaproveitada: false }
 }
 
+// ─── Registro id-da-Spedy → nota daqui (`nfse_spedy`) ─────────────────────────
+/**
+ * O webhook chega dizendo "a nota X mudou para authorized" e nada mais: o id é
+ * da Spedy, não daqui. Sem um índice do id dela para o nosso cliente/rascunho,
+ * o evento é ilegível — e o integrationId não resolve sozinho porque ele é
+ * HASHEADO quando o id do rascunho passa de 36 caracteres (ver integrationIdDe),
+ * e hash não volta.
+ *
+ * Por isso o registro nasce aqui, no instante em que o id da Spedy existe, e não
+ * na gravação de `nfse_emitidas`: a nota órfã — aquela cujo polling estourou e
+ * que NUNCA chegou a virar `nfse_emitidas` — é exatamente o caso que o webhook
+ * precisa consertar.
+ *
+ * Best-effort de propósito: falhar aqui não pode derrubar uma emissão que já
+ * aconteceu na prefeitura. Se o registro não for gravado, o webhook ainda tenta
+ * o caminho do integrationId e, na pior das hipóteses, guarda o evento para
+ * conciliação manual.
+ */
+export async function registrarNotaSpedy(params: {
+  invoiceId: string
+  recurso: RecursoSpedy
+  config: ConfigFiscalCliente
+  integrationId?: string
+  rascunhoId?: string
+  competenciaId?: string
+  numeroRps?: string
+  serieRps?: string
+}): Promise<void> {
+  try {
+    await db().collection(COLECAO_REGISTRO_SPEDY).doc(params.invoiceId).set({
+      tenantId: params.config.tenantId ?? null,
+      clienteId: params.config.clienteId,
+      recurso: params.recurso,
+      integrationId: params.integrationId ?? null,
+      rascunhoId: params.rascunhoId ?? null,
+      competenciaId: params.competenciaId ?? null,
+      numeroRps: params.numeroRps ?? null,
+      serieRps: params.serieRps ?? null,
+      municipioIbge: params.config.municipioIbge ?? null,
+      ambienteEmissao: params.config.ambienteEmissao ?? null,
+      atualizadoEm: Timestamp.now(),
+    }, { merge: true })
+  } catch (err) {
+    console.error('[Spedy] falha ao registrar nota em nfse_spedy', {
+      invoiceId: params.invoiceId,
+      erro: err instanceof Error ? err.message : String(err),
+    })
+  }
+}
+
+/** Índice reverso usado pela consulta/cancelamento: rascunho → id da Spedy. */
+async function buscarRegistroPorRascunho(rascunhoId: string): Promise<{ id: string; recurso: RecursoSpedy } | null> {
+  try {
+    // Igualdade em campo único: usa o índice automático do Firestore, sem
+    // depender de firestore.indexes.json (que não é deste módulo).
+    const snap = await db().collection(COLECAO_REGISTRO_SPEDY)
+      .where('rascunhoId', '==', rascunhoId)
+      .limit(5)
+      .get()
+    const doc = snap.docs[0]
+    if (!doc) return null
+    return { id: doc.id, recurso: (doc.data().recurso as RecursoSpedy | undefined) ?? 'service-invoices' }
+  } catch {
+    return null
+  }
+}
+
 async function pollAteTerminal(config: ConfigFiscalCliente, id: string, resource = 'service-invoices'): Promise<SpedyResposta | null> {
   for (let tentativa = 0; tentativa < POLL_MAX_TENTATIVAS; tentativa++) {
     const resultado = await spedyFetch(config, `/${resource}/${id}`, { method: 'GET' })
@@ -369,11 +453,17 @@ function buildConsumerInvoicePayload(input: EmitirConsumidorInput, prestador: Pr
 
 // Mesmo POST + polling + interpretação do NFS-e, parametrizado pelo recurso.
 // Duplicado de propósito para não tocar em `emitir` (o caminho já validado).
-async function emitirDocumento(config: ConfigFiscalCliente, resource: string, payload: unknown): Promise<ResultadoEmissao> {
+async function emitirDocumento(config: ConfigFiscalCliente, resource: RecursoSpedy, payload: unknown): Promise<ResultadoEmissao> {
   try {
     const criacao = await obterOuCriarNota(config, resource, payload as { integrationId?: string } & Record<string, unknown>)
     if ('erro' in criacao) return criacao.erro
     const id = criacao.id
+    await registrarNotaSpedy({
+      invoiceId: id,
+      recurso: resource,
+      config,
+      integrationId: (payload as { integrationId?: string }).integrationId,
+    })
     const final = await pollAteTerminal(config, id, resource)
     if (!final) {
       return { sucesso: false, codigoErro: 'SPEDY_PROCESSANDO', erro: 'A Spedy ainda está processando a nota. Consulte novamente em instantes.', detalhes: id }
@@ -407,6 +497,301 @@ async function emitirDocumento(config: ConfigFiscalCliente, resource: string, pa
   }
 }
 
+// ─── Ciclo de vida: consulta e cancelamento ──────────────────────────────────
+/**
+ * Entrada da consulta/cancelamento pela Spedy.
+ *
+ * Estende os tipos do ciclo com o que só existe no mundo da Spedy: o id da nota
+ * lá dentro (`spedyInvoiceId`) e o rascunho que a originou. Os dois moram aqui
+ * e no roteador — e não em ../types.ts — porque nenhum conector municipal tem
+ * uso para eles.
+ */
+export type ChaveSpedy = { spedyInvoiceId?: string; rascunhoId?: string }
+export type ConsultaSpedyInput = ConsultarNfseInput & ChaveSpedy
+export type CancelamentoSpedyInput = CancelarNfseInput & ChaveSpedy
+
+type NotaLocalizada = { id: string; recurso: RecursoSpedy } | { erro: ResultadoOperacaoNfse }
+
+/**
+ * Descobre QUAL nota da Spedy corresponde a este documento nosso.
+ *
+ * Ordem deliberada, da referência mais forte para a mais fraca:
+ *  1. `spedyInvoiceId` gravado na nota (pelo webhook) — é o id em si;
+ *  2. o registro `nfse_spedy` do rascunho — índice local, sem custo de API;
+ *  3. o integrationId derivado do rascunho e, por fim, do par série+número do
+ *     RPS — os mesmos usados na emissão (ver integrationIdDe).
+ *
+ * Quando a busca na Spedy falha (rede, 429, 5xx), devolve ERRO e não
+ * "não encontrada": tratar indisponibilidade como ausência faria a consulta
+ * afirmar que a nota não existe, e o retry em ciclo.ts usa exatamente essa
+ * resposta para decidir reemitir.
+ */
+async function resolverNotaSpedy(
+  config: ConfigFiscalCliente,
+  input: ConsultaSpedyInput,
+): Promise<NotaLocalizada> {
+  if (input.spedyInvoiceId) {
+    // O recurso vem do registro quando ele existe: NFS-e é o único caminho do
+    // ciclo hoje, mas mandar um id de product-invoice para /service-invoices
+    // devolveria 404 e viraria "nota não localizada" — erro que mente.
+    const registro = await db().collection(COLECAO_REGISTRO_SPEDY).doc(input.spedyInvoiceId).get().catch(() => null)
+    return {
+      id: input.spedyInvoiceId,
+      recurso: (registro?.data()?.recurso as RecursoSpedy | undefined) ?? 'service-invoices',
+    }
+  }
+
+  if (input.rascunhoId) {
+    const registro = await buscarRegistroPorRascunho(input.rascunhoId)
+    if (registro) return registro
+  }
+
+  const candidatos = [
+    integrationIdDe({ rascunhoId: input.rascunhoId }),
+    integrationIdDe({ numeroRps: input.numeroRps, serieRps: input.serieRps }),
+  ].filter((c): c is string => Boolean(c))
+
+  let indisponivel = false
+  for (const integrationId of candidatos) {
+    const achada = await buscarNotaPorIntegrationId(config, integrationId, 'service-invoices')
+    if (achada === undefined) {
+      indisponivel = true
+      continue
+    }
+    const id = achada?.id as string | undefined
+    if (id) return { id, recurso: 'service-invoices' }
+  }
+
+  if (indisponivel) {
+    return {
+      erro: {
+        sucesso: false,
+        codigoErro: 'SPEDY_CONSULTA_INDISPONIVEL',
+        erro: 'Não foi possível consultar a Spedy agora. Tente novamente em instantes.',
+      },
+    }
+  }
+
+  return {
+    erro: {
+      sucesso: false,
+      codigoErro: 'SPEDY_NOTA_NAO_LOCALIZADA',
+      erro: 'Não foi possível localizar esta nota na Spedy. Confirme se ela foi emitida por este provedor.',
+    },
+  }
+}
+
+/**
+ * Releitura de uma nota na Spedy, para quem está fora do fluxo de emissão.
+ *
+ * Existe para o webhook: o corpo do POST diz apenas "a nota X mudou" e NÃO é
+ * fonte de verdade — número, status e totais de IBS/CBS são lidos daqui, com a
+ * chave de API do próprio cliente. Devolve `status: 0` quando nem chegou a
+ * haver resposta HTTP (rede/timeout), que é o que distingue "não consegui
+ * olhar" de "olhei e a Spedy recusou".
+ */
+export async function lerNotaSpedy(
+  config: ConfigFiscalCliente,
+  recurso: string,
+  invoiceId: string,
+): Promise<{ ok: boolean; status: number; body: Record<string, unknown> | null; texto: string }> {
+  try {
+    const leitura = await spedyFetch(config, `/${recurso}/${encodeURIComponent(invoiceId)}`, { method: 'GET' })
+    return { ok: leitura.resp.ok, status: leitura.resp.status, body: leitura.body, texto: leitura.bodyText.slice(0, 1000) }
+  } catch (err) {
+    return { ok: false, status: 0, body: null, texto: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/** Traduz o corpo de uma nota da Spedy no contrato do ciclo (ResultadoOperacaoNfse). */
+export function interpretarNota(body: Record<string, unknown> | null, invoiceId: string): ResultadoOperacaoNfse {
+  const statusSpedy = body?.status as string | undefined
+  const status = mapearStatusSpedy(statusSpedy)
+  const detalhe = body?.processingDetail as Record<string, unknown> | undefined
+  const autorizacao = body?.authorization as Record<string, unknown> | undefined
+  const numeroNfse = (body?.number as string | number | undefined)?.toString()
+  const codigoVerificacao = (autorizacao?.protocol as string | undefined) ?? undefined
+
+  // Status que não conhecemos NÃO vira check verde nem erro definitivo: vira
+  // falha explícita, com o valor cru no texto, para o operador ver o que a
+  // Spedy respondeu em vez de um "emitida" inventado.
+  if (status === 'erro') {
+    return {
+      sucesso: false,
+      codigoErro: 'SPEDY_STATUS_DESCONHECIDO',
+      erro: `A Spedy respondeu um status que a plataforma ainda não conhece (${statusSpedy ?? 'vazio'}). Nenhuma alteração foi feita na nota.`,
+      detalhes: invoiceId,
+    }
+  }
+
+  if (status === 'rejeitada') {
+    return {
+      sucesso: true,
+      status: 'rejeitada',
+      mensagem: (detalhe?.message as string | undefined) ?? `Nota recusada (status ${statusSpedy}).`,
+      codigoErro: (detalhe?.code as string | undefined) ?? statusSpedy,
+      numeroNfse,
+      codigoVerificacao,
+    }
+  }
+
+  if (status === 'processando') {
+    return {
+      sucesso: true,
+      status: 'processando',
+      mensagem: `A Spedy ainda está processando a nota (status ${statusSpedy}).`,
+      detalhes: invoiceId,
+    }
+  }
+
+  return {
+    sucesso: true,
+    status,
+    mensagem: status === 'cancelada' ? 'NFS-e cancelada na prefeitura.' : 'NFS-e autorizada.',
+    numeroNfse,
+    codigoVerificacao,
+  }
+}
+
+// ─── Retenção do documento fiscal (XML/PDF) ──────────────────────────────────
+// Timeout curto e explícito: o download roda dentro da emissão, que tem 60s de
+// orçamento total e já gastou até 25s no polling. Melhor não reter agora (o
+// webhook e a consulta refazem) do que estourar a function e perder o resultado
+// de uma nota já autorizada na prefeitura.
+const DOWNLOAD_TIMEOUT_MS = 8_000
+
+async function baixarArquivoSpedy(
+  config: ConfigFiscalCliente,
+  recurso: RecursoSpedy,
+  invoiceId: string,
+  tipo: 'xml' | 'pdf',
+): Promise<{ conteudo: Buffer; contentType: string } | { erro: string }> {
+  const apiKey = decryptApiKey(config.credenciais?.spedyApiKey)
+  const url = `${baseUrl(config)}/${recurso}/${invoiceId}/${tipo}`
+  try {
+    const resp = await fetch(url, {
+      method: 'GET',
+      headers: { 'X-Api-Key': apiKey, Accept: tipo === 'pdf' ? 'application/pdf' : 'application/xml' },
+      signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+    })
+    if (!resp.ok) return { erro: `HTTP ${resp.status} ao baixar ${tipo}` }
+
+    const contentType = resp.headers.get('content-type') ?? ''
+    const bytes = Buffer.from(await resp.arrayBuffer())
+
+    // Alguns endpoints devolvem um JSON com link em vez do arquivo. Sem este
+    // desvio, o que iria para o Storage seria o JSON — um "XML" de 80 bytes que
+    // só se descobre inválido daqui a cinco anos, numa fiscalização.
+    if (contentType.includes('application/json')) {
+      let link: string | undefined
+      try {
+        const json = JSON.parse(bytes.toString('utf8')) as Record<string, unknown>
+        link = (json.url ?? json.link ?? json.downloadUrl) as string | undefined
+      } catch {
+        return { erro: `Resposta JSON ilegível no download do ${tipo}` }
+      }
+      if (!link) return { erro: `Resposta JSON sem link de download do ${tipo}` }
+      const arquivo = await fetch(link, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) })
+      if (!arquivo.ok) return { erro: `HTTP ${arquivo.status} ao baixar ${tipo} pelo link` }
+      return {
+        conteudo: Buffer.from(await arquivo.arrayBuffer()),
+        contentType: arquivo.headers.get('content-type') ?? (tipo === 'pdf' ? 'application/pdf' : 'application/xml'),
+      }
+    }
+
+    if (bytes.length === 0) return { erro: `Download do ${tipo} veio vazio` }
+    return { conteudo: bytes, contentType: contentType || (tipo === 'pdf' ? 'application/pdf' : 'application/xml') }
+  } catch (err) {
+    return { erro: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+export type RetencaoDocumentos = {
+  xmlStoragePath?: string
+  pdfStoragePath?: string
+  erros: string[]
+}
+
+/**
+ * Baixa XML e PDF da nota autorizada e grava em `nfse/{clienteId}/{ano}/{mes}/`.
+ *
+ * Escritório contábil tem guarda de 5 anos do documento fiscal e, até aqui, a
+ * plataforma não retinha o arquivo de NENHUMA nota que ela mesma emitia — o
+ * XML só existia dentro da Spedy. Perder o contrato com o provedor era perder o
+ * acervo dos 119 clientes.
+ *
+ * Nunca lança: devolve os caminhos que conseguiu e a lista do que falhou. O
+ * chamador decide o que fazer com a falha parcial (o webhook registra em
+ * `nfse_eventos`), mas em nenhum caso ela invalida uma nota já autorizada.
+ */
+export async function reterDocumentosFiscais(params: {
+  config: ConfigFiscalCliente
+  invoiceId: string
+  recurso: RecursoSpedy
+  nota?: Record<string, unknown>
+  numeroNfse?: string
+  clienteId?: string
+}): Promise<RetencaoDocumentos> {
+  const resultado: RetencaoDocumentos = { erros: [] }
+  const clienteId = params.clienteId ?? params.config.clienteId
+  if (!clienteId) {
+    resultado.erros.push('Cliente não identificado — retenção do documento fiscal não executada.')
+    return resultado
+  }
+
+  const { ano, mes } = competenciaDaNota(params.nota)
+  // Nome do arquivo pelo número da nota quando ele existe (é o que o contador
+  // procura); o id da Spedy é só o fallback de nota sem número.
+  const nome = params.numeroNfse ?? params.invoiceId
+
+  for (const tipo of ['xml', 'pdf'] as const) {
+    try {
+      const caminho = caminhoArquivoFiscal({ clienteId, ano, mes, nome, extensao: tipo })
+      const baixado = await baixarArquivoSpedy(params.config, params.recurso, params.invoiceId, tipo)
+      if ('erro' in baixado) {
+        resultado.erros.push(`${tipo.toUpperCase()}: ${baixado.erro}`)
+        continue
+      }
+      await getStorage().bucket().file(caminho).save(baixado.conteudo, {
+        contentType: baixado.contentType,
+        metadata: { metadata: { clienteId, spedyInvoiceId: params.invoiceId, numeroNfse: nome } },
+      })
+      if (tipo === 'xml') resultado.xmlStoragePath = caminho
+      else resultado.pdfStoragePath = caminho
+    } catch (err) {
+      resultado.erros.push(`${tipo.toUpperCase()}: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  if (resultado.erros.length > 0) {
+    console.error('[Spedy] retenção parcial do documento fiscal', {
+      invoiceId: params.invoiceId,
+      clienteId,
+      erros: resultado.erros,
+    })
+  }
+
+  // O caminho fica no registro `nfse_spedy` além de ir para `nfse_emitidas`:
+  // a retenção também roda em caminhos que não gravam a nota (emissão cujo
+  // polling estourou, consulta manual), e sem isto o arquivo existiria no
+  // Storage sem nada apontando para ele.
+  if (resultado.xmlStoragePath || resultado.pdfStoragePath) {
+    await db().collection(COLECAO_REGISTRO_SPEDY).doc(params.invoiceId).set({
+      clienteId,
+      xmlStoragePath: resultado.xmlStoragePath ?? null,
+      pdfStoragePath: resultado.pdfStoragePath ?? null,
+      arquivosRetidosEm: Timestamp.now(),
+    }, { merge: true }).catch((err) => {
+      console.error('[Spedy] falha ao anotar caminho dos arquivos em nfse_spedy', {
+        invoiceId: params.invoiceId,
+        erro: err instanceof Error ? err.message : String(err),
+      })
+    })
+  }
+
+  return resultado
+}
+
 export class SpedyConector {
   async emitir(input: EmitirNfseInput, config: ConfigFiscalCliente, prestador: Prestador): Promise<ResultadoEmissao> {
     try {
@@ -418,15 +803,31 @@ export class SpedyConector {
       if ('erro' in criacao) return criacao.erro
       const id = criacao.id
 
+      // Índice id-da-Spedy → rascunho gravado ANTES do polling: se a function
+      // morrer no meio (timeout, deploy, OOM), é este registro que deixa o
+      // webhook fechar a nota depois. Gravar só no sucesso repetiria o bug da
+      // nota órfã, que é justamente o que estamos matando.
+      await registrarNotaSpedy({
+        invoiceId: id,
+        recurso: 'service-invoices',
+        config,
+        integrationId: payload.integrationId,
+        rascunhoId: input.rascunhoId,
+        competenciaId: input.competenciaId,
+        numeroRps: input.numeroRps,
+        serieRps: input.serieRps,
+      })
+
       const final = await pollAteTerminal(config, id)
       if (!final) {
         // Não estourou erro — a nota segue "enqueued"/"created" na Spedy além do
-        // tempo de polling. Fica como pendente; precisa de um webhook ou consulta
-        // manual depois (follow-up: implementar webhook `invoice.status_changed`).
+        // tempo de polling. Deixou de ser nota órfã: o registro em `nfse_spedy`
+        // acima já existe, então o webhook fecha esta nota quando a prefeitura
+        // responder. O status daqui continua sendo "não sei" (nunca sucesso).
         return {
           sucesso: false,
           codigoErro: 'SPEDY_PROCESSANDO',
-          erro: 'A Spedy ainda está processando a nota. Consulte novamente em instantes pelo histórico.',
+          erro: 'A Spedy ainda está processando a nota. O status será atualizado automaticamente quando a prefeitura responder.',
           detalhes: id,
         }
       }
@@ -453,9 +854,23 @@ export class SpedyConector {
       }
 
       const autorizacao = final.body?.authorization as Record<string, unknown> | undefined
+      const numeroNfse = (final.body?.number as string | number | undefined)?.toString()
+
+      // Guarda de 5 anos: o documento fiscal é baixado e retido no Storage já
+      // na emissão. Best-effort — a nota está autorizada na prefeitura e não
+      // pode ser reportada como falha porque um download não voltou; o que
+      // falhar aqui é refeito pelo webhook e pelo botão Consultar.
+      await reterDocumentosFiscais({
+        config,
+        invoiceId: id,
+        recurso: 'service-invoices',
+        nota: final.body ?? undefined,
+        numeroNfse,
+      })
+
       return {
         sucesso: true,
-        numeroNfse: (final.body?.number as string | number | undefined)?.toString(),
+        numeroNfse,
         // A Spedy não expõe um "código de verificação" separado no schema
         // atual — usamos o protocolo de autorização como referência mais
         // próxima. Vale confirmar contra uma emissão real de sandbox.
@@ -463,6 +878,96 @@ export class SpedyConector {
       }
     } catch (err) {
       return { sucesso: false, erro: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * Consulta o status corrente da nota na Spedy. Antes de ler, dispara
+   * `POST /{id}/check-status`, que força a Spedy a reperguntar à prefeitura —
+   * ler direto devolveria o último status em cache dela, e a pergunta que o
+   * contador faz ao clicar em "Consultar" é sobre a PREFEITURA.
+   */
+  async consultar(input: ConsultaSpedyInput, config: ConfigFiscalCliente): Promise<ResultadoOperacaoNfse> {
+    try {
+      const alvo = await resolverNotaSpedy(config, input)
+      if ('erro' in alvo) return alvo.erro
+
+      // Best-effort: 404/405 aqui (endpoint indisponível para o recurso) não
+      // pode impedir a leitura do status, que é o que interessa.
+      await spedyFetch(config, `/${alvo.recurso}/${alvo.id}/check-status`, { method: 'POST' }).catch(() => null)
+
+      const leitura = await spedyFetch(config, `/${alvo.recurso}/${alvo.id}`, { method: 'GET' })
+      if (!leitura.resp.ok) {
+        return {
+          sucesso: false,
+          codigoErro: `SPEDY_HTTP_${leitura.resp.status}`,
+          erro: (leitura.body?.message as string | undefined) ?? `Spedy retornou HTTP ${leitura.resp.status} ao consultar a nota.`,
+          detalhes: leitura.bodyText.slice(0, 1000),
+        }
+      }
+
+      const resultado = interpretarNota(leitura.body, alvo.id)
+      // Consulta também serve de rede de segurança da retenção: nota autorizada
+      // antes deste módulo existir (ou cujo download falhou) é retida agora.
+      if (resultado.status === 'emitida') {
+        await reterDocumentosFiscais({
+          config,
+          invoiceId: alvo.id,
+          recurso: alvo.recurso,
+          nota: leitura.body ?? undefined,
+          numeroNfse: resultado.numeroNfse,
+        })
+      }
+      return resultado
+    } catch (err) {
+      return { sucesso: false, codigoErro: 'SPEDY_EXCECAO', erro: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * Cancela a nota na Spedy (`DELETE /{recurso}/{id}`).
+   *
+   * Não devolve 'cancelada' pelo 2xx do DELETE: cancelamento é assíncrono do
+   * lado da prefeitura tanto quanto a emissão. Relemos o status e só quem
+   * responder `cancelled` fecha como cancelada — o resto vira 'processando', que
+   * o ciclo já sabe tratar (`cancelamento_pendente`).
+   */
+  async cancelar(input: CancelamentoSpedyInput, config: ConfigFiscalCliente): Promise<ResultadoOperacaoNfse> {
+    try {
+      const alvo = await resolverNotaSpedy(config, input)
+      if ('erro' in alvo) return alvo.erro
+
+      // O motivo vai como query string: o schema público documenta o DELETE
+      // sem corpo, e a prefeitura exige justificativa. Confirmar o nome do
+      // parâmetro (`reason`) contra um cancelamento real de homologação —
+      // parâmetro ignorado não quebra a chamada, mas some da justificativa.
+      const motivo = input.motivo?.trim()
+      const query = motivo ? `?reason=${encodeURIComponent(motivo.slice(0, 255))}` : ''
+      const exclusao = await spedyFetch(config, `/${alvo.recurso}/${alvo.id}${query}`, { method: 'DELETE' })
+
+      if (!exclusao.resp.ok) {
+        return {
+          sucesso: false,
+          codigoErro: `SPEDY_HTTP_${exclusao.resp.status}`,
+          erro: (exclusao.body?.message as string | undefined) ?? `Spedy retornou HTTP ${exclusao.resp.status} ao cancelar a nota.`,
+          detalhes: exclusao.bodyText.slice(0, 1000),
+        }
+      }
+
+      const leitura = await spedyFetch(config, `/${alvo.recurso}/${alvo.id}`, { method: 'GET' }).catch(() => null)
+      const status = leitura?.resp.ok ? mapearStatusSpedy(leitura.body?.status as string | undefined) : 'processando'
+
+      if (status === 'cancelada') {
+        return { sucesso: true, status: 'cancelada', mensagem: 'NFS-e cancelada na prefeitura.' }
+      }
+      return {
+        sucesso: true,
+        status: 'processando',
+        mensagem: 'Cancelamento aceito pela Spedy; aguardando confirmação da prefeitura.',
+        detalhes: alvo.id,
+      }
+    } catch (err) {
+      return { sucesso: false, codigoErro: 'SPEDY_EXCECAO', erro: err instanceof Error ? err.message : String(err) }
     }
   }
 

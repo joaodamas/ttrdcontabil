@@ -18,6 +18,16 @@ import type {
 // Municípios que exigem certificado A1
 const IBGE_A1 = new Set(['3525904', '3509502', '3508900', '3550308', '3505708'])
 
+/**
+ * Referências que só a Spedy usa para achar a nota do lado dela (id na Spedy e
+ * rascunho de origem). Ficam no roteador, e não em ../types.ts, porque nenhum
+ * conector municipal tem uso para elas — e um conector que recebe campo a mais
+ * simplesmente o ignora, então isso não muda nada para os oito municípios.
+ */
+export type ChaveProvedor = { spedyInvoiceId?: string; rascunhoId?: string }
+export type ConsultarNfseInputRoteado = ConsultarNfseInput & ChaveProvedor
+export type CancelarNfseInputRoteado = CancelarNfseInput & ChaveProvedor
+
 export async function rotearEmissao(
   input:     EmitirNfseInput,
   config:    ConfigFiscalCliente,
@@ -145,13 +155,14 @@ async function carregarConector(ibge: string): Promise<CicloConector | null> {
 }
 
 export async function rotearConsulta(
-  input: ConsultarNfseInput,
+  input: ConsultarNfseInputRoteado,
   config: ConfigFiscalCliente,
   prestador: Prestador,
   cert?: CertificadoA1,
 ): Promise<ResultadoOperacaoNfse> {
   if (config.provedorNfse === 'spedy') {
-    return { sucesso: false, codigoErro: 'CONSULTA_NAO_IMPLEMENTADA', erro: 'Consulta via Spedy ainda não implementada — só a emissão está integrada por enquanto.' }
+    const { SpedyConector } = await import('../provedores/spedy')
+    return new SpedyConector().consultar(input, config)
   }
   const conector = await carregarConector(prestador.municipioIbge)
   if (!conector) {
@@ -164,13 +175,14 @@ export async function rotearConsulta(
 }
 
 export async function rotearCancelamento(
-  input: CancelarNfseInput,
+  input: CancelarNfseInputRoteado,
   config: ConfigFiscalCliente,
   prestador: Prestador,
   cert?: CertificadoA1,
 ): Promise<ResultadoOperacaoNfse> {
   if (config.provedorNfse === 'spedy') {
-    return { sucesso: false, codigoErro: 'CANCELAMENTO_NAO_IMPLEMENTADO', erro: 'Cancelamento via Spedy ainda não implementado — só a emissão está integrada por enquanto.' }
+    const { SpedyConector } = await import('../provedores/spedy')
+    return new SpedyConector().cancelar(input, config)
   }
   const conector = await carregarConector(prestador.municipioIbge)
   if (!conector) {

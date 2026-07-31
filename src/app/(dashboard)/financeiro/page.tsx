@@ -29,7 +29,9 @@ import { AppModal } from '@/components/ui/app-modal'
 import { DataTableShell } from '@/components/ui/data-table-shell'
 import { financeiroBaseFiltroSchema } from '@/features/financeiro/schemas'
 import { useFinanceiroList } from '@/features/financeiro/hooks'
-import { financeiroKeys } from '@/features/financeiro/queries'
+import { financeiroKeys, useFinanceiroAgregadosQuery } from '@/features/financeiro/queries'
+import { agruparInadimplencia, paraItemAging } from '@/features/financeiro/aging'
+import type { LancamentoRecord } from '@/features/financeiro/types'
 import { scoreCobranca, motivoPrioridade } from '@/lib/financeiro-prioridade'
 import { CentralCobranca } from '@/components/financeiro/central-cobranca'
 import { AlertasFinanceiros } from '@/components/financeiro/alertas-financeiros'
@@ -88,8 +90,21 @@ function FinanceiroContent() {
   const page = activePagination.page
   const cursor = activePagination.cursorStack[page - 1] ?? null
   const cursorKey = cursor?.id ?? 'first-page'
-  const { lancamentos, filteredLancamentos, total, totalPages, hasMore, lastCursor, somaAReceber, somaRecebidoMes, somaEmAtraso, isLoading, isError, error, refetch } =
+  const { lancamentos, totalPages, hasMore, lastCursor, somaAReceber, somaRecebidoMes, somaEmAtraso, isLoading, isError, error, refetch } =
     useFinanceiroList({ clienteId, competenciaId, tipo, status, page, cursor, cursorKey })
+  /**
+   * Segunda query, de propósito: a tabela mostra 20 linhas, os agregados varrem
+   * a base inteira do filtro. Antes tudo aqui embaixo — aging, inadimplentes,
+   * alertas, fila e os dois exports — era calculado sobre a página aberta, e a
+   * planilha de inadimplência saía com 20 linhas parecendo o relatório completo.
+   */
+  const agregados = useFinanceiroAgregadosQuery({ clienteId, competenciaId, tipo, status })
+  const lancamentosCompletos = useMemo(
+    () => (agregados.data?.lancamentos ?? []) as LancamentoRecord[],
+    [agregados.data]
+  )
+  const agregadosProntos = !!agregados.data && !agregados.isError
+  const truncado = agregados.data?.truncado ?? false
   /**
    * Armadilha: em falha o hook devolve as somas como 0 e a lista como vazia —
    * são defaults de leitura, não fatos sobre o caixa do escritório. Exibir
@@ -99,12 +114,23 @@ function FinanceiroContent() {
    * porque uma planilha de inadimplência vazia é a mesma mentira em arquivo.
    */
   const semDados = isLoading || isError
-  const exportDisabled = semDados || filteredLancamentos.length === 0
-  const agora = new Date()
-  const filaCobranca = [...filteredLancamentos]
-    .filter((l) => l.tipo === 'receita' && l.status === 'pendente')
-    .sort((a, b) => scoreCobranca(b, agora) - scoreCobranca(a, agora))
-    .slice(0, 5)
+  // Truncado também trava o export: meia planilha com cara de planilha inteira
+  // é o mesmo erro que esta tarefa veio corrigir, só que com mais linhas.
+  const exportDisabled = !agregadosProntos || truncado || lancamentosCompletos.length === 0
+  // Instante da leitura dos agregados, não de cada re-render: "atrasado há N
+  // dias" tem que ser contado a partir do momento a que os números se referem.
+  const agora = useMemo(
+    () => (agregados.dataUpdatedAt ? new Date(agregados.dataUpdatedAt) : new Date()),
+    [agregados.dataUpdatedAt]
+  )
+  const filaCobranca = useMemo(
+    () =>
+      [...lancamentosCompletos]
+        .filter((l) => l.tipo === 'receita' && l.status === 'pendente')
+        .sort((a, b) => scoreCobranca(b, agora) - scoreCobranca(a, agora))
+        .slice(0, 5),
+    [lancamentosCompletos, agora]
+  )
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [historyLancamentoId, setHistoryLancamentoId] = useState<string | null>(null)
   const [historyItems, setHistoryItems] = useState<Array<Record<string, unknown>>>([])
@@ -112,10 +138,10 @@ function FinanceiroContent() {
   const [timelineLancamento, setTimelineLancamento] = useState<Record<string, unknown> | null>(null)
   const [filterSheetOpen, setFilterSheetOpen] = useState(false)
 
+  // Invalida tabela E agregados: baixar um lançamento muda o aging, a fila e a
+  // inadimplência tanto quanto muda a linha da tabela.
   async function refreshFinanceiro() {
-    await queryClient.invalidateQueries({
-      queryKey: financeiroKeys.snapshot({ clienteId, competenciaId, tipo, status, page }),
-    })
+    await queryClient.invalidateQueries({ queryKey: financeiroKeys.all })
   }
 
   async function handleDeleteLancamento() {
@@ -156,30 +182,19 @@ function FinanceiroContent() {
     }
   }
 
+  // Sai da base inteira do filtro, não da página: é a planilha que o escritório
+  // usa para cobrar, e antes ela tinha 20 linhas.
   function exportarInadimplencia() {
-    const hoje = new Date()
-    const agrupado = new Map<string, { cliente: string; quantidade: number; total: number; vencimentoMaisAntigo: string }>()
-
-    for (const lancamento of filteredLancamentos) {
-      const vencimento = tsToDate(lancamento.dataVencimento)
-      if (lancamento.tipo !== 'receita' || lancamento.status !== 'pendente' || !vencimento || vencimento >= hoje) continue
-      const cliente = (lancamento.clienteNome as string | undefined) ?? 'Sem cliente'
-      const atual = agrupado.get(cliente) ?? {
-        cliente,
-        quantidade: 0,
-        total: 0,
-        vencimentoMaisAntigo: formatDate(vencimento),
-      }
-      atual.quantidade += 1
-      atual.total += (lancamento.valor as number | undefined) ?? 0
-      const antigo = new Date(atual.vencimentoMaisAntigo.split('/').reverse().join('-'))
-      if (vencimento < antigo) atual.vencimentoMaisAntigo = formatDate(vencimento)
-      agrupado.set(cliente, atual)
-    }
+    const linhas = agruparInadimplencia(lancamentosCompletos.map(paraItemAging), agora)
 
     exportToExcel(
       'relatorio-inadimplencia',
-      Array.from(agrupado.values()).sort((a, b) => b.total - a.total),
+      linhas.map((l) => ({
+        cliente: l.cliente,
+        quantidade: l.quantidade,
+        total: l.total,
+        vencimentoMaisAntigo: formatDate(l.vencimentoMaisAntigo),
+      })),
       [
         { key: 'cliente', label: 'Cliente' },
         { key: 'quantidade', label: 'Lancamentos em atraso' },
@@ -192,7 +207,7 @@ function FinanceiroContent() {
   function exportarLancamentos() {
     exportToExcel(
       'financeiro-lancamentos',
-      filteredLancamentos.map((l) => {
+      lancamentosCompletos.map((l) => {
         const vencimento = tsToDate(l.dataVencimento)
         const pagamento = tsToDate(l.dataPagamento)
         return {
@@ -224,8 +239,12 @@ function FinanceiroContent() {
       <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
         <div>
           <h2 className="text-lg font-semibold">Financeiro</h2>
+          {/* Antes mostrava o tamanho da página (sempre "20 lançamentos").
+              Agora é a contagem do filtro inteiro; "+" quando bateu o teto. */}
           <p className="text-sm text-muted-foreground">
-            {semDados ? '—' : `${total} lançamento${total !== 1 ? 's' : ''}`}
+            {!agregadosProntos
+              ? '—'
+              : `${agregados.data!.total.toLocaleString('pt-BR')}${truncado ? '+' : ''} lançamento${agregados.data!.total !== 1 ? 's' : ''}`}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -259,14 +278,43 @@ function FinanceiroContent() {
         />
       ) : null}
 
+      {agregados.isError ? (
+        /* A tabela pode ter carregado e estes números não. Sem este aviso o
+           aging e a fila simplesmente sumiriam da tela, como se não houvesse
+           nada a cobrar. */
+        <InlineAlert
+          tone="danger"
+          title="Não foi possível calcular o aging e a inadimplência."
+          description={getErrorMessage(agregados.error, 'A leitura da base inteira falhou. Aging, inadimplentes, alertas e os exports ficam indisponíveis até a releitura.')}
+          action={{ label: 'Tentar novamente', onClick: () => void agregados.refetch() }}
+        />
+      ) : null}
+
+      {truncado ? (
+        <InlineAlert
+          tone="warning"
+          title="Base maior que o limite de leitura desta tela"
+          description={`Foram lidos ${agregados.data!.teto.toLocaleString('pt-BR')} lançamentos e há mais. O aging, os inadimplentes e a previsão abaixo estão incompletos, e os exports ficam bloqueados — filtre por cliente ou competência para reduzir o conjunto.`}
+        />
+      ) : null}
+
+      {/* Os KPIs somam o escritório inteiro no servidor e ignoram os filtros da
+          tela de propósito; o aging logo abaixo segue os filtros. A descrição
+          existe para os dois números não parecerem a mesma coisa discordando. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <KpiCard label="A Receber" value={semDados ? '—' : formatCurrency(somaAReceber)} icon={TrendingUp} />
-        <KpiCard label="Recebido no Mês" value={semDados ? '—' : formatCurrency(somaRecebidoMes)} icon={CheckCircle} tone="success" />
-        <KpiCard label="Em Atraso" value={semDados ? '—' : formatCurrency(somaEmAtraso)} icon={AlertTriangle} tone="danger" />
+        <KpiCard label="A Receber" value={semDados ? '—' : formatCurrency(somaAReceber)} icon={TrendingUp} description="Escritório inteiro — não segue os filtros." />
+        <KpiCard label="Recebido no Mês" value={semDados ? '—' : formatCurrency(somaRecebidoMes)} icon={CheckCircle} tone="success" description="Escritório inteiro — não segue os filtros." />
+        <KpiCard label="Em Atraso" value={semDados ? '—' : formatCurrency(somaEmAtraso)} icon={AlertTriangle} tone="danger" description="Escritório inteiro — não segue os filtros." />
       </div>
 
-      <CentralCobranca lancamentos={filteredLancamentos as Record<string, unknown>[]} agora={agora} />
-      <AlertasFinanceiros lancamentos={filteredLancamentos as Record<string, unknown>[]} agora={agora} />
+      {/* Só renderiza com dado na mão: painel vazio por falha de leitura afirma
+          que não há nada em atraso. */}
+      {agregadosProntos ? (
+        <>
+          <CentralCobranca lancamentos={lancamentosCompletos as Record<string, unknown>[]} agora={agora} />
+          <AlertasFinanceiros lancamentos={lancamentosCompletos as Record<string, unknown>[]} agora={agora} />
+        </>
+      ) : null}
 
       <FilterSheet
         open={filterSheetOpen}
@@ -335,11 +383,7 @@ function FinanceiroContent() {
                 key={item.id as string}
                 item={item}
                 agora={agora}
-                onBaixado={() =>
-                  void queryClient.invalidateQueries({
-                    queryKey: financeiroKeys.snapshot({ clienteId, competenciaId, tipo, status, page }),
-                  })
-                }
+                onBaixado={() => void refreshFinanceiro()}
               />
             ))}
           </div>

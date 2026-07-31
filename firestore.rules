@@ -227,6 +227,74 @@ service cloud.firestore {
         .hasAny(camposFiscalDoServidor());
     }
 
+    // [PRESTADOR→TOMADOR] O par (clienteId, cpfCnpj) é o que identifica um
+    // tomador na carteira do prestador. Sem `clienteId` a carteira vira global e
+    // o contrato recorrente fatura o tomador de outro cliente; sem `cpfCnpj`
+    // não existe nota em prefeitura nenhuma. `ativo` é exigido porque a tela e o
+    // gerador filtram por ele — tomador sem o campo é tomador invisível.
+    // O formato de cpfCnpj é conferido aqui de propósito: TODO conector faz
+    // replace(/\D/g,'') antes de enviar, então guardar "12.345.678/0001-90"
+    // quebra dedup e comparação em silêncio, sem quebrar a emissão.
+    function tomadorPayloadValido() {
+      return ('clienteId' in request.resource.data)
+        && (request.resource.data.clienteId is string)
+        && (request.resource.data.clienteId.size() > 0)
+        && ('cpfCnpj' in request.resource.data)
+        && (request.resource.data.cpfCnpj is string)
+        && request.resource.data.cpfCnpj.matches('^[0-9]{11}$|^[0-9]{14}$')
+        && ('razaoSocial' in request.resource.data)
+        && (request.resource.data.razaoSocial is string)
+        && (request.resource.data.razaoSocial.size() > 0)
+        && (request.resource.data.razaoSocial.size() <= 200)
+        && ('ativo' in request.resource.data)
+        && (request.resource.data.ativo is bool);
+    }
+
+    // [PRESTADOR→TOMADOR] O contrato precisa dizer, no mínimo, QUEM fatura QUEM,
+    // de quanto e em que dia — contrato sem tomadorId reabre exatamente o buraco
+    // que fazia a nota sair com prestador == tomador. `valor` numérico e > 0
+    // porque valor zero/negativo vira nota inválida na prefeitura e string
+    // "1.234,56" quebra o cálculo do ISS sem erro nenhum. `ativo` ausente faz o
+    // cron (where ativo == true) simplesmente nunca faturar o contrato — falha
+    // silenciosa que só aparece quando o cliente reclama da nota que não saiu.
+    function nfseRecorrentePayloadValido() {
+      return ('clienteId' in request.resource.data)
+        && (request.resource.data.clienteId is string)
+        && (request.resource.data.clienteId.size() > 0)
+        && ('tomadorId' in request.resource.data)
+        && (request.resource.data.tomadorId is string)
+        && (request.resource.data.tomadorId.size() > 0)
+        && ('descricao' in request.resource.data)
+        && (request.resource.data.descricao is string)
+        && (request.resource.data.descricao.size() > 0)
+        && (request.resource.data.descricao.size() <= 2000)
+        && ('valor' in request.resource.data)
+        && (request.resource.data.valor is number)
+        && (request.resource.data.valor > 0)
+        && ('diaEmissao' in request.resource.data)
+        && (request.resource.data.diaEmissao is int)
+        && (request.resource.data.diaEmissao >= 1)
+        && (request.resource.data.diaEmissao <= 31)
+        && ('ativo' in request.resource.data)
+        && (request.resource.data.ativo is bool);
+    }
+
+    // [PRESTADOR→TOMADOR] O contrato só aponta para tomador da carteira DO
+    // PRÓPRIO prestador. Sem isto o cliente A fatura o tomador do cliente B — e
+    // a carteira de B, que é a lista de clientes dele, vaza para dentro das
+    // notas de A.
+    // Tolerante a tomadorId inexistente de propósito: quem não existe não é de
+    // ninguém, e travar aqui quebraria qualquer fluxo que grave o contrato antes
+    // do tomador. O abuso real é apontar para um tomador que EXISTE e é de
+    // outro prestador. Só é avaliada depois de nfseRecorrentePayloadValido()
+    // (o && curto-circuita), que garante tomadorId string não vazia — path
+    // montado com campo ausente quebraria a regra inteira.
+    function tomadorDaCarteiraDoPrestador() {
+      let tomadorPath = /databases/$(database)/documents/tomadores/$(request.resource.data.tomadorId);
+      return !exists(tomadorPath)
+        || get(tomadorPath).data.clienteId == request.resource.data.clienteId;
+    }
+
     // ─── Usuários ─────────────────────────────────────────────────────────────
 
     match /usuarios/{uid} {
@@ -526,6 +594,43 @@ service cloud.firestore {
       // [P0-1] Leitura restrita a admin/fiscal/financeiro (ver canReadNfse()).
       allow read: if canReadNfse() && sameTenantExisting();
       allow write: if false;
+    }
+
+    // ─── Carteira de tomadores e contrato de faturamento ──────────────────────
+    // A NFS-e sai EM NOME DO CLIENTE: o prestador é o cliente do escritório e o
+    // tomador é o cliente DELE. `tomadores` é a carteira de cada prestador e
+    // `nfse_recorrentes` é o contrato (quem fatura quem, de quanto, quando).
+    //
+    // NÃO CONFUNDIR com `clientes_servicos` (acima), que é o honorário do
+    // ESCRITÓRIO — a confusão entre as duas é a origem do bug de
+    // prestador == tomador.
+    //
+    // Escrita direta do navegador é OK aqui, ao contrário de clientes_fiscal:
+    // nenhuma das duas guarda credencial, só cadastro do tomador e o contrato.
+    // O gate segue a tela 'fiscal', que é quem configura emissão; a LEITURA usa
+    // canReadNfse() (inclui 'financeiro') porque estes são os mesmos dados que o
+    // financeiro já enxerga denormalizados em nfse_emitidas ao conciliar
+    // cobrança — restringir aqui não esconderia nada e quebraria a conciliação.
+
+    match /tomadores/{id} {
+      allow read: if canReadNfse() && sameTenantExisting();
+      allow create: if isFiscal() && tomadorPayloadValido() && sameTenantWrite();
+      allow update: if isFiscal() && tomadorPayloadValido() && sameTenantUpdate();
+      // Tomador que já saiu em nota emitida não pode sumir do histórico: a
+      // inativação normal é `ativo: false` + `deletedAt`. Delete físico exige
+      // admin, mesma regra de clientes.
+      allow delete: if isAdmin() && sameTenantExisting();
+    }
+
+    match /nfse_recorrentes/{id} {
+      allow read: if canReadNfse() && sameTenantExisting();
+      allow create: if isFiscal() && sameTenantWrite()
+        && nfseRecorrentePayloadValido() && tomadorDaCarteiraDoPrestador();
+      allow update: if isFiscal() && sameTenantUpdate()
+        && nfseRecorrentePayloadValido() && tomadorDaCarteiraDoPrestador();
+      // Encerrar contrato é `ativo: false` (ou `dataFim`), não apagar: o
+      // histórico do que foi faturado precisa continuar explicável.
+      allow delete: if isAdmin() && sameTenantExisting();
     }
 
     // ─── WhatsApp (régua de cobrança) ─────────────────────────────────────────

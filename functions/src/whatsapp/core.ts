@@ -4,6 +4,16 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { HttpsError } from 'firebase-functions/v2/https'
 import { redactAuditData, sanitizeAuditString, SYSTEM_ACTOR, writeAuditLog } from '../audit'
 import { DEFAULT_TENANT_ID } from '../tenant'
+import {
+  avaliarTetoDiario,
+  decidirConfirmacaoPagamento,
+  ETAPA_CONFIRMACAO_PAGAMENTO,
+  normalizarTetoDiario,
+  resolverTemplateKey,
+  TEMPLATE_CONFIRMACAO_PAGAMENTO,
+  TIPO_JOB_COBRANCA,
+  TIPO_JOB_CONFIRMACAO,
+} from './decisao'
 import type { ClienteWhatsappTarget, EligibilityResult, LancamentoDoc, WhatsappCampaignRule, WhatsappTenantConfig } from './types'
 
 const db = () => admin.firestore()
@@ -16,13 +26,27 @@ const DEFAULT_RULES: Array<Omit<WhatsappCampaignRule, 'tenantId'>> = [
   { ativo: true, etapa: 'D+7', diasDepois: 7, templateKey: 'cobranca_atraso_critico', usarDiasUteis: false, horaMinima: '08:00', horaMaxima: '18:00', exigeAprovacao: true, prioridade: 50 },
 ]
 
-const DEFAULT_TEMPLATES = [
+type TemplatePadrao = {
+  templateKey: string
+  providerTemplateName: string
+  providerContentSid: string
+  providerLanguage: string
+  categoria: string
+  /** Só quando difere do padrão — ver VARIAVEIS_TEMPLATE_PADRAO. */
+  variaveisEsperadas?: string[]
+}
+
+const VARIAVEIS_TEMPLATE_PADRAO = ['nome_cliente', 'servico', 'valor', 'vencimento']
+
+const DEFAULT_TEMPLATES: TemplatePadrao[] = [
   { templateKey: 'cobranca_pre_vencimento_7', providerTemplateName: 'cobranca_pre_vencimento_7', providerContentSid: '', providerLanguage: 'pt_BR', categoria: 'utility' },
   { templateKey: 'cobranca_pre_vencimento_3', providerTemplateName: 'cobranca_pre_vencimento_3', providerContentSid: '', providerLanguage: 'pt_BR', categoria: 'utility' },
   { templateKey: 'cobranca_vencimento_hoje', providerTemplateName: 'cobranca_vencimento_hoje', providerContentSid: '', providerLanguage: 'pt_BR', categoria: 'utility' },
   { templateKey: 'cobranca_atraso_leve', providerTemplateName: 'cobranca_atraso_leve', providerContentSid: '', providerLanguage: 'pt_BR', categoria: 'utility' },
   { templateKey: 'cobranca_atraso_critico', providerTemplateName: 'cobranca_atraso_critico', providerContentSid: '', providerLanguage: 'pt_BR', categoria: 'utility' },
-  { templateKey: 'cobranca_baixa_confirmada', providerTemplateName: 'cobranca_baixa_confirmada', providerContentSid: '', providerLanguage: 'pt_BR', categoria: 'utility' },
+  // A 4ª variável da confirmação é a data do PAGAMENTO, não o vencimento: quem
+  // cadastrar o template na Twilio precisa ver isso no catálogo.
+  { templateKey: TEMPLATE_CONFIRMACAO_PAGAMENTO, providerTemplateName: TEMPLATE_CONFIRMACAO_PAGAMENTO, providerContentSid: '', providerLanguage: 'pt_BR', categoria: 'utility', variaveisEsperadas: ['nome_cliente', 'servico', 'valor', 'pagamento'] },
 ]
 
 /**
@@ -189,13 +213,13 @@ export async function ensureWhatsappDefaults(tenantId = DEFAULT_TENANT_ID) {
     const ref = db().collection('whatsapp_campaign_rules').doc(`${tenantId}_${rule.etapa}`)
     batch.set(ref, { tenantId, ...rule, canal: 'whatsapp', atualizadoEm: FieldValue.serverTimestamp(), criadoEm: FieldValue.serverTimestamp() }, { merge: true })
   }
-  for (const template of DEFAULT_TEMPLATES) {
+  for (const { variaveisEsperadas, ...template } of DEFAULT_TEMPLATES) {
     const ref = db().collection('whatsapp_templates').doc(`${tenantId}_${template.templateKey}`)
     batch.set(ref, {
       tenantId,
       ...template,
       ativo: true,
-      variaveisEsperadas: ['nome_cliente', 'servico', 'valor', 'vencimento'],
+      variaveisEsperadas: variaveisEsperadas ?? VARIAVEIS_TEMPLATE_PADRAO,
       canal: 'whatsapp',
       aprovadoProvider: false,
       atualizadoEm: FieldValue.serverTimestamp(),
@@ -205,7 +229,17 @@ export async function ensureWhatsappDefaults(tenantId = DEFAULT_TENANT_ID) {
   await batch.commit()
 }
 
-export async function getTenantWhatsappConfig(tenantId: string): Promise<WhatsappTenantConfig> {
+/**
+ * O teto diário por cliente é parâmetro do escritório, mas `WhatsappTenantConfig`
+ * é tipo compartilhado com a UI e não pode ser alterado daqui. Estendemos aqui:
+ * quem só conhece o tipo original continua compilando.
+ */
+export type WhatsappTenantConfigComTeto = WhatsappTenantConfig & {
+  /** Máximo de mensagens que UM cliente pode receber num dia. */
+  whatsappMaxMensagensClienteDia: number
+}
+
+export async function getTenantWhatsappConfig(tenantId: string): Promise<WhatsappTenantConfigComTeto> {
   const snap = await db().collection('configuracoes').doc('escritorio').get()
   const data = snap.data() ?? {}
   return {
@@ -215,6 +249,9 @@ export async function getTenantWhatsappConfig(tenantId: string): Promise<Whatsap
     whatsappJanelaHoraMinima: data.whatsappJanelaHoraMinima as string | undefined,
     whatsappJanelaHoraMaxima: data.whatsappJanelaHoraMaxima as string | undefined,
     whatsappUsaDiasUteis: Boolean(data.whatsappUsaDiasUteis ?? true),
+    // Parâmetro ainda não exposto na tela de admin: sem o campo gravado, vale o
+    // default conservador do módulo de decisão.
+    whatsappMaxMensagensClienteDia: normalizarTetoDiario(data.whatsappMaxMensagensClienteDia),
   }
 }
 
@@ -383,7 +420,16 @@ async function cancelarJobsPendentesDoCliente(clienteId: string, motivo: string)
     }, { merge: true })
     const lancamentoId = doc.data().lancamentoId
     if (lancamentoId) {
-      batch.set(db().collection('lancamentos').doc(String(lancamentoId)), {
+      // Job de confirmação de baixa também é cancelado (o cliente pediu para
+      // parar), mas ele não é etapa da régua: mexer em `statusWhatsappCobranca`
+      // de um lançamento já pago reescreveria o histórico da cobrança.
+      const ehConfirmacao = String(doc.data().tipo ?? TIPO_JOB_COBRANCA) === TIPO_JOB_CONFIRMACAO
+      batch.set(db().collection('lancamentos').doc(String(lancamentoId)), ehConfirmacao ? {
+        statusConfirmacaoPagamentoWhatsapp: 'nao_enviada',
+        confirmacaoPagamentoWhatsappMotivo: motivo,
+        confirmacaoPagamentoWhatsappEm: null,
+        atualizadoEm: FieldValue.serverTimestamp(),
+      } : {
         statusWhatsappCobranca: 'nao_agendado',
         proximaAcaoWhatsappEm: null,
         atualizadoEm: FieldValue.serverTimestamp(),
@@ -625,13 +671,79 @@ export async function evaluateLancamentoEligibility(
   return { eligible: true, target, rule: matchedRule, etapa: matchedRule.etapa, scheduledFor: janela.proximo }
 }
 
-export function buildJobKey(lancamentoId: string, etapa: string, dateBase: Date) {
-  // A chave é o "dia da régua" em Brasília — se usasse o calendário do processo
-  // (UTC), tudo depois das 21h viraria o dia seguinte e a deduplicação de etapa
-  // deixaria passar um segundo envio.
+/**
+ * O dia do calendário em Brasília, como 'AAAAMMDD'. Se usasse o calendário do
+ * processo (UTC), tudo depois das 21h viraria o dia seguinte — e tanto a
+ * deduplicação de etapa quanto a contagem do teto diário deixariam passar um
+ * envio a mais.
+ */
+function diaEscritorio(dateBase: Date): string {
   const partes = partesEscritorio(dateBase)
-  const base = `${partes.ano}${String(partes.mes).padStart(2, '0')}${String(partes.dia).padStart(2, '0')}`
-  return `${lancamentoId}_${etapa}_${base}`
+  return `${partes.ano}${String(partes.mes).padStart(2, '0')}${String(partes.dia).padStart(2, '0')}`
+}
+
+export function buildJobKey(lancamentoId: string, etapa: string, dateBase: Date) {
+  return `${lancamentoId}_${etapa}_${diaEscritorio(dateBase)}`
+}
+
+/** Chave determinística do job de confirmação: um por lançamento, para sempre. */
+export function buildConfirmacaoJobKey(lancamentoId: string) {
+  return `${lancamentoId}_${ETAPA_CONFIRMACAO_PAGAMENTO}`
+}
+
+/**
+ * Contador de mensagens enviadas por cliente por dia.
+ *
+ * Um documento por cliente/dia em vez de contar `whatsapp_messages`: a consulta
+ * por cliente + data exigiria índice composto novo (firestore.indexes.json é de
+ * outro agente) e, sem orderBy, um `limit` qualquer devolveria uma amostra
+ * arbitrária do histórico — o teto ficaria furado sem ninguém perceber.
+ */
+const COLECAO_CONTADOR_DIARIO = 'whatsapp_envios_diarios'
+
+function chaveContadorDiario(tenantId: string, clienteId: string, dia: string) {
+  return `${tenantId}_${clienteId}_${dia}`
+}
+
+async function contarEnviosDoDia(tenantId: string, clienteId: string, base: Date): Promise<number> {
+  if (!clienteId) return 0
+  const snap = await db()
+    .collection(COLECAO_CONTADOR_DIARIO)
+    .doc(chaveContadorDiario(tenantId, clienteId, diaEscritorio(base)))
+    .get()
+  return Number(snap.data()?.total ?? 0)
+}
+
+/**
+ * Incrementa o contador DEPOIS do envio confirmado pelo provider.
+ *
+ * A conferência do teto é uma leitura separada, então dois despachos simultâneos
+ * do mesmo cliente poderiam furar o limite em um. A fila processa os jobs em
+ * série e é ela quem manda volume; o disparo manual é humano, um de cada vez.
+ * Contar só o que saiu de fato é o que mantém o número honesto.
+ */
+async function registrarEnvioNoContador(tenantId: string, clienteId: string, base: Date) {
+  if (!clienteId) return
+  const dia = diaEscritorio(base)
+  await db().collection(COLECAO_CONTADOR_DIARIO).doc(chaveContadorDiario(tenantId, clienteId, dia)).set({
+    tenantId,
+    clienteId,
+    dia,
+    total: FieldValue.increment(1),
+    ultimoEnvioEm: FieldValue.serverTimestamp(),
+    atualizadoEm: FieldValue.serverTimestamp(),
+  }, { merge: true })
+}
+
+/**
+ * Próxima janela de envio a partir de amanhã — o adiamento certo para quem
+ * bateu o teto do dia. Reagendar para daqui a 30 min só faria a fila reprovar o
+ * mesmo job seis vezes por hora até a meia-noite.
+ */
+function proximaJanelaEmOutroDia(base: Date, janela: JanelaEnvio): Date {
+  const amanha = new Date(base.getTime() + 86400000)
+  const resolvido = resolverJanelaEnvio(amanha, janela)
+  return resolvido.dentroDaJanela ? amanha : resolvido.proximo
 }
 
 export async function queueWhatsappJob(lancamentoId: string, opts?: { manual?: boolean }) {
@@ -664,7 +776,12 @@ export async function queueWhatsappJob(lancamentoId: string, opts?: { manual?: b
     clienteId: lancamento.clienteId,
     lancamentoId,
     messageId: null,
+    tipo: TIPO_JOB_COBRANCA,
     etapa: eligibility.etapa,
+    // Congela o template da regra no job: se a regra for editada entre o
+    // enfileiramento e o envio, o dispatch ainda prefere a versão ATUAL dela —
+    // isto aqui é a rede de segurança para quando a regra some.
+    templateKey: eligibility.rule.templateKey ?? null,
     status: 'agendado',
     scheduledFor: admin.firestore.Timestamp.fromDate(eligibility.scheduledFor),
     attemptCount: 0,
@@ -692,12 +809,118 @@ export async function queueWhatsappJob(lancamentoId: string, opts?: { manual?: b
   return { jobKey, etapa: eligibility.etapa, scheduledFor: eligibility.scheduledFor }
 }
 
-async function buildMessagePayload(job: FirebaseFirestore.DocumentData, fromNumber: string) {
+export type ResultadoConfirmacao = { enfileirado: boolean; motivo: string; jobKey?: string; scheduledFor?: Date }
+
+/**
+ * Enfileira a CONFIRMAÇÃO DE PAGAMENTO — o caminho desacoplado da régua.
+ *
+ * `queueWhatsappJob` não serve aqui: ele exige etapa da régua e vencimento
+ * futuro, e a primeira coisa que faz é recusar lançamento pago. A confirmação
+ * nasce do oposto — da baixa — e não tem etapa nem dias antes/depois.
+ *
+ * Nunca lança: o chamador é um trigger do Firestore, e derrubar o registro do
+ * evento do lançamento por causa de uma mensagem de cortesia seria trocar o
+ * essencial pelo acessório. O desfecho volta no retorno.
+ */
+export async function queueConfirmacaoPagamento(lancamentoId: string): Promise<ResultadoConfirmacao> {
+  const lancamentoSnap = await db().collection('lancamentos').doc(lancamentoId).get()
+  if (!lancamentoSnap.exists) return { enfileirado: false, motivo: 'Lançamento não encontrado.' }
+  const lancamento = lancamentoSnap.data() as LancamentoDoc
+  if (!lancamento.clienteId) return { enfileirado: false, motivo: 'Lançamento sem cliente vinculado.' }
+
+  const clienteSnap = await db().collection('clientes').doc(lancamento.clienteId).get()
+  if (!clienteSnap.exists) return { enfileirado: false, motivo: 'Cliente não encontrado.' }
+  const cliente = clienteSnap.data() ?? {}
+  const tenantId = String(cliente.tenantId ?? lancamento.tenantId ?? DEFAULT_TENANT_ID)
+
+  const config = await getTenantWhatsappConfig(tenantId)
+  const target = await resolveBillingTarget(lancamento.clienteId)
+  // Sem contato válido nem faz sentido consultar o opt-out do número.
+  const numeroOptOut = target ? await isNumeroOptOut(target.contatoTelefone) : false
+
+  const agora = new Date()
+  const veredicto = decidirConfirmacaoPagamento({
+    canalHabilitado: config.whatsappCloudApiEnabled,
+    tipo: lancamento.tipo,
+    status: lancamento.status,
+    valor: lancamento.valor,
+    dataPagamento: lancamento.dataPagamento?.toDate() ?? null,
+    clienteAtivo: cliente.status === 'ativo',
+    consentimento: Boolean(cliente.aceiteWhatsAppCobranca),
+    clientePausado: Boolean(cliente.whatsappCobrancaPausado),
+    temContatoValido: Boolean(target),
+    numeroOptOut,
+    agora,
+  })
+  if (!veredicto.enviar || !target) return { enfileirado: false, motivo: veredicto.motivo }
+
+  const janela = resolverJanelaEnvio(agora, {
+    horaMinima: config.whatsappJanelaHoraMinima,
+    horaMaxima: config.whatsappJanelaHoraMaxima,
+    usarDiasUteis: config.whatsappUsaDiasUteis,
+  })
+
+  const jobKey = buildConfirmacaoJobKey(lancamentoId)
+  const dataPagamento = lancamento.dataPagamento?.toDate()
+  const payloadResumo = {
+    clienteNome: cliente.razaoSocial ?? lancamento.clienteNome ?? '',
+    servico: lancamento.descricao ?? 'Mensalidade',
+    valor: Number(lancamento.valor ?? 0).toFixed(2),
+    // A 4ª variável do template é a data do pagamento; guardá-la como
+    // `vencimento` seria mentir no registro que o operador lê.
+    pagamento: dataPagamento?.toLocaleDateString('pt-BR', { timeZone: TIMEZONE_ESCRITORIO }) ?? '',
+    formaPagamento: String(lancamento.formaPagamento ?? ''),
+  }
+
+  try {
+    // `create` (e não `set`) é o que torna isto idempotente: trigger do Firestore
+    // é entrega AO MENOS UMA VEZ, e a mesma baixa pode chegar duas vezes. Aqui a
+    // segunda entrega falha com ALREADY_EXISTS em vez de gerar outra mensagem.
+    await db().collection('whatsapp_jobs').doc(jobKey).create({
+      tenantId,
+      jobKey,
+      clienteId: lancamento.clienteId,
+      lancamentoId,
+      messageId: null,
+      tipo: TIPO_JOB_CONFIRMACAO,
+      etapa: ETAPA_CONFIRMACAO_PAGAMENTO,
+      templateKey: TEMPLATE_CONFIRMACAO_PAGAMENTO,
+      status: 'agendado',
+      scheduledFor: admin.firestore.Timestamp.fromDate(janela.proximo),
+      attemptCount: 0,
+      lastAttemptAt: null,
+      nextRetryAt: null,
+      erro: null,
+      detalhes: janela.dentroDaJanela ? null : janela.motivo ?? null,
+      contatoDestino: target.contatoTelefone,
+      payloadResumo,
+      criadoEm: FieldValue.serverTimestamp(),
+      atualizadoEm: FieldValue.serverTimestamp(),
+    })
+  } catch (error) {
+    // 6 = ALREADY_EXISTS no gRPC do Firestore.
+    if ((error as { code?: number }).code === 6) {
+      return { enfileirado: false, motivo: 'Confirmação já enfileirada para este lançamento.' }
+    }
+    throw error
+  }
+
+  // Campos próprios: `statusWhatsappCobranca` descreve a RÉGUA do lançamento e
+  // escrever nele aqui apagaria o histórico da cobrança que acabou de ser paga.
+  await db().collection('lancamentos').doc(lancamentoId).set({
+    statusConfirmacaoPagamentoWhatsapp: 'agendado',
+    confirmacaoPagamentoWhatsappEm: admin.firestore.Timestamp.fromDate(janela.proximo),
+    atualizadoEm: FieldValue.serverTimestamp(),
+  }, { merge: true })
+
+  return { enfileirado: true, motivo: veredicto.motivo, jobKey, scheduledFor: janela.proximo }
+}
+
+async function buildMessagePayload(job: FirebaseFirestore.DocumentData, fromNumber: string, templateKey: string) {
   const templateSnap = await db()
     .collection('whatsapp_templates')
     .where('tenantId', '==', job.tenantId)
     .get()
-  const templateKey = mapEtapaToTemplate(String(job.etapa))
   const template = templateSnap.docs
     .map((doc) => doc.data())
     .find((doc) => doc.templateKey === templateKey) ?? {}
@@ -715,27 +938,102 @@ async function buildMessagePayload(job: FirebaseFirestore.DocumentData, fromNumb
       '1': String(job.payloadResumo?.clienteNome ?? ''),
       '2': String(job.payloadResumo?.servico ?? ''),
       '3': String(job.payloadResumo?.valor ?? ''),
-      '4': String(job.payloadResumo?.vencimento ?? ''),
+      // A 4ª variável é a data que dá contexto à mensagem: pagamento na
+      // confirmação, vencimento na cobrança.
+      '4': String(job.payloadResumo?.pagamento ?? job.payloadResumo?.vencimento ?? ''),
     }),
   }
 }
 
-function mapEtapaToTemplate(etapa: string) {
-  switch (etapa) {
-    case 'D-7': return 'cobranca_pre_vencimento_7'
-    case 'D-3': return 'cobranca_pre_vencimento_3'
-    case 'D0': return 'cobranca_vencimento_hoje'
-    case 'D+3': return 'cobranca_atraso_leve'
-    case 'D+7': return 'cobranca_atraso_critico'
-    default: return 'cobranca_pre_vencimento_3'
-  }
-}
-
 type VeredictoDespacho =
-  | { acao: 'enviar'; contatoDestino: string; config: WhatsappTenantConfig }
+  | { acao: 'enviar'; contatoDestino: string; config: WhatsappTenantConfigComTeto; templateKey: string }
   | { acao: 'cancelar'; motivo: string }
   | { acao: 'adiar'; motivo: string; proximo: Date }
   | { acao: 'aguardar_aprovacao'; motivo: string }
+
+/**
+ * Última porta antes do envio, comum aos dois tipos de job: a janela do
+ * escritório e o teto diário do cliente. Os dois adiam, nunca cancelam — a
+ * mensagem continua devida, só não pode sair AGORA.
+ */
+async function avaliarJanelaETeto(params: {
+  tenantId: string
+  clienteId: string
+  janela: JanelaEnvio
+  teto: number
+}): Promise<{ acao: 'adiar'; motivo: string; proximo: Date } | null> {
+  const agora = new Date()
+  const janela = resolverJanelaEnvio(agora, params.janela)
+  if (!janela.dentroDaJanela) {
+    return { acao: 'adiar', motivo: janela.motivo ?? 'Fora da janela de envio.', proximo: janela.proximo }
+  }
+
+  const enviadasHoje = await contarEnviosDoDia(params.tenantId, params.clienteId, agora)
+  const teto = avaliarTetoDiario({ enviadasHoje, teto: params.teto })
+  if (!teto.permitido) {
+    return { acao: 'adiar', motivo: teto.motivo ?? 'Teto diário atingido.', proximo: proximaJanelaEmOutroDia(agora, params.janela) }
+  }
+
+  return null
+}
+
+/**
+ * Reavalia a CONFIRMAÇÃO DE BAIXA no instante do envio.
+ *
+ * Não passa pela revalidação da cobrança porque lá "lançamento já foi baixado"
+ * é motivo de cancelamento — aqui é a pré-condição. O que muda entre a baixa e
+ * o envio e importa: baixa revertida, opt-out, e o job que ficou parado tempo
+ * demais (confirmar pagamento de duas semanas atrás só gera dúvida).
+ */
+async function revalidarConfirmacaoAntesDoEnvio(job: FirebaseFirestore.DocumentData): Promise<VeredictoDespacho> {
+  const lancamentoId = String(job.lancamentoId ?? '')
+  if (!lancamentoId) return { acao: 'cancelar', motivo: 'Job sem lançamento vinculado.' }
+
+  const lancamentoSnap = await db().collection('lancamentos').doc(lancamentoId).get()
+  if (!lancamentoSnap.exists) return { acao: 'cancelar', motivo: 'Lançamento não existe mais.' }
+  const lancamento = lancamentoSnap.data() as LancamentoDoc
+
+  const clienteId = String(job.clienteId ?? lancamento.clienteId ?? '')
+  if (!clienteId) return { acao: 'cancelar', motivo: 'Lançamento sem cliente vinculado.' }
+  const clienteSnap = await db().collection('clientes').doc(clienteId).get()
+  if (!clienteSnap.exists) return { acao: 'cancelar', motivo: 'Cliente não encontrado.' }
+  const cliente = clienteSnap.data() ?? {}
+
+  const tenantId = String(job.tenantId ?? cliente.tenantId ?? DEFAULT_TENANT_ID)
+  const config = await getTenantWhatsappConfig(tenantId)
+  const target = await resolveBillingTarget(clienteId)
+  const numeroOptOut = target ? await isNumeroOptOut(target.contatoTelefone) : false
+
+  const veredicto = decidirConfirmacaoPagamento({
+    canalHabilitado: config.whatsappCloudApiEnabled,
+    tipo: lancamento.tipo,
+    status: lancamento.status,
+    valor: lancamento.valor,
+    dataPagamento: lancamento.dataPagamento?.toDate() ?? null,
+    clienteAtivo: cliente.status === 'ativo',
+    consentimento: Boolean(cliente.aceiteWhatsAppCobranca),
+    clientePausado: Boolean(cliente.whatsappCobrancaPausado),
+    temContatoValido: Boolean(target),
+    numeroOptOut,
+    agora: new Date(),
+  })
+  if (!veredicto.enviar || !target) return { acao: 'cancelar', motivo: veredicto.motivo }
+
+  const janela: JanelaEnvio = {
+    horaMinima: config.whatsappJanelaHoraMinima,
+    horaMaxima: config.whatsappJanelaHoraMaxima,
+    usarDiasUteis: config.whatsappUsaDiasUteis,
+  }
+  const bloqueio = await avaliarJanelaETeto({ tenantId, clienteId, janela, teto: config.whatsappMaxMensagensClienteDia })
+  if (bloqueio) return bloqueio
+
+  // Mesma regra do resto do módulo: vale o que está gravado no job; o mapa
+  // (etapa CONFIRMACAO) é só a rede de segurança.
+  const { templateKey } = resolverTemplateKey({ templateKeyJob: job.templateKey, etapa: String(job.etapa ?? ETAPA_CONFIRMACAO_PAGAMENTO) })
+  if (!templateKey) return { acao: 'cancelar', motivo: 'Confirmação sem template configurado.' }
+
+  return { acao: 'enviar', contatoDestino: target.contatoTelefone, config, templateKey }
+}
 
 /**
  * Reavalia a cobrança no INSTANTE do envio.
@@ -747,6 +1045,10 @@ type VeredictoDespacho =
  * por isso o veredicto é cancelar/adiar, nunca retentar.
  */
 async function revalidarJobAntesDoEnvio(job: FirebaseFirestore.DocumentData, origem: 'fila' | 'manual'): Promise<VeredictoDespacho> {
+  if (String(job.tipo ?? TIPO_JOB_COBRANCA) === TIPO_JOB_CONFIRMACAO) {
+    return revalidarConfirmacaoAntesDoEnvio(job)
+  }
+
   const lancamentoId = String(job.lancamentoId ?? '')
   if (!lancamentoId) return { acao: 'cancelar', motivo: 'Job sem lançamento vinculado.' }
 
@@ -792,17 +1094,35 @@ async function revalidarJobAntesDoEnvio(job: FirebaseFirestore.DocumentData, ori
     return { acao: 'aguardar_aprovacao', motivo: `Etapa ${rule.etapa} exige aprovação — não é despachada automaticamente.` }
   }
 
+  // ARMADILHA: o envio ignorava `rule.templateKey` e derivava o template da
+  // etapa. Uma etapa D+15 criada no banco caía no default do switch e mandava
+  // "vence em 3 dias" para quem estava 15 dias atrasado. A regra manda; o mapa
+  // só entra quando ela não declara template.
+  const { templateKey, origem: origemTemplate } = resolverTemplateKey({
+    templateKeyRegra: rule.templateKey,
+    templateKeyJob: job.templateKey,
+    etapa: String(job.etapa ?? ''),
+  })
+  if (!templateKey) {
+    return {
+      acao: 'cancelar',
+      motivo: `Etapa "${job.etapa}" sem templateKey na regra e sem correspondência no mapa — nada foi enviado. Configure o template da etapa.`,
+    }
+  }
+  if (origemTemplate === 'mapa') {
+    console.warn('[whatsapp][template-por-etapa]', JSON.stringify({ etapa: job.etapa, templateKey }))
+  }
+
   const config = await getTenantWhatsappConfig(tenantId)
-  const janela = resolverJanelaEnvio(new Date(), {
+  const janela: JanelaEnvio = {
     horaMinima: rule.horaMinima || config.whatsappJanelaHoraMinima,
     horaMaxima: rule.horaMaxima || config.whatsappJanelaHoraMaxima,
     usarDiasUteis: rule.usarDiasUteis ?? config.whatsappUsaDiasUteis,
-  })
-  if (!janela.dentroDaJanela) {
-    return { acao: 'adiar', motivo: janela.motivo ?? 'Fora da janela de envio.', proximo: janela.proximo }
   }
+  const bloqueio = await avaliarJanelaETeto({ tenantId, clienteId, janela, teto: config.whatsappMaxMensagensClienteDia })
+  if (bloqueio) return bloqueio
 
-  return { acao: 'enviar', contatoDestino: target.contatoTelefone, config }
+  return { acao: 'enviar', contatoDestino: target.contatoTelefone, config, templateKey }
 }
 
 /** Persiste o desfecho de um job que NÃO virou mensagem agora. */
@@ -813,6 +1133,10 @@ async function registrarNaoEnvio(jobId: string, job: FirebaseFirestore.DocumentD
   // campos de WhatsApp. Confirmamos a existência antes de tocar nele.
   const lancamentoCandidato = job.lancamentoId ? db().collection('lancamentos').doc(String(job.lancamentoId)) : null
   const lancamentoRef = lancamentoCandidato && (await lancamentoCandidato.get()).exists ? lancamentoCandidato : null
+  // A confirmação de baixa não é etapa da régua: escrever nos campos dela
+  // (`statusWhatsappCobranca`, `proximaAcaoWhatsappEm`) faria a tela do
+  // financeiro anunciar cobrança prevista para um lançamento já pago.
+  const ehConfirmacao = String(job.tipo ?? TIPO_JOB_COBRANCA) === TIPO_JOB_CONFIRMACAO
 
   if (veredicto.acao === 'adiar') {
     await jobRef.set({
@@ -825,7 +1149,10 @@ async function registrarNaoEnvio(jobId: string, job: FirebaseFirestore.DocumentD
       atualizadoEm: FieldValue.serverTimestamp(),
     }, { merge: true })
     if (lancamentoRef) {
-      await lancamentoRef.set({
+      await lancamentoRef.set(ehConfirmacao ? {
+        confirmacaoPagamentoWhatsappEm: admin.firestore.Timestamp.fromDate(veredicto.proximo),
+        atualizadoEm: FieldValue.serverTimestamp(),
+      } : {
         proximaAcaoWhatsappEm: admin.firestore.Timestamp.fromDate(veredicto.proximo),
         atualizadoEm: FieldValue.serverTimestamp(),
       }, { merge: true })
@@ -860,7 +1187,12 @@ async function registrarNaoEnvio(jobId: string, job: FirebaseFirestore.DocumentD
       // 'cancelado' não existe em WhatsappStatus (tipo compartilhado com a UI):
       // o lançamento volta para 'nao_agendado', que é o que de fato descreve o
       // estado — não há mais envio previsto.
-      await lancamentoRef.set({
+      await lancamentoRef.set(ehConfirmacao ? {
+        statusConfirmacaoPagamentoWhatsapp: 'nao_enviada',
+        confirmacaoPagamentoWhatsappMotivo: veredicto.motivo,
+        confirmacaoPagamentoWhatsappEm: null,
+        atualizadoEm: FieldValue.serverTimestamp(),
+      } : {
         statusWhatsappCobranca: 'nao_agendado',
         proximaAcaoWhatsappEm: null,
         atualizadoEm: FieldValue.serverTimestamp(),
@@ -868,13 +1200,14 @@ async function registrarNaoEnvio(jobId: string, job: FirebaseFirestore.DocumentD
     }
   }
 
+  const rotulo = ehConfirmacao ? 'Confirmação de pagamento' : `Cobrança WhatsApp ${job.etapa}`
   await db().collection('events').add({
     tenantId: job.tenantId ?? DEFAULT_TENANT_ID,
     clienteId: job.clienteId ?? null,
     tipo: veredicto.acao === 'cancelar' ? 'whatsapp_cobranca_cancelada' : 'whatsapp_cobranca_retida',
-    titulo: veredicto.acao === 'cancelar' ? `Cobrança WhatsApp ${job.etapa} cancelada` : `Cobrança WhatsApp ${job.etapa} aguardando aprovação`,
+    titulo: veredicto.acao === 'cancelar' ? `${rotulo} cancelada` : `${rotulo} aguardando aprovação`,
     descricao: veredicto.motivo,
-    metadata: redactAuditData({ jobId, etapa: job.etapa }),
+    metadata: redactAuditData({ jobId, etapa: job.etapa, tipo: job.tipo ?? TIPO_JOB_COBRANCA }),
     criadoEm: FieldValue.serverTimestamp(),
   })
 }
@@ -906,7 +1239,9 @@ export async function dispatchWhatsappJob(jobId: string, opts?: { origem?: 'fila
   }
 
   const config = veredicto.config
+  const templateKey = veredicto.templateKey
   const jobParaEnvio = { ...job, contatoDestino: veredicto.contatoDestino }
+  const ehConfirmacao = String(job.tipo ?? TIPO_JOB_COBRANCA) === TIPO_JOB_CONFIRMACAO
 
   // Todo o caminho de dispatch (pré-condições, montagem e envio) fica dentro do
   // try para que QUALQUER falha — inclusive Cloud API desabilitada ou token/phone
@@ -924,7 +1259,7 @@ export async function dispatchWhatsappJob(jobId: string, opts?: { origem?: 'fila
       throw new HttpsError('failed-precondition', 'Credenciais ou número Twilio não configurados.')
     }
 
-    const messagePayload = await buildMessagePayload(jobParaEnvio, fromNumber)
+    const messagePayload = await buildMessagePayload(jobParaEnvio, fromNumber, templateKey)
     const client = twilio(accountSid, authToken)
     const response = await client.messages.create(messagePayload)
     const providerMessageId = response.sid ?? null
@@ -935,7 +1270,9 @@ export async function dispatchWhatsappJob(jobId: string, opts?: { origem?: 'fila
       clienteId: job.clienteId,
       lancamentoId: job.lancamentoId,
       jobId,
-      templateKey: mapEtapaToTemplate(String(job.etapa)),
+      // O template REALMENTE usado, não o que a etapa sugeriria: é o registro
+      // que o operador consulta quando o cliente pergunta o que recebeu.
+      templateKey,
       etapa: job.etapa,
       status: 'enviado',
       providerMessageId,
@@ -960,7 +1297,17 @@ export async function dispatchWhatsappJob(jobId: string, opts?: { origem?: 'fila
       atualizadoEm: FieldValue.serverTimestamp(),
     }, { merge: true })
 
-    await db().collection('lancamentos').doc(String(job.lancamentoId)).set({
+    // O teto do dia só conta mensagem que SAIU. Incrementar antes do provider
+    // confirmar faria uma falha de rede consumir a cota do cliente.
+    await registrarEnvioNoContador(String(job.tenantId ?? DEFAULT_TENANT_ID), String(job.clienteId ?? ''), new Date())
+
+    await db().collection('lancamentos').doc(String(job.lancamentoId)).set(ehConfirmacao ? {
+      statusConfirmacaoPagamentoWhatsapp: 'enviada',
+      confirmacaoPagamentoWhatsappEm: FieldValue.serverTimestamp(),
+      confirmacaoPagamentoWhatsappMensagemId: messageRef.id,
+      confirmacaoPagamentoWhatsappMotivo: null,
+      atualizadoEm: FieldValue.serverTimestamp(),
+    } : {
       statusWhatsappCobranca: 'enviado',
       ultimoEnvioWhatsappEm: FieldValue.serverTimestamp(),
       ultimaMensagemWhatsappId: messageRef.id,
@@ -971,10 +1318,10 @@ export async function dispatchWhatsappJob(jobId: string, opts?: { origem?: 'fila
     await db().collection('events').add({
       tenantId: job.tenantId,
       clienteId: job.clienteId,
-      tipo: 'whatsapp_cobranca_enviado',
-      titulo: `Cobrança WhatsApp ${job.etapa}`,
+      tipo: ehConfirmacao ? 'whatsapp_confirmacao_enviada' : 'whatsapp_cobranca_enviado',
+      titulo: ehConfirmacao ? 'Confirmação de pagamento enviada' : `Cobrança WhatsApp ${job.etapa}`,
       descricao: `Mensagem enviada para ${jobParaEnvio.contatoDestino}.`,
-      metadata: redactAuditData({ etapa: job.etapa, providerMessageId }),
+      metadata: redactAuditData({ etapa: job.etapa, templateKey, providerMessageId }),
       criadoEm: FieldValue.serverTimestamp(),
     })
 
@@ -985,7 +1332,7 @@ export async function dispatchWhatsappJob(jobId: string, opts?: { origem?: 'fila
       entidadeId: messageRef.id,
       acao: 'send',
       dadosAntes: null,
-      dadosDepois: { jobId, etapa: job.etapa, contatoDestino: jobParaEnvio.contatoDestino },
+      dadosDepois: { jobId, etapa: job.etapa, templateKey, contatoDestino: jobParaEnvio.contatoDestino },
       origem: 'cloud_function',
     })
 
@@ -1003,7 +1350,11 @@ export async function dispatchWhatsappJob(jobId: string, opts?: { origem?: 'fila
       atualizadoEm: FieldValue.serverTimestamp(),
     }, { merge: true })
     if (job.lancamentoId) {
-      await db().collection('lancamentos').doc(String(job.lancamentoId)).set({
+      await db().collection('lancamentos').doc(String(job.lancamentoId)).set(ehConfirmacao ? {
+        statusConfirmacaoPagamentoWhatsapp: 'falhou',
+        confirmacaoPagamentoWhatsappMotivo: twilioError.message ?? 'Falha ao enviar mensagem pelo provider.',
+        atualizadoEm: FieldValue.serverTimestamp(),
+      } : {
         statusWhatsappCobranca: 'falhou',
         atualizadoEm: FieldValue.serverTimestamp(),
       }, { merge: true })

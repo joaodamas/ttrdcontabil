@@ -26,6 +26,11 @@ const AUDITED_COLLECTIONS = new Set([
   'clientes_fiscal',
   'nfse_rascunhos',
   'nfse_emitidas',
+  // Auditadas pelo que causam, não pelo que são: o tomador define PARA QUEM a
+  // nota sai, e o contrato recorrente dispara emissão real sem ninguém clicar.
+  // Alterar qualquer um dos dois é o tipo de mudança que precisa de rastro.
+  'tomadores',
+  'nfse_recorrentes',
   'ir_declaracoes',
   'ir_checklist',
   'usuarios',
@@ -56,6 +61,14 @@ const TENANT_SCOPED_COLLECTIONS = new Set([
   'nfse_emitidas',
   'nfse_eventos',
   'nfse_fila_processamento',
+  // As regras de `tomadores` e `nfse_recorrentes` exigem sameTenantExisting().
+  // Fora deste Set o efeito é assimétrico e silencioso: a ESCRITA passa (o
+  // createDocument injeta o tenantId por getAuditActor) mas a LEITURA é negada,
+  // porque a query de lista sai sem o `where('tenantId','==',...)` que a regra
+  // espera. Na prática o contador cadastra o tomador, recebe confirmação, e ele
+  // não aparece na tela.
+  'tomadores',
+  'nfse_recorrentes',
   'events',
   'logs_auditoria',
   'dashboard_kpis',
