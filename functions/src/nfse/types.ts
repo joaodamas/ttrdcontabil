@@ -22,6 +22,28 @@ export interface Tomador {
   }
 }
 
+// ─── Reforma Tributária (IBS/CBS) — NFS-e ────────────────────────────────────
+// Grupo `ibsCbs` do CreateServiceInvoiceDto da Spedy (conferido em 2026-08-03
+// contra https://api.spedy.com.br/swagger/v1/swagger.json → ServiceInvoiceIbsCbsDto).
+//
+// A Spedy CALCULA IBS e CBS sozinha nas alíquotas da fase de transição
+// (IBS 0,1% / CBS 0,9%) — daqui só sai o enquadramento. ISS/PIS/COFINS
+// continuam obrigatórios e inalterados no mesmo payload.
+//
+// ⚠️ `cst` e `classification` são INTEIROS na API. O cadastro antigo em
+// ProdutoRecord (src/features/produtos/types.ts) guardava string — converter
+// na origem, não aqui.
+//
+// Opcional de propósito: os mesmos campos podem ser preenchidos na "Regra de
+// Tributação" do painel da Spedy. Sem configuração, o objeto NÃO é enviado e a
+// nota sai exatamente como hoje — quem manda é a regra do painel.
+export interface ReformaIbsCbs {
+  cst: number                       // CST da reforma (tabela própria, NT 2025.002)
+  classification: number            // cClassTrib — Código de Classificação Tributária
+  operationIndicatorCode?: string   // código indicador da operação de fornecimento
+  isPersonalUse?: boolean           // operação de uso ou consumo pessoal
+}
+
 // ─── Dados do serviço ────────────────────────────────────────────────────────
 export interface Servico {
   discriminacao: string      // descrição livre
@@ -41,6 +63,8 @@ export interface Servico {
   descontoIncondicionado?: number
   descontoCondicionado?: number
   municipioPrestacao?: string // IBGE do local de prestação
+  // Sobrescreve, só nesta nota, o enquadramento de IBS/CBS do cliente.
+  reformaIbsCbs?: ReformaIbsCbs
 }
 
 // ─── Certificado digital ─────────────────────────────────────────────────────
@@ -77,6 +101,9 @@ export interface ConfigFiscalCliente {
   // decisão de reverter a trava "sem emissão automática" (ver
   // docs_dev/checklist-ajustes-producao.md) é por cliente, não global.
   emissaoAutomatica?: boolean
+  // Enquadramento padrão de IBS/CBS deste cliente. Ausente = não enviamos o
+  // grupo e a Spedy aplica a Regra de Tributação do painel (ver ReformaIbsCbs).
+  reformaIbsCbs?: ReformaIbsCbs
   // Credenciais por municipio (salvas em Firestore — campo credenciais)
   credenciais?: CredenciaisConector
 }

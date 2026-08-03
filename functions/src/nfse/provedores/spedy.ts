@@ -34,6 +34,7 @@ import type {
   EmitirProdutoInput,
   ItemProdutoFiscal,
   Prestador,
+  ReformaIbsCbs,
   ResultadoEmissao,
   ResultadoOperacaoNfse,
   Tomador,
@@ -131,11 +132,51 @@ function integrationIdDe(input: { rascunhoId?: string; numeroRps?: string; serie
   return base.length <= 36 ? base : createHash('sha1').update(base).digest('hex').slice(0, 32)
 }
 
+/**
+ * Monta o grupo `ibsCbs` da NFS-e, se houver enquadramento configurado.
+ *
+ * Precedência: o que veio na nota ganha do padrão do cliente — mesmo critério
+ * já usado em `aliquota` e `itemListaServico` logo abaixo.
+ *
+ * Devolve `undefined` (e o campo some do payload) quando não há CST +
+ * classificação válidos. Isso é deliberado: sem os dois, a Spedy aplica a Regra
+ * de Tributação do painel. Enviar o grupo pela metade seria pior que não
+ * enviar — vira rejeição na prefeitura em vez de fallback silencioso.
+ *
+ * `cst` e `classification` são inteiros na API, mas o cadastro antigo guardava
+ * string (ProdutoRecord.ibsCbsCst/cClassTrib). Coagimos aqui para que um dado
+ * legado não derrube a emissão — e descartamos o que não vira número.
+ */
+export function buildIbsCbs(
+  nota: ReformaIbsCbs | undefined,
+  padrao: ReformaIbsCbs | undefined,
+): ReformaIbsCbs | undefined {
+  const origem = nota ?? padrao
+  if (!origem) return undefined
+
+  const inteiro = (v: unknown): number | undefined => {
+    const n = typeof v === 'string' ? Number(v.trim()) : v
+    return typeof n === 'number' && Number.isFinite(n) ? Math.trunc(n) : undefined
+  }
+
+  const cst = inteiro(origem.cst)
+  const classification = inteiro(origem.classification)
+  if (cst === undefined || classification === undefined) return undefined
+
+  return {
+    cst,
+    classification,
+    ...(origem.operationIndicatorCode ? { operationIndicatorCode: origem.operationIndicatorCode } : {}),
+    ...(typeof origem.isPersonalUse === 'boolean' ? { isPersonalUse: origem.isPersonalUse } : {}),
+  }
+}
+
 function buildServiceInvoicePayload(input: EmitirNfseInput, config: ConfigFiscalCliente, prestador: Prestador) {
   const aliquota = input.servico.aliquota ?? config.aliquotaPadrao ?? 0
   const valor = input.servico.valorServico
   const issAmount = Number((valor * (aliquota / 100)).toFixed(2))
   const endereco = input.tomador.endereco
+  const ibsCbs = buildIbsCbs(input.servico.reformaIbsCbs, config.reformaIbsCbs)
 
   return {
     integrationId: integrationIdDe(input),
@@ -167,6 +208,8 @@ function buildServiceInvoicePayload(input: EmitirNfseInput, config: ConfigFiscal
       issAmount,
       issWithheld: input.servico.issRetido,
     },
+    // Reforma Tributária: só entra no corpo quando há enquadramento. Ver buildIbsCbs.
+    ...(ibsCbs ? { ibsCbs } : {}),
   }
 }
 

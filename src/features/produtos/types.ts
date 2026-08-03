@@ -37,11 +37,22 @@ export type ProdutoRecord = Record<string, unknown> & {
   // ── Reforma Tributária (IBS/CBS/IS — LC 214/2025, NT 2025.002) ──
   // Homologação obrigatória desde 01/07/2026; produção obrigatória em
   // 03/08/2026 pra CRT 3 (Regime Normal). Simples Nacional/MEI: 2027.
-  // CAMPOS AINDA NÃO TRANSMITIDOS: confirmado em 2026-07-29, via schema
-  // público da Spedy (api.spedy.com.br/llms.txt), que o endpoint
-  // `product-invoices` ainda não aceita IBS/CBS — só ICMS/PIS/COFINS. Esses
-  // campos ficam guardados aqui pra quando o provedor liberar (ver
-  // functions/src/nfse/provedores/spedy.ts) — NÃO acionam nada hoje.
+  //
+  // ⚠️ CORRIGIDO EM 2026-08-03 — a nota anterior dizia que a Spedy não aceitava
+  // IBS/CBS. Aceita, nos dois modelos. A conclusão de 29/07 veio do
+  // `api.spedy.com.br/llms.txt`, que está DESATUALIZADO (zero ocorrências de
+  // `ibsCbs`). A fonte válida é o swagger:
+  //   https://api.spedy.com.br/swagger/v1/swagger.json
+  //     · NFS-e  → CreateServiceInvoiceDto.ibsCbs (ServiceInvoiceIbsCbsDto)
+  //     · NF-e   → SefazInvoiceItemIbsCbsDto, POR ITEM (~45 campos)
+  //
+  // ESTADO: NFS-e transmite (functions/src/nfse/types.ts → ReformaIbsCbs, e
+  // buildIbsCbs em provedores/spedy.ts). NF-e de produto AINDA NÃO — é o
+  // trabalho grande, e estes dois campos aqui são a semente dele.
+  //
+  // ⚠️ Tipo: a API espera INTEIRO em cst/classification. Aqui é string por
+  // histórico do cadastro; `buildIbsCbs` coage na borda. Ao construir a
+  // transmissão de NF-e, converter na origem em vez de propagar string.
   ibsCbsCst?: string          // CST da reforma — tabela própria (NT 2025.002), não reaproveita icmsCst
   cClassTrib?: string         // Código de Classificação Tributária — vinculado a artigo da LC 214/2025
 
