@@ -30,6 +30,11 @@ export interface Tomador {
 // (IBS 0,1% / CBS 0,9%) — daqui só sai o enquadramento. ISS/PIS/COFINS
 // continuam obrigatórios e inalterados no mesmo payload.
 //
+// PRAZO (Ato Conjunto RFB/CGIBS nº 4, de 30/07/2026): a NFS-e de serviços em
+// geral só é obrigada em 01/10/2026 — e 01/01/2027 se o emissor for optante do
+// Simples Nacional. Quem venceu em 03/08/2026 foi NF-e/NFC-e/CT-e/MDF-e, que
+// não passam por aqui. Ou seja: há folga pra configurar cliente a cliente.
+//
 // ⚠️ `cst` e `classification` são INTEIROS na API. O cadastro antigo em
 // ProdutoRecord (src/features/produtos/types.ts) guardava string — converter
 // na origem, não aqui.

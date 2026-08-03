@@ -35,8 +35,14 @@ export type ProdutoRecord = Record<string, unknown> & {
   cofinsAliquota?: number
 
   // ── Reforma Tributária (IBS/CBS/IS — LC 214/2025, NT 2025.002) ──
-  // Homologação obrigatória desde 01/07/2026; produção obrigatória em
-  // 03/08/2026 pra CRT 3 (Regime Normal). Simples Nacional/MEI: 2027.
+  // Prazo por MODELO de documento, não por data única — Ato Conjunto
+  // RFB/CGIBS nº 4, de 30/07/2026:
+  //   03/08/2026 → NF-e, NFC-e, CT-e, MDF-e (é o caso DESTE arquivo)
+  //   01/10/2026 → NFS-e de serviços em geral
+  //   01/12/2026 → NFS-e de plataformas e específicas, NF-e ABI/NFAg/NFGas
+  //   01/01/2027 → tudo que for emitido por optante do Simples Nacional / MEI
+  // Na carteira da TTRD isso significa: 96 dos 119 clientes (Simples) só em
+  // 2027; dos 23 de Regime Normal, só quem emite produto está obrigado agora.
   //
   // ⚠️ CORRIGIDO EM 2026-08-03 — a nota anterior dizia que a Spedy não aceitava
   // IBS/CBS. Aceita, nos dois modelos. A conclusão de 29/07 veio do
