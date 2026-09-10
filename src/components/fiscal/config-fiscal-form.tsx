@@ -98,7 +98,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       ambienteEmissao:  'homologacao',
       optanteSimples:   true,
       naturezaOperacao: '1',
-      provedorNfse:     'spedy',
+      provedorNfse:     'municipio',
       emissaoAutomatica:false,
     },
   })
@@ -109,7 +109,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       ambienteEmissao:  'homologacao',
       optanteSimples:   true,
       naturezaOperacao: '1',
-      provedorNfse:     'spedy',
+      provedorNfse:     'municipio',
       ...defaultValues,
       // Credenciais NUNCA são pré-preenchidas: o que vem de defaultValues.credenciais
       // já está criptografado (formato iv:authTag:ciphertext). Preencher o campo com
@@ -129,7 +129,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
   }, [open, defaultValues, reset])
 
   const municipioIbge = watch('municipioIbge')
-  const provedorNfse = watch('provedorNfse') ?? 'spedy'
+  const provedorNfse = watch('provedorNfse') ?? 'municipio'
   const tipo = MUNICIPIO_TIPO[municipioIbge]
   const municipioNome = MUNICIPIOS.find(m => m.ibge === municipioIbge)?.nome ?? ''
   const credenciais = (defaultValues?.credenciais ?? {}) as Record<string, unknown>
@@ -163,7 +163,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
         cnae:                 data.cnae              || null,
         aliquotaPadrao:       data.aliquotaPadrao    ?? null,
         issRetidoPadrao:      data.issRetidoPadrao   ?? false,
-        provedorNfse:         data.provedorNfse ?? 'spedy',
+        provedorNfse:         data.provedorNfse ?? 'municipio',
         emissaoAutomatica:    data.emissaoAutomatica ?? false,
       }
 
@@ -256,13 +256,13 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="municipio">Conector direto do município (padrão)</SelectItem>
-                  <SelectItem value="spedy">Spedy (API — qualquer município)</SelectItem>
+                  <SelectItem value="spedy">Spedy (API — sem conta ativa)</SelectItem>
                 </SelectContent>
               </Select>
             )} />
             <p className="text-xs text-muted-foreground">
               {provedorNfse === 'spedy'
-                ? 'Emite via API da Spedy — cobre qualquer município do Brasil, não só os 8 com conector próprio.'
+                ? 'A conta da Spedy foi encerrada em setembro/2026. Emitir por aqui vai falhar na autenticação — o conector segue no código à espera de decisão sobre o provedor definitivo.'
                 : 'Usa o conector escrito para o município selecionado abaixo (só cobre os municípios listados).'}
             </p>
           </div>
