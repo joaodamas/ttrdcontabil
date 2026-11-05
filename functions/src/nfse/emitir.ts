@@ -151,6 +151,18 @@ function resumoTentativaNfse(input: EmitirNfseInput, config: ConfigFiscalCliente
   }
 }
 
+/**
+ * Endereço do tomador como mapa sem `undefined` (o Firestore recusa undefined
+ * dentro de mapa aninhado). Nada preenchido = null.
+ */
+function enderecoParaGravar(e: EmitirNfseInput['tomador']['endereco']): Record<string, string> | null {
+  if (!e) return null
+  const limpo = Object.fromEntries(
+    Object.entries(e).filter(([, v]) => typeof v === 'string' && v.trim() !== '').map(([k, v]) => [k, (v as string).trim()]),
+  )
+  return Object.keys(limpo).length > 0 ? limpo : null
+}
+
 /** Campos extras gravados em nfse_emitidas (ex.: marcação de lote). */
 export interface OpcoesEmissao {
   extrasNotaEmitida?: Record<string, unknown>
@@ -386,7 +398,18 @@ async function enviarEmissao(
       rascunhoId:        input.rascunhoId ?? null,
       tomadorNome:       input.tomador.razaoSocial,
       tomadorCpfCnpj:    input.tomador.cpfCnpj,
+      // Campos abaixo existem para "Copiar de nota anterior" sem depender do
+      // XML (que só o Ambiente Nacional devolve). Ausentes = null, nunca undefined.
+      tomadorEmail:      input.tomador.email ?? null,
+      tomadorEndereco:   enderecoParaGravar(input.tomador.endereco),
       descricaoServico:  input.servico.discriminacao,
+      descricaoServicoModelo: input.servico.descricaoModelo?.trim() || null,
+      itemListaServico:  input.servico.itemListaServico ?? null,
+      codigoTributacaoNacional: input.servico.codigoTributacaoNacional?.trim() || null,
+      codigoNbs:         input.servico.codigoNbs?.trim() || null,
+      municipioPrestacaoIbge: input.servico.municipioPrestacao?.trim() || null,
+      informacoesComplementares: input.servico.informacoesComplementares?.trim() || null,
+      dataCompetencia:   input.dataCompetencia ?? null,
       codigoServico:     input.servico.codigoServico,
       valorServico:      input.servico.valorServico,
       aliquota:          input.servico.aliquota ?? config.aliquotaPadrao ?? null,

@@ -95,6 +95,13 @@ export function validarPayloadFiscal(
       erros.push('Alíquota fiscal inválida.')
     }
     if (typeof servico.issRetido !== 'boolean') erros.push('ISS retido deve ser informado como verdadeiro ou falso.')
+    if (servico.municipioPrestacao && !isIbge(servico.municipioPrestacao)) erros.push('Município IBGE do local da prestação inválido.')
+    if (servico.codigoTributacaoNacional?.trim() && onlyDigits(servico.codigoTributacaoNacional).length !== 6) {
+      erros.push('Código de tributação nacional deve ter 6 dígitos.')
+    }
+    if (servico.informacoesComplementares && servico.informacoesComplementares.trim().length > 2000) {
+      erros.push('Informações complementares devem ter até 2000 caracteres.')
+    }
   }
 
   if (!['homologacao', 'producao'].includes(config.ambienteEmissao)) erros.push('Ambiente fiscal inválido.')

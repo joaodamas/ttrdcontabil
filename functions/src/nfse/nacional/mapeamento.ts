@@ -102,6 +102,55 @@ export function mapearCodigoTributacaoNacional(itemLista: string | undefined | n
   return codigo
 }
 
+// ─── NBS e informações complementares ───────────────────────────────────────
+
+/**
+ * Código NBS (cNBS, TSCodNBS = 9 dígitos). Aceita a forma pontuada da tabela
+ * oficial ("1.1501.10.00" → "115011000"). Vazio = não informa (opcional no XSD).
+ */
+export function mapearCodigoNbs(valor: string | undefined | null): string | undefined {
+  const bruto = String(valor ?? '').trim()
+  if (!bruto) return undefined
+  const d = digitos(bruto)
+  if (d.length !== 9 || !/^[\d.\s-]+$/.test(bruto)) {
+    throw new ErroMapeamentoNacional(
+      'NBS_INVALIDO',
+      `Código NBS "${bruto}" inválido: são 9 dígitos (ex.: 1.1501.10.00 ou 115011000).`,
+    )
+  }
+  return d
+}
+
+/** Troca de caracteres comuns fora do Latin-1 por equivalentes aceitos pelo XSD. */
+const SUBSTITUICOES_LATIN1: Array<[RegExp, string]> = [
+  [/[\u2013\u2014\u2212]/g, '-'],
+  [/[\u2018\u2019\u201A\u2032]/g, "'"],
+  [/[\u201C\u201D\u201E\u2033]/g, '"'],
+  [/\u2026/g, '...'],
+  [/[\u2022\u25CF\u25AA]/g, '-'],
+  [/[\u00A0\u2007\u202F\t]/g, ' '],
+]
+
+/**
+ * xInfComp é TSString no XSD de PRODUÇÃO: só caracteres de U+0020 a U+00FF,
+ * SEM quebra de linha (diferente de xDescServ, que aceita). Dados bancários
+ * costumam vir em várias linhas — as linhas viram " | ". Caracteres fora do
+ * Latin-1 que não têm equivalente são descartados. Limite: 2000.
+ */
+export function normalizarInformacoesComplementares(texto: string | undefined | null): string | undefined {
+  let t = String(texto ?? '')
+  for (const [re, sub] of SUBSTITUICOES_LATIN1) t = t.replace(re, sub)
+  t = t
+    .split(/\r\n|\r|\n/)
+    .map((linha) => linha.replace(/ {2,}/g, ' ').trim())
+    .filter(Boolean)
+    .join(' | ')
+    .replace(/[^\u0020-\u00FF]/g, '')
+    .trim()
+  if (!t) return undefined
+  return t.length > 2000 ? t.slice(0, 2000).trim() : t
+}
+
 // ─── ISSQN ──────────────────────────────────────────────────────────────────
 
 /** ISS retido → tpRetISSQN: 1 = não retido; 2 = retido pelo tomador. */
@@ -244,10 +293,16 @@ export function montarDadosNotaNacional(
     },
     tomador: mapearTomador(input.tomador),
     servico: {
-      cTribNac: mapearCodigoTributacaoNacional(servico.itemListaServico ?? config.itemListaServico, config.codigoTributacaoNacional),
+      // Override da nota > override da config > derivado do item LC 116.
+      cTribNac: mapearCodigoTributacaoNacional(
+        servico.itemListaServico ?? config.itemListaServico,
+        String(servico.codigoTributacaoNacional ?? '').trim() || config.codigoTributacaoNacional,
+      ),
       cTribMun: cTribMun ? cTribMun.padStart(3, '0') : undefined,
+      cNBS: mapearCodigoNbs(servico.codigoNbs),
       descricao: String(servico.discriminacao ?? '').trim(),
       municipioPrestacao: normalizarIbge(servico.municipioPrestacao) || ibgeEmissor,
+      informacoesComplementares: normalizarInformacoesComplementares(servico.informacoesComplementares),
     },
     valores: {
       valorServico: servico.valorServico,

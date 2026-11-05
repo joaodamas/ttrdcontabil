@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   ErroMapeamentoNacional,
+  mapearCodigoNbs,
   mapearCodigoTributacaoNacional,
   mapearRegime,
   mapearTomador,
@@ -10,6 +11,7 @@ import {
   mapearTribIssqn,
   montarDadosNotaNacional,
   nomeMunicipio,
+  normalizarInformacoesComplementares,
 } from '../../functions/src/nfse/nacional/mapeamento'
 import { montarDpsXml, validarDadosNota } from '../../functions/src/nfse/nacional/dps'
 import { conectorLiberaProducao, nacionalLiberadoParaProducao, resolverProvedorNfse } from '../../functions/src/nfse/provedor'
@@ -198,5 +200,36 @@ describe('nacionalLiberadoParaProducao — chave única do Ambiente Nacional', (
     expect(nacionalLiberadoParaProducao({})).toBe(false)
     expect(nacionalLiberadoParaProducao(undefined)).toBe(false)
     expect(nacionalLiberadoParaProducao({ producaoLiberada: 'true' as unknown as boolean })).toBe(false)
+  })
+})
+
+describe('campos por nota (cTribNac, NBS, informações complementares)', () => {
+  it('cTribNac da nota tem precedência sobre o da config e o item LC 116', () => {
+    const d = montarDadosNotaNacional(input({ codigoTributacaoNacional: '010201' }), config({ codigoTributacaoNacional: '171901' }), prestador, DPS)
+    expect(d.servico.cTribNac).toBe('010201')
+    const semNota = montarDadosNotaNacional(input({ codigoTributacaoNacional: '  ' }), config({ codigoTributacaoNacional: '171902' }), prestador, DPS)
+    expect(semNota.servico.cTribNac).toBe('171902')
+  })
+
+  it('NBS aceita a forma pontuada e recusa tamanho errado', () => {
+    expect(mapearCodigoNbs('1.1501.10.00')).toBe('115011000')
+    expect(mapearCodigoNbs('115011000')).toBe('115011000')
+    expect(mapearCodigoNbs('')).toBeUndefined()
+    expect(mapearCodigoNbs(undefined)).toBeUndefined()
+    expect(() => mapearCodigoNbs('1.1501.10')).toThrow(/NBS/)
+    expect(() => mapearCodigoNbs('ABC115011000')).toThrow(/NBS/)
+  })
+
+  it('informações complementares: linhas viram " | ", caracteres fora do Latin-1 são trocados ou removidos', () => {
+    expect(normalizarInformacoesComplementares('Banco 001 – Ag 1\n\n  C/C 2  \r\nPIX “chave”')).toBe('Banco 001 - Ag 1 | C/C 2 | PIX "chave"')
+    expect(normalizarInformacoesComplementares('Ação 😀 ok')).toBe('Ação  ok')
+    expect(normalizarInformacoesComplementares('   \n ')).toBeUndefined()
+    expect(normalizarInformacoesComplementares('x'.repeat(2100))).toHaveLength(2000)
+  })
+
+  it('informações complementares chegam à DPS', () => {
+    const d = montarDadosNotaNacional(input({ informacoesComplementares: 'Dados bancários\nAg 1' }), config(), prestador, DPS)
+    expect(d.servico.informacoesComplementares).toBe('Dados bancários | Ag 1')
+    expect(montarDpsXml(d, { dhEmi: '2026-11-05T10:00:00-03:00' }).xml).toContain('<xInfComp>Dados bancários | Ag 1</xInfComp>')
   })
 })

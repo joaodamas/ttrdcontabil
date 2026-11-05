@@ -41,6 +41,19 @@ export interface Servico {
   descontoIncondicionado?: number
   descontoCondicionado?: number
   municipioPrestacao?: string // IBGE do local de prestação
+  // ── Só para o Ambiente Nacional (por nota; vazios herdam da config) ──
+  /** cTribNac explícito (6 dígitos). Tem precedência sobre config.codigoTributacaoNacional e o item LC 116. */
+  codigoTributacaoNacional?: string
+  /** Código NBS (9 dígitos; aceita a forma pontuada "1.1501.10.00"). */
+  codigoNbs?: string
+  /** Informações complementares da nota (xInfComp). */
+  informacoesComplementares?: string
+  /**
+   * Descrição com variáveis ({{MES_COMPETENCIA}}…) de onde `discriminacao` foi
+   * renderada. Só é guardada em nfse_emitidas para a cópia da próxima nota —
+   * o que vai para a DPS é sempre `discriminacao`, já renderada.
+   */
+  descricaoModelo?: string
 }
 
 // ─── Certificado digital ─────────────────────────────────────────────────────
