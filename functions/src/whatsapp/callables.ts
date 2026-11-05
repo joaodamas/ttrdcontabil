@@ -1,8 +1,8 @@
 import * as admin from 'firebase-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
-import { assertCanAccessCliente } from '../authz'
-import { DEFAULT_TENANT_ID, requireEnvironmentTenant } from '../tenant'
+import { assertAdmin, assertCanAccessCliente } from '../authz'
+import { DEFAULT_TENANT_ID } from '../tenant'
 import { dispatchWhatsappJob, ensureWhatsappDefaults, queueWhatsappJob } from './core'
 import { twilioSecrets } from './secrets'
 
@@ -16,14 +16,8 @@ async function getLancamentoOwnedByActor(uid: string, lancamentoId: string) {
   return { ref: snap.ref, data }
 }
 
-async function assertAdminUser(uid: string) {
-  const snap = await db().collection('usuarios').doc(uid).get()
-  if (!snap.exists) throw new HttpsError('permission-denied', 'Usuário sem perfil cadastrado.')
-  const usuario = snap.data() ?? {}
-  if (usuario.ativo === false) throw new HttpsError('permission-denied', 'Usuário inativo.')
-  if (usuario.perfil !== 'admin') throw new HttpsError('permission-denied', 'Apenas administradores podem editar o catálogo de mensagens.')
-  return { id: uid, tenantId: requireEnvironmentTenant(usuario.tenantId, 'Usuário') }
-}
+const assertAdminUser = (uid: string) =>
+  assertAdmin(uid, 'Apenas administradores podem editar o catálogo de mensagens.')
 
 export const inicializarConfiguracaoWhatsapp = onCall({ region: 'southamerica-east1' }, async (request) => {
   const uid = request.auth?.uid

@@ -41,6 +41,19 @@ service cloud.firestore {
     function isEquipeContabil() { return isAtivo() && userDoc().perfil in ['admin', 'operacional', 'fiscal']; }
     function canRead()       { return isAtivo(); }
 
+    // Senhas de portal dos clientes (clientes_credenciais). Decisão do dono
+    // (2026-11-05): só administrador e fiscal — por PERFIL, sem override de
+    // tela. Espelha PERFIS_CREDENCIAIS em functions/src/usuarios/perfis.ts.
+    function podeVerCredenciais() { return isAtivo() && userDoc().perfil in ['admin', 'fiscal']; }
+
+    // Campos que saíram de `clientes` para `clientes_credenciais/{clienteId}`.
+    // Espelha CAMPOS_CREDENCIAL em src/lib/clientes-import.ts.
+    function camposCredencialCliente() {
+      return ['loginPrefeitura', 'senhaWebPrefeitura', 'senhaPinCertificadoDigitalECnpj',
+        'loginPostoFiscal', 'senhaPostoFiscal', 'responsavelSenhaMeuGov', 'responsavelSenhaEcacPf',
+        'responsavelSenhaWebPrefeitura', 'responsavelSenhaPinCertificadoDigitalCpf'];
+    }
+
     // [P1] Espelha canAccessTela() (src/lib/permissions.ts): quando o admin concede
     // um array `telas` não vazio a um usuário via usuario-form, esse array vira a
     // fonte de verdade e PODE incluir telas fora do default do perfil. Sem este
@@ -305,36 +318,94 @@ service cloud.firestore {
 
     // ─── Usuários ─────────────────────────────────────────────────────────────
 
+    // Criar, excluir e mudar perfil/telas/ativo/e-mail/tenant de usuário é só
+    // pelas Cloud Functions (functions/src/usuarios/callables.ts), que exigem
+    // admin ativo, validam perfil e telas, mantêm o Auth em sincronia (login
+    // desabilitado ao desativar), travam o último admin e gravam auditoria.
+    // O navegador só lê e, do próprio doc, atualiza nome e ultimoAcesso.
     match /usuarios/{uid} {
-      allow get: if (isAuth() && request.auth.uid == uid) || (canRead() && sameTenantExisting());
-      // NOTA DE ISOLAMENTO: regras de `list` não conseguem filtrar por `tenantId`
-      // (não há acesso ao `where` da query). O isolamento aqui depende de dois
-      // fatos: (1) o ambiente é SINGLE-TENANT por deploy — `requireEnvironmentTenant`
-      // (functions/src/tenant.ts) rejeita qualquer tenant != DEFAULT_TENANT_ID, então
-      // todo doc em `usuarios` compartilha o mesmo tenant; (2) o helper de cliente
-      // `listDocuments` (src/lib/firestore-client.ts) sempre adiciona
-      // `where('tenantId','==', actor.tenantId)`. Num cenário futuro de banco
-      // compartilhado entre tenants, trocar por leitura por-doc/denormalização.
-      allow list: if canRead();
-      allow update: if (isAuth() && request.auth.uid == uid
-          // 'telas' controla acesso de leitura a coleções sensíveis (via hasTela);
-          // sem bloquear aqui, qualquer usuário se autoconcede acesso. Só admin altera.
-          && !request.resource.data.diff(resource.data).affectedKeys()
-              .hasAny(['perfil', 'ativo', 'criadoEm', 'tenantId', 'telas']))
-        || (isAdmin() && sameTenantUpdate());
-      allow create: if isAdmin() && sameTenantNew();
-      allow delete: if isAdmin() && sameTenantExisting();
+      allow get: if (isAuth() && request.auth.uid == uid) || (isAdmin() && sameTenantExisting());
+      // Listar expõe e-mail, perfil e telas de todos: só admin (tela de
+      // Usuários). Os seletores de responsável leem usuarios_diretorio.
+      // Isolamento de tenant no `list`: ver a nota em usuarios_diretorio.
+      allow list: if isAdmin();
+      allow update: if isAuth() && request.auth.uid == uid && isAtivo()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'ultimoAcesso'])
+        && (!('nome' in request.resource.data.diff(resource.data).affectedKeys())
+          || (request.resource.data.nome is string
+            && request.resource.data.nome.size() >= 2
+            && request.resource.data.nome.size() <= 100))
+        && (!('ultimoAcesso' in request.resource.data.diff(resource.data).affectedKeys())
+          || request.resource.data.ultimoAcesso == request.time);
+      allow create, delete: if false;
+    }
+
+    // Projeção id/nome/ativo de cada usuário, mantida pelo trigger
+    // sincronizarDiretorioUsuario. É o que os seletores de responsável listam.
+    // NOTA DE ISOLAMENTO: está em TENANT_SCOPED_COLLECTIONS
+    // (src/lib/firestore-client.ts), então a query sai com
+    // where('tenantId','==',...) e o `read` abaixo é avaliado por documento.
+    match /usuarios_diretorio/{uid} {
+      allow read: if canRead() && sameTenantExisting();
+      allow write: if false;
     }
 
     // ─── Clientes ─────────────────────────────────────────────────────────────
 
+    // Senhas de portal não entram mais em `clientes` (legível por qualquer
+    // usuário ativo): vivem em clientes_credenciais. Docs antigos ainda podem
+    // ter os campos até rodar scripts/migrar-credenciais-clientes.mjs — o update
+    // pode REMOVÊ-los (a tela faz isso ao salvar), nunca gravar ou trocar.
+    // `credenciaisPreenchidas` (lista de nomes de campo, sem valor) é escrita só
+    // pelo trigger sincronizarCredenciaisPreenchidas.
+    function clienteSemCredenciais() {
+      return !request.resource.data.keys().hasAny(camposCredencialCliente().concat(['credenciaisPreenchidas']));
+    }
+    function clienteCredenciaisIntactas() {
+      let diff = request.resource.data.diff(resource.data);
+      let protegidos = camposCredencialCliente().concat(['credenciaisPreenchidas']);
+      return !diff.addedKeys().hasAny(protegidos) && !diff.changedKeys().hasAny(protegidos)
+        && !diff.removedKeys().hasAny(['credenciaisPreenchidas']);
+    }
+
     match /clientes/{id} {
       allow read: if canRead() && sameTenantExisting();
-      allow create: if isOperacional() && clientePayloadValido() && sameTenantWrite();
-      allow update: if isOperacional() && clientePayloadValido() && sameTenantUpdate();
+      allow create: if isOperacional() && clientePayloadValido() && sameTenantWrite() && clienteSemCredenciais();
+      allow update: if isOperacional() && clientePayloadValido() && sameTenantUpdate() && clienteCredenciaisIntactas();
       // [MELHORIA 2] Delete separado: apenas admin pode remover clientes.
       // isOperacional inclui admin, mas tornar explícito evita que um
       // 'operacional' delete por acidente ou ataque direto à API.
+      allow delete: if isAdmin() && sameTenantExisting();
+    }
+
+    // Logins e senhas de portal do cliente (prefeitura, posto fiscal, PIN do
+    // certificado, Meu Gov, e-CAC). Id do doc = id do cliente.
+    function credencialTextoOk(d, campo) {
+      return !(campo in d) || (d[campo] is string && d[campo].size() <= 500);
+    }
+    function credenciaisPayloadValido(clienteId) {
+      let d = request.resource.data;
+      let clientePath = /databases/$(database)/documents/clientes/$(clienteId);
+      return d.clienteId == clienteId
+        && d.keys().hasOnly(camposCredencialCliente().concat(['tenantId', 'clienteId', 'criadoEm', 'atualizadoEm',
+          'criadoPorId', 'criadoPorNome', 'atualizadoPorId', 'atualizadoPorNome']))
+        && credencialTextoOk(d, 'loginPrefeitura')
+        && credencialTextoOk(d, 'senhaWebPrefeitura')
+        && credencialTextoOk(d, 'senhaPinCertificadoDigitalECnpj')
+        && credencialTextoOk(d, 'loginPostoFiscal')
+        && credencialTextoOk(d, 'senhaPostoFiscal')
+        && credencialTextoOk(d, 'responsavelSenhaMeuGov')
+        && credencialTextoOk(d, 'responsavelSenhaEcacPf')
+        && credencialTextoOk(d, 'responsavelSenhaWebPrefeitura')
+        && credencialTextoOk(d, 'responsavelSenhaPinCertificadoDigitalCpf')
+        && exists(clientePath)
+        && get(clientePath).data.tenantId == d.tenantId;
+    }
+
+    match /clientes_credenciais/{clienteId} {
+      allow read: if podeVerCredenciais() && sameTenantExisting();
+      allow create: if podeVerCredenciais() && sameTenantNew() && credenciaisPayloadValido(clienteId);
+      allow update: if podeVerCredenciais() && sameTenantUpdate() && credenciaisPayloadValido(clienteId);
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
@@ -683,7 +754,11 @@ service cloud.firestore {
 
     match /logs_auditoria/{id} {
       allow read: if isAdmin() && sameTenantExisting();
-      allow create: if isAtivo() && sameTenantNew();
+      // Ninguém registra log em nome de outro, nem se passa pelo servidor
+      // (origem 'cloud_function' só pelo Admin SDK).
+      allow create: if isAtivo() && sameTenantNew()
+        && request.resource.data.usuarioId == request.auth.uid
+        && request.resource.data.origem == 'client';
       allow update, delete: if false;
     }
 

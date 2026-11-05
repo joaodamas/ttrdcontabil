@@ -93,7 +93,7 @@ export function redactAuditData(value: unknown): unknown {
   )
 }
 
-export async function writeAuditLog(params: {
+export type AuditLogParams = {
   tenantId: string
   actor: AuditActor
   entidade: string
@@ -102,8 +102,14 @@ export async function writeAuditLog(params: {
   dadosAntes?: Record<string, unknown> | null
   dadosDepois?: Record<string, unknown> | null
   origem: 'cloud_function' | 'scheduler' | 'trigger'
-}) {
-  await db().collection('logs_auditoria').add({
+}
+
+/**
+ * Documento de log pronto para gravar — para quem precisa do log na MESMA
+ * transação/batch da mudança (callables de usuário: sem log, sem mudança).
+ */
+export function montarAuditLog(params: AuditLogParams) {
+  return {
     tenantId: params.tenantId,
     usuarioId: params.actor.id,
     usuarioNome: params.actor.nome,
@@ -115,7 +121,11 @@ export async function writeAuditLog(params: {
     dadosDepois: params.dadosDepois ? redactAuditData(params.dadosDepois) : null,
     origem: params.origem,
     criadoEm: FieldValue.serverTimestamp(),
-  })
+  }
+}
+
+export async function writeAuditLog(params: AuditLogParams) {
+  await db().collection('logs_auditoria').add(montarAuditLog(params))
 }
 
 export const SYSTEM_ACTOR: AuditActor = {

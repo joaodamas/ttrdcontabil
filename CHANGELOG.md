@@ -13,6 +13,21 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Segurança — usuários, permissões e senhas de portal dos clientes (2026-11-05)
+Detalhes, matriz perfil × capacidade, ordem de deploy e rollback: `docs/USUARIOS-PERMISSOES.md`.
+- **Usuário novo por convite**: a tela não pede mais senha. O callable `criarUsuario` (só admin ativo) cria a conta com senha aleatória que ninguém conhece e o perfil na mesma operação (falhou o perfil, a conta sai — sem login órfão); o Firebase envia o e-mail de definir senha. E-mail que já tinha login sem perfil é reaproveitado com a senha antiga anulada.
+- **Ações por usuário**: editar, reenviar convite/redefinir senha, desativar/reativar (bloqueia o login no Auth e derruba as sessões na hora) e excluir (perfil + login, com confirmação). Callables `atualizarUsuario`, `redefinirSenhaUsuario`, `excluirUsuario`.
+- **Último administrador**: nenhuma mudança deixa o escritório sem admin ativo (rebaixar, desativar, excluir, inclusive a si mesmo); ninguém se desativa nem se exclui.
+- **Auditoria** de toda mudança de usuário em `logs_auditoria`, gravada pelo servidor na mesma transação (antes/depois de nome, perfil, telas, ativo).
+- **Regras**: o navegador não cria/exclui usuário nem muda perfil/telas/ativo/e-mail/tenant (só as functions); o próprio usuário só atualiza nome e último acesso, e só se ativo; listar `usuarios` só admin — os seletores de responsável leem `usuarios_diretorio` (id/nome/ativo, mantido pelo trigger `sincronizarDiretorioUsuario`). `logs_auditoria` exige `usuarioId` = quem grava e origem `client`.
+- **Senhas de portal dos clientes** (prefeitura, posto fiscal, PIN do certificado, Meu Gov, e-CAC) saem de `clientes` (legível por todo usuário ativo) para `clientes_credenciais/{clienteId}`, legível e gravável só por **administrador e fiscal**. Os demais perfis veem só "preenchida/em branco" (`clientes.credenciaisPreenchidas`, mantido pelo trigger `sincronizarCredenciaisPreenchidas`). Ficha, formulário, PDF da ficha, importação por planilha e relatório com senhas (admin) adaptados; ficha completa agora revela também para o fiscal.
+- **NFS-e**: `gerarDanfse` e o Storage `nfse/` exigem quem lê NFS-e (fiscal/financeiro/admin ou tela fiscal), não mais qualquer usuário; `validarCertificado` exige admin/fiscal ativo. Checagem de perfil das functions unificada em `authz.ts`.
+- **Sessão**: o front ouve o próprio perfil; desativado, excluído ou sem perfil desloga e mostra "Sem acesso" (antes, conta sem perfil entrava como "leitura"). Último acesso passa a ser gravado no login.
+- **Corrigido**: abrir a edição de um usuário trocava as telas personalizadas pelo padrão do perfil e salvar gravava isso. Tabela de telas padrão única (o formulário divergia da guarda de rota para "leitura").
+- **Exige decisão do dono — deploy em ordem**: functions → `node scripts/sincronizar-diretorio-usuarios.mjs --aplicar` → regras Firestore + Storage → hosting → `node scripts/migrar-credenciais-clientes.mjs --aplicar` (ambos rodam primeiro em dry-run).
+- **Exige decisão do dono — Console do Firebase**: (1) **só depois** das functions no ar, Authentication → Settings → User actions → desmarcar "Enable create (sign-up)"; (2) Authentication → Templates → Redefinição de senha em português, com texto de convite.
+- Testes: regras novas em `__tests__/rules/usuarios-credenciais.rules.test.ts`; regras puras dos callables, credenciais e sessão em `__tests__/lib/usuarios-regras.test.ts`, `clientes-credenciais.test.ts`, `auth-perfil.test.ts`.
+
 ### Corrigido — navegação e cliques (auditoria de 2026-11-05)
 - **Ficha do cliente na URL** (`/clientes?cliente=<id>`): o Voltar do navegador fecha a ficha em vez de sair para "Hoje"; o link abre a ficha direto. No celular, tocar em qualquer ponto da linha abre a ficha, e o menu ⋯ fica visível em telas de toque.
 - **Emissão de NFS-e**: Esc, clique fora, X ou Cancelar com dados digitados pedem confirmação ("Descartar a nota em preenchimento?"); fechar volta para a tela de origem (antes caía sempre em `/fiscal` e deixava uma entrada inútil no histórico).

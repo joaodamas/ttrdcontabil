@@ -1,7 +1,8 @@
 import * as admin from 'firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
-import { requireEnvironmentTenant } from './tenant'
+import { assertPerfil } from './authz'
+import { PERFIS } from './usuarios/perfis'
 
 const db = () => admin.firestore()
 
@@ -10,24 +11,8 @@ type DashboardInput = {
   ano?: number
 }
 
-async function assertDashboardUser(uid: string) {
-  const snap = await db().collection('usuarios').doc(uid).get()
-  if (!snap.exists) throw new HttpsError('permission-denied', 'Usuário sem perfil cadastrado.')
-  const usuario = snap.data() ?? {}
-  if (usuario.ativo === false) throw new HttpsError('permission-denied', 'Usuário inativo.')
-
-  const perfil = usuario.perfil as string | undefined
-  if (!['admin', 'operacional', 'fiscal', 'financeiro', 'leitura'].includes(perfil ?? '')) {
-    throw new HttpsError('permission-denied', 'Perfil sem permissão para dashboard.')
-  }
-
-  return {
-    id: uid,
-    nome: (usuario.nome as string | undefined) ?? uid,
-    perfil,
-    tenantId: requireEnvironmentTenant(usuario.tenantId, 'Usuário'),
-  }
-}
+// Qualquer perfil ativo vê o dashboard.
+const assertDashboardUser = (uid: string) => assertPerfil(uid, PERFIS, 'Perfil sem permissão para dashboard.')
 
 function validateInput(data: unknown): Required<DashboardInput> {
   const now = new Date()

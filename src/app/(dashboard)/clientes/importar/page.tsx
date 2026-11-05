@@ -15,6 +15,10 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Progress } from '@/components/ui/progress'
 import { createDocument, getNextClienteCodigo, getServicos, listDocuments } from '@/lib/firestore-client'
 import { clientesKeys } from '@/features/clientes/queries'
+import { useAuth } from '@/contexts/auth-context'
+import { podeVerCredenciais } from '@/lib/permissions'
+import { separarCredenciais, type CredenciaisCliente } from '@/lib/clientes-credenciais'
+import { salvarCredenciaisCliente } from '@/features/clientes/credenciais'
 import {
   escolherClientesExemplo,
   gerarTemplateClientesXlsx,
@@ -36,6 +40,8 @@ interface Resultado {
 export default function ImportarClientesPage() {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const { usuario } = useAuth()
+  const podeCredenciais = podeVerCredenciais(usuario)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [etapa, setEtapa] = useState<Etapa>('inicio')
@@ -131,12 +137,28 @@ export default function ImportarClientesPage() {
     let feitos = 0
 
     let proximoCodigo = await getNextClienteCodigo()
+    let senhasIgnoradas = 0
 
     for (const cliente of clientesValidos) {
       try {
-        const id = await createDocument('clientes', { ...cliente.payload, codigo: proximoCodigo })
+        // Senhas da planilha vão para clientes_credenciais (só admin/fiscal);
+        // para os demais perfis ficam de fora, com aviso no fim.
+        const { dados, credenciais } = separarCredenciais(cliente.payload)
+        const preenchidas = Object.fromEntries(
+          Object.entries(credenciais).filter(([, v]) => typeof v === 'string' && v.trim() !== '')
+        ) as CredenciaisCliente
+        const id = await createDocument('clientes', { ...dados, codigo: proximoCodigo })
         proximoCodigo += 1
         idPorCnpj.set(cliente.cpfCnpjDigits, id)
+        if (Object.keys(preenchidas).length > 0) {
+          if (podeCredenciais) {
+            await salvarCredenciaisCliente(id, preenchidas).catch((err) => {
+              falhas.push(`Linha ${cliente.linha} (${cliente.raw.razaoSocial || cliente.raw.cpfCnpj}): cliente criado, senhas não salvas — ${err instanceof Error ? err.message : 'erro'}`)
+            })
+          } else {
+            senhasIgnoradas += 1
+          }
+        }
       } catch (err) {
         falhas.push(`Linha ${cliente.linha} (${cliente.raw.razaoSocial || cliente.raw.cpfCnpj}): ${err instanceof Error ? err.message : 'erro ao criar cliente'}`)
       }
@@ -185,6 +207,9 @@ export default function ImportarClientesPage() {
     }
 
     queryClient.invalidateQueries({ queryKey: clientesKeys.all })
+    if (senhasIgnoradas > 0) {
+      toast.warning(`Senhas de ${senhasIgnoradas} cliente(s) não foram importadas: só administrador ou fiscal grava senhas. Peça a um deles para preenchê-las na ficha.`)
+    }
     setResultado({ clientesCriados: idPorCnpj.size, servicosCriados: servicosValidos.length - falhas.filter((f) => f.startsWith('Serviço')).length, falhas })
     setEtapa('concluido')
   }
@@ -210,8 +235,8 @@ export default function ImportarClientesPage() {
           <CardContent className="space-y-4">
             <InlineAlert
               tone="warning"
-              title="Nunca inclua senhas ou certificados na planilha"
-              description="Credenciais fiscais (prefeitura, certificado digital, Meu Gov, e-CAC) continuam sendo preenchidas individualmente, pela tela de cada cliente — não existe campo pra isso no modelo."
+              title="Senhas na planilha: trate o arquivo como confidencial"
+              description="A planilha aceita logins e senhas de portal (prefeitura, PIN do certificado, Meu Gov, e-CAC). Elas são gravadas à parte do cadastro, visíveis só para administrador e fiscal — e só são importadas quando quem importa é administrador ou fiscal. Envie e receba o arquivo por canal protegido; certificado digital não vai na planilha."
             />
             <div className="flex flex-wrap gap-3">
               <Button variant="outline" onClick={() => void baixarModelo()} disabled={gerandoModelo}>

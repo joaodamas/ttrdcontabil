@@ -14,7 +14,7 @@ import {
   COLECAO_SEQUENCIAS_DPS, idSequenciaDps, normalizarSerieDps, podeReusarDps, proximoNumeroDps,
 } from './nacional/numeracao'
 import { assertCaminhoCertificado, pfxBase64FromStorageBuffer } from './certificado'
-import { assertCanAccessCliente } from '../authz'
+import { assertCanAccessCliente, assertPerfil } from '../authz'
 import { validarPayloadFiscal } from './validacao'
 import { writeAuditLog, SYSTEM_ACTOR, type AuditActor } from '../audit'
 import { requireEnvironmentTenant } from '../tenant'
@@ -666,6 +666,9 @@ export const validarCertificado = onCall(
   { region: 'southamerica-east1', timeoutSeconds: 15, invoker: 'public' },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Autenticação necessária.')
+    // Só quem pode enviar o certificado (uploadCertificado → 'fiscal'). Antes
+    // bastava estar logado: qualquer conta testava senhas de .pfx à vontade.
+    await assertPerfil(request.auth.uid, ['admin', 'fiscal'], 'Apenas administradores e fiscais validam certificados.')
 
     const { pfxBase64, senha } = request.data as { pfxBase64: string; senha: string }
     if (!pfxBase64 || !senha) throw new HttpsError('invalid-argument', 'pfxBase64 e senha são obrigatórios.')

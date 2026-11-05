@@ -8,8 +8,11 @@ import { gerarESalvarDanfse } from './servico'
 /**
  * gerarDanfse({ nfseId }) → { pdfUrl, pdfPath, reutilizado }
  *
- * Qualquer perfil que pode ler o cliente pode obter o DANFSe (é uma
- * representação do XML que ele já lê). Escrita só pelo Admin SDK.
+ * Quem lê a NFS-e pode obter o DANFSe (é uma representação do XML que ele já
+ * lê): perfil fiscal/financeiro/admin ou a tela 'fiscal' concedida — o mesmo
+ * critério de canReadNfse() em firestore.rules e de nfse/ em storage.rules.
+ * Antes bastava ler o cliente ('read'), e o perfil "leitura" baixava o PDF de
+ * uma nota que as regras não o deixam ver. Escrita só pelo Admin SDK.
  */
 export const gerarDanfse = onCall(
   { region: 'southamerica-east1', timeoutSeconds: 60, memory: '512MiB', invoker: 'public' },
@@ -22,7 +25,7 @@ export const gerarDanfse = onCall(
 
     const snap = await admin.firestore().collection('nfse_emitidas').doc(nfseId).get()
     if (!snap.exists) throw new HttpsError('not-found', 'NFS-e não encontrada.')
-    await assertCanAccessCliente(request.auth.uid, snap.data()?.clienteId as string | undefined, 'read')
+    await assertCanAccessCliente(request.auth.uid, snap.data()?.clienteId as string | undefined, 'nfse')
 
     try {
       const resultado = await gerarESalvarDanfse(nfseId)

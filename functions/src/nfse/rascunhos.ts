@@ -2,8 +2,9 @@ import * as admin from 'firebase-admin'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { Timestamp } from 'firebase-admin/firestore'
-import { requireEnvironmentTenant, DEFAULT_TENANT_ID } from '../tenant'
+import { DEFAULT_TENANT_ID } from '../tenant'
 import { SYSTEM_ACTOR } from '../audit'
+import { assertPerfil } from '../authz'
 import { processarEmissao } from './emitir'
 import { credentialSecrets } from './secrets'
 import {
@@ -31,20 +32,8 @@ type GerarRascunhosInput = {
 }
 
 async function assertCanGenerate(uid: string) {
-  const userDoc = await db().collection('usuarios').doc(uid).get()
-  if (!userDoc.exists) throw new HttpsError('permission-denied', 'Usuário sem perfil cadastrado.')
-  const user = userDoc.data() ?? {}
-  if (user.ativo === false) throw new HttpsError('permission-denied', 'Usuário inativo.')
-  const perfil = user.perfil as string | undefined
-  if (!perfil || !['admin', 'fiscal'].includes(perfil)) {
-    throw new HttpsError('permission-denied', 'Perfil sem permissão para gerar rascunhos NFS-e.')
-  }
-  return {
-    uid,
-    nome: (user.nome as string | undefined) ?? uid,
-    perfil,
-    tenantId: requireEnvironmentTenant(user.tenantId, 'Usuário'),
-  }
+  const usuario = await assertPerfil(uid, ['admin', 'fiscal'], 'Perfil sem permissão para gerar rascunhos NFS-e.')
+  return { uid, nome: usuario.nome, perfil: usuario.perfil, tenantId: usuario.tenantId }
 }
 
 function competenciaLabel(mes: number, ano: number) {

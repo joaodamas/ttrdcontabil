@@ -1,9 +1,11 @@
 import { limit, serverTimestamp } from 'firebase/firestore'
+import { sendPasswordResetEmail } from 'firebase/auth'
+import { getFunctions, httpsCallable } from 'firebase/functions'
+import { getClientAuth, getFirebaseApp } from '@/lib/firebase'
 import {
   createDocument,
   getDocument,
   getServicos,
-  getUsuarios,
   invalidateUsuariosCache,
   listDocuments,
   setDocument,
@@ -36,20 +38,55 @@ export const DEFAULT_PARAMETROS_ESCRITORIO: ParametrosEscritorio = {
   uiFeatureFlags: DEFAULT_UI_FEATURE_FLAGS,
 }
 
+/** Lista completa (e-mail, perfil, telas) — as regras só deixam o admin listar `usuarios`. */
 export async function fetchUsuariosAdmin() {
-  return getUsuarios() as Promise<UsuarioAdmin[]>
+  const data = await listDocuments<Omit<UsuarioAdmin, 'id'>>('usuarios', [limit(200)])
+  return data.sort((a, b) => String(a.nome ?? '').localeCompare(String(b.nome ?? ''), 'pt-BR')) as UsuarioAdmin[]
 }
 
-export async function updateUsuarioAdmin(id: string, data: Pick<UsuarioAdmin, 'nome' | 'perfil' | 'ativo' | 'telas'>) {
-  await updateDocument('usuarios', id, data)
+// ─── Ciclo de vida do usuário: só pelas Cloud Functions ───────────────────────
+// (functions/src/usuarios/callables.ts). As regras não deixam o navegador criar,
+// excluir nem mudar perfil/telas/ativo de ninguém.
+
+function callable<I, O>(nome: string) {
+  return httpsCallable<I, O>(getFunctions(getFirebaseApp(), 'southamerica-east1'), nome)
+}
+
+/**
+ * O convite é o e-mail de "definir senha" do Firebase: o usuário escolhe a
+ * própria senha pelo link e ninguém mais a conhece. Texto do e-mail: modelo de
+ * redefinição de senha no Console (Authentication → Templates), em pt.
+ */
+export async function enviarConviteSenha(email: string) {
+  const auth = getClientAuth()
+  auth.languageCode = 'pt'
+  await sendPasswordResetEmail(auth, email)
+}
+
+export async function criarUsuarioAdmin(data: { nome: string; email: string; perfil: string; telas: string[] }) {
+  const { data: r } = await callable<typeof data, { uid: string; email: string; contaReaproveitada: boolean }>('criarUsuario')(data)
   invalidateUsuariosCache()
+  return r
 }
 
-export async function createUsuarioProfileAdmin(
-  id: string,
-  data: Omit<UsuarioAdmin, 'id' | 'ultimoAcesso'>
+export async function atualizarUsuarioAdmin(
+  uid: string,
+  data: Partial<Pick<UsuarioAdmin, 'nome' | 'perfil' | 'ativo' | 'telas'>>,
 ) {
-  await setDocument('usuarios', id, data)
+  const { data: r } = await callable<{ uid: string } & typeof data, { uid: string; alterados: string[] }>('atualizarUsuario')({ uid, ...data })
+  invalidateUsuariosCache()
+  return r
+}
+
+/** Confere/registra no servidor e dispara o e-mail de definir senha. */
+export async function reenviarConviteAdmin(uid: string) {
+  const { data } = await callable<{ uid: string }, { uid: string; email: string }>('redefinirSenhaUsuario')({ uid })
+  await enviarConviteSenha(data.email)
+  return data.email
+}
+
+export async function excluirUsuarioAdmin(uid: string) {
+  await callable<{ uid: string }, { uid: string }>('excluirUsuario')({ uid })
   invalidateUsuariosCache()
 }
 

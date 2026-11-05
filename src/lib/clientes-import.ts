@@ -1,5 +1,7 @@
 import * as XLSX from 'xlsx'
 import { validateCpf, validateCnpj } from '@/lib/utils'
+import { CAMPOS_CREDENCIAL_LISTA } from '../../functions/src/clientes/credenciais-campos'
+import { credenciaisPreenchidasDe } from '@/lib/clientes-credenciais'
 
 export const REGIMES_VALIDOS = ['simples_nacional', 'lucro_presumido', 'lucro_real', 'mei', 'isento'] as const
 export const STATUS_VALIDOS = ['ativo', 'inativo', 'suspenso'] as const
@@ -127,11 +129,11 @@ export interface DadosModeloClientes {
 
 // Credenciais nunca saem com valor no exemplo — só se estão preenchidas. Senha do
 // Meu Gov/e-CAC vazada dá acesso aos dados fiscais da empresa na Receita.
-export const CAMPOS_CREDENCIAL = new Set([
-  'loginPrefeitura', 'senhaWebPrefeitura', 'senhaPinCertificadoDigitalECnpj', 'loginPostoFiscal', 'senhaPostoFiscal',
-  'responsavelSenhaMeuGov', 'responsavelSenhaEcacPf', 'responsavelSenhaWebPrefeitura', 'responsavelSenhaPinCertificadoDigitalCpf',
-])
-const CREDENCIAL_PREENCHIDA = '✔ preenchida na plataforma'
+// A lista mora em functions/src/clientes/credenciais-campos.ts (fonte única com
+// o trigger e as regras); desde 2026-11-05 os valores ficam em
+// clientes_credenciais, não em `clientes` — ver src/lib/clientes-credenciais.ts.
+export const CAMPOS_CREDENCIAL: ReadonlySet<string> = new Set<string>(CAMPOS_CREDENCIAL_LISTA)
+export const CREDENCIAL_PREENCHIDA = '✔ preenchida na plataforma'
 
 // Dados pessoais do responsável não vão no exemplo: a planilha circula fora da
 // plataforma. Mostra só o formato esperado.
@@ -186,7 +188,7 @@ export function montarModeloClientes(dados: DadosModeloClientes) {
 
   const exemplosClientes = [cabCliente, ...dados.clientes.map((c) =>
     CLIENTE_COLUMNS.map((col) => {
-      if (CAMPOS_CREDENCIAL.has(col.key)) return texto(c[col.key]) ? CREDENCIAL_PREENCHIDA : ''
+      if (CAMPOS_CREDENCIAL.has(col.key)) return (credenciaisPreenchidasDe(c) as string[]).includes(col.key) ? CREDENCIAL_PREENCHIDA : ''
       if (col.key in CAMPOS_MASCARADOS && texto(c[col.key])) return CAMPOS_MASCARADOS[col.key]
       if (col.key === 'cpfCnpj') return documentoFormatado(c.cpfCnpj)
       if (typeof c[col.key] === 'boolean') return c[col.key] ? 'sim' : 'não'

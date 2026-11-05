@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -22,6 +22,10 @@ import { getErrorMessage } from '@/lib/error-message'
 import { SELECT_NONE_VALUE } from '@/lib/select-values'
 import { useViaCep } from '@/hooks/use-viacep'
 import { clientesKeys } from '@/features/clientes/queries'
+import { useAuth } from '@/contexts/auth-context'
+import { podeVerCredenciais } from '@/lib/permissions'
+import { credenciaisPreenchidasDe, separarCredenciais } from '@/lib/clientes-credenciais'
+import { carregarCredenciaisCliente, salvarCredenciaisCliente } from '@/features/clientes/credenciais'
 
 const clienteSchema = z.object({
   tipoPessoa: z.enum(['pf', 'pj']).default('pj'),
@@ -174,6 +178,14 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
   const [buscandoCnpj, setBuscandoCnpj] = useState(false)
   const [cnpjOk, setCnpjOk] = useState(false)
   const [confirmDescartarOpen, setConfirmDescartarOpen] = useState(false)
+  const { usuario } = useAuth()
+  // Senhas de portal: só admin e fiscal leem/gravam (clientes_credenciais).
+  // Os demais veem só "preenchida/em branco" e o save não mexe nelas.
+  const podeCredenciais = podeVerCredenciais(usuario)
+  const [credStatus, setCredStatus] = useState<'carregando' | 'ok' | 'erro'>(
+    isEditing && podeCredenciais ? 'carregando' : 'ok'
+  )
+  const credPreenchidas = credenciaisPreenchidasDe(initialData as Record<string, unknown> | undefined)
 
   const {
     register,
@@ -193,6 +205,24 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
       ...initialData,
     },
   })
+
+  useEffect(() => {
+    if (!isEditing || !podeCredenciais || !initialData?.id) return
+    let ativo = true
+    carregarCredenciaisCliente(initialData.id, initialData as Record<string, unknown>)
+      .then((cred) => {
+        if (!ativo) return
+        for (const [k, v] of Object.entries(cred)) setValue(k as FieldName, v, { shouldDirty: false })
+        setCredStatus('ok')
+      })
+      .catch((err) => {
+        console.error('[cliente-form] credenciais', err)
+        if (ativo) setCredStatus('erro')
+      })
+    return () => { ativo = false }
+    // Carrega uma vez por cliente aberto.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialData?.id, podeCredenciais])
 
   const tipoPessoa = watch('tipoPessoa')
   const aceiteWhatsAppCobranca = watch('aceiteWhatsAppCobranca')
@@ -273,10 +303,16 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
           : '',
         regimeTributario: data.regimeTributario ?? null,
       }
+      // Senha nunca vai para `clientes` (as regras recusam): segue para
+      // clientes_credenciais, e só quando quem salva pode e elas carregaram —
+      // gravar o formulário sem tê-las lido apagaria as senhas.
+      const { dados, credenciais } = separarCredenciais(payload)
+      const gravarCredenciais = podeCredenciais && credStatus === 'ok'
       if (isEditing) {
-        await updateDocument('clientes', initialData!.id!, {
-          ...payload,
-        })
+        await updateDocument('clientes', initialData!.id!, dados)
+        if (gravarCredenciais) {
+          await salvarCredenciaisCliente(initialData!.id!, credenciais, initialData as Record<string, unknown>)
+        }
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: clientesKeys.all }),
           queryClient.invalidateQueries({ queryKey: clientesKeys.detail(initialData!.id!) }),
@@ -290,9 +326,17 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
       } else {
         const codigo = await getNextClienteCodigo()
         const id = await createDocument('clientes', {
-          ...payload,
+          ...dados,
           codigo,
         })
+        if (gravarCredenciais) {
+          try {
+            await salvarCredenciaisCliente(id, credenciais)
+          } catch (err) {
+            console.error('[cliente-form] credenciais do cliente novo', err)
+            toast.error('Cliente cadastrado, mas as senhas não foram salvas. Abra o cadastro e salve de novo.')
+          }
+        }
         await queryClient.invalidateQueries({ queryKey: clientesKeys.all })
         toast.success('Cliente cadastrado com sucesso!')
         if (onSuccess) {
@@ -735,15 +779,19 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-            Senhas ficam mascaradas no formulário. Revise permissões, auditoria e exportações antes de liberar clientes reais neste ambiente.
-          </div>
+          <AvisoCredenciais pode={podeCredenciais} status={credStatus} />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {EMPRESA_CREDENCIAIS_FIELDS.map((field) => (
-              <div key={field.name} className="space-y-2">
-                <Label htmlFor={field.name}>{field.label}</Label>
-                <Input id={field.name} type={field.type ?? 'text'} {...register(field.name)} />
-              </div>
+              <CampoCredencial
+                key={field.name}
+                name={field.name}
+                label={field.label}
+                type={field.type ?? 'text'}
+                pode={podeCredenciais}
+                status={credStatus}
+                preenchida={credPreenchidas.includes(field.name as never)}
+                register={register}
+              />
             ))}
           </div>
         </CardContent>
@@ -856,10 +904,16 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {REPRESENTANTE_CREDENCIAIS_FIELDS.map((field) => (
-              <div key={field.name} className="space-y-2">
-                <Label htmlFor={field.name}>{field.label}</Label>
-                <Input id={field.name} type="password" {...register(field.name)} />
-              </div>
+              <CampoCredencial
+                key={field.name}
+                name={field.name}
+                label={field.label}
+                type="password"
+                pode={podeCredenciais}
+                status={credStatus}
+                preenchida={credPreenchidas.includes(field.name as never)}
+                register={register}
+              />
             ))}
           </div>
         </CardContent>
@@ -935,5 +989,54 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
       onConfirm={cancelar}
     />
     </>
+  )
+}
+
+function AvisoCredenciais({ pode, status }: { pode: boolean; status: 'carregando' | 'ok' | 'erro' }) {
+  const texto = !pode
+    ? 'Logins e senhas de portal só são visíveis e editáveis por administrador e fiscal. Aqui aparece só se cada um está preenchido.'
+    : status === 'erro'
+      ? 'Não foi possível carregar as senhas deste cliente. Salvar agora não altera as senhas; recarregue a página para editá-las.'
+      : 'Senhas ficam mascaradas e guardadas à parte do cadastro, visíveis só para administrador e fiscal.'
+  return (
+    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+      {texto}
+    </div>
+  )
+}
+
+function CampoCredencial({
+  name, label, type, pode, status, preenchida, register,
+}: {
+  name: FieldName
+  label: string
+  type: string
+  pode: boolean
+  status: 'carregando' | 'ok' | 'erro'
+  preenchida: boolean
+  register: ReturnType<typeof useForm<ClienteFormData>>['register']
+}) {
+  if (!pode) {
+    return (
+      <div className="space-y-2">
+        <Label>{label}</Label>
+        <p className="flex h-9 items-center rounded-md border border-dashed px-3 text-sm text-muted-foreground">
+          {preenchida ? 'preenchida' : 'em branco'}
+        </p>
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={name}>{label}</Label>
+      <Input
+        id={name}
+        type={type}
+        autoComplete="off"
+        disabled={status !== 'ok'}
+        placeholder={status === 'carregando' ? 'Carregando…' : undefined}
+        {...register(name)}
+      />
+    </div>
   )
 }

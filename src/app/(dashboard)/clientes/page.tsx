@@ -30,6 +30,7 @@ import { clientesFiltroSchema } from '@/features/clientes/schemas'
 import type { ClienteRecord } from '@/features/clientes/types'
 import { limit } from 'firebase/firestore'
 import { listDocuments, registrarExportacaoSensivel } from '@/lib/firestore-client'
+import { listarCredenciaisClientes } from '@/features/clientes/credenciais'
 import { baixarRelatorioClientesXlsx } from '@/lib/clientes-relatorio'
 import { useAuth } from '@/contexts/auth-context'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -322,13 +323,15 @@ function ClientesContent() {
         listDocuments<Record<string, unknown>>('clientes_fiscal', [limit(2000)]).catch(() => []),
       ])
       const comSenhas = incluirSenhas && ehAdmin
+      // As senhas moram em clientes_credenciais: só são lidas neste caso.
+      const credenciais = comSenhas ? await listarCredenciaisClientes() : undefined
       if (comSenhas) {
         await registrarExportacaoSensivel('clientes', {
           relatorio: 'ficha_completa_com_senhas',
           clientes: todos.length,
         })
       }
-      baixarRelatorioClientesXlsx({ clientes: todos, fiscais, incluirSenhas: comSenhas })
+      baixarRelatorioClientesXlsx({ clientes: todos, fiscais, incluirSenhas: comSenhas, credenciais })
     } catch (err) {
       console.error('[clientes] relatório da ficha completa falhou', err)
       toast.error('Não foi possível gerar o relatório. Tente novamente.')
