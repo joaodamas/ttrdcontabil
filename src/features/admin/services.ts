@@ -1,4 +1,4 @@
-import { limit } from 'firebase/firestore'
+import { limit, serverTimestamp } from 'firebase/firestore'
 import {
   createDocument,
   getDocument,
@@ -87,27 +87,30 @@ export async function fetchConectoresFiscaisAdmin() {
   return conectores.sort((a, b) => String(a.nome ?? a.id).localeCompare(String(b.nome ?? b.id), 'pt-BR'))
 }
 
+/** Chave única do Ambiente Nacional (espelha DOC_NFSE_NACIONAL em functions/src/nfse/provedor.ts). */
+export const DOC_NFSE_NACIONAL = 'nfse_nacional'
+
+export interface ChaveNfseNacional {
+  producaoLiberada: boolean
+  alteradoPorNome?: string | null
+  alteradoEm?: { toDate?: () => Date } | null
+}
+
+export async function fetchChaveNfseNacional(): Promise<ChaveNfseNacional | null> {
+  // Antes da primeira vez que o admin liga a chave o documento não existe, e a
+  // regra de `configuracoes` (sameTenantExisting) nega a leitura de doc
+  // inexistente. Ausente/negado = chave desligada — sem derrubar a tela.
+  return getDocument<ChaveNfseNacional>('configuracoes', DOC_NFSE_NACIONAL).catch(() => null)
+}
+
 /**
- * Cria o conector do Ambiente Nacional para um município — documento separado
- * do conector da prefeitura (o backend só libera produção para o provedor que
- * foi homologado; ver functions/src/nfse/provedor.ts). Nasce bloqueado: o admin
- * marca "homologado" e libera produção depois de validar emissão/consulta/cancelamento.
+ * Liga/desliga a emissão em PRODUÇÃO pelo Ambiente Nacional para o escritório
+ * inteiro. As regras só deixam admin gravar em `configuracoes`.
  */
-export async function criarConectorNacionalAdmin(municipio: { ibge: string; nome: string; uf?: string }) {
-  return setDocument('fiscal_conectores', `nacional-${municipio.ibge}`, {
-    nome: `Ambiente Nacional — ${municipio.nome}`,
-    municipio: municipio.nome,
-    uf: municipio.uf ?? 'SP',
-    municipioIbge: municipio.ibge,
-    provedor: 'nacional',
-    tipoIntegracao: 'nacional',
-    ativo: true,
-    homologado: false,
-    producaoLiberada: false,
-    emissao: true,
-    consulta: true,
-    cancelamento: true,
-  })
+export async function salvarChaveNfseNacional(producaoLiberada: boolean, existe: boolean, alteradoPorNome: string) {
+  const payload = { producaoLiberada, alteradoPorNome, alteradoEm: serverTimestamp() }
+  if (existe) return updateDocument('configuracoes', DOC_NFSE_NACIONAL, payload)
+  return setDocument('configuracoes', DOC_NFSE_NACIONAL, payload)
 }
 
 export async function updateConectorFiscalAdmin(

@@ -1,6 +1,12 @@
 import * as admin from 'firebase-admin'
 import { IBGE_LEGADO, normalizarIbge, type ConfigFiscalCliente } from './types'
-import { conectorLiberaProducao, resolverProvedorNfse, type OperacaoFiscal } from './provedor'
+import {
+  conectorLiberaProducao,
+  DOC_NFSE_NACIONAL,
+  nacionalLiberadoParaProducao,
+  resolverProvedorNfse,
+  type OperacaoFiscal,
+} from './provedor'
 
 const db = () => admin.firestore()
 
@@ -9,6 +15,18 @@ export async function isProducaoLiberadaPorConfigOuConector(
   operacao: OperacaoFiscal = 'emissao',
 ) {
   if (config.producaoLiberada === true) return true
+
+  const provedor = resolverProvedorNfse(config)
+
+  // Ambiente Nacional: a liberação de produção é a chave única do escritório
+  // (configuracoes/nfse_nacional, ligada pelo admin) — não mais município a
+  // município. A adesão de cada município é conferida pelo NacionalConector
+  // no convênio, antes de enviar.
+  if (provedor === 'nacional') {
+    const chave = await db().collection('configuracoes').doc(DOC_NFSE_NACIONAL).get()
+    return nacionalLiberadoParaProducao(chave.exists ? chave.data() : null)
+  }
+
   if (!config.municipioIbge) return false
 
   // Conector e config podem estar com o código antigo ou o corrigido (IBGE_LEGADO).
@@ -23,6 +41,5 @@ export async function isProducaoLiberadaPorConfigOuConector(
 
   if (snap.empty) return false
 
-  const provedor = resolverProvedorNfse(config)
   return snap.docs.some((doc) => conectorLiberaProducao(doc.data() as Record<string, unknown>, operacao, provedor))
 }

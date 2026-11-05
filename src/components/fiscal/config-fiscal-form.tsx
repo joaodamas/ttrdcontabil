@@ -270,14 +270,18 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
           {/* Config antiga apontando para a Spedy (conta encerrada, sem integrador) */}
           {provedorNfse === 'spedy' && (
             <div className="rounded-md border border-warning/30 bg-warning/8 p-3 text-xs text-muted-foreground">
-              Este cliente estava configurado para emitir pela Spedy, que foi descontinuada. Ao salvar, ele passa
-              a emitir pelo Ambiente Nacional (Sefin Nacional), com o certificado A1 do próprio cliente.
+              Este cliente estava configurado com a Spedy, que foi descontinuada. Ele já emite pelo Ambiente
+              Nacional, com o certificado A1 do próprio cliente — não precisa fazer nada.
             </div>
           )}
 
-          {/* Provedor de emissão */}
-          <div className="space-y-1.5">
-            <Label required>Emitir por</Label>
+          {/* Provedor de emissão — Nacional sempre; a prefeitura fica escondida em "avançado" */}
+          <details className="rounded-md border border-border/60 px-3 py-2" open={!nacional}>
+            <summary className="cursor-pointer select-none text-xs text-muted-foreground">
+              Emissão pelo <strong className="text-foreground">{nacional ? 'Ambiente Nacional' : 'conector da prefeitura (legado)'}</strong> · opções avançadas
+            </summary>
+          <div className="mt-2 space-y-1.5">
+            <Label>Emitir por</Label>
             <Controller name="provedorNfse" control={control} render={({ field }) => (
               <Select
                 value={field.value === 'prefeitura' ? 'prefeitura' : 'nacional'}
@@ -296,6 +300,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
                 : 'A nota sai pelo webservice da prefeitura. Use só para municípios que ainda não aderiram ao Emissor Nacional.'}
             </p>
           </div>
+          </details>
 
           {/* Emissão automática — reverte a trava de revisão humana, por cliente */}
           <div className="space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
