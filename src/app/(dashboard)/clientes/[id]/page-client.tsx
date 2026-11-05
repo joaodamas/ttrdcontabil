@@ -30,7 +30,7 @@ import {
   Package, Truck,
 } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
-import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
+import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO, defaultsDaConfigFiscal } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
 import { useAuth } from '@/contexts/auth-context'
@@ -1401,23 +1401,7 @@ export default function ClienteDetailPage() {
         onOpenChange={setConfigOpen}
         clienteId={id}
         docId={fiscal?.id as string | undefined}
-        defaultValues={fiscal ? {
-          municipioIbge:        fiscal.municipioIbge       as string,
-          inscricaoMunicipal:   fiscal.inscricaoMunicipal  as string,
-          inscricaoEstadual:    fiscal.inscricaoEstadual   as string,
-          ambienteEmissao:      (fiscal.ambienteEmissao    as 'homologacao' | 'producao') ?? 'homologacao',
-          regimeTributario:     fiscal.regimeTributario    as string,
-          optanteSimples:       (fiscal.optanteSimples     as boolean) ?? true,
-          incentivadorCultural: (fiscal.incentivadorCultural as boolean) ?? false,
-          naturezaOperacao:     (fiscal.naturezaOperacao   as string) ?? '1',
-          codigoServicoPadrao:  fiscal.codigoServicoPadrao as string,
-          descricaoServicoPadrao: fiscal.descricaoServicoPadrao as string,
-          itemListaServico:     fiscal.itemListaServico    as string,
-          cnae:                 fiscal.cnae                as string,
-          aliquotaPadrao:       fiscal.aliquotaPadrao      as number,
-          issRetidoPadrao:      (fiscal.issRetidoPadrao    as boolean) ?? false,
-          credenciais:          (fiscal.credenciais        as Record<string, unknown>) ?? {},
-        } : undefined}
+        defaultValues={defaultsDaConfigFiscal(fiscal as Record<string, unknown> | null | undefined)}
         onSaved={() => { void loadClienteContext() }}
       />
       <ClienteServicoDialog

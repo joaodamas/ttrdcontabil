@@ -137,11 +137,8 @@ export function TomadorForm({
       bairro: resultado.bairro || atual.bairro,
       municipio: resultado.cidade || atual.municipio,
       uf: resultado.uf || atual.uf,
-      // O ViaCEP devolve o código IBGE, mas o use-viacep ainda o descarta (o
-      // patch do hook está registrado como dependência externa). A leitura
-      // defensiva faz o campo passar a ser preenchido sozinho no dia em que o
-      // hook expuser `ibge`, sem tocar neste arquivo — até lá, digita-se na mão.
-      municipioIbge: (resultado as { ibge?: string }).ibge || atual.municipioIbge,
+      // O ViaCEP devolve o código IBGE (exigido no endereço nacional da NFS-e).
+      municipioIbge: resultado.ibge || atual.municipioIbge,
     }))
   }
 
