@@ -19,6 +19,16 @@ export { gerarRascunhosNfseMensais, processarNfseRecorrenteDiaria } from './nfse
 export { gerarFechamentoMensal } from './fechamento'
 export { recalcularDashboardKpis } from './dashboard'
 
+// ── Usuários ──────────────────────────────────────────────────────────────────
+// Criação/alteração/exclusão de usuários só pelo servidor (ver usuarios/callables.ts).
+export {
+  criarUsuario,
+  atualizarUsuario,
+  redefinirSenhaUsuario,
+  excluirUsuario,
+} from './usuarios/callables'
+export { sincronizarDiretorioUsuario } from './usuarios/diretorio'
+
 // ── Backup ────────────────────────────────────────────────────────────────────
 export { exportarFirestoreSemanal } from './backup'
 
