@@ -4,7 +4,7 @@
 //
 //   cd functions && npm run build && cd ..
 //   NFSE_PFX=~/certs/cliente.pfx NFSE_PFX_SENHA=... \
-//     node scripts/poc-nfse-nacional/emitir-conector.mjs --dados ~/nota-conector.json [--consultar] [--cancelar "motivo com 15+ caracteres"]
+//     node scripts/poc-nfse-nacional/emitir-conector.mjs --dados ~/nota-conector.json [--competencia AAAA-MM-DD] [--consultar] [--cancelar "motivo com 15+ caracteres"]
 //
 // Travado: ambienteEmissao é SEMPRE 'homologacao' (tpAmb=2, hosts *.producaorestrita);
 // não há opção para produção. O JSON de entrada (fora do repositório) tem o formato
@@ -66,7 +66,8 @@ async function main() {
   }
   const numero = String(o.numero ?? d.numero ?? Math.floor(Date.now() / 1000) % 1_000_000_000)
   const serie = String(o.serie ?? d.serie ?? '900')
-  const input = { clienteId: 'local', tomador: d.tomador, servico: d.servico, numeroRps: numero, serieRps: serie }
+  const dataCompetencia = typeof o.competencia === 'string' ? o.competencia : d.dataCompetencia
+  const input = { clienteId: 'local', tomador: d.tomador, servico: d.servico, numeroRps: numero, serieRps: serie, dataCompetencia }
 
   console.log(`Ambiente: PRODUÇÃO RESTRITA (tpAmb=2). DPS série ${serie}, número ${numero}.`)
   const conector = new NacionalConector()

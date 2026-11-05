@@ -13,6 +13,11 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Adicionado — competência da nota e homologação do Ambiente Nacional (2026-11-05)
+- **Competência vinculada vira a competência da NFS-e nacional** (`dCompet`): honorário de outubro emitido em novembro sai com competência de outubro (1º dia do mês). Sem vínculo, usa a data de emissão; nunca passa dela (regra da Sefin). `functions/src/nfse/nacional/competencia.ts`, testado.
+- **Admin → Conectores:** botão "Adicionar ao Ambiente Nacional" cria o conector nacional do município (separado do da prefeitura, nasce bloqueado) e cada linha mostra o caminho (Ambiente Nacional / Prefeitura). É por ele que o admin marca "homologado" e libera a produção do Nacional.
+- **Homologação do Ambiente Nacional concluída na produção restrita** com a ARTE & PRIME (São Paulo): o conector da plataforma emitiu, consultou e cancelou uma NFS-e. Ver o radar.
+
 ### Alterado — emissão pelo Ambiente Nacional como padrão de todos (2026-11-05)
 - Só `provedorNfse: 'prefeitura'` (escolha explícita, opção "Conector da prefeitura (legado)") usa o webservice municipal. O valor `'municipio'` que o formulário antigo gravava à força em todo cliente passa a ir pelo **Ambiente Nacional**, como o dono decidiu — sem precisar reabrir cliente por cliente. Município sem convênio nacional (ex.: Cajamar) é recusado com mensagem clara, sem cair para a prefeitura.
 - Teste real do conector na produção restrita registrado no radar: bloqueio de Cajamar ✔; em São Paulo passou convênio, código e alíquota e parou em E0084 (prestador sem estabelecimento em SP), o esperado para o certificado de teste. Traduções de E0312 (serviço não vigente na competência) e E0084 corrigidas. **Exige homologação** com cliente estabelecido em município aderente.
