@@ -22,33 +22,6 @@ export interface Tomador {
   }
 }
 
-// ─── Reforma Tributária (IBS/CBS) — NFS-e ────────────────────────────────────
-// Grupo `ibsCbs` do CreateServiceInvoiceDto da Spedy (conferido em 2026-08-03
-// contra https://api.spedy.com.br/swagger/v1/swagger.json → ServiceInvoiceIbsCbsDto).
-//
-// A Spedy CALCULA IBS e CBS sozinha nas alíquotas da fase de transição
-// (IBS 0,1% / CBS 0,9%) — daqui só sai o enquadramento. ISS/PIS/COFINS
-// continuam obrigatórios e inalterados no mesmo payload.
-//
-// PRAZO (Ato Conjunto RFB/CGIBS nº 4, de 30/07/2026): a NFS-e de serviços em
-// geral só é obrigada em 01/10/2026 — e 01/01/2027 se o emissor for optante do
-// Simples Nacional. Quem venceu em 03/08/2026 foi NF-e/NFC-e/CT-e/MDF-e, que
-// não passam por aqui. Ou seja: há folga pra configurar cliente a cliente.
-//
-// ⚠️ `cst` e `classification` são INTEIROS na API. O cadastro antigo em
-// ProdutoRecord (src/features/produtos/types.ts) guardava string — converter
-// na origem, não aqui.
-//
-// Opcional de propósito: os mesmos campos podem ser preenchidos na "Regra de
-// Tributação" do painel da Spedy. Sem configuração, o objeto NÃO é enviado e a
-// nota sai exatamente como hoje — quem manda é a regra do painel.
-export interface ReformaIbsCbs {
-  cst: number                       // CST da reforma (tabela própria, NT 2025.002)
-  classification: number            // cClassTrib — Código de Classificação Tributária
-  operationIndicatorCode?: string   // código indicador da operação de fornecimento
-  isPersonalUse?: boolean           // operação de uso ou consumo pessoal
-}
-
 // ─── Dados do serviço ────────────────────────────────────────────────────────
 export interface Servico {
   discriminacao: string      // descrição livre
@@ -68,8 +41,6 @@ export interface Servico {
   descontoIncondicionado?: number
   descontoCondicionado?: number
   municipioPrestacao?: string // IBGE do local de prestação
-  // Sobrescreve, só nesta nota, o enquadramento de IBS/CBS do cliente.
-  reformaIbsCbs?: ReformaIbsCbs
 }
 
 // ─── Certificado digital ─────────────────────────────────────────────────────
@@ -96,9 +67,9 @@ export interface ConfigFiscalCliente {
   naturezaOperacao?: string
   ambienteEmissao: 'producao' | 'homologacao'
   producaoLiberada?: boolean
-  // 'spedy' delega a emissão a uma API agregadora (cobre qualquer município,
-  // sem depender de conector caseiro); default 'municipio' preserva o
-  // comportamento atual (conector direto por IBGE).
+  // 'municipio' = conector direto por IBGE (único caminho ativo). 'spedy' só
+  // aparece em configs antigas: a conta foi encerrada e o roteador devolve
+  // PROVEDOR_DESCONTINUADO (municipios/router.ts).
   provedorNfse?: 'municipio' | 'spedy'
   // Opt-in explícito por cliente: quando true, o cron diário
   // (processarNfseRecorrenteDiaria) emite a NFS-e recorrente sem revisão
@@ -106,9 +77,6 @@ export interface ConfigFiscalCliente {
   // decisão de reverter a trava "sem emissão automática" (ver
   // docs_dev/checklist-ajustes-producao.md) é por cliente, não global.
   emissaoAutomatica?: boolean
-  // Enquadramento padrão de IBS/CBS deste cliente. Ausente = não enviamos o
-  // grupo e a Spedy aplica a Regra de Tributação do painel (ver ReformaIbsCbs).
-  reformaIbsCbs?: ReformaIbsCbs
   // Credenciais por municipio (salvas em Firestore — campo credenciais)
   credenciais?: CredenciaisConector
 }
@@ -134,9 +102,6 @@ export interface CredenciaisConector {
   // Cotia (GIAP)
   giaplogin?: string
   giapSenha?: string
-
-  // Spedy (provedorNfse === 'spedy') — chave de API por empresa
-  spedyApiKey?: string
 }
 
 // ─── Carteira de tomadores e faturamento recorrente ──────────────────────────
@@ -235,65 +200,6 @@ export interface EmitirNfseInput {
   // Numero RPS gerado pelo sistema (se vazio, gera automaticamente)
   numeroRps?: string
   serieRps?: string
-}
-
-// ─── NF-e (produto) e NFC-e (consumidor) — Fase B ─────────────────────────────
-// Fundação da emissão de MERCADORIA via Spedy. Importante: a Spedy TRANSMITE mas
-// NÃO calcula imposto — CFOP/NCM/CST(ou CSOSN)/alíquotas vêm determinados daqui
-// (preenchidos pelo contador no catálogo de produtos, que ainda será construído).
-// MVP: operação interna, sem ST/DIFAL/IPI. Suporta Simples (CSOSN) e regime
-// normal (CST). Nada disso emite ponta a ponta até existirem catálogo, tela e
-// homologação na SEFAZ.
-export interface ImpostoItem {
-  cst?: string          // regime normal (Lucro Presumido/Real)
-  csosn?: string        // Simples Nacional
-  origem?: string       // 0–8, origem da mercadoria (usado no ICMS)
-  baseCalculo?: number
-  aliquota?: number     // em % (ex.: 18)
-  valor?: number        // se ausente, a Spedy calcula a partir da alíquota
-  // ICMS-ST (substituição tributária) — só ICMS. O contador informa; a Spedy
-  // NÃO calcula MVA. Mapeiam p/ baseStRetentionAmount / stRetentionAmount.
-  stBaseRetencao?: number
-  stValorRetido?: number
-}
-
-export interface ItemProdutoFiscal {
-  codigo: string
-  descricao: string
-  ncm: string
-  cfop: string
-  unidade: string       // ex.: "UN"
-  quantidade: number
-  valorUnitario: number
-  icms: ImpostoItem     // origem obrigatória
-  pis?: ImpostoItem
-  cofins?: ImpostoItem
-  ipi?: ImpostoItem     // indústria — nome do campo na Spedy a confirmar em homologação
-}
-
-// NF-e (modelo 55) — produto/mercadoria
-export interface EmitirProdutoInput {
-  clienteId: string
-  rascunhoId?: string
-  naturezaOperacao: string   // ex.: "Venda de mercadoria"
-  destino?: 'internal' | 'interstate'  // default internal; a Spedy infere as UFs
-  tomador: Tomador
-  itens: ItemProdutoFiscal[]
-  pagamentos?: { metodo: string; valor: number }[]
-  /** Gerada pelo navegador por tentativa; vira integrationId na Spedy. Ver idempotencia.ts. */
-  chaveIdempotencia?: string
-}
-
-// NFC-e (modelo 65) — consumidor final. Tomador é opcional (venda anônima);
-// sempre interna e presencial/online.
-export interface EmitirConsumidorInput {
-  clienteId: string
-  rascunhoId?: string
-  naturezaOperacao: string
-  tomador?: Tomador
-  presencial: boolean        // true = presence, false = internet
-  itens: ItemProdutoFiscal[]
-  pagamentos: { metodo: string; valor: number }[]
 }
 
 // ─── Resultado da emissão ─────────────────────────────────────────────────────

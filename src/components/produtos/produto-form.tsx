@@ -136,7 +136,7 @@ export function ProdutoForm({ clienteId, produto, onSaved }: ProdutoFormProps) {
         open={open}
         onOpenChange={setOpen}
         title={isEditing ? 'Editar Produto' : 'Novo Produto'}
-        description="Ficha fiscal do produto para NF-e/NFC-e. Preencha conforme o regime da empresa emissora — a Spedy transmite o que for informado aqui."
+        description="Ficha fiscal do produto para NF-e/NFC-e. Preencha conforme o regime da empresa emissora — a plataforma ainda não emite NF-e; a ficha fica pronta para quando emitir."
         icon={<Package className="size-4" />}
         size="md"
       >
@@ -275,8 +275,7 @@ export function ProdutoForm({ clienteId, produto, onSaved }: ProdutoFormProps) {
             <div>
               <p className="section-label">Reforma Tributária (IBS/CBS)</p>
               <p className="text-[11px] text-amber-600 mt-1">
-                ⚠ Ainda não é enviado ao emissor — a Spedy ainda não aceita esses campos na API de NF-e.
-                Preencha pra deixar pronto; a transmissão real depende do provedor liberar isso do lado deles.
+                ⚠ Ainda não é transmitido — a plataforma não emite NF-e hoje. Preencha pra deixar pronto.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">

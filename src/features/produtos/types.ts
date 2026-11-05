@@ -2,10 +2,12 @@ import type { Timestamp } from 'firebase/firestore'
 
 // Catálogo de produtos para NF-e (modelo 55) e NFC-e (modelo 65).
 //
-// A Spedy TRANSMITE mas NÃO calcula/determina imposto: a situação tributária
-// (CST/CSOSN, se tem ST, base e valor de ST, IPI, alíquotas) é preenchida aqui
-// pelo contador, uma vez por produto. A emissão reusa esta ficha e a converte
-// no item enviado ao provedor. Cobre Simples (CSOSN) e regime normal (CST).
+// A situação tributária (CST/CSOSN, se tem ST, base e valor de ST, IPI,
+// alíquotas) é preenchida aqui pelo contador, uma vez por produto. Cobre
+// Simples (CSOSN) e regime normal (CST).
+//
+// A emissão de NF-e saiu em 2026-11-05 (só existia via Spedy, encerrada; a
+// emissão é direta, sem integrador). O catálogo fica para não perder a ficha.
 export type ProdutoRecord = Record<string, unknown> & {
   id: string
   clienteId: string          // empresa emissora (dona do produto)
@@ -44,21 +46,8 @@ export type ProdutoRecord = Record<string, unknown> & {
   // Na carteira da TTRD isso significa: 96 dos 119 clientes (Simples) só em
   // 2027; dos 23 de Regime Normal, só quem emite produto está obrigado agora.
   //
-  // ⚠️ CORRIGIDO EM 2026-08-03 — a nota anterior dizia que a Spedy não aceitava
-  // IBS/CBS. Aceita, nos dois modelos. A conclusão de 29/07 veio do
-  // `api.spedy.com.br/llms.txt`, que está DESATUALIZADO (zero ocorrências de
-  // `ibsCbs`). A fonte válida é o swagger:
-  //   https://api.spedy.com.br/swagger/v1/swagger.json
-  //     · NFS-e  → CreateServiceInvoiceDto.ibsCbs (ServiceInvoiceIbsCbsDto)
-  //     · NF-e   → SefazInvoiceItemIbsCbsDto, POR ITEM (~45 campos)
-  //
-  // ESTADO: NFS-e transmite (functions/src/nfse/types.ts → ReformaIbsCbs, e
-  // buildIbsCbs em provedores/spedy.ts). NF-e de produto AINDA NÃO — é o
-  // trabalho grande, e estes dois campos aqui são a semente dele.
-  //
-  // ⚠️ Tipo: a API espera INTEIRO em cst/classification. Aqui é string por
-  // histórico do cadastro; `buildIbsCbs` coage na borda. Ao construir a
-  // transmissão de NF-e, converter na origem em vez de propagar string.
+  // ⚠️ cst/classification são inteiros nos leiautes fiscais; aqui é string por
+  // histórico do cadastro — converter na origem ao construir a transmissão.
   ibsCbsCst?: string          // CST da reforma — tabela própria (NT 2025.002), não reaproveita icmsCst
   cClassTrib?: string         // Código de Classificação Tributária — vinculado a artigo da LC 214/2025
 

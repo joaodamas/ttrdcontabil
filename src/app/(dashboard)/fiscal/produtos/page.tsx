@@ -63,7 +63,7 @@ export default function ProdutosPage() {
       <div className="surface-subtle flex flex-wrap items-end justify-between gap-3 border px-4 py-4 sm:px-5">
         <div className="space-y-1.5">
           <h2 className="text-lg font-semibold">Catálogo de Produtos</h2>
-          <p className="text-sm text-muted-foreground">Ficha fiscal por produto, para NF-e e NFC-e.</p>
+          <p className="text-sm text-muted-foreground">Ficha fiscal por produto, para NF-e e NFC-e. A plataforma ainda não emite NF-e — o catálogo fica pronto para quando emitir.</p>
         </div>
         <div className="flex items-end gap-2">
           <div className="space-y-1.5">
@@ -112,7 +112,7 @@ export default function ProdutosPage() {
                     colSpan={7}
                     icon={Package}
                     title="Nenhum produto cadastrado"
-                    description="Cadastre o primeiro produto com a ficha fiscal para emitir NF-e/NFC-e desta empresa."
+                    description="Cadastre o primeiro produto com a ficha fiscal desta empresa."
                   />
                 ) : (
                   produtos.map((p) => (

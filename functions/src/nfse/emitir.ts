@@ -106,8 +106,7 @@ function decryptSenhaCertificado(senhaRaw: string | undefined): string {
 
 async function getCertificado(clienteId: string, config: ConfigFiscalCliente): Promise<CertificadoA1 | undefined> {
   const pathPersistido = config.credenciais?.certificadoStoragePath
-  // Sem certificado é caminho legítimo (município por token, ou Spedy assinando
-  // do lado dela) — segue sem A1. Mas se HÁ caminho, ele não pode ser usado cru:
+  // Sem certificado é caminho legítimo (município autenticado por token) — segue sem A1. Mas se HÁ caminho, ele não pode ser usado cru:
   // assertCaminhoCertificado confere contra o derivado de clienteId e devolve o
   // derivado. Ver a armadilha documentada em certificado.ts.
   if (!pathPersistido) return undefined

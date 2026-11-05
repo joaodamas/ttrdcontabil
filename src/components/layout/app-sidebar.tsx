@@ -88,8 +88,7 @@ const NAV_SECTIONS: NavSection[] = [
     icon: Receipt,
     items: [
       { href: '/fiscal',            label: 'Emitir NFS-e',     icon: Receipt,   telaKey: 'fiscal' },
-      { href: '/fiscal/emitir-nfe', label: 'Emitir NF-e',      icon: Receipt,   telaKey: 'fiscal' },
-      { href: '/fiscal/produtos',   label: 'Produtos (NF-e)',  icon: Package2,  telaKey: 'fiscal' },
+      { href: '/fiscal/produtos',   label: 'Produtos',  icon: Package2,  telaKey: 'fiscal' },
       { href: '/fiscal/historico',  label: 'Histórico',        icon: History,   telaKey: 'fiscal' },
       { href: '/ir',                label: 'Imposto de Renda', icon: FileText,  telaKey: 'ir' },
     ],

@@ -18,13 +18,18 @@ import type {
 // Municípios que exigem certificado A1
 const IBGE_A1 = new Set(['3525904', '3509502', '3508900', '3550308', '3505708'])
 
+/** Rascunho de origem da nota — conectores que não usam simplesmente ignoram. */
+export type ChaveProvedor = { rascunhoId?: string }
+
 /**
- * Referências que só a Spedy usa para achar a nota do lado dela (id na Spedy e
- * rascunho de origem). Ficam no roteador, e não em ../types.ts, porque nenhum
- * conector municipal tem uso para elas — e um conector que recebe campo a mais
- * simplesmente o ignora, então isso não muda nada para os oito municípios.
+ * Clientes ainda gravados com provedorNfse 'spedy' (conta encerrada em 2026-09):
+ * falha com instrução clara em vez de erro de credencial de uma API que não existe.
  */
-export type ChaveProvedor = { spedyInvoiceId?: string; rascunhoId?: string }
+const PROVEDOR_DESCONTINUADO = {
+  sucesso: false as const,
+  codigoErro: 'PROVEDOR_DESCONTINUADO',
+  erro: 'Este cliente ainda está configurado com a Spedy, que foi descontinuada. Em Clientes → Fiscal, troque o provedor para "Conector direto do município".',
+}
 export type ConsultarNfseInputRoteado = ConsultarNfseInput & ChaveProvedor
 export type CancelarNfseInputRoteado = CancelarNfseInput & ChaveProvedor
 
@@ -34,12 +39,7 @@ export async function rotearEmissao(
   prestador: Prestador,
   cert?:     CertificadoA1,
 ): Promise<ResultadoEmissao> {
-  // Spedy é agnóstico de município (cobre 1.200+ via API própria) — quando
-  // configurado, ignora o roteamento por IBGE e o conector caseiro inteiro.
-  if (config.provedorNfse === 'spedy') {
-    const { SpedyConector } = await import('../provedores/spedy')
-    return new SpedyConector().emitir(input, config, prestador)
-  }
+  if (config.provedorNfse === 'spedy') return PROVEDOR_DESCONTINUADO
 
   const ibge = prestador.municipioIbge
 
@@ -160,10 +160,7 @@ export async function rotearConsulta(
   prestador: Prestador,
   cert?: CertificadoA1,
 ): Promise<ResultadoOperacaoNfse> {
-  if (config.provedorNfse === 'spedy') {
-    const { SpedyConector } = await import('../provedores/spedy')
-    return new SpedyConector().consultar(input, config)
-  }
+  if (config.provedorNfse === 'spedy') return PROVEDOR_DESCONTINUADO
   const conector = await carregarConector(prestador.municipioIbge)
   if (!conector) {
     return { sucesso: false, erro: `Município com código IBGE ${prestador.municipioIbge} ainda não integrado.` }
@@ -180,10 +177,7 @@ export async function rotearCancelamento(
   prestador: Prestador,
   cert?: CertificadoA1,
 ): Promise<ResultadoOperacaoNfse> {
-  if (config.provedorNfse === 'spedy') {
-    const { SpedyConector } = await import('../provedores/spedy')
-    return new SpedyConector().cancelar(input, config)
-  }
+  if (config.provedorNfse === 'spedy') return PROVEDOR_DESCONTINUADO
   const conector = await carregarConector(prestador.municipioIbge)
   if (!conector) {
     return { sucesso: false, erro: `Município com código IBGE ${prestador.municipioIbge} ainda não integrado.` }

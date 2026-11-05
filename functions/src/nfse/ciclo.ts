@@ -153,10 +153,6 @@ async function montarContextoFiscal(nota: Record<string, unknown>, operacao: 'co
  * Achata um documento de `nfse_rascunhos` no payload de emissão, cobrindo os
  * dois formatos que a coleção tem (o antigo, com campos soltos em `dados`, e o
  * novo, com `dados.tomador`/`dados.servico`).
- *
- * Exportado porque o webhook da Spedy (webhook-spedy.ts) materializa a nota
- * órfã a partir do MESMO rascunho — duplicar este mapeamento lá faria os dois
- * caminhos divergirem no dia em que o formato mudar de novo.
  */
 export function normalizarRascunho(id: string, data: Record<string, unknown>): EmitirNfseInput {
   const dados = (data.dados ?? {}) as Record<string, unknown>
@@ -249,9 +245,6 @@ async function consultarRpsAntesRetry(
     clienteId: input.clienteId,
     numeroRps: input.numeroRps,
     serieRps: input.serieRps,
-    // Sem o rascunho, a consulta pela Spedy só teria o par série+número do RPS
-    // para reconstruir o integrationId — e o rascunho é a chave que a emissão
-    // realmente usou quando ele existe (ver integrationIdDe em provedores/spedy).
     rascunhoId: input.rascunhoId,
   }, config, prestador, cert)
 
@@ -303,7 +296,6 @@ export const consultarNfse = onCall(
       numeroRps: data.numeroRps as string | undefined,
       serieRps: data.serieRps as string | undefined,
       rascunhoId: data.rascunhoId as string | undefined,
-      spedyInvoiceId: data.spedyInvoiceId as string | undefined,
     }, config, prestador, cert)
 
     await registrarEvento(nfseId, 'consulta_status', request.auth.uid, 'Consulta de status executada.', {
@@ -383,7 +375,6 @@ export const cancelarNfse = onCall(
       numeroRps: nota.numeroRps as string | undefined,
       serieRps: nota.serieRps as string | undefined,
       rascunhoId: nota.rascunhoId as string | undefined,
-      spedyInvoiceId: nota.spedyInvoiceId as string | undefined,
       motivo: motivo.trim(),
     }, config, prestador, cert)
 

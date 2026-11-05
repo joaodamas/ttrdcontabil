@@ -2,11 +2,31 @@
 
 Levantado em **05/11/2026**. Status: **a validar** — nada implementado ainda.
 
+## Restrição do dono (2026-11-05)
+
+**Sem integrador.** Spedy encerrada e nenhum outro agregador (Focus NFe, Nota
+Gateway, Tecnospeed e afins). A emissão é direta: conector da prefeitura ou a
+API pública da Sefin Nacional, com o certificado A1 do próprio cliente.
+
+## Respostas rápidas
+
+- **Dá para emitir direto?** Sim — `POST /nfse` na Sefin Nacional recebe a DPS
+  (XML assinado) e devolve a NFS-e de forma síncrona.
+- **Sai no CNPJ do cliente?** Sim — a DPS é assinada e a conexão autenticada com
+  o certificado digital do prestador (o manual amarra o acesso aos "atores" da
+  nota: prestador, tomador, intermediário). A plataforma já guarda o A1 de cada
+  cliente cifrado. Emitir com certificado do escritório como procurador: **a
+  confirmar**. Formalizar a autorização do cliente em contrato/procuração.
+- **No valor que ele falar?** O valor do serviço é declaratório (vai o que o
+  cliente informou). Alíquota, código de tributação, regime e retenções são
+  validados contra os parâmetros do município (`/parametros_municipais/...`) e a
+  DPS é rejeitada se não baterem — consultar antes de enviar.
+
 ## Por que agora
 
-- A conta na Spedy foi encerrada (CHANGELOG, 10/09/2026). Era o único caminho que
-  montava o grupo **IBS/CBS** da reforma tributária; os 8 conectores municipais não
-  preenchem esses campos.
+- A conta na Spedy foi encerrada (10/09/2026) e o conector saiu do código
+  (05/11/2026). Era o único caminho que montava o grupo **IBS/CBS** da reforma; os
+  8 conectores municipais não preenchem esses campos.
 - A LC 214/2025 exigiu a adesão dos municípios ao padrão nacional até 01/01/2026.
   A Sefin Nacional recebe a DPS e devolve a NFS-e no layout nacional, que já traz
   IBS/CBS — um conector só no lugar de 8 conectores municipais + provedor pago.
@@ -47,4 +67,4 @@ Levantado em **05/11/2026**. Status: **a validar** — nada implementado ainda.
 - [APIs — produção restrita e produção (gov.br/nfse)](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/apis-prod-restrita-e-producao)
 - [Manual dos contribuintes — APIs ADN (gov.br/nfse)](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/manual-contribuintes-apis-adn-sistema-nacional-nfse.pdf)
 - [Manual contribuintes — emissor público API v1.2, out/2025 (gov.br/nfse)](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/manual-contribuintes-emissor-publico-api-sistema-nacional-nfs-e-v1-2-out2025.pdf/@@download/file)
-- Mercado (não normativo): [Contábeis](https://www.contabeis.com.br/artigos/77741/nfs-e-nacional-obrigatoriedade-prazos-e-impacto-contabil/), [Focus NFe](https://focusnfe.com.br/blog/nfse-nacional/), [Nota Gateway](https://notagateway.com.br/blog/api-nfse-nacional/), [Migrate](https://migrate.info/en/blog/brasil/nfs-e-simples-nacional-emissor-nacional-obrigatorio)
+- Mercado (não normativo, só para contexto de prazos — não são opções de integração): [Contábeis](https://www.contabeis.com.br/artigos/77741/nfs-e-nacional-obrigatoriedade-prazos-e-impacto-contabil/), [Focus NFe](https://focusnfe.com.br/blog/nfse-nacional/), [Nota Gateway](https://notagateway.com.br/blog/api-nfse-nacional/), [Migrate](https://migrate.info/en/blog/brasil/nfs-e-simples-nacional-emissor-nacional-obrigatorio)

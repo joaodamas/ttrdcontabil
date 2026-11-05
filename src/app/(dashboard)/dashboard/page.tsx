@@ -22,7 +22,7 @@ import {
   Users, ClipboardList, CheckSquare, TrendingUp,
   AlertTriangle, AlertCircle, ArrowRight, CheckCircle2, DollarSign,
   Receipt, Bell, CalendarClock, WalletCards, Gauge, BarChart2, Sparkles,
-  ChevronDown, Package2,
+  ChevronDown,
 } from 'lucide-react'
 
 /* ─── Skeleton ──────────────────────────────────────────────────────────── */
@@ -304,9 +304,6 @@ function DashboardV2(props: DashboardV2Props) {
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => router.push('/fiscal?emitir=1')}>
                 <Receipt className="size-3.5" /> NFS-e
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push('/fiscal/emitir-nfe')}>
-                <Package2 className="size-3.5" /> NF-e
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

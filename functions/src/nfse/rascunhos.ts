@@ -458,7 +458,7 @@ async function listarPendentes(params: {
  * seguida — reaproveitando processarEmissao(input, rascunhoId), que
  * já tem a transação de alocação/reuso de RPS e a gravação em
  * nfse_emitidas/nfse_erros. Emissão é sequencial (não em paralelo) pra não
- * estourar limite de taxa dos conectores/Spedy.
+ * estourar limite de taxa dos conectores municipais.
  */
 /**
  * Interruptor geral da emissão automática, em `configuracoes/escritorio`.
