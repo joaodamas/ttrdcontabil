@@ -2,7 +2,9 @@
  * Assinatura digital XML (xmldsig) para NFS-e brasileira.
  * Utiliza RSA-SHA1 com canonicalização C14N exclusiva — padrão ABRASF.
  */
-import * as forge from 'node-forge'
+// Import default (esModuleInterop): funciona no build CJS das Functions e também
+// quando o arquivo é carregado como ESM (scripts/poc-nfse-nacional, Node direto).
+import forge from 'node-forge'
 import { SignedXml } from 'xml-crypto'
 
 export interface ChaveAssinatura {
@@ -56,8 +58,17 @@ export function extrairChaveDoPfx(pfxBase64: string, senha: string): ChaveAssina
  * @param xmlStr  - XML completo como string
  * @param refId   - valor do atributo Id do elemento a assinar (sem #)
  * @param chave   - chave privada e certificado
+ * @param opcoes.posicao - onde a <Signature> entra em relação ao elemento
+ *   assinado. 'append' (padrão, ABRASF) = último filho do próprio elemento;
+ *   'after' = irmão logo depois dele. O leiaute nacional (DPS e pedRegEvento)
+ *   exige 'after': a Signature é filha de <DPS>, depois de <infDPS>.
  */
-export function assinarXml(xmlStr: string, refId: string, chave: ChaveAssinatura): string {
+export function assinarXml(
+  xmlStr: string,
+  refId: string,
+  chave: ChaveAssinatura,
+  opcoes: { posicao?: 'append' | 'after' } = {},
+): string {
   const sig = new SignedXml({
     privateKey: chave.privateKeyPem,
     publicCert: chave.certPem,
@@ -78,7 +89,7 @@ export function assinarXml(xmlStr: string, refId: string, chave: ChaveAssinatura
   sig.computeSignature(xmlStr, {
     location: {
       reference: `//*[@Id='${refId}']`,
-      action: 'append',
+      action: opcoes.posicao ?? 'append',
     },
     existingPrefixes: { ds: 'http://www.w3.org/2000/09/xmldsig#' },
   })
