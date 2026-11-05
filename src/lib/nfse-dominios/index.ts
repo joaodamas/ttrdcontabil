@@ -123,3 +123,19 @@ export function classificacoesIbsCbs(data: string, cst?: string): OpcaoCatalogo[
       descricao: `${c.descricao}${c.reducaoIbs || c.reducaoCbs ? ` (redução IBS ${c.reducaoIbs}% / CBS ${c.reducaoCbs}%)` : ''}`,
     }))
 }
+
+/** "Cajamar/SP" pelo código IBGE (os 5.570 municípios), ou undefined. */
+export function nomeMunicipio(ibge: string | null | undefined): string | undefined {
+  const codigo = String(ibge ?? '').replace(/\D/g, '')
+  return MUNICIPIOS.find((m) => m.codigo === codigo)?.rotulo
+}
+
+/**
+ * O cliente precisa de certificado A1? No Ambiente Nacional (padrão — tudo que
+ * não for o conector legado 'prefeitura') sempre; no conector da prefeitura, só
+ * nos municípios ABRASF/GeisWeb.
+ */
+export function exigeCertificadoA1(provedorNfse: unknown, tipoConector: string | undefined): boolean {
+  if (provedorNfse !== 'prefeitura') return true
+  return tipoConector === 'abrasf_a1' || tipoConector === 'geisweb_a1'
+}

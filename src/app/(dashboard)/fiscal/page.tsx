@@ -29,6 +29,7 @@ import { gerarRascunhosNfseMensais, removeRascunho } from '@/features/fiscal/ser
 import { getErrorMessage } from '@/lib/error-message'
 import { useFiscalDashboard, useFiscalReadiness } from '@/features/fiscal/hooks'
 import { fiscalKeys } from '@/features/fiscal/queries'
+import { temHistoricoInterno } from '@/lib/historico-interno'
 
 export default function FiscalPage() {
   const router = useRouter()
@@ -124,6 +125,12 @@ export default function FiscalPage() {
   }
 
   function closeEmissaoModal() {
+    // Aberta de outra tela (botão "Nova NFS-e" do topo, cliente, painel…):
+    // fechar volta para lá, sem deixar uma entrada /fiscal?emitir=1 no histórico.
+    if (temHistoricoInterno()) {
+      router.back()
+      return
+    }
     const next = new URLSearchParams(searchParams.toString())
     next.delete('emitir')
     next.delete('clienteId')

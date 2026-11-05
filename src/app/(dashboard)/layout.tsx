@@ -12,6 +12,8 @@ import { useAuth } from '@/contexts/auth-context'
 import { FeatureFlagsProvider, useFeatureFlags } from '@/contexts/feature-flags-context'
 import { Search, Plus } from 'lucide-react'
 import Link from 'next/link'
+import { Suspense } from 'react'
+import { RastreadorNavegacao } from '@/lib/historico-interno'
 
 function TopBar() {
   const { usuario } = useAuth()
@@ -55,6 +57,7 @@ function DashboardChrome({ children }: { children: React.ReactNode }) {
       data-modal-v2={isEnabled('modalV2Enabled') ? 'on' : 'off'}
       data-sidebar-v2={isEnabled('sidebarV2Enabled') ? 'on' : 'off'}
     >
+      <Suspense fallback={null}><RastreadorNavegacao /></Suspense>
       <AppSidebar />
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
         <TopBar />

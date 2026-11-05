@@ -13,6 +13,13 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Corrigido — navegação e cliques (auditoria de 2026-11-05)
+- **Ficha do cliente na URL** (`/clientes?cliente=<id>`): o Voltar do navegador fecha a ficha em vez de sair para "Hoje"; o link abre a ficha direto. No celular, tocar em qualquer ponto da linha abre a ficha, e o menu ⋯ fica visível em telas de toque.
+- **Emissão de NFS-e**: Esc, clique fora, X ou Cancelar com dados digitados pedem confirmação ("Descartar a nota em preenchimento?"); fechar volta para a tela de origem (antes caía sempre em `/fiscal` e deixava uma entrada inútil no histórico).
+- **Tomadores do cliente**: `/clientes/<id>/tomadores` e `/importar` abriam o Painel em produção (sem rewrite no `firebase.json`); rewrites adicionados e link "Tomadores" na aba Fiscal do cliente.
+- **Certificado A1**: o cartão de envio e o alerta "Certificado ausente" só apareciam para os 8 municípios dos conectores antigos; no Ambiente Nacional aparecem para todo cliente. Nome do município pela tabela IBGE completa.
+- **Financeiro**: filtros de tipo e status na URL (Voltar e links mantêm o filtro). Busca de clientes não empilha uma entrada de histórico por termo. Atalho "Novo lançamento" do botão flutuante aponta para `/financeiro/novo`.
+
 ### Adicionado — listas suspensas oficiais e IBS/CBS na emissão (2026-11-05)
 - **Códigos viram listas suspensas com busca** (catálogo oficial em `src/lib/nfse-dominios`): na emissão, código de tributação nacional, NBS (só os 918 códigos emitíveis de 9 dígitos), local da prestação e município do tomador (preenche nome e UF); na configuração fiscal, município de emissão (os 5.570 do IBGE, não mais 8 cidades fixas, com aviso quando o município não emite pelo Ambiente Nacional), código de tributação nacional e NBS padrão.
 - **IBS/CBS**: CST, classificação tributária (cClassTrib, filtrada pelo CST e pela vigência) e indicador de operação (cIndOp), com padrão por cliente na configuração fiscal e troca por nota; gravados em `nfse_emitidas`, rascunhos, cópia de nota e modelo — **Exige homologação**. Os três juntos ou nenhum; classificação de outro CST é recusada antes do envio.

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { FileText, Sparkles } from 'lucide-react'
 
 import { AppModal } from '@/components/ui/app-modal'
@@ -41,14 +42,24 @@ export function EmitirNfseModal({
   onFinished,
 }: EmitirNfseModalProps) {
   const [activeStep, setActiveStep] = useState(0)
+  const [preenchido, setPreenchido] = useState(false)
+  const [confirmarDescarte, setConfirmarDescarte] = useState(false)
   const statuses = buildStepStatuses(activeStep)
 
+  // Esc, clique fora, X ou Cancelar com dados digitados pedem confirmação.
+  const pedirFechamento = (aberto: boolean) => {
+    if (aberto) return onOpenChange(true)
+    if (preenchido) return setConfirmarDescarte(true)
+    onOpenChange(false)
+  }
+
   return (
+    <>
     <AppModal
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={pedirFechamento}
       title="Emissão assistida de NFS-e"
-      description="Revise vínculo, tomador e serviço antes de enviar a nota para a prefeitura."
+      description="Revise vínculo, tomador e serviço antes de enviar a nota para o Ambiente Nacional."
       icon={<FileText className="size-4" />}
       badge={(
         <span className="hidden items-center gap-1 rounded-full border border-primary/15 bg-primary/[0.06] px-2.5 py-1 text-[11px] font-medium text-primary sm:inline-flex">
@@ -67,11 +78,23 @@ export function EmitirNfseModal({
           layout="modal"
           initialClienteId={clienteId}
           initialRascunhoId={rascunhoId}
-          onCancel={() => onOpenChange(false)}
-          onFinished={onFinished}
+          onCancel={() => pedirFechamento(false)}
+          onFinished={async () => { setPreenchido(false); await onFinished?.() }}
           onStepChange={setActiveStep}
+          onDirtyChange={setPreenchido}
         />
       </div>
     </AppModal>
+    <ConfirmDialog
+      open={confirmarDescarte}
+      onOpenChange={setConfirmarDescarte}
+      title="Descartar a nota em preenchimento?"
+      description="Os dados digitados serão perdidos. Para continuar depois, use “Salvar rascunho”."
+      confirmLabel="Descartar"
+      cancelLabel="Continuar editando"
+      destructive
+      onConfirm={() => { setConfirmarDescarte(false); setPreenchido(false); onOpenChange(false) }}
+    />
+    </>
   )
 }

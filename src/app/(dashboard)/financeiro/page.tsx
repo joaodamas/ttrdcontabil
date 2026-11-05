@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useMemo, useState, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Timestamp } from 'firebase/firestore'
 import { useQueryClient } from '@tanstack/react-query'
@@ -68,8 +68,21 @@ function FinanceiroContent() {
     competenciaId: searchParams.get('competenciaId') ?? '',
   })
   const { clienteId, competenciaId } = parsed
-  const [tipo, setTipo] = useState(() => searchParams.get('tipo') ?? '')
-  const [status, setStatus] = useState(() => searchParams.get('status') ?? '')
+  // Tipo e status ficam na URL: Voltar e links compartilhados mantêm o filtro.
+  const router = useRouter()
+  const tipo = searchParams.get('tipo') ?? ''
+  const status = searchParams.get('status') ?? ''
+  const setFiltros = (mudancas: Record<string, string>) => {
+    const p = new URLSearchParams(searchParams.toString())
+    for (const [k, v] of Object.entries(mudancas)) {
+      if (v) p.set(k, v)
+      else p.delete(k)
+    }
+    const q = p.toString()
+    router.push(q ? `/financeiro?${q}` : '/financeiro', { scroll: false })
+  }
+  const setTipo = (v: string) => setFiltros({ tipo: v })
+  const setStatus = (v: string) => setFiltros({ status: v })
   const filterKey = useMemo(
     () => JSON.stringify({ clienteId, competenciaId, tipo, status }),
     [clienteId, competenciaId, tipo, status]
@@ -313,7 +326,7 @@ function FinanceiroContent() {
         open={filterSheetOpen}
         onOpenChange={setFilterSheetOpen}
         activeCount={(tipo ? 1 : 0) + (status ? 1 : 0)}
-        onReset={() => { setTipo(''); setStatus(''); setPagination({ filterKey, page: 1, cursorStack: [null] }) }}
+        onReset={() => { setFiltros({ tipo: '', status: '' }); setPagination({ filterKey, page: 1, cursorStack: [null] }) }}
       >
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tipo</p>
@@ -366,7 +379,7 @@ function FinanceiroContent() {
                 Ordenada por atraso, proximidade do vencimento e impacto de caixa.
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => { setTipo('receita'); setStatus('pendente'); setPagination({ filterKey, page: 1, cursorStack: [null] }) }}>
+            <Button variant="outline" size="sm" onClick={() => { setFiltros({ tipo: 'receita', status: 'pendente' }); setPagination({ filterKey, page: 1, cursorStack: [null] }) }}>
               Ver receitas pendentes
             </Button>
           </div>

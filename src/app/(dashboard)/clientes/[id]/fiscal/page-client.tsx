@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, Pencil, Plus, ShieldCheck, ShieldAlert, ShieldOff, AlertTriangle, Package, Truck } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO, defaultsDaConfigFiscal } from '@/components/fiscal/config-fiscal-form'
+import { exigeCertificadoA1, nomeMunicipio } from '@/lib/nfse-dominios'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
 import { getPathSegmentAfter } from '@/lib/route-params'
@@ -90,7 +91,7 @@ export default function ClienteFiscalPage() {
   const creds       = (fiscal?.credenciais ?? {}) as Record<string, unknown>
   const ibge        = fiscal?.municipioIbge as string | undefined
   const tipo        = ibge ? MUNICIPIO_TIPO[ibge] : undefined
-  const municipioNome = MUNICIPIOS.find(m => m.ibge === ibge)?.nome ?? (ibge ?? '—')
+  const municipioNome = MUNICIPIOS.find(m => m.ibge === ibge)?.nome ?? nomeMunicipio(ibge) ?? (ibge ?? '—')
 
   const certInfo: CertInfo | null = creds.certTitular
     ? {
@@ -237,8 +238,8 @@ export default function ClienteFiscalPage() {
         </CardContent>
       </Card>
 
-      {/* Certificado A1 — só para municípios ABRASF */}
-      {fiscal && (tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
+      {/* Certificado A1 — Ambiente Nacional sempre; conector da prefeitura só ABRASF/GeisWeb */}
+      {fiscal && exigeCertificadoA1(fiscal.provedorNfse, tipo) && (
         <Card>
           <CardHeader className="flex flex-row items-center gap-2">
             {certInfo
