@@ -23,6 +23,9 @@ import { Loader2 } from 'lucide-react'
 import { getClientes, getCompetencias, createDocument, updateDocument } from '@/lib/firestore-client'
 import { SELECT_NONE_VALUE } from '@/lib/select-values'
 import { formatWhatsApp, normalizeWhatsApp } from '@/lib/utils'
+import { useQueryClient } from '@tanstack/react-query'
+import { financeiroKeys } from '@/features/financeiro/queries'
+import { nomePreservado } from '@/lib/nome-preservado'
 
 const lancamentoSchema = z.object({
   clienteId:        z.string().optional().nullable(),
@@ -97,6 +100,11 @@ interface LancamentoFormProps {
 
 export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFormProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
+  // router.refresh() não toca o cache do React Query (static export): sem
+  // invalidar, a lista mostrava o registro antigo até o staleTime vencer.
+  const invalidarListas = () =>
+    Promise.all([queryClient.invalidateQueries({ queryKey: financeiroKeys.all })])
   const isEditing = !!initialData?.id
 
   const [clientes, setClientes]         = useState<ClienteItem[]>([])
@@ -170,7 +178,10 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
       ...data,
       clienteId: data.clienteId || null,
       competenciaId: data.competenciaId || null,
-      clienteNome: cliente?.razaoSocial ?? null,
+      clienteNome: nomePreservado(data.clienteId, cliente?.razaoSocial, {
+        id: initialData?.clienteId,
+        nome: (initialData as { clienteNome?: string | null } | undefined)?.clienteNome,
+      }),
       pagadorNome: data.pagadorNome || cliente?.razaoSocial || null,
       pagadorWhatsapp: normalizeWhatsApp(data.pagadorWhatsapp),
       dataVencimento: Timestamp.fromDate(new Date(`${data.dataVencimento}T12:00:00`)),
@@ -180,14 +191,16 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
     try {
       if (isEditing) {
         await updateDocument('lancamentos', initialData!.id!, payload)
+        await invalidarListas()
         toast.success('Lançamento atualizado!')
         if (onSuccess) onSuccess(initialData!.id!)
-        else { router.push('/financeiro'); router.refresh() }
+        else { router.push('/financeiro') }
       } else {
         const id = await createDocument('lancamentos', payload)
+        await invalidarListas()
         toast.success('Lançamento criado!')
         if (onSuccess) onSuccess(id)
-        else { router.push('/financeiro'); router.refresh() }
+        else { router.push('/financeiro') }
       }
     } catch {
       toast.error('Erro ao salvar lançamento. Verifique cliente, valor e vencimento.')

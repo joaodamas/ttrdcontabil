@@ -24,6 +24,11 @@ import { Timestamp, where, limit } from 'firebase/firestore'
 import { getErrorMessage } from '@/lib/error-message'
 import { SELECT_NONE_VALUE } from '@/lib/select-values'
 import { toDateInputValue } from '@/lib/form-dates'
+import { useQueryClient } from '@tanstack/react-query'
+import { irKeys } from '@/features/ir/queries'
+import { tarefasKeys } from '@/features/tarefas/queries'
+import { hojeKeys } from '@/features/hoje/queries'
+import { nomePreservado } from '@/lib/nome-preservado'
 
 const irSchema = z.object({
   clienteId: z.string().min(1, 'Cliente é obrigatório'),
@@ -64,6 +69,11 @@ interface IrFormProps {
 
 export function IrForm({ initialData }: IrFormProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
+  // router.refresh() não toca o cache do React Query (static export): sem
+  // invalidar, a lista mostrava o registro antigo até o staleTime vencer.
+  const invalidarListas = () =>
+    Promise.all([queryClient.invalidateQueries({ queryKey: irKeys.all }), queryClient.invalidateQueries({ queryKey: tarefasKeys.all }), queryClient.invalidateQueries({ queryKey: hojeKeys.all })])
   const isEditing = !!initialData?.id
 
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -101,13 +111,22 @@ export function IrForm({ initialData }: IrFormProps) {
   }, [])
 
   async function onSubmit(data: IrFormData) {
+    const anterior = initialData as
+      | { clienteId?: string; clienteNome?: string | null; responsavelId?: string | null; responsavelNome?: string | null }
+      | undefined
     try {
       const cliente = clientes.find((c) => c.id === data.clienteId)
       const responsavel = usuarios.find((u) => u.id === data.responsavelId)
       const payload = {
         ...data,
-        clienteNome: cliente?.razaoSocial ?? null,
-        responsavelNome: responsavel?.nome ?? null,
+        clienteNome: nomePreservado(data.clienteId, cliente?.razaoSocial, {
+          id: anterior?.clienteId,
+          nome: anterior?.clienteNome,
+        }),
+        responsavelNome: nomePreservado(data.responsavelId, responsavel?.nome, {
+          id: anterior?.responsavelId,
+          nome: anterior?.responsavelNome,
+        }),
         dataEntrega: data.dataEntrega ? Timestamp.fromDate(new Date(`${data.dataEntrega}T12:00:00`)) : null,
       }
 
@@ -156,7 +175,7 @@ export function IrForm({ initialData }: IrFormProps) {
         toast.success('Declaração criada!')
         router.push(`/ir/${id}`)
       }
-      router.refresh()
+      await invalidarListas()
     } catch (err) {
       toast.error(getErrorMessage(err, 'Nao foi possivel salvar a declaracao de IR. Verifique cliente, responsavel e permissao de acesso.'))
     }

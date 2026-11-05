@@ -45,6 +45,7 @@ import { hojeKeys } from '@/features/hoje/queries'
 import { useHojeData } from '@/features/hoje/hooks'
 import type { HojeTask, HojeUsuario } from '@/features/hoje/types'
 import { PageHeader } from '@/components/layout/page-header'
+import { dateFromIsoLocal, isoDateLocal } from '@/lib/form-dates'
 
 type FilaItem = HojeTask & {
   grupo: 'atrasada' | 'hoje' | 'proximos'
@@ -175,7 +176,7 @@ function TaskRow({
     if (!isoDate) { setEditingPrazo(false); return }
     setSavingPrazo(true)
     try {
-      const dataPrazo = Timestamp.fromDate(new Date(isoDate + 'T00:00:00'))
+      const dataPrazo = Timestamp.fromDate(dateFromIsoLocal(isoDate))
       await updateDocument('tarefas', item.id, { dataPrazo })
       toast.success('Prazo atualizado.')
       await queryClient.invalidateQueries({ queryKey: hojeKeys.all })
@@ -231,7 +232,7 @@ function TaskRow({
             <input
               type="date"
               autoFocus
-              defaultValue={prazo ? prazo.toISOString().slice(0, 10) : ''}
+              defaultValue={prazo ? isoDateLocal(prazo) : ''}
               disabled={savingPrazo}
               onBlur={e => void handlePrazoChange(e.target.value)}
               onKeyDown={e => {

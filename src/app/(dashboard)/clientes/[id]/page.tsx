@@ -1,6 +1,6 @@
 import ClienteDetailPage from './page-client'
 
-export const generateStaticParams = () => []
+export const generateStaticParams = () => [{ id: 'placeholder' }]
 export const dynamicParams = false
 
 export default function Page() {

@@ -139,12 +139,13 @@ async function getAuditActor() {
     // Perfil indisponível não deve impedir o write principal.
   }
 
-  _actorCache = {
+  // Sem cachear: um ator sem tenantId preso no cache fazia toda query seguinte
+  // sair sem o filtro de tenant (e ser negada) até recarregar a página.
+  return {
     uid: authUser.uid,
     nome,
     email: authUser.email ?? '',
   }
-  return _actorCache
 }
 
 function redactAuditData(value: unknown): unknown {

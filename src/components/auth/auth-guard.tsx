@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { useAuth } from '@/contexts/auth-context'
+import { LOGOUT_EXPLICITO_KEY, useAuth } from '@/contexts/auth-context'
 import { Loader2 } from 'lucide-react'
 import { canAccessTela, type TelaKey } from '@/lib/permissions'
 
@@ -15,6 +15,11 @@ function getTelaFromPath(pathname: string): TelaKey | null {
   if (pathname.startsWith('/financeiro')) return 'financeiro'
   if (pathname.startsWith('/fiscal')) return 'fiscal'
   if (pathname.startsWith('/ir')) return 'ir'
+  // Mesmas telas da sidebar (app-sidebar.tsx): sem isto os relatórios abriam
+  // por URL para qualquer perfil — Carteira tem receita por cliente.
+  if (pathname.startsWith('/relatorios/carteira')) return 'financeiro'
+  if (pathname.startsWith('/relatorios/produtividade')) return 'admin'
+  if (pathname.startsWith('/servicos')) return 'servicos'
   if (pathname.startsWith('/admin/servicos')) return 'servicos'
   if (pathname.startsWith('/admin')) return 'admin'
   if (pathname.startsWith('/dashboard')) return 'dashboard'
@@ -46,7 +51,15 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!loading && !usuario) {
-      router.replace('/login')
+      // Devolve o usuário à tela que ele tentou abrir (o login sanitiza o from),
+      // exceto quando ele mesmo saiu.
+      let logoutExplicito = false
+      try {
+        logoutExplicito = window.sessionStorage.getItem(LOGOUT_EXPLICITO_KEY) === '1'
+        window.sessionStorage.removeItem(LOGOUT_EXPLICITO_KEY)
+      } catch {}
+      const from = window.location.pathname + window.location.search
+      router.replace(!logoutExplicito && from !== '/' ? `/login?from=${encodeURIComponent(from)}` : '/login')
       return
     }
 

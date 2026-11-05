@@ -254,7 +254,10 @@ function FechamentoContent() {
               variant="outline"
               size="sm"
               onClick={() => setRevisaoDialogOpen(true)}
-              disabled={loading || revisaoLoading}
+              // A revisão trava o mês INTEIRO (id ano_mes), mas o snapshot sai da
+              // lista na tela — com regime filtrado ele registraria só parte.
+              disabled={loading || revisaoLoading || Boolean(regime)}
+              title={regime ? 'Remova o filtro de regime para encerrar a revisão do mês inteiro.' : undefined}
             >
               <ClipboardList className="w-4 h-4 mr-1" />
               Encerrar revisão do mês

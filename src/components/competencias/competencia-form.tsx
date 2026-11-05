@@ -35,6 +35,8 @@ import { SELECT_NONE_VALUE } from '@/lib/select-values'
 import { useAuth } from '@/contexts/auth-context'
 import { competenciaPodeTransicionar, opcoesStatusCompetencia } from '@/lib/status-transitions'
 import type { StatusCompetencia } from '@/types/firestore'
+import { useQueryClient } from '@tanstack/react-query'
+import { competenciasKeys } from '@/features/competencias/queries'
 
 const competenciaSchema = z.object({
   clienteId:        z.string().min(1, 'Selecione o cliente'),
@@ -67,6 +69,11 @@ interface CompetenciaFormProps {
 
 export function CompetenciaForm({ initialData, onSuccess, onClose }: CompetenciaFormProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
+  // router.refresh() não toca o cache do React Query (static export): sem
+  // invalidar, a lista mostrava o registro antigo até o staleTime vencer.
+  const invalidarListas = () =>
+    Promise.all([queryClient.invalidateQueries({ queryKey: competenciasKeys.all })])
   const isEditing = !!initialData?.id
   const { usuario } = useAuth()
 
@@ -237,12 +244,14 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
     try {
       if (isEditing) {
         await updateDocument('competencias', initialData!.id!, payload)
+        await invalidarListas()
         toast.success('Competência atualizada!')
         if (onSuccess) onSuccess(initialData!.id!)
         else router.push(`/competencias/${initialData!.id}`)
       } else {
         const docId = `${data.clienteId}_${data.clienteServicoId}_${data.ano}_${String(data.mes).padStart(2, '0')}`
         const id = await setDocument('competencias', docId, payload)
+        await invalidarListas()
         toast.success('Competência criada!')
         if (onSuccess) onSuccess(id)
         else router.push(`/competencias/${id}`)

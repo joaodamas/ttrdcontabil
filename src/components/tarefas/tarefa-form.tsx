@@ -27,6 +27,10 @@ import { toDateInputValue } from '@/lib/form-dates'
 import { useAuth } from '@/contexts/auth-context'
 import { opcoesStatusTarefa, tarefaPodeTransicionar } from '@/lib/status-transitions'
 import type { StatusTarefa } from '@/types/firestore'
+import { useQueryClient } from '@tanstack/react-query'
+import { tarefasKeys } from '@/features/tarefas/queries'
+import { hojeKeys } from '@/features/hoje/queries'
+import { nomePreservado } from '@/lib/nome-preservado'
 
 const tarefaSchema = z.object({
   clienteId:     z.string().optional().nullable(),
@@ -65,6 +69,11 @@ interface TarefaFormProps {
 
 export function TarefaForm({ initialData, onSuccess, onClose }: TarefaFormProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
+  // router.refresh() não toca o cache do React Query (static export): sem
+  // invalidar, a lista mostrava o registro antigo até o staleTime vencer.
+  const invalidarListas = () =>
+    Promise.all([queryClient.invalidateQueries({ queryKey: tarefasKeys.all }), queryClient.invalidateQueries({ queryKey: hojeKeys.all })])
   const isEditing = !!initialData?.id
   const { usuario } = useAuth()
 
@@ -119,19 +128,21 @@ export function TarefaForm({ initialData, onSuccess, onClose }: TarefaFormProps)
       return
     }
 
-    const payload = buildPayload(data, clientes, usuarios, initialData?.status)
+    const payload = buildPayload(data, clientes, usuarios, initialData?.status, initialData as NomesAnteriores | undefined)
 
     try {
       if (isEditing) {
         await updateDocument('tarefas', initialData!.id!, payload)
+        await invalidarListas()
         toast.success('Tarefa atualizada!')
         if (onSuccess) onSuccess(initialData!.id!)
-        else { router.push('/tarefas'); router.refresh() }
+        else { router.push('/tarefas') }
       } else {
         const id = await createDocument('tarefas', payload)
+        await invalidarListas()
         toast.success('Tarefa criada!')
         if (onSuccess) onSuccess(id)
-        else { router.push('/tarefas'); router.refresh() }
+        else { router.push('/tarefas') }
       }
     } catch (err) {
       toast.error(getErrorMessage(err, 'Não foi possível salvar a tarefa. Verifique título, status e permissões.'))
@@ -275,11 +286,19 @@ export function TarefaForm({ initialData, onSuccess, onClose }: TarefaFormProps)
   )
 }
 
+type NomesAnteriores = {
+  clienteId?: string | null
+  clienteNome?: string | null
+  responsavelId?: string | null
+  responsavelNome?: string | null
+}
+
 function buildPayload(
   data: TarefaFormData,
   clientes: ClienteItem[],
   usuarios: UsuarioItem[],
-  statusAnterior?: TarefaFormData['status']
+  statusAnterior?: TarefaFormData['status'],
+  anterior?: NomesAnteriores,
 ): TarefaPayload {
   const cliente = data.clienteId ? clientes.find((c) => c.id === data.clienteId) : null
   const responsavel = data.responsavelId ? usuarios.find((u) => u.id === data.responsavelId) : null
@@ -297,9 +316,9 @@ function buildPayload(
   return {
     ...data,
     clienteId: data.clienteId || null,
-    clienteNome: cliente?.razaoSocial ?? null,
+    clienteNome: nomePreservado(data.clienteId, cliente?.razaoSocial, { id: anterior?.clienteId, nome: anterior?.clienteNome }),
     responsavelId: data.responsavelId || null,
-    responsavelNome: responsavel?.nome ?? null,
+    responsavelNome: nomePreservado(data.responsavelId, responsavel?.nome, { id: anterior?.responsavelId, nome: anterior?.responsavelNome }),
     dataPrazo,
     dataConclusao,
   }

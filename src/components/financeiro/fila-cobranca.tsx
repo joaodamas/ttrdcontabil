@@ -10,6 +10,7 @@ import { motivoPrioridade } from '@/lib/financeiro-prioridade'
 import { createDocument } from '@/lib/firestore-client'
 import { Building2, Mail, Wallet } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import type { Timestamp } from 'firebase/firestore'
 
 type Props = {
   item: Record<string, unknown>
@@ -136,7 +137,14 @@ export function FilaCobrancaItem({ item, agora, onBaixado }: Props) {
               e-mail do cadastro do cliente (carregado na fila). CRM e templates avançados ficam no roadmap.
             </TooltipContent>
           </Tooltip>
-          <LancamentoBaixar lancamentoId={id} onBaixado={() => onBaixado(id)} />
+          <LancamentoBaixar
+            lancamentoId={id}
+            valor={item.valor as number | undefined}
+            clienteNome={item.clienteNome as string | undefined}
+            descricao={descricao}
+            dataVencimento={item.dataVencimento as Timestamp | undefined}
+            onBaixado={() => onBaixado(id)}
+          />
         </div>
       </div>
     </div>
