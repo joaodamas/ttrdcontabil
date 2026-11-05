@@ -163,6 +163,9 @@ export interface ValoresCopiados {
   codigoTributacaoNacional?: string
   codigoNbs?: string
   municipioPrestacaoIbge?: string
+  ibsCbsCst?: string
+  ibsCbsClassTrib?: string
+  ibsCbsIndOp?: string
   valorServico?: number
   aliquota?: number
   issRetido?: boolean
@@ -199,6 +202,9 @@ export interface NotaEmitidaParaCopia {
   codigoTributacaoNacional?: string | null
   codigoNbs?: string | null
   municipioPrestacaoIbge?: string | null
+  ibsCbsCst?: string | null
+  ibsCbsClassTrib?: string | null
+  ibsCbsIndOp?: string | null
   valorServico?: number | null
   aliquota?: number | null
   issRetido?: boolean | null
@@ -405,6 +411,9 @@ export function valoresDaNotaEmitida(nota: NotaEmitidaParaCopia, xml?: DadosXmlN
     codigoTributacaoNacional: cTribNac,
     codigoNbs: str(nota.codigoNbs) ?? (x.codigoNbs ? formatarNbs(x.codigoNbs) : undefined),
     municipioPrestacaoIbge: str(nota.municipioPrestacaoIbge) ?? x.municipioPrestacaoIbge,
+    ibsCbsCst: str(nota.ibsCbsCst),
+    ibsCbsClassTrib: str(nota.ibsCbsClassTrib),
+    ibsCbsIndOp: str(nota.ibsCbsIndOp),
     valorServico: num(nota.valorServico) ?? x.valorServico,
     aliquota: num(nota.aliquota) ?? x.aliquota,
     issRetido: typeof nota.issRetido === 'boolean' ? nota.issRetido : x.issRetido,
@@ -440,6 +449,9 @@ export interface ModeloNfse {
   codigoTributacaoNacional: string | null
   codigoNbs: string | null
   municipioPrestacaoIbge: string | null
+  ibsCbsCst?: string | null
+  ibsCbsClassTrib?: string | null
+  ibsCbsIndOp?: string | null
   valorServico: number | null
   aliquota: number | null
   issRetido: boolean
@@ -478,6 +490,9 @@ export function modeloDoFormulario(v: ValoresCopiados, agora: Date): ModeloNfse 
     codigoTributacaoNacional: nulo(v.codigoTributacaoNacional?.replace(/\D/g, '')),
     codigoNbs: nulo(v.codigoNbs),
     municipioPrestacaoIbge: nulo(v.municipioPrestacaoIbge?.replace(/\D/g, '')),
+    ibsCbsCst: nulo(v.ibsCbsCst),
+    ibsCbsClassTrib: nulo(v.ibsCbsClassTrib),
+    ibsCbsIndOp: nulo(v.ibsCbsIndOp),
     valorServico: num(v.valorServico) ?? null,
     aliquota: num(v.aliquota) ?? null,
     issRetido: v.issRetido === true,
@@ -510,6 +525,9 @@ export function valoresDoModelo(modelo: unknown): ValoresCopiados | null {
     codigoTributacaoNacional: str(m.codigoTributacaoNacional),
     codigoNbs: str(m.codigoNbs),
     municipioPrestacaoIbge: str(m.municipioPrestacaoIbge),
+    ibsCbsCst: str(m.ibsCbsCst),
+    ibsCbsClassTrib: str(m.ibsCbsClassTrib),
+    ibsCbsIndOp: str(m.ibsCbsIndOp),
     valorServico: num(m.valorServico),
     aliquota: num(m.aliquota),
     issRetido: typeof m.issRetido === 'boolean' ? m.issRetido : undefined,

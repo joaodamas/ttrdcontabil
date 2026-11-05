@@ -48,6 +48,10 @@ export interface Servico {
   codigoNbs?: string
   /** Informações complementares da nota (xInfComp). */
   informacoesComplementares?: string
+  /** IBS/CBS da nota (vazios herdam da config): CST (3), cClassTrib (6), indicador de operação (6). */
+  ibsCbsCst?: string
+  ibsCbsClassTrib?: string
+  ibsCbsIndOp?: string
   /**
    * Descrição com variáveis ({{MES_COMPETENCIA}}…) de onde `discriminacao` foi
    * renderada. Só é guardada em nfse_emitidas para a cópia da próxima nota —
@@ -98,6 +102,13 @@ export interface ConfigFiscalCliente {
   // Percentual aproximado dos tributos do Simples (pTotTribSN) para ME/EPP.
   // Sem ele, usa aliquotaPadrao (ver mapeamento.ts — premissa a confirmar).
   aliquotaSimplesNacional?: number
+  // NBS padrão do cliente (a nota tem precedência).
+  codigoNbs?: string
+  // IBS/CBS padrão do cliente (tabelas oficiais em src/lib/nfse-dominios):
+  // CST (3 dígitos), cClassTrib (6) e indicador de operação cIndOp (6).
+  ibsCbsCst?: string
+  ibsCbsClassTrib?: string
+  ibsCbsIndOp?: string
   // Opt-in explícito por cliente: quando true, o cron diário
   // (processarNfseRecorrenteDiaria) emite a NFS-e recorrente sem revisão
   // humana, no dia configurado em clientes.diaEmissaoNFSe. Default false —

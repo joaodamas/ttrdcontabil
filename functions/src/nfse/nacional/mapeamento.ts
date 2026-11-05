@@ -8,7 +8,7 @@
  */
 import { IBGE_MAP, normalizarIbge } from '../types'
 import type { ConfigFiscalCliente, EmitirNfseInput, Prestador, Tomador } from '../types'
-import type { DadosNota, DadosPrestador, DadosTomador, TotalTributos } from './dps'
+import type { DadosIbsCbs, DadosNota, DadosPrestador, DadosTomador, TotalTributos } from './dps'
 
 export class ErroMapeamentoNacional extends Error {
   readonly codigoErro: string
@@ -299,7 +299,7 @@ export function montarDadosNotaNacional(
         String(servico.codigoTributacaoNacional ?? '').trim() || config.codigoTributacaoNacional,
       ),
       cTribMun: cTribMun ? cTribMun.padStart(3, '0') : undefined,
-      cNBS: mapearCodigoNbs(servico.codigoNbs),
+      cNBS: mapearCodigoNbs(servico.codigoNbs?.trim() || config.codigoNbs),
       descricao: String(servico.discriminacao ?? '').trim(),
       municipioPrestacao: normalizarIbge(servico.municipioPrestacao) || ibgeEmissor,
       informacoesComplementares: normalizarInformacoesComplementares(servico.informacoesComplementares),
@@ -317,5 +317,29 @@ export function montarDadosNotaNacional(
       totTrib,
     },
     dps: { serie: dps.serie, numero: dps.numero, competencia: dps.competencia },
+    ibscbs: mapearIbsCbs(servico, config),
   }
+}
+
+/**
+ * IBS/CBS: o da nota tem precedência, campo a campo, sobre o padrão do cliente.
+ * Nada preenchido = sem o grupo (Simples/MEI até 2026). Parcial = recusa, para
+ * não mandar uma classificação pela metade.
+ */
+export function mapearIbsCbs(
+  servico: Pick<NonNullable<EmitirNfseInput['servico']>, 'ibsCbsCst' | 'ibsCbsClassTrib' | 'ibsCbsIndOp'>,
+  config: Pick<ConfigFiscalCliente, 'ibsCbsCst' | 'ibsCbsClassTrib' | 'ibsCbsIndOp'>,
+): DadosIbsCbs | undefined {
+  const cst = digitos(servico.ibsCbsCst?.trim() || config.ibsCbsCst)
+  const cClassTrib = digitos(servico.ibsCbsClassTrib?.trim() || config.ibsCbsClassTrib)
+  const cIndOp = digitos(servico.ibsCbsIndOp?.trim() || config.ibsCbsIndOp)
+  if (!cst && !cClassTrib && !cIndOp) return undefined
+  if (cst.length !== 3 || cClassTrib.length !== 6 || cIndOp.length !== 6) {
+    throw new ErroMapeamentoNacional('IBSCBS_INCOMPLETO', 'IBS/CBS: informe CST, classificação tributária e indicador de operação (os três) ou deixe todos vazios.')
+  }
+  if (!cClassTrib.startsWith(cst)) {
+    throw new ErroMapeamentoNacional('IBSCBS_CLASSIFICACAO', `A classificação tributária ${cClassTrib} não pertence ao CST ${cst}.`)
+  }
+  // indDest 0 = o destinatário é o próprio tomador (único caso suportado).
+  return { cIndOp, indDest: 0, cst, cClassTrib }
 }

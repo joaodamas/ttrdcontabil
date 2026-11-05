@@ -40,8 +40,10 @@ import { situacaoNacional } from '@/lib/nfse-nacional-convenio'
 import { normalizarIbge } from '@/lib/ibge'
 import { buscarDadosCnpj } from '@/lib/cnpj-lookup'
 import { useViaCep } from '@/hooks/use-viacep'
-import { MUNICIPIOS } from '@/components/fiscal/config-fiscal-form'
 import { NfseCopiarNota } from '@/components/fiscal/nfse-copiar-nota'
+import { CatalogoPicker } from '@/components/fiscal/catalogo-picker'
+import { CST_IBSCBS, INDICADOR_OPERACAO, MUNICIPIOS as MUNICIPIOS_IBGE, NBS, SERVICOS_NACIONAIS, classificacoesIbsCbs } from '@/lib/nfse-dominios'
+import municipiosIbge from '@/lib/nfse-dominios/municipios.json'
 import {
   VARIAVEIS_DESCRICAO,
   codigoNacionalDerivado,
@@ -118,6 +120,9 @@ const nfseSchema = z.object({
     (v) => !v || /^\d{7}$/.test(v.trim()),
     { message: 'Código IBGE com 7 dígitos' },
   ),
+  ibsCbsCst:        textoOpcional,
+  ibsCbsClassTrib:  textoOpcional,
+  ibsCbsIndOp:      textoOpcional,
   valorServico:     z.number({ error: 'Informe o valor do serviço' }).min(0.01, 'Valor deve ser maior que zero'),
   aliquota:         z.number().min(0).max(100).optional().nullable(),
   issRetido:        z.boolean().default(false),
@@ -188,7 +193,7 @@ function textoEndereco(e: Record<string, string>): string {
 
 function nomeMunicipioConhecido(ibge: string | null | undefined): string | undefined {
   const codigo = normalizarIbge(digitosDe(ibge))
-  return MUNICIPIOS.find((m) => m.ibge === codigo)?.nome
+  return (municipiosIbge as { ibge: string; nome: string }[]).find((m) => m.ibge === codigo)?.nome
 }
 
 type NfseFormData = z.input<typeof nfseSchema>
@@ -340,6 +345,9 @@ export function NfseEmissaoForm({
           codigoTributacaoNacional: (dados.codigoTributacaoNacional as string | null | undefined) ?? '',
           codigoNbs: (dados.codigoNbs as string | null | undefined) ?? '',
           municipioPrestacaoIbge: (dados.municipioPrestacaoIbge as string | null | undefined) ?? '',
+          ibsCbsCst: (dados.ibsCbsCst as string | null | undefined) ?? '',
+          ibsCbsClassTrib: (dados.ibsCbsClassTrib as string | null | undefined) ?? '',
+          ibsCbsIndOp: (dados.ibsCbsIndOp as string | null | undefined) ?? '',
           informacoesComplementares: (dados.informacoesComplementares as string | null | undefined) ?? '',
           clienteId: rascunho.clienteId ?? '',
           competenciaId: (rascunho.competenciaId as string | null | undefined) ?? (dados.competenciaId as string | null | undefined) ?? null,
@@ -452,6 +460,13 @@ export function NfseEmissaoForm({
         setValue('informacoesComplementares', fiscal.informacoesComplementaresPadrao)
       }
       if (!watch('codigoServico') && fiscal.codigoServicoPadrao) setValue('codigoServico', fiscal.codigoServicoPadrao as string)
+      // NBS e IBS/CBS padrão do cliente (configuração fiscal); editáveis na nota.
+      if (!watch('codigoNbs') && typeof fiscal.codigoNbs === 'string') setValue('codigoNbs', fiscal.codigoNbs)
+      if (!watch('ibsCbsCst') && !watch('ibsCbsClassTrib') && !watch('ibsCbsIndOp')) {
+        if (typeof fiscal.ibsCbsCst === 'string') setValue('ibsCbsCst', fiscal.ibsCbsCst)
+        if (typeof fiscal.ibsCbsClassTrib === 'string') setValue('ibsCbsClassTrib', fiscal.ibsCbsClassTrib)
+        if (typeof fiscal.ibsCbsIndOp === 'string') setValue('ibsCbsIndOp', fiscal.ibsCbsIndOp)
+      }
       if (!watch('itemListaServico') && fiscal.itemListaServico) setValue('itemListaServico', fiscal.itemListaServico as string)
       if (!watch('descricaoServico') && fiscal.descricaoServicoPadrao) setValue('descricaoServico', fiscal.descricaoServicoPadrao as string)
       if (watch('aliquota') == null && fiscal.aliquotaPadrao != null) setValue('aliquota', Number(fiscal.aliquotaPadrao))
@@ -484,6 +499,11 @@ export function NfseEmissaoForm({
     setValue('codigoTributacaoNacional', v.codigoTributacaoNacional ?? '', opts)
     setValue('codigoNbs', v.codigoNbs ?? '', opts)
     if (v.municipioPrestacaoIbge !== undefined) setValue('municipioPrestacaoIbge', v.municipioPrestacaoIbge, opts)
+    if (v.ibsCbsCst || v.ibsCbsClassTrib || v.ibsCbsIndOp) {
+      setValue('ibsCbsCst', v.ibsCbsCst ?? '', opts)
+      setValue('ibsCbsClassTrib', v.ibsCbsClassTrib ?? '', opts)
+      setValue('ibsCbsIndOp', v.ibsCbsIndOp ?? '', opts)
+    }
     if (v.valorServico !== undefined) setValue('valorServico', v.valorServico, opts)
     if (v.aliquota !== undefined) setValue('aliquota', v.aliquota, opts)
     if (v.issRetido !== undefined) setValue('issRetido', v.issRetido, opts)
@@ -626,6 +646,9 @@ export function NfseEmissaoForm({
           codigoTributacaoNacional: data.codigoTributacaoNacional?.trim() || null,
           codigoNbs:        data.codigoNbs?.trim() || null,
           municipioPrestacaoIbge: data.municipioPrestacaoIbge?.trim() || null,
+          ibsCbsCst:        data.ibsCbsCst?.trim() || null,
+          ibsCbsClassTrib:  data.ibsCbsClassTrib?.trim() || null,
+          ibsCbsIndOp:      data.ibsCbsIndOp?.trim() || null,
           informacoesComplementares: data.informacoesComplementares?.trim() || null,
           dataCompetencia:  lerCompetencia(data.competencia) ? competenciaParaData(lerCompetencia(data.competencia)!) : null,
           valorServico:     data.valorServico,
@@ -700,6 +723,9 @@ export function NfseEmissaoForm({
           codigoTributacaoNacional: data.codigoTributacaoNacional?.trim() || undefined,
           codigoNbs:        data.codigoNbs?.trim() || undefined,
           municipioPrestacao: data.municipioPrestacaoIbge?.trim() || undefined,
+          ibsCbsCst:        data.ibsCbsCst?.trim() || undefined,
+          ibsCbsClassTrib:  data.ibsCbsClassTrib?.trim() || undefined,
+          ibsCbsIndOp:      data.ibsCbsIndOp?.trim() || undefined,
           informacoesComplementares: data.informacoesComplementares?.trim() || undefined,
           valorServico:     data.valorServico,
           aliquota:         data.aliquota ?? undefined,
@@ -1087,7 +1113,7 @@ export function NfseEmissaoForm({
                 {errors.tomadorBairro && <p className="text-xs text-destructive">{errors.tomadorBairro.message}</p>}
               </div>
             </div>
-            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_80px_160px]">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_80px_minmax(0,1fr)]">
               <div className="space-y-1.5">
                 <Label htmlFor="tomadorMunicipio">Município</Label>
                 <Input id="tomadorMunicipio" {...register('tomadorMunicipio')} />
@@ -1097,8 +1123,24 @@ export function NfseEmissaoForm({
                 <Input id="tomadorUf" maxLength={2} {...register('tomadorUf')} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="tomadorMunicipioIbge">Código IBGE</Label>
-                <Input id="tomadorMunicipioIbge" inputMode="numeric" maxLength={7} placeholder="7 dígitos" {...register('tomadorMunicipioIbge')} />
+                <Label>Município (lista IBGE)</Label>
+                <Controller name="tomadorMunicipioIbge" control={control} render={({ field }) => (
+                  <CatalogoPicker
+                    opcoes={MUNICIPIOS_IBGE}
+                    value={field.value}
+                    placeholder="Selecione o município"
+                    buscaPlaceholder="Buscar município ou código IBGE..."
+                    permitirLimpar
+                    onChange={(ibge) => {
+                      field.onChange(ibge ?? '')
+                      const m = (municipiosIbge as { ibge: string; nome: string; uf: string }[]).find((x) => x.ibge === ibge)
+                      if (m) {
+                        setValue('tomadorMunicipio', m.nome, { shouldDirty: true })
+                        setValue('tomadorUf', m.uf, { shouldDirty: true })
+                      }
+                    }}
+                  />
+                )} />
                 {errors.tomadorMunicipioIbge && <p className="text-xs text-destructive">{errors.tomadorMunicipioIbge.message}</p>}
               </div>
             </div>
@@ -1225,46 +1267,111 @@ export function NfseEmissaoForm({
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="codigoTributacaoNacional">Código de tributação nacional</Label>
-              <Input
-                id="codigoTributacaoNacional"
-                inputMode="numeric"
-                maxLength={6}
-                placeholder={cTribNacDerivado ? `Automático: ${cTribNacDerivado}` : 'Automático pelo item LC 116'}
-                {...register('codigoTributacaoNacional')}
-              />
+              <Controller name="codigoTributacaoNacional" control={control} render={({ field }) => (
+                <CatalogoPicker
+                  opcoes={SERVICOS_NACIONAIS}
+                  value={field.value}
+                  onChange={(v) => field.onChange(v ?? '')}
+                  placeholder={cTribNacDerivado ? `Automático: ${cTribNacDerivado}` : 'Automático pelo item LC 116'}
+                  buscaPlaceholder="Buscar código ou serviço..."
+                  permitirLimpar
+                />
+              )} />
               {errors.codigoTributacaoNacional
                 ? <p className="text-xs text-destructive">{errors.codigoTributacaoNacional.message}</p>
-                : <p className="text-xs text-muted-foreground">6 dígitos. Vazio = o da configuração fiscal ou o derivado do item LC 116.</p>}
+                : <p className="text-xs text-muted-foreground">Lista nacional de serviços. Vazio = o da configuração fiscal ou o derivado do item LC 116.</p>}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="codigoNbs">Código NBS</Label>
-              <Input id="codigoNbs" placeholder="Ex.: 1.1501.10.00" {...register('codigoNbs')} />
+              <Controller name="codigoNbs" control={control} render={({ field }) => (
+                <CatalogoPicker
+                  opcoes={NBS}
+                  value={field.value}
+                  onChange={(v) => field.onChange(v ?? '')}
+                  placeholder="Selecione o NBS"
+                  buscaPlaceholder="Buscar código ou descrição do NBS..."
+                  permitirLimpar
+                />
+              )} />
               {errors.codigoNbs
                 ? <p className="text-xs text-destructive">{errors.codigoNbs.message}</p>
                 : (
-                    <p className="text-xs text-muted-foreground">
-                      Opcional, 9 dígitos.{' '}
-                      <a
-                        href="https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline underline-offset-2 hover:text-foreground"
-                      >
-                        Tabela oficial (anexos do leiaute)
-                      </a>
-                    </p>
+                    <p className="text-xs text-muted-foreground">Opcional. Tabela NBS 2.0 oficial (Anexo B da NFS-e).</p>
                   )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="municipioPrestacaoIbge">Local da prestação (IBGE)</Label>
-              <Input id="municipioPrestacaoIbge" inputMode="numeric" maxLength={7} placeholder="Município do prestador" {...register('municipioPrestacaoIbge')} />
+              <Controller name="municipioPrestacaoIbge" control={control} render={({ field }) => (
+                <CatalogoPicker
+                  opcoes={MUNICIPIOS_IBGE}
+                  value={field.value}
+                  onChange={(v) => field.onChange(v ?? '')}
+                  placeholder="Município do prestador"
+                  buscaPlaceholder="Buscar município ou código IBGE..."
+                  permitirLimpar
+                />
+              )} />
               {errors.municipioPrestacaoIbge
                 ? <p className="text-xs text-destructive">{errors.municipioPrestacaoIbge.message}</p>
                 : (
                     <p className="text-xs text-muted-foreground">
-                      {nomeMunicipioConhecido(previewLocalPrestacao) ?? (previewLocalPrestacao ? 'Município fora da lista da plataforma' : 'Vazio = município do prestador')}
+                      {previewLocalPrestacao ? 'Onde o serviço foi prestado' : 'Vazio = município do prestador'}
                     </p>
                   )}
+            </div>
+          </div>
+
+          <div className="space-y-3 rounded-md border p-3">
+            <div>
+              <p className="text-sm font-medium">IBS/CBS</p>
+              <p className="text-xs text-muted-foreground">
+                Vem do padrão do cliente. Obrigatório para Lucro Presumido e Real; Simples e MEI a partir de 2027.
+                Preencha os três ou deixe todos vazios.
+              </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label>CST</Label>
+                <Controller name="ibsCbsCst" control={control} render={({ field }) => (
+                  <CatalogoPicker
+                    opcoes={CST_IBSCBS}
+                    value={field.value}
+                    onChange={(v) => {
+                      field.onChange(v ?? '')
+                      if (!v || !String(watch('ibsCbsClassTrib') ?? '').startsWith(v)) setValue('ibsCbsClassTrib', '', { shouldDirty: true })
+                    }}
+                    placeholder="Selecione o CST"
+                    permitirLimpar
+                  />
+                )} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Classificação tributária</Label>
+                <Controller name="ibsCbsClassTrib" control={control} render={({ field }) => (
+                  <CatalogoPicker
+                    opcoes={classificacoesIbsCbs(new Date().toISOString().slice(0, 10), watch('ibsCbsCst') || undefined)}
+                    value={field.value}
+                    onChange={(v) => {
+                      field.onChange(v ?? '')
+                      if (v) setValue('ibsCbsCst', v.slice(0, 3), { shouldDirty: true })
+                    }}
+                    placeholder="Selecione a classificação"
+                    permitirLimpar
+                  />
+                )} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Indicador de operação</Label>
+                <Controller name="ibsCbsIndOp" control={control} render={({ field }) => (
+                  <CatalogoPicker
+                    opcoes={INDICADOR_OPERACAO}
+                    value={field.value}
+                    onChange={(v) => field.onChange(v ?? '')}
+                    placeholder="Selecione o indicador"
+                    permitirLimpar
+                  />
+                )} />
+              </div>
             </div>
           </div>
 

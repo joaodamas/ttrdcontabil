@@ -27,6 +27,13 @@ import { buscarDadosCnpj } from '@/lib/cnpj-lookup'
 import { normalizarIbge } from '@/lib/ibge'
 import { Textarea } from '@/components/ui/textarea'
 import { REGRAS_COMPETENCIA, normalizarRegraCompetencia } from '@/lib/nfse-modelo'
+import { CatalogoPicker } from '@/components/fiscal/catalogo-picker'
+import { CST_IBSCBS, INDICADOR_OPERACAO, MUNICIPIOS as MUNICIPIOS_IBGE, NBS, SERVICOS_NACIONAIS, classificacoesIbsCbs } from '@/lib/nfse-dominios'
+import municipiosIbge from '@/lib/nfse-dominios/municipios.json'
+import { situacaoNacional } from '@/lib/nfse-nacional-convenio'
+
+const nomeDoMunicipio = (ibge: string | null | undefined) =>
+  (municipiosIbge as { ibge: string; nome: string }[]).find((m) => m.ibge === ibge)?.nome
 
 export const MUNICIPIOS = [
   { ibge: '3525904', nome: 'Jundiaí' },
@@ -81,6 +88,10 @@ const schema = z.object({
   codigoTributacaoMunicipal: z.string().regex(/^\d{3}$/, 'Use 3 dígitos (ex.: 001)').optional().nullable().or(z.literal('')),
   serieDps:                  z.string().regex(/^([0-9]{1,4}|[0-8][0-9]{4})$/, 'Série de 1 a 5 dígitos (até 89999)').optional().nullable().or(z.literal('')),
   aliquotaSimplesNacional:   z.number().min(0).max(100).optional().nullable(),
+  codigoNbs:                 z.string().optional().nullable(),
+  ibsCbsCst:                 z.string().optional().nullable(),
+  ibsCbsClassTrib:           z.string().optional().nullable(),
+  ibsCbsIndOp:               z.string().optional().nullable(),
   // Emissão automática (sem revisão humana) no dia configurado abaixo
   emissaoAutomatica:   z.boolean().optional(),
   // Padrões da tela de emissão (não mudam a DPS por si só)
@@ -121,6 +132,10 @@ export function defaultsDaConfigFiscal(
     codigoTributacaoMunicipal: s(fiscal.codigoTributacaoMunicipal) ?? '',
     serieDps:                  s(fiscal.serieDps) ?? '',
     aliquotaSimplesNacional:   typeof fiscal.aliquotaSimplesNacional === 'number' ? fiscal.aliquotaSimplesNacional : null,
+    codigoNbs:                 s(fiscal.codigoNbs) ?? '',
+    ibsCbsCst:                 s(fiscal.ibsCbsCst) ?? '',
+    ibsCbsClassTrib:           s(fiscal.ibsCbsClassTrib) ?? '',
+    ibsCbsIndOp:               s(fiscal.ibsCbsIndOp) ?? '',
     emissaoAutomatica:      fiscal.emissaoAutomatica === true,
     competenciaPadrao:      normalizarRegraCompetencia(fiscal.competenciaPadrao),
     informacoesComplementaresPadrao: s(fiscal.informacoesComplementaresPadrao) ?? '',
@@ -191,7 +206,8 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
   // Credenciais de portal municipal (token/login) só valem no conector legado;
   // no Ambiente Nacional a única credencial é o certificado A1.
   const tipo = nacional ? undefined : MUNICIPIO_TIPO[municipioIbge]
-  const municipioNome = MUNICIPIOS.find(m => m.ibge === municipioIbge)?.nome ?? ''
+  const municipioNome = MUNICIPIOS.find(m => m.ibge === municipioIbge)?.nome ?? nomeDoMunicipio(municipioIbge) ?? ''
+  const situacaoMunicipio = municipioIbge ? situacaoNacional(municipioIbge) : null
   const credenciais = (defaultValues?.credenciais ?? {}) as Record<string, unknown>
   const certInfo: CertInfo | null = credenciais.certTitular
     ? {
@@ -229,6 +245,10 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
         codigoTributacaoMunicipal: data.codigoTributacaoMunicipal || null,
         serieDps:                  data.serieDps                  || null,
         aliquotaSimplesNacional:   Number.isFinite(data.aliquotaSimplesNacional) ? data.aliquotaSimplesNacional : null,
+        codigoNbs:                 data.codigoNbs       || null,
+        ibsCbsCst:                 data.ibsCbsCst       || null,
+        ibsCbsClassTrib:           data.ibsCbsClassTrib || null,
+        ibsCbsIndOp:               data.ibsCbsIndOp     || null,
         emissaoAutomatica:    data.emissaoAutomatica ?? false,
         competenciaPadrao:    normalizarRegraCompetencia(data.competenciaPadrao),
         informacoesComplementaresPadrao: data.informacoesComplementaresPadrao?.trim() || null,
@@ -276,15 +296,14 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       setValue('optanteSimples', dados.optanteSimples)
       if (dados.cnae) setValue('cnae', dados.cnae)
 
-      const municipioConhecido = dados.municipioIbge
-        ? MUNICIPIOS.find(m => m.ibge === dados.municipioIbge)
-        : undefined
-      if (municipioConhecido) setValue('municipioIbge', municipioConhecido.ibge)
+      const ibgeReceita = normalizarIbge(dados.municipioIbge ?? undefined)
+      const municipioConhecido = ibgeReceita && nomeDoMunicipio(ibgeReceita) ? ibgeReceita : undefined
+      if (municipioConhecido) setValue('municipioIbge', municipioConhecido)
 
       const avisos: string[] = []
       if (!dados.regimeTributario) avisos.push('regime tributário (Lucro Presumido/Real) precisa ser confirmado manualmente')
       if (dados.municipioIbge && !municipioConhecido) {
-        avisos.push(`município (${dados.municipio ?? dados.municipioIbge}/${dados.uf ?? '?'}) não está na lista de municípios atendidos pela plataforma`)
+        avisos.push(`município (${dados.municipio ?? dados.municipioIbge}/${dados.uf ?? '?'}) não foi encontrado na tabela IBGE`)
       }
       toast.success(
         avisos.length > 0
@@ -355,16 +374,19 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
             <div className="space-y-1.5">
               <Label required>Município de Emissão</Label>
               <Controller name="municipioIbge" control={control} render={({ field }) => (
-                <Select value={field.value ?? ''} onValueChange={field.onChange}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    {MUNICIPIOS.map(m => (
-                      <SelectItem key={m.ibge} value={m.ibge}>{m.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <CatalogoPicker
+                  opcoes={MUNICIPIOS_IBGE}
+                  value={field.value}
+                  onChange={(v) => field.onChange(v ?? '')}
+                  placeholder="Selecione o município"
+                  buscaPlaceholder="Buscar município ou código IBGE..."
+                />
               )} />
-              {errors.municipioIbge && <p className="text-xs text-destructive">{errors.municipioIbge.message}</p>}
+              {errors.municipioIbge
+                ? <p className="text-xs text-destructive">{errors.municipioIbge.message}</p>
+                : situacaoMunicipio === 'prefeitura' || situacaoMunicipio === 'sem_convenio'
+                  ? <p className="text-xs text-amber-600">Este município não emite pelo Ambiente Nacional — a nota sai no portal da prefeitura.</p>
+                  : null}
             </div>
 
             <div className="space-y-1.5">
@@ -512,7 +534,16 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Código de tributação nacional</Label>
-                  <Input {...register('codigoTributacaoNacional')} placeholder="Automático pelo item LC 116 (ex.: 171901)" />
+                  <Controller name="codigoTributacaoNacional" control={control} render={({ field }) => (
+                    <CatalogoPicker
+                      opcoes={SERVICOS_NACIONAIS}
+                      value={field.value}
+                      onChange={(v) => field.onChange(v ?? '')}
+                      placeholder="Automático pelo item LC 116"
+                      buscaPlaceholder="Buscar código ou serviço..."
+                      permitirLimpar
+                    />
+                  )} />
                   {errors.codigoTributacaoNacional && <p className="text-xs text-destructive">{errors.codigoTributacaoNacional.message}</p>}
                 </div>
                 <div className="space-y-1.5">
@@ -536,6 +567,70 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
               </div>
               <p className="text-xs text-muted-foreground">
                 A numeração da DPS é sequencial por CNPJ, ambiente e série, controlada pela plataforma.
+              </p>
+
+              <div className="space-y-1.5">
+                <Label>Código NBS padrão</Label>
+                <Controller name="codigoNbs" control={control} render={({ field }) => (
+                  <CatalogoPicker
+                    opcoes={NBS}
+                    value={field.value}
+                    onChange={(v) => field.onChange(v ?? '')}
+                    placeholder="Selecione o NBS"
+                    buscaPlaceholder="Buscar código ou descrição do NBS..."
+                    permitirLimpar
+                  />
+                )} />
+              </div>
+
+              <p className="pt-1 text-xs font-semibold uppercase text-muted-foreground">IBS/CBS padrão</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>CST do IBS/CBS</Label>
+                  <Controller name="ibsCbsCst" control={control} render={({ field }) => (
+                    <CatalogoPicker
+                      opcoes={CST_IBSCBS}
+                      value={field.value}
+                      onChange={(v) => {
+                        field.onChange(v ?? '')
+                        // Classificação de outro CST deixa de valer.
+                        if (!v || !String(watch('ibsCbsClassTrib') ?? '').startsWith(v)) setValue('ibsCbsClassTrib', '')
+                      }}
+                      placeholder="Selecione o CST"
+                      permitirLimpar
+                    />
+                  )} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Classificação tributária (cClassTrib)</Label>
+                  <Controller name="ibsCbsClassTrib" control={control} render={({ field }) => (
+                    <CatalogoPicker
+                      opcoes={classificacoesIbsCbs(new Date().toISOString().slice(0, 10), watch('ibsCbsCst') || undefined)}
+                      value={field.value}
+                      onChange={(v) => {
+                        field.onChange(v ?? '')
+                        if (v) setValue('ibsCbsCst', v.slice(0, 3))
+                      }}
+                      placeholder="Selecione a classificação"
+                      permitirLimpar
+                    />
+                  )} />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Indicador de operação (cIndOp)</Label>
+                  <Controller name="ibsCbsIndOp" control={control} render={({ field }) => (
+                    <CatalogoPicker
+                      opcoes={INDICADOR_OPERACAO}
+                      value={field.value}
+                      onChange={(v) => field.onChange(v ?? '')}
+                      placeholder="Selecione o indicador de operação"
+                      permitirLimpar
+                    />
+                  )} />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Obrigatório para Lucro Presumido e Real; Simples e MEI a partir de 2027. Preencha os três ou deixe todos vazios.
               </p>
             </div>
           )}
