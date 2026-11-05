@@ -29,8 +29,10 @@ import { useCarteira } from '@/features/carteira/hooks'
 import { clientesFiltroSchema } from '@/features/clientes/schemas'
 import type { ClienteRecord } from '@/features/clientes/types'
 import { limit } from 'firebase/firestore'
-import { listDocuments } from '@/lib/firestore-client'
+import { listDocuments, registrarExportacaoSensivel } from '@/lib/firestore-client'
 import { baixarRelatorioClientesXlsx } from '@/lib/clientes-relatorio'
+import { useAuth } from '@/contexts/auth-context'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 const REGIME_LABELS: Record<string, string> = {
   simples_nacional: 'Simples',
@@ -284,17 +286,28 @@ function ClientesContent() {
     : filteredClientes
 
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
+  const [confirmarSenhas, setConfirmarSenhas] = useState(false)
+  const { usuario } = useAuth()
+  const ehAdmin = usuario?.perfil === 'admin'
 
   // Relatório de TODOS os clientes ativos (não só a página/filtro da tela), com
-  // cada campo da ficha e o que está em branco, mais a situação fiscal.
-  async function exportarFichaCompleta() {
+  // cada campo da ficha e o que está em branco, mais a situação fiscal. Com
+  // senhas visíveis só para administrador, com confirmação e log de auditoria.
+  async function exportarFichaCompleta(incluirSenhas = false) {
     setGerandoRelatorio(true)
     try {
       const [todos, fiscais] = await Promise.all([
         listDocuments<Record<string, unknown>>('clientes', [limit(2000)]),
         listDocuments<Record<string, unknown>>('clientes_fiscal', [limit(2000)]).catch(() => []),
       ])
-      baixarRelatorioClientesXlsx({ clientes: todos, fiscais })
+      const comSenhas = incluirSenhas && ehAdmin
+      if (comSenhas) {
+        await registrarExportacaoSensivel('clientes', {
+          relatorio: 'ficha_completa_com_senhas',
+          clientes: todos.length,
+        })
+      }
+      baixarRelatorioClientesXlsx({ clientes: todos, fiscais, incluirSenhas: comSenhas })
     } catch (err) {
       console.error('[clientes] relatório da ficha completa falhou', err)
       toast.error('Não foi possível gerar o relatório. Tente novamente.')
@@ -305,6 +318,15 @@ function ClientesContent() {
 
   return (
     <div>
+      <ConfirmDialog
+        open={confirmarSenhas}
+        onOpenChange={setConfirmarSenhas}
+        title="Baixar relatório com senhas visíveis?"
+        description="O arquivo terá, em texto aberto, as senhas de todos os clientes ativos (prefeitura, posto fiscal, PIN do certificado, Meu Gov, e-CAC). Guarde em local seguro, não envie por e-mail e apague depois de usar. A exportação fica registrada no log de auditoria."
+        confirmLabel="Baixar com senhas"
+        destructive
+        onConfirm={() => exportarFichaCompleta(true)}
+      />
       <PageHeader
         title="Clientes"
         description={isLoading ? undefined : `${clientesFiltrados.length} cliente${clientesFiltrados.length !== 1 ? 's' : ''} encontrado${clientesFiltrados.length !== 1 ? 's' : ''}`}
@@ -323,10 +345,23 @@ function ClientesContent() {
               <FileDown />
               Exportar PDF
             </Button>
-            <Button variant="outline" size="cta" disabled={gerandoRelatorio} onClick={() => void exportarFichaCompleta()}>
-              {gerandoRelatorio ? <Loader2 className="animate-spin" /> : <FileSpreadsheet />}
-              Ficha completa (Excel)
-            </Button>
+            {ehAdmin ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger className={buttonVariants({ variant: 'outline', size: 'cta' })} disabled={gerandoRelatorio}>
+                  {gerandoRelatorio ? <Loader2 className="animate-spin" /> : <FileSpreadsheet />}
+                  Ficha completa (Excel)
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => void exportarFichaCompleta(false)}>Sem senhas</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setConfirmarSenhas(true)}>Com senhas visíveis…</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button variant="outline" size="cta" disabled={gerandoRelatorio} onClick={() => void exportarFichaCompleta(false)}>
+                {gerandoRelatorio ? <Loader2 className="animate-spin" /> : <FileSpreadsheet />}
+                Ficha completa (Excel)
+              </Button>
+            )}
             <Link href="/clientes/importar" className={buttonVariants({ variant: 'outline', size: 'cta' })}>
               <Upload />
               Importar

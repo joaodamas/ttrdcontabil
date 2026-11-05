@@ -14,7 +14,7 @@ Convenção para novas entradas:
 ## [Não lançado]
 
 ### Adicionado — relatório da ficha completa dos clientes ativos (2026-11-05)
-- Clientes → **"Ficha completa (Excel)"** baixa um relatório de TODOS os clientes ativos (não só a página/filtro): aba **Clientes ativos** com cada campo da ficha + "Preenchidos", "% completo" e "Campos em branco" (por nome); aba **Resumo por campo** (quantos preenchidos × em branco); aba **Fiscal NFS-e** (município, se emite pelo Ambiente Nacional, inscrição municipal, regime, certificado A1, ambiente). Senhas aparecem só como "✔ preenchida". `src/lib/clientes-relatorio.ts`, testado.
+- Clientes → **"Ficha completa (Excel)"** baixa um relatório de TODOS os clientes ativos (não só a página/filtro): aba **Clientes ativos** com cada campo da ficha + "Preenchidos", "% completo" e "Campos em branco" (por nome); aba **Resumo por campo** (quantos preenchidos × em branco); aba **Fiscal NFS-e** (município, se emite pelo Ambiente Nacional, inscrição municipal, regime, certificado A1, ambiente). Senhas aparecem como "✔ preenchida"; **administrador** pode baixar "Com senhas visíveis" (confirmação + registro `exportacao_sensivel` no log de auditoria, arquivo com sufixo `-COM-SENHAS`). `src/lib/clientes-relatorio.ts`, testado.
 
 ### Alterado — planilha de importação = ficha de cadastro do cliente (2026-11-05)
 - A planilha passa a ter todos os campos da ficha de cadastro (78 de 79 → todos os não sigilosos): dados completos do representante (CNH, órgão emissor, data de emissão, naturalidade, pai/mãe, PIS, título, escolaridade, formação, comunhão de bens, endereço), WhatsApp e contato preferencial do financeiro, e aceite de cobrança por WhatsApp (sim/não — a importação grava data e origem "Planilha de cadastro", como a ficha).

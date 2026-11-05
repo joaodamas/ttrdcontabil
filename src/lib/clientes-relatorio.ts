@@ -6,7 +6,8 @@ import { normalizarIbge } from '@/lib/ibge'
 /**
  * Relatório da ficha completa de TODOS os clientes ativos: cada campo da ficha
  * (mesmas colunas da planilha de importação), o que está preenchido e o que está
- * em branco. Senha/credencial nunca sai com valor — só "✔ preenchida".
+ * em branco. Senha/credencial sai como "✔ preenchida", exceto quando um
+ * administrador pede o relatório com senhas (incluirSenhas).
  */
 
 type Registro = Record<string, unknown>
@@ -14,6 +15,8 @@ type Registro = Record<string, unknown>
 export interface DadosRelatorioClientes {
   clientes: Registro[]
   fiscais: Registro[]
+  /** Só para administrador, com confirmação e log de auditoria (ver a tela de Clientes). */
+  incluirSenhas?: boolean
 }
 
 const SENHA_PREENCHIDA = '✔ preenchida'
@@ -35,10 +38,10 @@ function documento(v: unknown): string {
   return texto(v)
 }
 
-function valorCampo(c: Registro, key: string): string {
+function valorCampo(c: Registro, key: string, incluirSenhas = false): string {
   const v = texto(c[key])
   if (!v) return ''
-  if (CAMPOS_CREDENCIAL.has(key)) return SENHA_PREENCHIDA
+  if (CAMPOS_CREDENCIAL.has(key) && !incluirSenhas) return SENHA_PREENCHIDA
   if (key === 'cpfCnpj') return documento(c[key])
   return v
 }
@@ -53,7 +56,7 @@ export function montarRelatorioClientes(dados: DadosRelatorioClientes) {
 
   const cab = ['Código', ...CLIENTE_COLUMNS.map((c) => c.label), 'Preenchidos', '% completo', 'Campos em branco']
   const linhas = clientes.map((c) => {
-    const valores = CLIENTE_COLUMNS.map((col) => valorCampo(c, col.key))
+    const valores = CLIENTE_COLUMNS.map((col) => valorCampo(c, col.key, dados.incluirSenhas))
     const emBranco = CLIENTE_COLUMNS.filter((_, i) => !valores[i]).map((col) => col.label)
     const preenchidos = total - emBranco.length
     return [
@@ -119,5 +122,5 @@ export function baixarRelatorioClientesXlsx(dados: DadosRelatorioClientes) {
   XLSX.utils.book_append_sheet(wb, wsFiscal, 'Fiscal NFS-e')
 
   const hoje = new Date().toISOString().slice(0, 10)
-  XLSX.writeFile(wb, `clientes-ativos-ficha-completa-${hoje}.xlsx`)
+  XLSX.writeFile(wb, `clientes-ativos-ficha-completa${dados.incluirSenhas ? '-COM-SENHAS' : ''}-${hoje}.xlsx`)
 }

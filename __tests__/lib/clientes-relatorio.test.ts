@@ -36,6 +36,12 @@ describe('relatório da ficha completa dos clientes ativos', () => {
     expect(l[cab.indexOf('Responsável — Senha MEU GOV')]).toBe('✔ preenchida')
   })
 
+  it('com incluirSenhas (admin), a senha sai com o valor', () => {
+    const comSenha = montarRelatorioClientes({ clientes: [cheio], fiscais: [], incluirSenhas: true })
+    const c = comSenha.clientes[0]
+    expect(comSenha.clientes[1][c.indexOf('Responsável — Senha MEU GOV')]).toBe('SenhaReal#1')
+  })
+
   it('resumo por campo conta preenchidos e em branco', () => {
     const email = r.resumoPorCampo.find((l) => l[0] === 'E-mail')!
     expect(email.slice(1, 3)).toEqual(['1', '1'])
