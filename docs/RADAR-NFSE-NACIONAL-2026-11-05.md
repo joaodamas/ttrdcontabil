@@ -108,6 +108,21 @@ Certificado A1 da **JP PROJECT MANAGER LTDA** (59.360.092/0001-63, Cajamar/SP, S
 - **Próximo passo:** repetir o `emitir` com o A1 de um cliente de **Barueri, São Paulo ou Campinas** — aí deve sair a NFS-e de teste (chave de acesso), seguida de `consultar` e `cancelar`.
 - **Bug achado no caminho (corrigido):** a plataforma gravava Cajamar como 3508900 (Caiabu) e Taboão da Serra como 3552502 (Suzano). Corretos: 3509205 e 3552809. Configs antigas são normalizadas (`IBGE_LEGADO`).
 
+## ⚠ Correção: convênio na PRODUÇÃO ≠ produção restrita (2026-11-05)
+
+As conclusões de convênio acima foram tiradas da **produção restrita**, que está desatualizada. Consulta à **produção** (`adn.nfse.gov.br/parametrizacao/{ibge}/convenio`, só leitura):
+
+| Município | IBGE | Produção restrita (teste) | **Produção** |
+|---|---|---|---|
+| Cajamar | 3509205 | sem convênio | **aderenteEmissorNacional = 1** (emite pelo Nacional) |
+| São Paulo | 3550308 | 1 | **1** |
+| Barueri | 3505708 | 1 | **1** |
+| Campinas | 3509502 | 1 | **0** (sistema próprio) |
+| Jundiaí | 3525904 | 0 | **0** |
+| Santana de Parnaíba | 3547304 | sem convênio | **0** |
+
+O `NacionalConector` já consulta o convênio no ambiente da config (homologação → teste; produção → produção), então em produção Cajamar emite. Em homologação, Cajamar segue bloqueado porque o ambiente de testes não o tem.
+
 ## ✅ Homologação concluída — ciclo completo (2026-11-05)
 
 Prestador **ARTE & PRIME PLANEJADOS LTDA** (33.854.681/0001-04, São Paulo), produção restrita, competência 15/08/2025 (única janela com alíquota vigente no ambiente de testes de SP), serviço 01.01.01:
