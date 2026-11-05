@@ -66,3 +66,8 @@ scripts/clientes-*.json
 # cache do Firebase CLI. O hosting.*.cache é regravado a cada deploy e aparecia
 # modificado em TODO diff, escondendo mudança de verdade no meio do ruído.
 .firebase/
+
+# PoC NFS-e Nacional: requisicoes/respostas com dados reais e certificados A1
+/.poc-nfse/
+*.pfx
+*.p12

@@ -1,6 +1,8 @@
 # Radar — emitir NFS-e direto pelo Ambiente Nacional (Sefin Nacional)
 
-Levantado em **05/11/2026**. Status: **a validar** — nada implementado ainda.
+Levantado em **05/11/2026**. Status: **PoC pronta, aguardando um A1 de cliente** —
+`scripts/poc-nfse-nacional/` (CLI travada na produção restrita). Ver a seção
+"Achados da PoC" abaixo.
 
 ## Restrição do dono (2026-11-05)
 
@@ -44,6 +46,55 @@ API pública da Sefin Nacional, com o certificado A1 do próprio cliente.
 - `functions/src/nfse/municipios/sao-paulo.ts:7` — nota de que SP transmite ao ADN
   mas mantém emissor próprio (exceção a tratar).
 
+## Achados da PoC (05/11/2026)
+
+Código: `scripts/poc-nfse-nacional/` (CLI + README com o passo a passo) e testes em
+`__tests__/lib/nfse-nacional-*.test.ts`. Primeiro comando com o certificado:
+`NFSE_PFX=<arquivo.pfx> npm run poc:nfse -- convenio --ibge 3525904`.
+
+**Confirmado em documentação oficial:**
+
+- Rotas da Sefin Nacional: `POST /nfse` (síncrono), `GET /nfse/{chave}`, `GET`/`HEAD /dps/{id}`,
+  `POST`/`GET /nfse/{chave}/eventos`, `GET /parametros_municipais/{ibge}/convenio|{codServ}|{CPF/CNPJ}`
+  — [manual do emissor público – API v1.2](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/manual-contribuintes-emissor-publico-api-sistema-nacional-nfs-e-v1-2-out2025.pdf).
+- Leiaute 1.01 da **produção restrita** é diferente do de produção (NT 009): `finNFSe` obrigatório no
+  `infDPS`, `xDescServ` no fim de `cServ`, CST/cClassTrib direto em `IBSCBS/valores/trib`. Grupo
+  `IBSCBS` é **opcional** no XSD — [esquemas da produção restrita 20/10/2026](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/producao-restrita)
+  (cópia em `scripts/poc-nfse-nacional/schemas/`; a DPS gerada pela PoC valida neles com `xmllint`).
+- Id da DPS = `DPS`+IBGE(7)+tpInsc(1)+inscrição(14)+série(5)+nDPS(15); Id do pedido de evento =
+  `PRE`+chave(50)+código(6); cancelamento = evento `e101101` (cMotivo 1/2/9, xMotivo 15–255) — XSD e
+  [Anexo II (prod. restrita)](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/producao-restrita/anexo_ii-sefin_adn-pedregevt_evt-snnfse_prodrest-v1-01-20261020.xlsx).
+- Envio **compactado em base64** (regras E1225/E1226), XML UTF-8 (E1229), **sem prefixo de namespace**
+  (E1228), assinatura obrigatória com o certificado do **emitente** (E0714/E0717/E0718), certificado
+  de transmissão ICP-Brasil com CNPJ/CPF no OtherName (E1200–E1209) — [Anexo I (prod. restrita)](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/producao-restrita/anexo_i-sefin_adn-dps_nfse-snnfse_prodrest-v1-01-20261020.xlsx),
+  abas RN_RECEP. O código E6157→E1225 "Falha ao descompactar XML **Zip B64**" está no
+  [histórico de atualizações](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/atualizacoes-e-implantacoes).
+- **DANFSe:** a API do ADN foi suspensa em 03/08/2026; o sistema gera o PDF seguindo a NT 008
+  (tarja "NFS-e SEM VALIDADE JURÍDICA" quando `tpAmb=2`) — [NT 008 v1.02](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/rtc/nt-008-se-cgnfse-danfse-20260714-v1-02.pdf)
+  e [atualizações (03/08/2026: "Desativação da API do DANFSe do ADN")](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/atualizacoes-e-implantacoes).
+- ADN (distribuição): consulta aceita certificado do mesmo **CNPJ raiz** — [manual APIs ADN](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/manual-contribuintes-apis-adn-sistema-nacional-nfse.pdf).
+- 28/09/2026: o Painel Municipal ganhou opção para o município **antecipar** a adoção do Emissor Nacional
+  pelos optantes do Simples ([atualizações](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/atualizacoes-e-implantacoes)).
+
+**Só em bibliotecas abertas** (lidas como referência — PyNFSeNacionalGT 1.3.2 no PyPI e `nfse` 0.1.0
+no hex.pm; nenhuma virou dependência): nomes dos campos JSON (`dpsXmlGZipB64`, `nfseXmlGZipB64`,
+`chaveAcesso`, `pedidoRegistroEventoXmlGZipB64`, `eventoXmlGZipB64`, `erros`/`alertas`), gzip como
+compactação, RSA-SHA1 + C14N inclusiva com a `<Signature>` depois do `infDPS`, rotas do ADN
+`/parametrizacao/{ibge}/convenio` e `/parametrizacao/{ibge}/{cod.com.pontos}/{competencia}/aliquota`.
+
+**Ainda aberto** (os Swaggers da produção restrita pedem o certificado A1 até para abrir a
+documentação — HTTP 403 / handshake com pedido de certificado):
+
+1. Campos JSON exatos e formato do erro (conferir no Swagger com o A1).
+2. Base da Sefin na produção restrita: `/API/SefinNacional` (link oficial) × `/SefinNacional` — os dois
+   existem (403 sem certificado). A PoC usa o primeiro e aceita `--sefin raiz`.
+3. Parâmetros municipais: ADN `/parametrizacao` × Sefin `/parametros_municipais`.
+4. Se o CNPJ precisa ser habilitado antes no Emissor Nacional/CNC e liberado pelo município na produção restrita.
+5. Certificado do escritório como procurador: as regras exigem a assinatura do emitente (E0718) —
+   tratar como não suportado até prova.
+6. Se a API de DANFSe ainda responde na produção restrita (a PoC testa e informa).
+7. `/dps/{id}` com ou sem o prefixo `DPS`; faixas de série por tipo de emissor.
+
 ## O que validar (em ordem)
 
 1. **Norma vigente**: resolução CGSN em vigor e cronograma no portal nfse.gov.br —
@@ -51,18 +102,21 @@ API pública da Sefin Nacional, com o certificado A1 do próprio cliente.
 2. **Municípios da carteira**: para cada IBGE atendido hoje (Jundiaí, Campinas, Cotia,
    Barueri, Cajamar, Santana de Parnaíba, Taboão da Serra, São Paulo), confirmar se
    aceita emissão pela Sefin Nacional ou só pelo emissor próprio.
-3. **Produção restrita**: com um A1 real de cliente, emitir uma DPS de teste pelo
-   Swagger de produção restrita. Confirmar autenticação (certificado no TLS), formato
-   do envio (XML da DPS assinado, compactado e em base64 dentro de JSON — a confirmar no
-   manual), retorno da chave de acesso e eventos (cancelamento).
+3. **Produção restrita**: com um A1 real de cliente, rodar a PoC (`scripts/poc-nfse-nacional/`,
+   Etapa 1 `convenio`, Etapa 2 `emitir`, depois `consultar` e `cancelar`). Formato do envio já
+   confirmado como base64 compactado (Anexo I); falta ver os nomes dos campos no Swagger.
 4. **Numeração**: a DPS tem série e número próprios por emitente — resolve junto a
    pendência do RPS `Date.now()` (contador transacional por prestador+série).
-5. **DANFSe**: há relato de que a geração do PDF pela API foi suspensa (NT 008,
-   03/08/2026) e o sistema precisa gerar o próprio — confirmar na nota técnica.
+5. **DANFSe**: **confirmado** — API suspensa em 03/08/2026 (NT 008 v1.02). O sistema precisa gerar o
+   próprio PDF a partir do XML da NFS-e, no leiaute da NT 008.
 6. **Cloud Functions**: mTLS com o A1 do cliente a partir de `southamerica-east1`
    (o certificado já fica cifrado no Storage + senha no Secret Manager).
 
 ## Fontes
+
+- [Documentação técnica — produção restrita (esquemas e anexos 20/10/2026)](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/producao-restrita)
+- [Atualizações e implantações](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/atualizacoes-e-implantacoes)
+- [NT 008 — DANFSe v1.02](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/rtc/nt-008-se-cgnfse-danfse-20260714-v1-02.pdf)
 
 - [APIs — produção restrita e produção (gov.br/nfse)](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/apis-prod-restrita-e-producao)
 - [Manual dos contribuintes — APIs ADN (gov.br/nfse)](https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/manual-contribuintes-apis-adn-sistema-nacional-nfse.pdf)

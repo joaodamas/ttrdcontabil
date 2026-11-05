@@ -1,0 +1,36 @@
+{
+  "prestador": {
+    "cnpj": "11222333000181",
+    "inscricaoMunicipal": "123456",
+    "municipioIbge": "3525904",
+    "regime": { "opSimpNac": 3, "regApTribSN": 1, "regEspTrib": 0 }
+  },
+  "tomador": {
+    "cpfCnpj": "11444777000161",
+    "razaoSocial": "TOMADOR FICTICIO DE TESTE LTDA",
+    "email": "teste@example.com",
+    "endereco": {
+      "cep": "13201000",
+      "municipioIbge": "3525904",
+      "logradouro": "Rua Exemplo",
+      "numero": "100",
+      "bairro": "Centro"
+    }
+  },
+  "servico": {
+    "cTribNac": "171901",
+    "descricao": "Servicos de contabilidade - TESTE PRODUCAO RESTRITA, sem validade juridica",
+    "municipioPrestacao": "3525904"
+  },
+  "valores": {
+    "valorServico": 10.0,
+    "tribISSQN": 1,
+    "tpRetISSQN": 1,
+    "totTrib": { "pTotTribSN": 6.0 }
+  },
+  "dps": {
+    "serie": "900",
+    "numero": 1,
+    "competencia": "2026-11-05"
+  }
+}

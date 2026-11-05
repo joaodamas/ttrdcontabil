@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "smoke:prod": "node scripts/smoke-prod.mjs",
+    "poc:nfse": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/poc-nfse-nacional/cli.mjs",
     "backfill:tenant": "node scripts/backfill-tenant.mjs",
     "seed:single-tenant": "node scripts/seed-single-tenant.mjs",
     "seed:connectors": "node scripts/seed-fiscal-connectors.mjs",
