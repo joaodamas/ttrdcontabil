@@ -30,7 +30,7 @@ export function Lc116Picker({ value, onChange, placeholder = 'Buscar item (códi
         </span>
         <ChevronsUpDown className="ml-2 size-3.5 shrink-0 opacity-50" />
       </PopoverTrigger>
-      <PopoverContent className="w-[420px] p-0" align="start">
+      <PopoverContent className="w-[min(420px,calc(100vw-2rem))] p-0" align="start">
         <Command>
           <CommandInput placeholder="Digite o código (ex: 17.19) ou uma palavra-chave..." />
           <CommandList>

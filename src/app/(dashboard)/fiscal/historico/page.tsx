@@ -319,16 +319,16 @@ function FiscalHistoricoContent() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-xl border border-border/70 bg-card/95 px-4 py-3 card-shadow">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+        <div className="rounded-xl border border-border/70 bg-card/95 px-3 py-2.5 card-shadow sm:px-4 sm:py-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Emitidas</p>
           <p className="mt-1 text-2xl font-bold tabular-nums text-success">{totalEmitidas}</p>
         </div>
-        <div className="rounded-xl border border-border/70 bg-card/95 px-4 py-3 card-shadow">
+        <div className="rounded-xl border border-border/70 bg-card/95 px-3 py-2.5 card-shadow sm:px-4 sm:py-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Erros/Rejeitadas</p>
           <p className="mt-1 text-2xl font-bold tabular-nums text-destructive">{totalRejeitadas}</p>
         </div>
-        <div className="rounded-xl border border-border/70 bg-card/95 px-4 py-3 card-shadow">
+        <div className="col-span-2 rounded-xl border border-border/70 bg-card/95 px-3 py-2.5 card-shadow sm:col-span-1 sm:px-4 sm:py-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Valor total</p>
           <p className="mt-1 text-2xl font-bold tabular-nums">{formatCurrency(valorTotal)}</p>
         </div>
@@ -411,8 +411,8 @@ function FiscalHistoricoContent() {
       </div>
 
       <DataTableShell density="compact">
-        <table className="min-w-[920px] w-full text-sm">
-          <thead className="bg-muted/50 text-muted-foreground">
+        <table className="w-full table-fixed text-sm md:table-auto md:min-w-[920px]">
+          <thead className="hidden bg-muted/50 text-muted-foreground md:table-header-group">
             <tr>
               <th className="px-4 py-3 text-left font-medium">Cliente</th>
               <th className="px-4 py-3 text-left font-medium">Tipo</th>
@@ -451,8 +451,38 @@ function FiscalHistoricoContent() {
                       variant: 'outline' as const,
                     }
                     const dataEmissao = n.dataEmissao as Timestamp | undefined
+                    const comErro = n.status === 'rejeitada' || n.status === 'erro_integracao'
+                    // Mesmas ações na linha (desktop) e no card (celular).
+                    const acoes = (
+                      <div className="flex justify-end gap-1.5">
+                        <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Ver logs de emissão" onClick={() => setLogNota(n)}>
+                          <History className="h-3.5 w-3.5" />
+                        </Button>
+                        <Link href={`/fiscal/${n.id as string}`}>
+                          <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Ver detalhe">
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                        </Link>
+                        <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Consultar status" onClick={() => consultarStatus(n.id as string)}>
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </Button>
+                        {n.pdfUrl ? (
+                          <a href={n.pdfUrl as string} target="_blank" rel="noreferrer">
+                            <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Baixar PDF">
+                              <Download className="h-3.5 w-3.5" />
+                            </Button>
+                          </a>
+                        ) : null}
+                        {n.status === 'emitida' ? (
+                          <Button variant="outline" size="sm" className="h-8 w-8 p-0 text-destructive" title="Solicitar cancelamento" onClick={() => abrirCancelamento(n.id as string)}>
+                            <XCircle className="h-3.5 w-3.5" />
+                          </Button>
+                        ) : null}
+                      </div>
+                    )
                     return (
-                      <tr key={n.id as string} className={cn('transition-colors hover:bg-muted/35', (n.status === 'rejeitada' || n.status === 'erro_integracao') && 'bg-destructive/[0.03] border-l-2 border-l-destructive')}>
+                      <Fragment key={n.id as string}>
+                      <tr className={cn('hidden transition-colors hover:bg-muted/35 md:table-row', comErro && 'bg-destructive/[0.03] border-l-2 border-l-destructive')}>
                         <td className="px-4 py-3 font-medium">
                           <div className="flex items-center gap-1.5">
                             <span>{(n.clienteNome as string) ?? '—'}</span>
@@ -482,33 +512,35 @@ function FiscalHistoricoContent() {
                           <Badge variant={st.variant}>{st.label}</Badge>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex justify-end gap-1.5">
-                            <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Ver logs de emissão" onClick={() => setLogNota(n)}>
-                              <History className="h-3.5 w-3.5" />
-                            </Button>
-                            <Link href={`/fiscal/${n.id as string}`}>
-                              <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Ver detalhe">
-                                <Eye className="h-3.5 w-3.5" />
-                              </Button>
-                            </Link>
-                            <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Consultar status" onClick={() => consultarStatus(n.id as string)}>
-                              <RefreshCw className="h-3.5 w-3.5" />
-                            </Button>
-                            {n.pdfUrl ? (
-                              <a href={n.pdfUrl as string} target="_blank" rel="noreferrer">
-                                <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Baixar PDF">
-                                  <Download className="h-3.5 w-3.5" />
-                                </Button>
-                              </a>
-                            ) : null}
-                            {n.status === 'emitida' ? (
-                              <Button variant="outline" size="sm" className="h-8 w-8 p-0 text-destructive" title="Solicitar cancelamento" onClick={() => abrirCancelamento(n.id as string)}>
-                                <XCircle className="h-3.5 w-3.5" />
-                              </Button>
-                            ) : null}
+                          {acoes}
+                        </td>
+                      </tr>
+                      <tr className={cn('md:hidden', comErro && 'bg-destructive/[0.03] border-l-2 border-l-destructive')}>
+                        <td colSpan={8} className="px-3 py-2.5">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="flex items-center gap-1.5 text-sm font-medium">
+                                <span className="truncate">{(n.clienteNome as string) ?? '—'}</span>
+                                {n.origemEmissao === 'automatica' && (
+                                  <span title="Emitida automaticamente, sem revisão humana" className="shrink-0 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-destructive">
+                                    Auto
+                                  </span>
+                                )}
+                              </p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {TIPO_LABEL[tipoDocumentoDe(n)]} {(n.numeroNfse as string) ?? '—'} · {dataEmissao ? formatDate(tsToDate(dataEmissao)) : '—'}
+                                {n.tomadorNome ? ` · ${n.tomadorNome as string}` : ''}
+                              </p>
+                            </div>
+                            <p className="shrink-0 text-sm font-semibold tabular-nums">{formatCurrency(valorDocumento(n))}</p>
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+                            <Badge variant={st.variant}>{st.label}</Badge>
+                            {acoes}
                           </div>
                         </td>
                       </tr>
+                      </Fragment>
                     )
                   })}
                 </Fragment>

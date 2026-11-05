@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, Suspense } from 'react'
+import { Fragment, useMemo, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Timestamp } from 'firebase/firestore'
@@ -301,10 +301,10 @@ function FinanceiroContent() {
       {/* Os KPIs somam o escritório inteiro no servidor e ignoram os filtros da
           tela de propósito; o aging logo abaixo segue os filtros. A descrição
           existe para os dois números não parecerem a mesma coisa discordando. */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <KpiCard label="A Receber" value={semDados ? '—' : formatCurrency(somaAReceber)} icon={TrendingUp} description="Escritório inteiro — não segue os filtros." />
         <KpiCard label="Recebido no Mês" value={semDados ? '—' : formatCurrency(somaRecebidoMes)} icon={CheckCircle} tone="success" description="Escritório inteiro — não segue os filtros." />
-        <KpiCard label="Em Atraso" value={semDados ? '—' : formatCurrency(somaEmAtraso)} icon={AlertTriangle} tone="danger" description="Escritório inteiro — não segue os filtros." />
+        <KpiCard label="Em Atraso" value={semDados ? '—' : formatCurrency(somaEmAtraso)} icon={AlertTriangle} tone="danger" description="Escritório inteiro — não segue os filtros." className="col-span-2 sm:col-span-1" />
       </div>
 
       {/* Só renderiza com dado na mão: painel vazio por falha de leitura afirma
@@ -391,8 +391,8 @@ function FinanceiroContent() {
       ) : null}
 
       <DataTableShell density="compact">
-        <table className="min-w-[1180px] w-full text-sm">
-          <thead className="bg-muted/50">
+        <table className="w-full table-fixed text-sm md:table-auto md:min-w-[1180px]">
+          <thead className="hidden bg-muted/50 md:table-header-group">
             <tr>
               <th className="px-4 py-3 text-left section-label">Pagador</th>
               <th className="px-4 py-3 text-left section-label">WhatsApp</th>
@@ -455,9 +455,60 @@ function FinanceiroContent() {
                 const whatsappPausado = Boolean(l.whatsappCobrancaPausada)
                 const pagadorNome = (l.pagadorNome as string | undefined) ?? (l.clienteNome as string | undefined) ?? '—'
                 const pagadorWhatsapp = (l.pagadorWhatsapp as string | undefined) ?? '—'
+                // Mesmas ações na linha (desktop) e no card (celular).
+                const acoes = (
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground" title="Ver timeline" onClick={() => setTimelineLancamento(l as Record<string, unknown>)}>
+                      <Clock className="h-3.5 w-3.5" />
+                    </Button>
+                    {l.status === 'pendente' ? (
+                      <LancamentoBaixar
+                        lancamentoId={l.id as string}
+                        valor={l.valor as number}
+                        clienteNome={l.clienteNome as string | undefined}
+                        descricao={l.descricao as string | undefined}
+                        dataVencimento={l.dataVencimento as Timestamp | undefined}
+                        onBaixado={() => void refreshFinanceiro()}
+                      />
+                    ) : null}
+                    {(l.tipo === 'receita' || usuario?.perfil === 'admin') && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
+                          <MoreHorizontal className="h-3.5 w-3.5" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {l.tipo === 'receita' ? (
+                            <>
+                              <DropdownMenuItem onClick={() => void handleWhatsappAction('send', l.id as string)}>
+                                <Send className="h-3.5 w-3.5 mr-2" />Enviar cobrança agora
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleWhatsappAction(whatsappPausado ? 'resume' : 'pause', l.id as string)}>
+                                {whatsappPausado ? <Play className="h-3.5 w-3.5 mr-2" /> : <Pause className="h-3.5 w-3.5 mr-2" />}
+                                {whatsappPausado ? 'Retomar régua' : 'Pausar régua'}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleWhatsappAction('reschedule', l.id as string)}>
+                                <CalendarClock className="h-3.5 w-3.5 mr-2" />Reagendar régua
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void openWhatsappHistory(l.id as string)}>
+                                <History className="h-3.5 w-3.5 mr-2" />Histórico WhatsApp
+                              </DropdownMenuItem>
+                            </>
+                          ) : null}
+                          {l.tipo === 'receita' && usuario?.perfil === 'admin' ? <DropdownMenuSeparator /> : null}
+                          {usuario?.perfil === 'admin' ? (
+                            <DropdownMenuItem onClick={() => setDeleteId(l.id as string)} className="text-destructive">
+                              <Trash2 className="h-3.5 w-3.5 mr-2" />Excluir
+                            </DropdownMenuItem>
+                          ) : null}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
+                )
 
                 return (
-                  <tr key={l.id as string} className={`transition-colors hover:bg-muted/35${riscoMotivo ? ' border-l-2 border-l-destructive' : ''}`}>
+                  <Fragment key={l.id as string}>
+                  <tr className={`hidden transition-colors hover:bg-muted/35 md:table-row${riscoMotivo ? ' border-l-2 border-l-destructive' : ''}`}>
                     <td className="px-4 py-3">
                       <div className="min-w-0">
                         <p className="font-medium">{pagadorNome}</p>
@@ -508,55 +559,35 @@ function FinanceiroContent() {
                       {proximaAcao ? formatDateTime(proximaAcao) : '—'}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground" title="Ver timeline" onClick={() => setTimelineLancamento(l as Record<string, unknown>)}>
-                          <Clock className="h-3.5 w-3.5" />
-                        </Button>
-                        {l.status === 'pendente' ? (
-                          <LancamentoBaixar
-                            lancamentoId={l.id as string}
-                            valor={l.valor as number}
-                            clienteNome={l.clienteNome as string | undefined}
-                            descricao={l.descricao as string | undefined}
-                            dataVencimento={l.dataVencimento as Timestamp | undefined}
-                            onBaixado={() => void refreshFinanceiro()}
-                          />
-                        ) : null}
-                        {(l.tipo === 'receita' || usuario?.perfil === 'admin') && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
-                              <MoreHorizontal className="h-3.5 w-3.5" />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {l.tipo === 'receita' ? (
-                                <>
-                                  <DropdownMenuItem onClick={() => void handleWhatsappAction('send', l.id as string)}>
-                                    <Send className="h-3.5 w-3.5 mr-2" />Enviar cobrança agora
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => void handleWhatsappAction(whatsappPausado ? 'resume' : 'pause', l.id as string)}>
-                                    {whatsappPausado ? <Play className="h-3.5 w-3.5 mr-2" /> : <Pause className="h-3.5 w-3.5 mr-2" />}
-                                    {whatsappPausado ? 'Retomar régua' : 'Pausar régua'}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => void handleWhatsappAction('reschedule', l.id as string)}>
-                                    <CalendarClock className="h-3.5 w-3.5 mr-2" />Reagendar régua
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => void openWhatsappHistory(l.id as string)}>
-                                    <History className="h-3.5 w-3.5 mr-2" />Histórico WhatsApp
-                                  </DropdownMenuItem>
-                                </>
-                              ) : null}
-                              {l.tipo === 'receita' && usuario?.perfil === 'admin' ? <DropdownMenuSeparator /> : null}
-                              {usuario?.perfil === 'admin' ? (
-                                <DropdownMenuItem onClick={() => setDeleteId(l.id as string)} className="text-destructive">
-                                  <Trash2 className="h-3.5 w-3.5 mr-2" />Excluir
-                                </DropdownMenuItem>
-                              ) : null}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
+                      {acoes}
+                    </td>
+                  </tr>
+                  <tr className={`md:hidden${riscoMotivo ? ' border-l-2 border-l-destructive' : ''}`}>
+                    <td colSpan={11} className="px-3 py-2.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{pagadorNome}</p>
+                          <p className="truncate text-xs text-muted-foreground">{(l.descricao as string) ?? '—'}</p>
+                        </div>
+                        <p className="shrink-0 text-sm font-semibold tabular-nums">{formatCurrency(l.valor as number)}</p>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Venc. <span className={atrasado ? 'text-destructive font-medium' : ''}>{dataVenc ? formatDate(dataVenc) : '—'}</span>
+                        {dataPagamento ? ` · Pago ${formatDate(dataPagamento)}` : ''}
+                      </p>
+                      <div className="mt-1.5 flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-1">
+                          <Badge variant={st.variant}>{st.label}</Badge>
+                          <Badge variant={WHATSAPP_VARIANT_MAP[whatsappStatus] ?? 'outline'}>
+                            {WHATSAPP_STATUS_LABELS[whatsappStatus] ?? whatsappStatus}
+                          </Badge>
+                          {riscoMotivo ? <span className="text-[11px] font-medium text-destructive leading-tight">{riscoMotivo}</span> : null}
+                        </div>
+                        <div className="shrink-0">{acoes}</div>
                       </div>
                     </td>
                   </tr>
+                  </Fragment>
                 )
               })}
           </tbody>

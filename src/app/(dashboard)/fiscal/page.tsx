@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Timestamp } from 'firebase/firestore'
@@ -228,7 +228,7 @@ export default function FiscalPage() {
               : `${prontosEmissao}/${totalClientesAtivos} cliente${totalClientesAtivos !== 1 ? 's' : ''} pronto${totalClientesAtivos !== 1 ? 's' : ''} para emissão`}
           </span>
         </div>
-        <div className="grid gap-3 p-4 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3 sm:gap-3 sm:p-4 md:grid-cols-5">
           {[
             { label: 'Clientes ativos', value: readinessIsError ? '—' : totalClientesAtivos, tone: 'text-foreground' },
             { label: 'Prontos p/ rascunho', value: readinessIsError ? '—' : prontosRascunho, tone: 'text-info' },
@@ -243,8 +243,8 @@ export default function FiscalPage() {
           ))}
         </div>
         <DataTableShell className="rounded-none border-x-0 border-b-0 shadow-none" density="compact">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead>
+          <table className="w-full table-fixed text-sm md:table-auto md:min-w-[760px]">
+            <thead className="hidden md:table-header-group">
               <tr className="border-b border-border bg-muted/30">
                 <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cliente</th>
                 <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Município</th>
@@ -287,8 +287,25 @@ export default function FiscalPage() {
                   </td>
                 </tr>
               ) : (
-                readinessClientes.slice(0, 8).map((cliente) => (
-                  <tr key={cliente.clienteId} className="hover:bg-muted/30 transition-colors">
+                readinessClientes.slice(0, 8).map((cliente) => {
+                  const statusBadge = (
+                    cliente.prontoEmissao ? (
+                      <Badge className="gap-1 bg-success/10 text-success border-success/20">
+                        <ShieldCheck size={11} /> Pronto
+                      </Badge>
+                    ) : cliente.prontoRascunho ? (
+                      <Badge variant="outline" className="gap-1 border-warning/30 text-amber-800 dark:text-warning">
+                        <AlertTriangle size={11} /> Falta credencial
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive" className="gap-1">
+                        <XCircle size={11} /> Bloqueado
+                      </Badge>
+                    )
+                  )
+                  return (
+                  <Fragment key={cliente.clienteId}>
+                  <tr className="hidden hover:bg-muted/30 transition-colors md:table-row">
                     <td className="px-4 py-3 font-medium max-w-[240px]">
                       <div className="flex items-center gap-1.5">
                         <Link href={`/clientes/${cliente.clienteId}`} className="truncate hover:text-primary">
@@ -307,25 +324,42 @@ export default function FiscalPage() {
                     <td className="px-4 py-3 text-center tabular-nums">{cliente.servicosAtivos}</td>
                     <td className="px-4 py-3 text-center tabular-nums">{cliente.diaEmissaoNFSe ?? '—'}</td>
                     <td className="px-4 py-3">
-                      {cliente.prontoEmissao ? (
-                        <Badge className="gap-1 bg-success/10 text-success border-success/20">
-                          <ShieldCheck size={11} /> Pronto
-                        </Badge>
-                      ) : cliente.prontoRascunho ? (
-                        <Badge variant="outline" className="gap-1 border-warning/30 text-amber-800 dark:text-warning">
-                          <AlertTriangle size={11} /> Falta credencial
-                        </Badge>
-                      ) : (
-                        <Badge variant="destructive" className="gap-1">
-                          <XCircle size={11} /> Bloqueado
-                        </Badge>
-                      )}
+                      {statusBadge}
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground max-w-[320px]">
                       {cliente.bloqueios.length > 0 ? cliente.bloqueios.slice(0, 3).join(', ') : 'Sem bloqueios'}
                     </td>
                   </tr>
-                ))
+                  <tr className="md:hidden">
+                    <td colSpan={6} className="px-3 py-2.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 text-sm font-medium">
+                            <Link href={`/clientes/${cliente.clienteId}`} className="truncate hover:text-primary">
+                              {cliente.clienteNome}
+                            </Link>
+                            {cliente.emissaoAutomatica && (
+                              <span title="Emite sem revisão humana, sozinho, no dia configurado">
+                                <Badge variant="destructive" className="gap-1 shrink-0 text-[10px]">
+                                  <AlertTriangle size={9} /> Auto
+                                </Badge>
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {cliente.municipio ?? '—'} · {cliente.servicosAtivos} serviço{cliente.servicosAtivos !== 1 ? 's' : ''} · dia {cliente.diaEmissaoNFSe ?? '—'}
+                          </p>
+                        </div>
+                        <div className="shrink-0">{statusBadge}</div>
+                      </div>
+                      {cliente.bloqueios.length > 0 ? (
+                        <p className="mt-1 text-xs text-muted-foreground">{cliente.bloqueios.slice(0, 3).join(', ')}</p>
+                      ) : null}
+                    </td>
+                  </tr>
+                  </Fragment>
+                  )
+                })
               )}
             </tbody>
           </table>
@@ -361,8 +395,8 @@ export default function FiscalPage() {
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead>
+          <table className="w-full table-fixed text-sm md:table-auto md:min-w-[640px]">
+            <thead className="hidden md:table-header-group">
               <tr className="border-b border-border bg-muted/30">
                 <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cliente</th>
                 <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Nº NFS-e</th>
@@ -411,11 +445,46 @@ export default function FiscalPage() {
                 notas.map((n) => {
                   const dataEmissao = n.dataEmissao as Timestamp | undefined
                   const isRascunho = n._origem === 'rascunho'
+                  // Mesmas ações na linha (desktop) e no card (celular).
+                  const acoes = (
+                    <div className="flex justify-end gap-2">
+                      {hasErroTecnico(n) ? (
+                        <button
+                          type="button"
+                          onClick={() => setNotaErroOpen(n)}
+                          className="text-muted-foreground hover:text-destructive transition-colors"
+                          title="Ver erro técnico"
+                        >
+                          <Eye size={13} />
+                        </button>
+                      ) : null}
+                      {isRascunho && (
+                        <>
+                        <button
+                          type="button"
+                          onClick={() => openEmissaoModal({ rascunhoId: n.id as string })}
+                          className="text-muted-foreground hover:text-primary transition-colors"
+                          title="Revisar rascunho"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRascunhoParaRemover(n.id as string)}
+                          className="text-muted-foreground hover:text-destructive transition-colors"
+                          title="Remover rascunho"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                        </>
+                      )}
+                    </div>
+                  )
                   return (
+                    <Fragment key={n.id as string}>
                     <tr
-                      key={n.id as string}
                       className={cn(
-                        'transition-colors hover:bg-muted/30',
+                        'hidden transition-colors hover:bg-muted/30 md:table-row',
                         isRascunho && 'opacity-75'
                       )}
                     >
@@ -442,40 +511,35 @@ export default function FiscalPage() {
                         <StatusPill status={n.status as string} />
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <div className="flex justify-end gap-2">
-                          {hasErroTecnico(n) ? (
-                            <button
-                              type="button"
-                              onClick={() => setNotaErroOpen(n)}
-                              className="text-muted-foreground hover:text-destructive transition-colors"
-                              title="Ver erro técnico"
-                            >
-                              <Eye size={13} />
-                            </button>
-                          ) : null}
-                          {isRascunho && (
-                            <>
-                            <button
-                              type="button"
-                              onClick={() => openEmissaoModal({ rascunhoId: n.id as string })}
-                              className="text-muted-foreground hover:text-primary transition-colors"
-                              title="Revisar rascunho"
-                            >
-                              <Pencil size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setRascunhoParaRemover(n.id as string)}
-                              className="text-muted-foreground hover:text-destructive transition-colors"
-                              title="Remover rascunho"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                            </>
-                          )}
+                        {acoes}
+                      </td>
+                    </tr>
+                    <tr className={cn('md:hidden', isRascunho && 'opacity-75')}>
+                      <td colSpan={6} className="px-3 py-2.5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="flex items-center gap-1.5 text-sm font-medium">
+                              <span className="truncate">{(n.clienteNome as string) ?? '—'}</span>
+                              {n.origemEmissao === 'automatica' && (
+                                <span title="Emitida automaticamente, sem revisão humana" className="shrink-0 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-destructive">
+                                  Auto
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              <span className="font-mono">{(n.numeroNfse as string) ?? (isRascunho ? '(rascunho)' : '—')}</span>
+                              {' · '}{dataEmissao ? formatDate(tsToDate(dataEmissao)) : '—'}
+                            </p>
+                          </div>
+                          <p className="shrink-0 text-sm font-semibold tabular-nums">{formatCurrency((n.valorServico as number) ?? 0)}</p>
+                        </div>
+                        <div className="mt-1.5 flex items-center justify-between gap-2">
+                          <StatusPill status={n.status as string} />
+                          {acoes}
                         </div>
                       </td>
                     </tr>
+                    </Fragment>
                   )
                 })
               )}
