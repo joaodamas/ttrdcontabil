@@ -13,6 +13,12 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Adicionado — mapa de convênios NFS-e de todos os municípios (2026-11-05)
+- Consulta na **produção** do Sistema Nacional dos 5.571 municípios: 3.469 emitem pelo Emissor Nacional, 2.076 só compartilham dados (emissão no sistema da prefeitura), 26 sem convênio. Lista em `docs/nfse-nacional-convenios-2026-11-05.csv`; mapa em `src/lib/nfse-nacional-convenios.json` com `situacaoNacional()`; script `scripts/atualizar-convenios-nfse.cjs` para atualizar.
+- Emissão avisa ao escolher o cliente (em Produção) quando o município não emite pelo Nacional; prontidão mostra "Município não emite pelo Ambiente Nacional".
+- Prontidão deixava de fora a chave única: marcava "Município não liberado para produção" para todo cliente nacional em produção. Agora essa regra vale só para o conector da prefeitura.
+- Correção de diagnóstico: Cajamar **emite** pelo Nacional em produção (o "sem convênio" anterior era só do ambiente de testes).
+
 ### Alterado — emissão pelo Ambiente Nacional sem passos manuais (2026-11-05)
 - **Chave única "Ambiente Nacional — produção liberada"** em Administração → Conectores (`configuracoes/nfse_nacional`, só admin grava; confirmação ao ligar). Substitui a liberação município a município para o Nacional: ligada, clientes em Produção emitem em qualquer município aderente (o convênio continua conferido a cada emissão); desligada, nada sai em produção. O botão "Adicionar ao Ambiente Nacional" por município saiu.
 - **Clientes da Spedy emitem pelo Nacional automaticamente** (sem reabrir e salvar a configuração); sai o bloqueio "Spedy descontinuada".
