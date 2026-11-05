@@ -18,6 +18,8 @@ import type { ClienteRecord } from '@/features/clientes/types'
 import { Badge } from '@/components/ui/badge'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button, buttonVariants } from '@/components/ui/button'
+import { NfseStatusBadge } from '@/components/ui/status-badge'
+import { getStatusLabel } from '@/lib/status-semantics'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { TableEmptyState } from '@/components/ui/empty-state'
@@ -28,15 +30,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { ChevronDown, Download, Eye, FileText, Loader2, RefreshCw, Search, XCircle, History } from 'lucide-react'
 import { LogsNfseModal } from '@/components/fiscal/logs-nfse-modal'
 import { HeatmapFiscal } from '@/components/fiscal/heatmap-fiscal'
-
-const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  emitida: { label: 'Emitida', variant: 'default' },
-  pendente_processamento: { label: 'Pendente', variant: 'outline' },
-  cancelamento_pendente: { label: 'Cancelamento pendente', variant: 'outline' },
-  rejeitada: { label: 'Rejeitada', variant: 'destructive' },
-  cancelada: { label: 'Cancelada', variant: 'secondary' },
-  erro_integracao: { label: 'Erro', variant: 'destructive' },
-}
 
 const TIPO_LABEL: Record<string, string> = { nfe: 'NF-e', nfse: 'NFS-e' }
 
@@ -65,6 +58,7 @@ function FiscalHistoricoContent() {
 
   const [notas, setNotas] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(true)
+  const [erroCarga, setErroCarga] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [lastCursor, setLastCursor] = useState<FirestoreCursor | null>(null)
   const [clientes, setClientes] = useState<ClienteRecord[]>([])
@@ -123,6 +117,7 @@ function FiscalHistoricoContent() {
 
   const loadNotas = useCallback(() => {
     setLoading(true)
+    setErroCarga(null)
     const cursor = buscaAtiva ? null : (activePagination.cursorStack[page - 1] ?? null)
     const hasDateWindow = Boolean(ano && (!mes || (mes >= 1 && mes <= 12)))
     const inicioPeriodo = hasDateWindow
@@ -173,7 +168,8 @@ function FiscalHistoricoContent() {
         setLastCursor(filtered.length > PAGE_SIZE ? (data.cursors[PAGE_SIZE - 1] ?? null) : null)
       }
     }).catch((err) => {
-      toast.error(getErrorMessage(err, 'Não foi possível carregar o histórico de emissões. Verifique os filtros e tente novamente.'))
+      console.error('[fiscal/historico] falha ao carregar', err)
+      setErroCarga(getErrorMessage(err, 'Verifique sua conexão e os filtros, e tente novamente.'))
       setNotas([])
       setHasMore(false)
       setLastCursor(null)
@@ -402,7 +398,7 @@ function FiscalHistoricoContent() {
       <div className="surface-subtle flex flex-wrap items-center gap-2 border px-3 py-2.5">
         {['', 'emitida', 'pendente_processamento', 'cancelamento_pendente', 'rejeitada', 'cancelada', 'erro_integracao'].map(s => (
           <FilterBtn key={s} href={buildUrl({ status: s })} active={status === s}>
-            {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+            {s === '' ? 'Todos' : getStatusLabel('nfse', s)}
           </FilterBtn>
         ))}
       </div>
@@ -422,7 +418,15 @@ function FiscalHistoricoContent() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {notas.length === 0 ? (
+            {erroCarga && !loading ? (
+              <TableEmptyState
+                colSpan={8}
+                icon={FileText}
+                title="Não foi possível carregar o histórico de emissões"
+                description={erroCarga}
+                action={{ label: 'Tentar novamente', onClick: loadNotas }}
+              />
+            ) : notas.length === 0 ? (
               <TableEmptyState
                 colSpan={8}
                 icon={FileText}
@@ -443,10 +447,6 @@ function FiscalHistoricoContent() {
                     </td>
                   </tr>
                   {group.notas.map((n) => {
-                    const st = STATUS_MAP[n.status as string] ?? {
-                      label: n.status as string,
-                      variant: 'outline' as const,
-                    }
                     const dataEmissao = n.dataEmissao as Timestamp | undefined
                     return (
                       <tr key={n.id as string} className={cn('transition-colors hover:bg-muted/35', (n.status === 'rejeitada' || n.status === 'erro_integracao') && 'bg-destructive/[0.03] border-l-2 border-l-destructive')}>
@@ -476,7 +476,7 @@ function FiscalHistoricoContent() {
                           {formatCurrency(valorDocumento(n))}
                         </td>
                         <td className="px-4 py-3">
-                          <Badge variant={st.variant}>{st.label}</Badge>
+                          <NfseStatusBadge status={n.status as string} />
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-1.5">

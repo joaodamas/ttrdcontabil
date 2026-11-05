@@ -20,6 +20,8 @@ const eslintConfig = defineConfig([
     "functions/node_modules/**",
     // UI kit e assets do design system — protótipos standalone, não código Next.js
     "docs/**",
+    // Cópias de trabalho de agentes (git worktrees locais)
+    ".claude/**",
   ]),
   ...storybook.configs["flat/recommended"]
 ]);

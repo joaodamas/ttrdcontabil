@@ -8,6 +8,8 @@ import { useQueryClient } from '@tanstack/react-query'
 
 import { formatDate, formatCurrency, tsToDate, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
+import { NfseStatusBadge } from '@/components/ui/status-badge'
+import { resumirBloqueios } from '@/lib/fiscal-bloqueios'
 import { buttonVariants } from '@/components/ui/button'
 import { PageHeader } from '@/components/layout/page-header'
 import { AppModal } from '@/components/ui/app-modal'
@@ -27,26 +29,6 @@ import { gerarRascunhosNfseMensais, removeRascunho } from '@/features/fiscal/ser
 import { getErrorMessage } from '@/lib/error-message'
 import { useFiscalDashboard, useFiscalReadiness } from '@/features/fiscal/hooks'
 import { fiscalKeys } from '@/features/fiscal/queries'
-
-// ── Status map — soft colors inspired by QIVE ────────────────
-const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  emitida:                 { label: 'Emitida',    className: 'bg-success/10 text-success border-success/20' },
-  pendente_processamento:  { label: 'Pendente',   className: 'bg-warning/10 text-amber-800 dark:text-warning border-warning/20' },
-  rascunho:                { label: 'Rascunho',   className: 'bg-muted text-muted-foreground border-border' },
-  aguardando_emissao:      { label: 'Aguardando', className: 'bg-info/10 text-info border-info/20' },
-  rejeitada:               { label: 'Rejeitada',  className: 'bg-destructive/10 text-destructive border-destructive/20' },
-  cancelada:               { label: 'Cancelada',  className: 'bg-muted text-muted-foreground border-border' },
-  erro_integracao:         { label: 'Erro',       className: 'bg-destructive/10 text-destructive border-destructive/20' },
-}
-
-function StatusPill({ status }: { status: string }) {
-  const cfg = STATUS_CONFIG[status] ?? { label: status, className: 'bg-muted text-muted-foreground border-border' }
-  return (
-    <span className={cn('inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium', cfg.className)}>
-      {cfg.label}
-    </span>
-  )
-}
 
 export default function FiscalPage() {
   const router = useRouter()
@@ -316,8 +298,8 @@ export default function FiscalPage() {
                         </Badge>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground max-w-[320px]">
-                      {cliente.bloqueios.length > 0 ? cliente.bloqueios.slice(0, 3).join(', ') : 'Sem bloqueios'}
+                    <td className="px-4 py-3 text-xs text-muted-foreground max-w-[320px]" title={cliente.bloqueios.length > 3 ? cliente.bloqueios.join('\n') : undefined}>
+                      {resumirBloqueios(cliente.bloqueios)}
                     </td>
                   </tr>
                 ))
@@ -434,7 +416,7 @@ export default function FiscalPage() {
                         {formatCurrency((n.valorServico as number) ?? 0)}
                       </td>
                       <td className="px-4 py-3">
-                        <StatusPill status={n.status as string} />
+                        <NfseStatusBadge status={n.status as string} />
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-2">

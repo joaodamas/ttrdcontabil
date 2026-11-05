@@ -14,6 +14,8 @@ import { getErrorMessage } from '@/lib/error-message'
 import { Badge } from '@/components/ui/badge'
 import { PageHeader } from '@/components/layout/page-header'
 import { Button, buttonVariants } from '@/components/ui/button'
+import { PagamentoStatusBadge } from '@/components/ui/status-badge'
+import { getStatusLabel } from '@/lib/status-semantics'
 import { KpiCard } from '@/components/ui/kpi-card'
 import { LancamentoBaixar } from '@/components/financeiro/lancamento-baixar'
 import { FilaCobrancaItem } from '@/components/financeiro/fila-cobranca'
@@ -40,14 +42,6 @@ import { TimelineFinanceiraModal } from '@/components/financeiro/timeline-financ
 import type { FirestoreCursor } from '@/lib/firestore-client'
 import { fetchWhatsappHistory, pauseWhatsappRuleForLancamento, rescheduleWhatsappRuleForLancamento, resumeWhatsappRuleForLancamento, sendWhatsappNow } from '@/features/whatsapp/services'
 import { WHATSAPP_STATUS_LABELS } from '@/features/whatsapp/types'
-
-const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  pendente: { label: 'Pendente', variant: 'outline' },
-  pago: { label: 'Pago', variant: 'default' },
-  cancelado: { label: 'Cancelado', variant: 'destructive' },
-  atrasado: { label: 'Atrasado', variant: 'destructive' },
-  estornado: { label: 'Estornado', variant: 'secondary' },
-}
 
 const TIPO_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   receita: { label: 'Receita', variant: 'default' },
@@ -215,7 +209,7 @@ function FinanceiroContent() {
           descricao: l.descricao ?? '',
           cliente: l.clienteNome ?? '',
           tipo: TIPO_MAP[l.tipo as string]?.label ?? l.tipo ?? '',
-          status: STATUS_MAP[l.status as string]?.label ?? l.status ?? '',
+          status: (l.status ? getStatusLabel('pagamento', l.status as string) : ''),
           valor: formatCurrency(l.valor as number),
           vencimento: vencimento ? formatDate(vencimento) : '',
           pagamento: pagamento ? formatDate(pagamento) : '',
@@ -336,7 +330,7 @@ function FinanceiroContent() {
           <div className="flex flex-wrap gap-2">
             {(['', 'pendente', 'atrasado', 'pago', 'cancelado', 'estornado'] as const).map(s => (
               <FilterBtn key={s} onClick={() => { setStatus(s); setPagination({ filterKey, page: 1, cursorStack: [null] }) }} active={status === s}>
-                {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+                {s === '' ? 'Todos' : getStatusLabel('pagamento', s)}
               </FilterBtn>
             ))}
           </div>
@@ -357,7 +351,7 @@ function FinanceiroContent() {
           <span className="text-xs text-muted-foreground mr-1">Status:</span>
           {(['', 'pendente', 'atrasado', 'pago', 'cancelado', 'estornado'] as const).map((s) => (
             <FilterBtn key={s} onClick={() => { setStatus(s); setPagination({ filterKey, page: 1, cursorStack: [null] }) }} active={status === s}>
-              {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+              {s === '' ? 'Todos' : getStatusLabel('pagamento', s)}
             </FilterBtn>
           ))}
         </div>
@@ -428,10 +422,6 @@ function FinanceiroContent() {
                 action={!tipo && !status ? { label: 'Novo Lançamento', href: '/financeiro/novo' } : undefined}
               />
             ) : lancamentos.map((l) => {
-                const st = STATUS_MAP[l.status as string] ?? {
-                  label: l.status as string,
-                  variant: 'outline' as const,
-                }
                 const dataVenc = tsToDate(l.dataVencimento)
                 const dataPagamento = tsToDate(l.dataPagamento)
                 const atrasado =
@@ -485,7 +475,7 @@ function FinanceiroContent() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col items-start gap-1">
-                        <Badge variant={st.variant}>{st.label}</Badge>
+                        <PagamentoStatusBadge status={l.status as string} />
                         {riscoMotivo
                           ? <span className="text-[11px] font-medium text-destructive leading-tight">{riscoMotivo}</span>
                           : <span className={`text-xs ${atrasado ? 'text-destructive' : 'text-muted-foreground'}`}>{statusOperacional}</span>

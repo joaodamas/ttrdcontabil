@@ -1,12 +1,15 @@
 'use client'
 
 import { useCallback, useState, useEffect } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
 
 import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { Badge } from '@/components/ui/badge'
 import { PageHeader } from '@/components/layout/page-header'
+import { AmbienteBadge, NfseStatusBadge } from '@/components/ui/status-badge'
+import { RecordUnavailable, type RecordLoadFailure } from '@/components/ui/record-unavailable'
+import { getErrorMessage } from '@/lib/error-message'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, Pencil, Plus, ShieldCheck, ShieldAlert, ShieldOff, AlertTriangle, Package, Truck } from 'lucide-react'
@@ -23,40 +26,37 @@ const REGIME_LABELS: Record<string, string> = {
   isento:           'Isento / Imune',
 }
 
-const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  emitida:                 { label: 'Emitida',    variant: 'default' },
-  cancelada:               { label: 'Cancelada',  variant: 'destructive' },
-  pendente_processamento:  { label: 'Pendente',   variant: 'outline' },
-  erro_integracao:         { label: 'Erro',       variant: 'destructive' },
-  rejeitada:               { label: 'Rejeitada',  variant: 'destructive' },
-}
-
 export default function ClienteFiscalPage() {
   const pathname = usePathname()
   const id = getPathSegmentAfter(pathname, 'clientes')
-  const router  = useRouter()
 
   const [cliente,   setCliente]   = useState<Record<string, unknown> | null>(null)
   const [fiscal,    setFiscal]    = useState<Record<string, unknown> | null>(null)
   const [notas,     setNotas]     = useState<Array<Record<string, unknown>>>([])
   const [loading,   setLoading]   = useState(true)
+  const [falha,     setFalha]     = useState<{ reason: RecordLoadFailure; message?: string } | null>(null)
   const [configOpen, setConfigOpen] = useState(false)
   const [emitirOpen, setEmitirOpen] = useState(false)
 
   const load = useCallback(() => {
     if (!id) return
     setLoading(true)
+    setFalha(null)
     Promise.all([
       getDocument('clientes', id),
       listDocuments('clientes_fiscal', [where('clienteId', '==', id), limit(1)]),
       listDocuments('nfse_emitidas', [where('clienteId', '==', id), orderBy('dataEmissao', 'desc'), limit(10)]),
     ]).then(([clienteData, fiscalData, notasData]) => {
-      if (!clienteData) { router.push('/clientes'); return }
+      if (!clienteData) { setCliente(null); setFalha({ reason: 'nao_encontrado' }); return }
       setCliente(clienteData as Record<string, unknown>)
       setFiscal(fiscalData.length > 0 ? fiscalData[0] as Record<string, unknown> : null)
       setNotas(notasData as Array<Record<string, unknown>>)
+    }).catch((err: unknown) => {
+      console.error('[clientes/fiscal] falha ao carregar', err)
+      setCliente(null)
+      setFalha({ reason: 'erro', message: getErrorMessage(err, 'Verifique sua conexão e tente novamente.') })
     }).finally(() => setLoading(false))
-  }, [id, router])
+  }, [id])
 
   useEffect(() => {
     queueMicrotask(() => { void load() })
@@ -70,7 +70,19 @@ export default function ClienteFiscalPage() {
     )
   }
 
-  if (!cliente) return null
+  if (!cliente) {
+    return (
+      <RecordUnavailable
+        reason={falha?.reason ?? 'nao_encontrado'}
+        notFoundTitle="Cliente não encontrado"
+        errorTitle="Não foi possível carregar os dados fiscais do cliente"
+        errorDescription={falha?.message}
+        backHref={falha?.reason === 'erro' && id ? `/clientes/${id}` : '/clientes'}
+        backLabel={falha?.reason === 'erro' && id ? 'Voltar para o cliente' : 'Voltar para clientes'}
+        onRetry={load}
+      />
+    )
+  }
 
   // Ver mesma lógica em ../page-client.tsx: categoriaFiscal vem do CNAE
   // (scripts/classificar-clientes-fiscal.mjs) e decide NFS-e × NF-e × CT-e.
@@ -197,10 +209,7 @@ export default function ClienteFiscalPage() {
               <div>
                 <dt className="text-muted-foreground text-xs">Ambiente</dt>
                 <dd className="font-medium">
-                  {fiscal.ambienteEmissao === 'producao'
-                    ? <Badge variant="default" className="text-xs">Produção</Badge>
-                    : <Badge variant="secondary" className="text-xs">Homologação</Badge>
-                  }
+                  <AmbienteBadge ambiente={fiscal.ambienteEmissao === 'producao' ? 'producao' : 'homologacao'} />
                 </dd>
               </div>
               <div>
@@ -291,7 +300,6 @@ export default function ClienteFiscalPage() {
               </thead>
               <tbody className="divide-y">
                 {notas.map((n) => {
-                  const st = STATUS_MAP[n.status as string] ?? { label: n.status as string, variant: 'outline' as const }
                   const dt = n.dataEmissao instanceof Timestamp ? n.dataEmissao.toDate() : null
                   return (
                     <tr key={n.id as string} className="hover:bg-muted/30">
@@ -306,7 +314,7 @@ export default function ClienteFiscalPage() {
                         {dt ? dt.toLocaleDateString('pt-BR') : '—'}
                       </td>
                       <td className="px-4 py-2">
-                        <Badge variant={st.variant}>{st.label}</Badge>
+                        <NfseStatusBadge status={n.status as string} />
                       </td>
                     </tr>
                   )

@@ -24,6 +24,8 @@ import { useQueryClient } from '@tanstack/react-query'
 
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
+import { TarefaPrioridadeBadge } from '@/components/ui/status-badge'
+import { getStatusLabel } from '@/lib/status-semantics'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -50,20 +52,6 @@ import { dateFromIsoLocal, isoDateLocal } from '@/lib/form-dates'
 type FilaItem = HojeTask & {
   grupo: 'atrasada' | 'hoje' | 'proximos'
   score: number
-}
-
-const PRIORIDADE_LABEL: Record<string, string> = {
-  urgente: 'Urgente',
-  alta: 'Alta',
-  normal: 'Normal',
-  baixa: 'Baixa',
-}
-
-const PRIORIDADE_BADGE: Record<string, 'destructive' | 'warning' | 'outline' | 'secondary'> = {
-  urgente: 'destructive',
-  alta: 'warning',
-  normal: 'outline',
-  baixa: 'secondary',
 }
 
 function prioridadePeso(prioridade?: string) {
@@ -160,7 +148,6 @@ function TaskRow({
 }) {
   const prazo = tsToDate(item.dataPrazo)
   const atraso = diasAtraso(prazo)
-  const badge = PRIORIDADE_BADGE[item.prioridade ?? 'normal'] ?? 'outline'
   const semResponsavel = !item.responsavelId
   const [editingPrazo, setEditingPrazo] = useState(false)
   const [savingPrazo,  setSavingPrazo]  = useState(false)
@@ -193,7 +180,7 @@ function TaskRow({
           <Link href={`/tarefas/${item.id}`} className="font-medium hover:underline">
             {item.titulo ?? 'Tarefa sem título'}
           </Link>
-          <Badge variant={badge}>{PRIORIDADE_LABEL[item.prioridade ?? 'normal'] ?? item.prioridade ?? 'Normal'}</Badge>
+          <TarefaPrioridadeBadge prioridade={item.prioridade ?? 'normal'} />
           {impactoPeso(item) >= 3 && (
             <span className="rounded-full border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-[10px] font-semibold text-warning">fiscal</span>
           )}
@@ -553,7 +540,7 @@ export default function HojePage() {
                 : 'border-border bg-background text-muted-foreground hover:bg-muted'
             )}
           >
-            {p === 'todos' ? 'Todas' : PRIORIDADE_LABEL[p] ?? p}
+            {p === 'todos' ? 'Todas' : getStatusLabel('tarefaPrioridade', p)}
           </button>
         ))}
         {semResponsavelCount > 0 && (

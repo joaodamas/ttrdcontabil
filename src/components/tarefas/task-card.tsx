@@ -5,6 +5,7 @@ import { Timestamp } from 'firebase/firestore'
 import { updateDocument } from '@/lib/firestore-client'
 import { formatDate, tsToDate, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
+import { TarefaPrioridadeBadge } from '@/components/ui/status-badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { CheckCheck, AlertTriangle, Clock, User, Calendar } from 'lucide-react'
@@ -72,13 +73,6 @@ const BORDER_LEFT: Record<string, string> = {
   baixa: 'border-l-transparent',
 }
 
-const PRIORITY_BADGE: Record<string, string> = {
-  urgente: 'bg-destructive/10 text-destructive dark:bg-destructive/20 border-transparent',
-  alta: 'bg-warning/15 text-amber-800 dark:text-warning dark:bg-warning/20 border-transparent',
-  normal: 'bg-muted text-muted-foreground border-transparent',
-  baixa: 'bg-muted/50 text-muted-foreground/70 border-transparent',
-}
-
 export function TaskCard({ task, usuarios, selected, onToggleSelected, onUpdated }: TaskCardProps) {
   const [saving, setSaving] = useState(false)
 
@@ -123,7 +117,6 @@ export function TaskCard({ task, usuarios, selected, onToggleSelected, onUpdated
 
   const prioridade = task.prioridade ?? 'normal'
   const borderColor = BORDER_LEFT[prioridade] ?? 'border-l-border'
-  const badgeClass = PRIORITY_BADGE[prioridade] ?? PRIORITY_BADGE.normal
 
   return (
     <div
@@ -150,17 +143,7 @@ export function TaskCard({ task, usuarios, selected, onToggleSelected, onUpdated
             {/* Priority badge */}
             <Tooltip>
               <TooltipTrigger>
-                <span
-                  className={cn(
-                    'inline-flex cursor-help items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold leading-none border',
-                    badgeClass
-                  )}
-                >
-                  {prioridade === 'urgente' && (
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-destructive animate-pulse" />
-                  )}
-                  <span className="capitalize">{prioridade}</span>
-                </span>
+                <TarefaPrioridadeBadge prioridade={prioridade} className="cursor-help" />
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-[min(20rem,calc(100vw-2rem))] text-left leading-snug">
                 {prioridadeHint(task.prioridade)}

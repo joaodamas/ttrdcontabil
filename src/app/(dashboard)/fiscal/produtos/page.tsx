@@ -24,6 +24,7 @@ export default function ProdutosPage() {
   const [produtos, setProdutos] = useState<ProdutoRecord[]>([])
   const [loadingClientes, setLoadingClientes] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [erroCarga, setErroCarga] = useState<string | null>(null)
   const [paraInativar, setParaInativar] = useState<ProdutoRecord | null>(null)
 
   useEffect(() => {
@@ -36,9 +37,13 @@ export default function ProdutosPage() {
   const load = useCallback(() => {
     if (!clienteId) { setProdutos([]); return }
     setLoading(true)
+    setErroCarga(null)
     fetchProdutos({ clienteId })
       .then(setProdutos)
-      .catch((err) => toast.error(getErrorMessage(err, 'Não foi possível carregar os produtos. Verifique sua permissão de acesso.')))
+      .catch((err) => {
+        console.error('[fiscal/produtos] falha ao carregar', err)
+        setErroCarga(getErrorMessage(err, 'Verifique sua conexão e sua permissão de acesso, e tente novamente.'))
+      })
       .finally(() => setLoading(false))
   }, [clienteId])
 
@@ -108,7 +113,15 @@ export default function ProdutosPage() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {produtos.length === 0 ? (
+                {erroCarga ? (
+                  <TableEmptyState
+                    colSpan={7}
+                    icon={Package}
+                    title="Não foi possível carregar os produtos"
+                    description={erroCarga}
+                    action={{ label: 'Tentar novamente', onClick: load }}
+                  />
+                ) : produtos.length === 0 ? (
                   <TableEmptyState
                     colSpan={7}
                     icon={Package}

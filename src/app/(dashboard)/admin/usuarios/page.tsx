@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { fetchUsuariosAdmin } from '@/features/admin/services'
+import { getErrorMessage } from '@/lib/error-message'
 import type { UsuarioAdmin } from '@/features/admin/types'
 
 const PERFIL_LABELS: Record<string, string> = {
@@ -35,11 +36,17 @@ const PERFIL_COLORS: Record<string, string> = {
 export default function AdminUsuariosPage() {
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([])
   const [loading, setLoading]   = useState(true)
+  const [erroCarga, setErroCarga] = useState<string | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
+    setErroCarga(null)
     fetchUsuariosAdmin()
       .then(setUsuarios)
+      .catch((err: unknown) => {
+        console.error('[admin/usuarios] falha ao carregar', err)
+        setErroCarga(getErrorMessage(err, 'Verifique sua conexão e tente novamente.'))
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -79,7 +86,15 @@ export default function AdminUsuariosPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {usuarios.length === 0 ? (
+              {erroCarga ? (
+                <TableEmptyState
+                  colSpan={7}
+                  icon={UsersRound}
+                  title="Não foi possível carregar os usuários"
+                  description={erroCarga}
+                  action={{ label: 'Tentar novamente', onClick: load }}
+                />
+              ) : usuarios.length === 0 ? (
                 <TableEmptyState
                   colSpan={7}
                   icon={UsersRound}
