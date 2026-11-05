@@ -179,7 +179,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
         aliquotaPadrao:       data.aliquotaPadrao    ?? null,
         issRetidoPadrao:      data.issRetidoPadrao   ?? false,
         // Spedy foi descontinuada (sem integrador): salvar migra para o Ambiente Nacional.
-        provedorNfse:         data.provedorNfse === 'prefeitura' ? 'prefeitura' : 'nacional',
+        provedorNfse:         'nacional',
         codigoTributacaoNacional:  data.codigoTributacaoNacional  || null,
         codigoTributacaoMunicipal: data.codigoTributacaoMunicipal || null,
         serieDps:                  data.serieDps                  || null,
@@ -275,32 +275,12 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
             </div>
           )}
 
-          {/* Provedor de emissão — Nacional sempre; a prefeitura fica escondida em "avançado" */}
-          <details className="rounded-md border border-border/60 px-3 py-2" open={!nacional}>
-            <summary className="cursor-pointer select-none text-xs text-muted-foreground">
-              Emissão pelo <strong className="text-foreground">{nacional ? 'Ambiente Nacional' : 'conector da prefeitura (legado)'}</strong> · opções avançadas
-            </summary>
-          <div className="mt-2 space-y-1.5">
-            <Label>Emitir por</Label>
-            <Controller name="provedorNfse" control={control} render={({ field }) => (
-              <Select
-                value={field.value === 'prefeitura' ? 'prefeitura' : 'nacional'}
-                onValueChange={field.onChange}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="nacional">Ambiente Nacional (padrão)</SelectItem>
-                  <SelectItem value="prefeitura">Conector da prefeitura (legado)</SelectItem>
-                </SelectContent>
-              </Select>
-            )} />
-            <p className="text-xs text-muted-foreground">
-              {nacional
-                ? 'A nota sai pela API pública da Sefin Nacional, assinada com o certificado A1 do próprio cliente. O município precisa ter aderido ao Emissor Nacional — se não tiver, a emissão é recusada com aviso.'
-                : 'A nota sai pelo webservice da prefeitura. Use só para municípios que ainda não aderiram ao Emissor Nacional.'}
-            </p>
-          </div>
-          </details>
+          {/* Emissão só pelo Ambiente Nacional (decisão do dono, 2026-11-05): sem
+              conector de prefeitura na operação, então não há escolha de provedor. */}
+          <p className="rounded-md border border-border/60 px-3 py-2 text-xs text-muted-foreground">
+            Emissão pelo <strong className="text-foreground">Ambiente Nacional</strong>, com o certificado A1 do próprio
+            cliente. Municípios que não aderiram ao Emissor Nacional emitem no portal da prefeitura, fora da plataforma.
+          </p>
 
           {/* Emissão automática — reverte a trava de revisão humana, por cliente */}
           <div className="space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">

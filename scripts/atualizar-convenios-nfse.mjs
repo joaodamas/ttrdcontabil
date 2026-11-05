@@ -5,16 +5,18 @@
 //
 // Precisa de um certificado A1 válido qualquer (a API exige mTLS) em PEM:
 //   openssl pkcs12 -legacy -in cliente.pfx -nodes -out /tmp/a1.pem   (fora do repo!)
-//   NFSE_PEM=/tmp/a1.pem node scripts/atualizar-convenios-nfse.cjs
+//   NFSE_PEM=/tmp/a1.pem node scripts/atualizar-convenios-nfse.mjs
 // Leva ~20 min (5.571 municípios, 6 conexões, com pausa entre chamadas).
-const https = require('https')
-const fs = require('fs')
-const path = require('path')
+import https from 'node:https'
+import fs from 'node:fs'
+import path from 'node:path'
+import os from 'node:os'
+import { fileURLToPath } from 'node:url'
 const pemPath = process.env.NFSE_PEM
 if (!pemPath) { console.error('Defina NFSE_PEM (certificado A1 em PEM, fora do repositório).'); process.exit(1) }
 const pem = fs.readFileSync(pemPath, 'utf8')
-const raiz = path.join(__dirname, '..')
-const outPath = path.join(require('os').tmpdir(), 'convenios-nfse-parcial.json')
+const raiz = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
+const outPath = path.join(os.tmpdir(), 'convenios-nfse-parcial.json')
 const agent = new https.Agent({ cert: pem, key: pem, keepAlive: true, maxSockets: 6 })
 let lista = []
 async function carregarMunicipios() {

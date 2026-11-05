@@ -119,7 +119,7 @@ Consulta de convênio município a município em `adn.nfse.gov.br` (sem erros):
 | Sem convênio | 26 |
 
 - SP: 488 emitem pelo Nacional, 157 não. Da carteira: **emitem** São Paulo, Barueri, Cajamar, Cotia, Osasco, Santo André, Taboão da Serra; **não emitem** Campinas, Jundiaí, Guarulhos, Sorocaba, Santana de Parnaíba.
-- Lista completa: `docs/nfse-nacional-convenios-2026-11-05.csv`. Na plataforma: `src/lib/nfse-nacional-convenios.json` (`situacaoNacional(ibge)`), usado na emissão e na prontidão para avisar cedo. Atualizar: `NFSE_PEM=... node scripts/atualizar-convenios-nfse.cjs`.
+- Lista completa: `docs/nfse-nacional-convenios-2026-11-05.csv`. Na plataforma: `src/lib/nfse-nacional-convenios.json` (`situacaoNacional(ibge)`), usado na emissão e na prontidão para avisar cedo. Atualizar: `NFSE_PEM=... node scripts/atualizar-convenios-nfse.mjs`.
 - O `NacionalConector` continua conferindo ao vivo antes de cada emissão (o mapa é retrato).
 
 ## ⚠ Correção: convênio na PRODUÇÃO ≠ produção restrita (2026-11-05)
