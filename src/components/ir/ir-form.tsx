@@ -29,6 +29,7 @@ import { irKeys } from '@/features/ir/queries'
 import { tarefasKeys } from '@/features/tarefas/queries'
 import { hojeKeys } from '@/features/hoje/queries'
 import { nomePreservado } from '@/lib/nome-preservado'
+import { ClientePicker } from '@/components/ui/cliente-picker'
 
 const irSchema = z.object({
   clienteId: z.string().min(1, 'Cliente é obrigatório'),
@@ -47,6 +48,8 @@ type IrFormData = z.input<typeof irSchema>
 interface Cliente {
   id: string
   razaoSocial: string
+  nomeFantasia?: string
+  cpfCnpj?: string
 }
 
 interface Usuario {
@@ -197,24 +200,13 @@ export function IrForm({ initialData }: IrFormProps) {
               name="clienteId"
               control={control}
               render={({ field }) => (
-                <Select
-                  value={field.value ?? ''}
-                  onValueChange={field.onChange}
-                  disabled={loading || isEditing}
-                >
-                  <SelectTrigger>
-                    <SelectValue
-                      placeholder={loading ? 'Carregando...' : 'Selecione o cliente'}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clientes.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.razaoSocial}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ClientePicker
+                  clientes={clientes}
+                  value={field.value}
+                  onChange={(id) => field.onChange(id ?? '')}
+                  loading={loading}
+                  disabled={isEditing}
+                />
               )}
             />
             {errors.clienteId && (

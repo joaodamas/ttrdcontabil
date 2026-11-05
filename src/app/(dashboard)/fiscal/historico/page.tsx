@@ -21,7 +21,6 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { NfseStatusBadge } from '@/components/ui/status-badge'
 import { getStatusLabel } from '@/lib/status-semantics'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { AppModal } from '@/components/ui/app-modal'
 import { FilterBtn } from '@/components/ui/filter-btn'
@@ -30,6 +29,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { ChevronDown, Download, Eye, FileText, Loader2, RefreshCw, Search, XCircle, History } from 'lucide-react'
 import { LogsNfseModal } from '@/components/fiscal/logs-nfse-modal'
 import { HeatmapFiscal } from '@/components/fiscal/heatmap-fiscal'
+import { ClientePicker } from '@/components/ui/cliente-picker'
 
 const TIPO_LABEL: Record<string, string> = { nfe: 'NF-e', nfse: 'NFS-e' }
 
@@ -360,17 +360,13 @@ function FiscalHistoricoContent() {
             }}
           />
         </div>
-        <Select value={clienteId || 'all'} onValueChange={(v) => updateParam('clienteId', !v || v === 'all' ? '' : v)}>
-          <SelectTrigger className="w-56"><SelectValue placeholder="Todos os clientes" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os clientes</SelectItem>
-            {clientes.map((c) => (
-              <SelectItem key={c.id as string} value={c.id as string}>
-                {String(c.razaoSocial ?? c.nomeFantasia ?? c.id)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <ClientePicker
+          className="w-full sm:w-72"
+          clientes={clientes.map((c) => ({ id: String(c.id), razaoSocial: String(c.razaoSocial ?? c.nomeFantasia ?? c.id), nomeFantasia: c.nomeFantasia as string | undefined, cpfCnpj: c.cpfCnpj as string | undefined }))}
+          value={clienteId || null}
+          onChange={(id) => updateParam('clienteId', id ?? '')}
+          opcaoVazia="Todos os clientes"
+        />
       </div>
 
       <div className="surface-subtle flex flex-wrap items-center gap-2 border px-3 py-2.5">

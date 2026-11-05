@@ -31,6 +31,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { tarefasKeys } from '@/features/tarefas/queries'
 import { hojeKeys } from '@/features/hoje/queries'
 import { nomePreservado } from '@/lib/nome-preservado'
+import { ClientePicker } from '@/components/ui/cliente-picker'
 
 const tarefaSchema = z.object({
   clienteId:     z.string().optional().nullable(),
@@ -58,7 +59,7 @@ type TarefaPayload = Omit<TarefaFormData, 'dataPrazo'> & {
   dataConclusao?: Timestamp | null
 }
 
-interface ClienteItem { id: string; razaoSocial: string }
+interface ClienteItem { id: string; razaoSocial: string; nomeFantasia?: string; cpfCnpj?: string }
 interface UsuarioItem { id: string; nome: string }
 
 interface TarefaFormProps {
@@ -230,17 +231,13 @@ export function TarefaForm({ initialData, onSuccess, onClose }: TarefaFormProps)
               name="clienteId"
               control={control}
               render={({ field }) => (
-                <Select value={field.value ?? SELECT_NONE_VALUE} onValueChange={(v) => field.onChange(v === SELECT_NONE_VALUE ? null : v)} disabled={loading}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={loading ? 'Carregando...' : 'Selecione o cliente'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={SELECT_NONE_VALUE}>Nenhum</SelectItem>
-                    {clientes.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.razaoSocial}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ClientePicker
+                  clientes={clientes}
+                  value={field.value}
+                  onChange={field.onChange}
+                  loading={loading}
+                  opcaoVazia="Nenhum"
+                />
               )}
             />
           </div>

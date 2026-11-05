@@ -13,6 +13,10 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Alterado — seletor de cliente e tomador da NFS-e (2026-11-05)
+- **Seletor de cliente com busca** (`ClientePicker`): a lista ficava presa na largura do botão, cortando os nomes, e não tinha filtro com 100+ clientes. Agora busca por razão social, nome fantasia ou CNPJ (com ou sem pontuação, sem diferenciar acento), mostra o nome inteiro com CNPJ e fantasia abaixo. Aplicado em Emitir NFS-e, Tarefa, Lançamento, Competência, IR e nos filtros de Histórico de NFS-e e Produtos.
+- **Tomador deixa de ser preenchido com o próprio cliente.** Desde a primeira versão do módulo, escolher o cliente copiava os dados DELE para o tomador — a nota saía para o próprio CNPJ se ninguém corrigisse. Agora o tomador vem vazio e pode ser escolhido da carteira de tomadores do cliente (preenche nome, CPF/CNPJ e e-mail). **Exige atenção na homologação.**
+
 ### Corrigido — códigos IBGE errados (2026-11-05)
 - **Cajamar estava como 3508900 (que é Caiabu) e Taboão da Serra como 3552502 (que é Suzano)** no formulário fiscal, no roteador de conectores, na prontidão e nos scripts de cadastro. Cliente configurado pelo "Buscar dados do CNPJ" (código certo da Receita) caía em "município sem conector"; escolhido na lista, o XML ia à prefeitura com o código de outro município. Corrigido para 3509205 e 3552809; configs e conectores já gravados com o código antigo são normalizados na leitura (`IBGE_LEGADO` em `functions/src/nfse/types.ts` e `src/lib/ibge.ts`), sem migração de dados. **Exige homologação** em Cajamar e Taboão.
 
