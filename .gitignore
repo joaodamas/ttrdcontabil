@@ -71,3 +71,6 @@ scripts/clientes-*.json
 /.poc-nfse/
 *.pfx
 *.p12
+
+# Configuração local da ferramenta Serena (MCP)
+.serena/

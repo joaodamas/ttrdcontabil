@@ -11,7 +11,10 @@ export interface ClienteImportColumn {
   exemplo?: string
 }
 
-// Só dados cadastrais — nenhum campo de credencial/senha entra aqui de propósito.
+// Os campos da ficha de cadastro do cliente (cliente-form.tsx), na mesma ordem
+// das seções. Só dados cadastrais: senhas e credenciais (prefeitura, posto
+// fiscal, PIN do certificado, Meu Gov, e-CAC) ficam FORA de propósito — planilha
+// circula por e-mail; credencial só pela tela do cliente, que grava cifrado.
 export const CLIENTE_COLUMNS: ClienteImportColumn[] = [
   { key: 'cpfCnpj', label: 'CPF/CNPJ', obrigatorio: true, exemplo: '12.345.678/0001-90' },
   { key: 'tipoPessoa', label: 'Tipo Pessoa (pf/pj)', exemplo: 'pj' },
@@ -24,6 +27,7 @@ export const CLIENTE_COLUMNS: ClienteImportColumn[] = [
   { key: 'celular', label: 'Celular', exemplo: '(11) 98888-7777' },
   { key: 'whatsapp', label: 'WhatsApp principal', exemplo: '(11) 98888-7777' },
   { key: 'whatsappFinanceiro', label: 'WhatsApp financeiro', exemplo: '(11) 97777-6666' },
+  { key: 'aceiteWhatsAppCobranca', label: 'Aceite de cobrança por WhatsApp (sim/não)', exemplo: 'sim' },
   { key: 'cep', label: 'CEP', exemplo: '01310-100' },
   { key: 'logradouro', label: 'Logradouro', exemplo: 'Av. Paulista' },
   { key: 'numero', label: 'Número', exemplo: '1000' },
@@ -51,10 +55,30 @@ export const CLIENTE_COLUMNS: ClienteImportColumn[] = [
   { key: 'responsavelRg', label: 'Responsável — RG' },
   { key: 'responsavelDataNascimento', label: 'Responsável — Data Nascimento' },
   { key: 'responsavelEstadoCivil', label: 'Responsável — Estado Civil' },
+  { key: 'responsavelComunhaoBens', label: 'Responsável — Comunhão de bens' },
+  { key: 'responsavelCnh', label: 'Responsável — CNH' },
+  { key: 'responsavelDataEmissao', label: 'Responsável — Data de emissão do documento (dd/mm/aaaa)' },
+  { key: 'responsavelOrgaoEmissor', label: 'Responsável — Órgão emissor' },
+  { key: 'responsavelLocalNascimento', label: 'Responsável — Local de nascimento' },
+  { key: 'responsavelNomePai', label: 'Responsável — Nome do pai' },
+  { key: 'responsavelNomeMae', label: 'Responsável — Nome da mãe' },
+  { key: 'responsavelPis', label: 'Responsável — PIS' },
+  { key: 'responsavelTituloEleitor', label: 'Responsável — Título de eleitor' },
+  { key: 'responsavelEscolaridade', label: 'Responsável — Escolaridade' },
+  { key: 'responsavelFormacaoSuperior', label: 'Responsável — Formação superior' },
+  { key: 'responsavelCep', label: 'Responsável — CEP' },
+  { key: 'responsavelEndereco', label: 'Responsável — Logradouro' },
+  { key: 'responsavelNumero', label: 'Responsável — Número' },
+  { key: 'responsavelComplemento', label: 'Responsável — Complemento' },
+  { key: 'responsavelBairro', label: 'Responsável — Bairro' },
+  { key: 'responsavelCidade', label: 'Responsável — Cidade' },
+  { key: 'responsavelUf', label: 'Responsável — UF' },
   { key: 'responsavelFinanceiroNome', label: 'Financeiro — Nome' },
   { key: 'responsavelFinanceiroCargo', label: 'Financeiro — Cargo' },
   { key: 'responsavelFinanceiroEmail', label: 'Financeiro — E-mail' },
   { key: 'responsavelFinanceiroTelefone', label: 'Financeiro — Telefone' },
+  { key: 'responsavelFinanceiroWhatsapp', label: 'Financeiro — WhatsApp' },
+  { key: 'responsavelFinanceiroPreferencial', label: 'Financeiro — Contato preferencial da cobrança (sim/não)' },
   { key: 'observacoes', label: 'Observações' },
 ]
 
@@ -98,6 +122,17 @@ const CAMPOS_MASCARADOS: Record<string, string> = {
   responsavelCpf: '000.000.000-00',
   responsavelRg: '00.000.000-0',
   responsavelDataNascimento: 'dd/mm/aaaa',
+  responsavelDataEmissao: 'dd/mm/aaaa',
+  responsavelCnh: '00000000000',
+  responsavelPis: '000.00000.00-0',
+  responsavelTituloEleitor: '0000 0000 0000',
+  responsavelNomePai: 'Nome completo do pai',
+  responsavelNomeMae: 'Nome completo da mãe',
+  responsavelLocalNascimento: 'Cidade/UF',
+  responsavelEndereco: 'Rua/Avenida',
+  responsavelNumero: '000',
+  responsavelComplemento: 'Apto/Sala',
+  responsavelCep: '00000-000',
 }
 
 function texto(v: unknown): string {
@@ -136,6 +171,7 @@ export function montarModeloClientes(dados: DadosModeloClientes) {
     CLIENTE_COLUMNS.map((col) => {
       if (col.key in CAMPOS_MASCARADOS && texto(c[col.key])) return CAMPOS_MASCARADOS[col.key]
       if (col.key === 'cpfCnpj') return documentoFormatado(c.cpfCnpj)
+      if (typeof c[col.key] === 'boolean') return c[col.key] ? 'sim' : 'não'
       return texto(c[col.key])
     }),
   )]
@@ -184,7 +220,10 @@ export function gerarTemplateClientesXlsx(dados?: DadosModeloClientes) {
     ['Tipo Pessoa: pf ou pj'],
     ['Status: ativo, inativo ou suspenso (padrão: ativo)'],
     ['Regime: simples_nacional, lucro_presumido, lucro_real, mei ou isento'],
+    ['Aceite de cobrança por WhatsApp e Contato preferencial: sim ou não'],
     ['Datas: dd/mm/aaaa · Valores: só números, com vírgula ou ponto para centavos (ex: 450 ou 450,50)'],
+    [''],
+    ['Os campos são os mesmos da ficha de cadastro do cliente na plataforma, exceto senhas e credenciais (prefeitura, posto fiscal, PIN do certificado, Meu Gov, e-CAC): essas são cadastradas depois, na tela do cliente.'],
   ]
   const wsInstrucoes = XLSX.utils.aoa_to_sheet(instrucoes)
   wsInstrucoes['!cols'] = [{ wch: 110 }]
@@ -281,6 +320,17 @@ export function validarClienteRow(row: RawRow, linha: number, cnpjsExistentes: S
     else diaEmissaoNFSe = n
   }
 
+  const simNao = (campo: string, rotulo: string): boolean | undefined => {
+    const v = (row[campo] ?? '').trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+    if (!v) return undefined
+    if (['sim', 's', 'x', 'yes', 'true', '1'].includes(v)) return true
+    if (['nao', 'n', 'no', 'false', '0'].includes(v)) return false
+    erros.push(`${rotulo}: use sim ou não`)
+    return undefined
+  }
+  const aceiteWhatsAppCobranca = simNao('aceiteWhatsAppCobranca', 'Aceite de cobrança por WhatsApp')
+  const responsavelFinanceiroPreferencial = simNao('responsavelFinanceiroPreferencial', 'Contato preferencial da cobrança')
+
   const payload: Record<string, unknown> = {
     tipoPessoa,
     razaoSocial: row.razaoSocial,
@@ -320,10 +370,34 @@ export function validarClienteRow(row: RawRow, linha: number, cnpjsExistentes: S
     responsavelRg: row.responsavelRg || undefined,
     responsavelDataNascimento: row.responsavelDataNascimento || undefined,
     responsavelEstadoCivil: row.responsavelEstadoCivil || undefined,
+    responsavelComunhaoBens: row.responsavelComunhaoBens || undefined,
+    responsavelCnh: row.responsavelCnh || undefined,
+    responsavelDataEmissao: row.responsavelDataEmissao || undefined,
+    responsavelOrgaoEmissor: row.responsavelOrgaoEmissor || undefined,
+    responsavelLocalNascimento: row.responsavelLocalNascimento || undefined,
+    responsavelNomePai: row.responsavelNomePai || undefined,
+    responsavelNomeMae: row.responsavelNomeMae || undefined,
+    responsavelPis: row.responsavelPis || undefined,
+    responsavelTituloEleitor: row.responsavelTituloEleitor || undefined,
+    responsavelEscolaridade: row.responsavelEscolaridade || undefined,
+    responsavelFormacaoSuperior: row.responsavelFormacaoSuperior || undefined,
+    responsavelCep: row.responsavelCep || undefined,
+    responsavelEndereco: row.responsavelEndereco || undefined,
+    responsavelNumero: row.responsavelNumero || undefined,
+    responsavelComplemento: row.responsavelComplemento || undefined,
+    responsavelBairro: row.responsavelBairro || undefined,
+    responsavelCidade: row.responsavelCidade || undefined,
+    responsavelUf: row.responsavelUf || undefined,
     responsavelFinanceiroNome: row.responsavelFinanceiroNome || undefined,
     responsavelFinanceiroCargo: row.responsavelFinanceiroCargo || undefined,
     responsavelFinanceiroEmail: row.responsavelFinanceiroEmail || undefined,
     responsavelFinanceiroTelefone: row.responsavelFinanceiroTelefone || undefined,
+    responsavelFinanceiroWhatsapp: row.responsavelFinanceiroWhatsapp || undefined,
+    responsavelFinanceiroPreferencial,
+    aceiteWhatsAppCobranca,
+    // Mesmo registro que a ficha faz ao marcar o aceite: data e origem.
+    aceiteWhatsAppCobrancaEm: aceiteWhatsAppCobranca ? new Date().toISOString() : undefined,
+    aceiteWhatsAppCobrancaOrigem: aceiteWhatsAppCobranca ? 'Planilha de cadastro' : undefined,
     observacoes: row.observacoes || undefined,
   }
 

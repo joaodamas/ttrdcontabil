@@ -13,6 +13,11 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Alterado — planilha de importação = ficha de cadastro do cliente (2026-11-05)
+- A planilha passa a ter todos os campos da ficha de cadastro (78 de 79 → todos os não sigilosos): dados completos do representante (CNH, órgão emissor, data de emissão, naturalidade, pai/mãe, PIS, título, escolaridade, formação, comunhão de bens, endereço), WhatsApp e contato preferencial do financeiro, e aceite de cobrança por WhatsApp (sim/não — a importação grava data e origem "Planilha de cadastro", como a ficha).
+- Senhas e credenciais continuam fora de propósito (a planilha circula por e-mail); nos exemplos, documentos pessoais do representante saem mascarados.
+- `.serena/` (config local de ferramenta) saiu do repositório.
+
 ### Alterado — modelo de importação de clientes com exemplos reais (2026-11-05)
 - "Baixar modelo com exemplos (Excel)" em Clientes → Importar gera a planilha com os dados do próprio escritório: abas **Clientes** e **Serviços** vazias (prontas para importar), **Exemplo – Clientes** e **Exemplo – Serviços** com os 3 clientes de cadastro mais completo (no formato aceito pela importação; CPF/RG/nascimento do responsável mascarados) e **Tipos de Serviço** com os códigos válidos. As abas de exemplo não são importadas. Antes, o modelo trazia um exemplo inventado na própria aba Clientes. Se a leitura falhar, baixa o modelo em branco.
 
