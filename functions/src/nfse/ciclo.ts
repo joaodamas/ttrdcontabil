@@ -172,6 +172,8 @@ export function normalizarRascunho(id: string, data: Record<string, unknown>): E
       razaoSocial: dados.tomadorNome as string,
       cpfCnpj: String(dados.tomadorCpfCnpj ?? '').replace(/\D/g, ''),
       email: (dados.tomadorEmail as string | null | undefined) ?? undefined,
+      // Gravados pelo formulário de emissão (rascunho "Salvar rascunho").
+      endereco: (dados.tomadorEndereco as EmitirNfseInput['tomador']['endereco'] | null | undefined) ?? undefined,
     },
     servico: servicoRaw ? {
       discriminacao: servicoRaw.discriminacao as string,
@@ -182,10 +184,17 @@ export function normalizarRascunho(id: string, data: Record<string, unknown>): E
     } : {
       discriminacao: dados.descricaoServico as string,
       codigoServico: dados.codigoServico as string,
+      itemListaServico: (dados.itemListaServico as string | null | undefined) ?? undefined,
       valorServico: Number(dados.valorServico ?? 0),
       aliquota: (dados.aliquota as number | null | undefined) ?? undefined,
       issRetido: Boolean(dados.issRetido),
+      codigoTributacaoNacional: (dados.codigoTributacaoNacional as string | null | undefined) ?? undefined,
+      codigoNbs: (dados.codigoNbs as string | null | undefined) ?? undefined,
+      municipioPrestacao: (dados.municipioPrestacaoIbge as string | null | undefined) ?? undefined,
+      informacoesComplementares: (dados.informacoesComplementares as string | null | undefined) ?? undefined,
+      descricaoModelo: (dados.descricaoServicoModelo as string | null | undefined) ?? undefined,
     },
+    dataCompetencia: (dados.dataCompetencia as string | null | undefined) ?? undefined,
     numeroRps: (dados.numeroRps as string | undefined) ?? undefined,
     serieRps: (dados.serieRps as string | undefined) ?? undefined,
   }

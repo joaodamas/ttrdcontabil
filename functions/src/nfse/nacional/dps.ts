@@ -437,15 +437,25 @@ export function montarDpsXml(d: DadosNota, opcoes: OpcoesMontagem): { xml: strin
       ])
     : ''
 
-  // NT 009 (leiaute da produção restrita): xDescServ é o ÚLTIMO de cServ.
+  // Ordem de cServ difere entre os leiautes (fora de ordem = E1235):
+  //  - PRODUÇÃO (v1.01-20260209): cTribNac, cTribMun, xDescServ, cNBS;
+  //  - produção restrita (NT 009): cTribNac, cTribMun, cNBS, xDescServ (último).
+  const producao = tpAmbDoAmbiente(opcoes.ambiente) === TP_AMB_PRODUCAO
   const serv = grupo('serv', [
     grupo('locPrest', [el('cLocPrestacao', somenteDigitos(s.municipioPrestacao))]),
-    grupo('cServ', [
-      el('cTribNac', s.cTribNac),
-      opt('cTribMun', s.cTribMun),
-      opt('cNBS', s.cNBS),
-      el('xDescServ', s.descricao.trim()),
-    ]),
+    grupo('cServ', producao
+      ? [
+          el('cTribNac', s.cTribNac),
+          opt('cTribMun', s.cTribMun),
+          el('xDescServ', s.descricao.trim()),
+          opt('cNBS', s.cNBS),
+        ]
+      : [
+          el('cTribNac', s.cTribNac),
+          opt('cTribMun', s.cTribMun),
+          opt('cNBS', s.cNBS),
+          el('xDescServ', s.descricao.trim()),
+        ]),
     s.informacoesComplementares?.trim()
       ? grupo('infoCompl', [el('xInfComp', s.informacoesComplementares.trim().slice(0, 2000))])
       : null,

@@ -367,6 +367,18 @@ export interface NfseEmitidaDoc {
   tomadorMunicipio?: string
   tomadorUf?: string
   descricaoServico: string
+  /** Descrição com variáveis ({{MES_COMPETENCIA}}…) de onde descricaoServico foi renderada. */
+  descricaoServicoModelo?: string | null
+  /** Endereço do tomador enviado na DPS (cep/IBGE só dígitos). */
+  tomadorEndereco?: TomadorEnderecoDoc | null
+  itemListaServico?: string | null
+  /** cTribNac explícito da nota (vazio = derivado do item LC 116). */
+  codigoTributacaoNacional?: string | null
+  codigoNbs?: string | null
+  municipioPrestacaoIbge?: string | null
+  informacoesComplementares?: string | null
+  /** Competência pedida na emissão (AAAA-MM-DD); a DPS limita à data de emissão. */
+  dataCompetencia?: string | null
   codigoServico?: string
   valorServico: number
   valorDeducoes: number

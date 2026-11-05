@@ -8,6 +8,8 @@ export interface ViaCepResult {
   cidade:     string
   uf:         string
   cep:        string
+  /** Código IBGE do município (7 dígitos) — exigido no endereço nacional da NFS-e. */
+  ibge:       string
 }
 
 interface UseViaCepReturn {
@@ -57,6 +59,7 @@ export function useViaCep(): UseViaCepReturn {
         cidade:     data.localidade ?? '',
         uf:         data.uf         ?? '',
         cep:        data.cep        ?? '',
+        ibge:       data.ibge       ?? '',
       }
     } catch {
       setError('Erro ao consultar o CEP. Verifique sua conexão.')

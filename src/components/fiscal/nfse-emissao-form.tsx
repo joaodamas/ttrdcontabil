@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -22,8 +22,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CpfCnpjInput } from '@/components/ui/cpf-cnpj-input'
-import { Loader2, Save, Send, ArrowLeft, CheckCircle2, ChevronRight, RotateCcw } from 'lucide-react'
-import { formatCurrency, formatCpfCnpj, validateCpf, validateCnpj } from '@/lib/utils'
+import { Loader2, Save, Send, ArrowLeft, CheckCircle2, ChevronRight, RotateCcw, Search, FileStack, Info, Sparkles, X } from 'lucide-react'
+import { formatCep, formatCurrency, formatCpfCnpj, validateCpf, validateCnpj } from '@/lib/utils'
 import { getClientes, getCompetencias, createDocument, getDocument, updateDocument, listDocuments } from '@/lib/firestore-client'
 import { where, orderBy, limit } from 'firebase/firestore'
 import { getFunctions, httpsCallable } from 'firebase/functions'
@@ -37,6 +37,35 @@ import type { TomadorRecord } from '@/features/tomadores/types'
 import { provedorNfseEfetivo } from '@/features/fiscal/services'
 import { fetchChaveNfseNacional } from '@/features/admin/services'
 import { situacaoNacional } from '@/lib/nfse-nacional-convenio'
+import { normalizarIbge } from '@/lib/ibge'
+import { buscarDadosCnpj } from '@/lib/cnpj-lookup'
+import { useViaCep } from '@/hooks/use-viacep'
+import { MUNICIPIOS } from '@/components/fiscal/config-fiscal-form'
+import { NfseCopiarNota } from '@/components/fiscal/nfse-copiar-nota'
+import {
+  VARIAVEIS_DESCRICAO,
+  codigoNacionalDerivado,
+  competenciaFutura,
+  competenciaPadrao,
+  competenciaParaData,
+  competenciaParaInput,
+  contemVariaveis,
+  extrairDadosXmlNfse,
+  formatarCompetencia,
+  lerCompetencia,
+  modeloDoFormulario,
+  nbsValido,
+  normalizarRegraCompetencia,
+  notasParaCopia,
+  renderizarDescricao,
+  sugerirModeloComVariaveis,
+  valoresDaNotaEmitida,
+  valoresDoModelo,
+  type Competencia as CompetenciaMesAno,
+  type NotaEmitidaParaCopia,
+  type SugestaoModelo,
+  type ValoresCopiados,
+} from '@/lib/nfse-modelo'
 
 function isValidCpfCnpj(raw: string): boolean {
   const digits = raw.replace(/\D/g, '')
@@ -49,16 +78,28 @@ function isValidCodigoServico(code: string): boolean {
   return /^\d{1,4}(\.\d{1,4})?$/.test(code.trim())
 }
 
+const textoOpcional = z.string().optional().nullable()
+
 const nfseSchema = z.object({
   clienteId:        z.string().min(1, 'Cliente é obrigatório'),
   competenciaId:    z.string().optional().nullable(),
+  /** "AAAA-MM" (input type=month). Vira input.dataCompetencia = AAAA-MM-01. */
+  competencia:      z.string({ error: 'Informe a competência (mês/ano)' }).regex(/^\d{4}-\d{2}$/, 'Informe a competência (mês/ano)'),
   tomadorNome:      z.string().min(1, 'Nome do tomador é obrigatório').max(150),
   tomadorCpfCnpj:   z.string().min(11, 'CPF/CNPJ inválido').max(18).refine(
     v => isValidCpfCnpj(v),
     { message: 'CPF/CNPJ inválido — verifique os dígitos' }
   ),
   tomadorEmail:     z.string().email('E-mail inválido').optional().or(z.literal('')).nullable(),
-  descricaoServico: z.string().min(10, 'Descrição muito curta (mín. 10 caracteres)').max(500),
+  tomadorCep:         textoOpcional,
+  tomadorLogradouro:  textoOpcional,
+  tomadorNumero:      textoOpcional,
+  tomadorComplemento: textoOpcional,
+  tomadorBairro:      textoOpcional,
+  tomadorMunicipio:   textoOpcional,
+  tomadorMunicipioIbge: textoOpcional,
+  tomadorUf:          textoOpcional,
+  descricaoServico: z.string().min(10, 'Descrição muito curta (mín. 10 caracteres)').max(2000, 'Descrição com até 2000 caracteres'),
   codigoServico:    z.string().min(1, 'Código do serviço é obrigatório').max(20).refine(
     v => isValidCodigoServico(v),
     { message: 'Formato inválido. Use ex: 17.19 ou 6014' }
@@ -67,10 +108,88 @@ const nfseSchema = z.object({
     v => isValidCodigoServico(v),
     { message: 'Formato inválido. Use ex: 1.07 ou 17.19' }
   ),
+  /** cTribNac explícito (6 dígitos). Vazio = derivado do item LC 116 (ou da config). */
+  codigoTributacaoNacional: textoOpcional.refine(
+    (v) => !v || /^\d{6}$/.test(v.trim()),
+    { message: 'Use 6 dígitos (ex.: 010201) ou deixe vazio para derivar do item LC 116' },
+  ),
+  codigoNbs:        textoOpcional.refine((v) => nbsValido(v), { message: 'NBS tem 9 dígitos (ex.: 1.1501.10.00)' }),
+  municipioPrestacaoIbge: textoOpcional.refine(
+    (v) => !v || /^\d{7}$/.test(v.trim()),
+    { message: 'Código IBGE com 7 dígitos' },
+  ),
   valorServico:     z.number({ error: 'Informe o valor do serviço' }).min(0.01, 'Valor deve ser maior que zero'),
   aliquota:         z.number().min(0).max(100).optional().nullable(),
   issRetido:        z.boolean().default(false),
+  informacoesComplementares: z.string().max(2000, 'Até 2000 caracteres').optional().nullable(),
+}).superRefine((d, ctx) => {
+  // Endereço nacional do tomador: tudo ou nada (parcial = E1235 na Sefin).
+  const cep = digitosDe(d.tomadorCep)
+  const ibge = digitosDe(d.tomadorMunicipioIbge)
+  const algum = Boolean(cep || d.tomadorLogradouro?.trim() || d.tomadorNumero?.trim() || d.tomadorBairro?.trim() || ibge)
+  if (algum) {
+    if (cep.length !== 8) ctx.addIssue({ code: 'custom', path: ['tomadorCep'], message: 'CEP com 8 dígitos' })
+    if (!d.tomadorLogradouro?.trim()) ctx.addIssue({ code: 'custom', path: ['tomadorLogradouro'], message: 'Informe o logradouro' })
+    if (!d.tomadorNumero?.trim()) ctx.addIssue({ code: 'custom', path: ['tomadorNumero'], message: 'Informe o número (ou S/N)' })
+    if (!d.tomadorBairro?.trim()) ctx.addIssue({ code: 'custom', path: ['tomadorBairro'], message: 'Informe o bairro' })
+    if (ibge.length !== 7) ctx.addIssue({ code: 'custom', path: ['tomadorMunicipioIbge'], message: 'Código IBGE do município com 7 dígitos (obrigatório no endereço nacional)' })
+  }
+  const comp = lerCompetencia(d.competencia)
+  if (comp && competenciaFutura(comp, new Date())) {
+    ctx.addIssue({ code: 'custom', path: ['competencia'], message: 'A competência não pode ser posterior ao mês atual' })
+  }
+  if (comp && renderizarDescricao(d.descricaoServico ?? '', comp).length > 2000) {
+    ctx.addIssue({ code: 'custom', path: ['descricaoServico'], message: 'Com as variáveis substituídas, a descrição passa de 2000 caracteres' })
+  }
 })
+
+function digitosDe(v: string | null | undefined): string {
+  return String(v ?? '').replace(/\D/g, '')
+}
+
+const CAMPOS_TOMADOR = [
+  'tomadorNome', 'tomadorCpfCnpj', 'tomadorEmail', 'tomadorCep', 'tomadorLogradouro', 'tomadorNumero',
+  'tomadorComplemento', 'tomadorBairro', 'tomadorMunicipio', 'tomadorMunicipioIbge', 'tomadorUf',
+] as const
+
+/** Endereço completo do formulário → payload da callable / mapa gravado (sem undefined). */
+function enderecoDoFormulario(d: Pick<NfseFormData, typeof CAMPOS_TOMADOR[number]>) {
+  const cep = digitosDe(d.tomadorCep)
+  const ibge = digitosDe(d.tomadorMunicipioIbge)
+  if (cep.length !== 8 || ibge.length !== 7 || !d.tomadorLogradouro?.trim() || !d.tomadorNumero?.trim() || !d.tomadorBairro?.trim()) {
+    return null
+  }
+  const e: Record<string, string> = {
+    cep,
+    logradouro: d.tomadorLogradouro.trim(),
+    numero: d.tomadorNumero.trim(),
+    bairro: d.tomadorBairro.trim(),
+    municipioIbge: ibge,
+  }
+  if (d.tomadorComplemento?.trim()) e.complemento = d.tomadorComplemento.trim()
+  if (d.tomadorMunicipio?.trim()) e.municipio = d.tomadorMunicipio.trim()
+  if (d.tomadorUf?.trim()) e.uf = d.tomadorUf.trim().toUpperCase()
+  return e
+}
+
+function codigoNacionalDoItem(item: string | null | undefined): string | undefined {
+  return codigoNacionalDerivado(item)
+}
+
+function textoEndereco(e: Record<string, string>): string {
+  const municipio = [e.municipio, e.uf].filter(Boolean).join('/')
+  return [
+    [e.logradouro, e.numero, e.complemento].filter(Boolean).join(', '),
+    e.bairro,
+    municipio ? `${municipio} (IBGE ${e.municipioIbge})` : `IBGE ${e.municipioIbge}`,
+    `CEP ${formatCep(e.cep)}`,
+  ].filter(Boolean).join(' — ')
+}
+
+function nomeMunicipioConhecido(ibge: string | null | undefined): string | undefined {
+  const codigo = normalizarIbge(digitosDe(ibge))
+  return MUNICIPIOS.find((m) => m.ibge === codigo)?.nome
+}
 
 type NfseFormData = z.input<typeof nfseSchema>
 
@@ -138,6 +257,13 @@ export function NfseEmissaoForm({
   const [ultimoRascunho,     setUltimoRascunho]     = useState<RascunhoNfse | null>(null)
   const [loadingUltimoRasc,  setLoadingUltimoRasc]  = useState(false)
   const [templates,          setTemplates]          = useState<RascunhoNfse[]>([])
+  // "Copiar de nota anterior" (nfse_emitidas do prestador) e modelo padrão.
+  const [notasCliente,       setNotasCliente]       = useState<{ clienteId: string; notas: NotaEmitidaParaCopia[] } | null>(null)
+  const [copiaOrigem,        setCopiaOrigem]        = useState<string | null>(null)
+  const [sugestaoModelo,     setSugestaoModelo]     = useState<SugestaoModelo | null>(null)
+  const [salvandoModelo,     setSalvandoModelo]     = useState(false)
+  const [buscandoCnpjTomador, setBuscandoCnpjTomador] = useState(false)
+  const { buscar: buscarCep, loading: buscandoCep, error: erroCep } = useViaCep()
 
   const {
     register,
@@ -167,6 +293,18 @@ export function NfseEmissaoForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedValues.clienteId, watchedValues.tomadorNome, watchedValues.tomadorCpfCnpj, watchedValues.descricaoServico, watchedValues.codigoServico, watchedValues.valorServico, onStepChange, showResume])
 
+  const competenciasPorId = useMemo(
+    () => Object.fromEntries(competencias.map((c) => [c.id, { mes: c.mes, ano: c.ano }])) as Record<string, CompetenciaMesAno>,
+    [competencias],
+  )
+
+  // Competência vinculada escolhida → o mês/ano da nota acompanha (continua editável).
+  const competenciaIdSelecionada = watch('competenciaId')
+  useEffect(() => {
+    const c = competenciaIdSelecionada ? competenciasPorId[competenciaIdSelecionada] : undefined
+    if (c) setValue('competencia', competenciaParaInput(c), { shouldValidate: true })
+  }, [competenciaIdSelecionada, competenciasPorId, setValue])
+
   // Load clients on mount
   useEffect(() => {
     getClientes({ status: 'ativo' })
@@ -186,14 +324,29 @@ export function NfseEmissaoForm({
           return
         }
         const dados = rascunho.dados ?? {}
+        const endRasc = (dados.tomadorEndereco ?? {}) as Record<string, string | undefined>
+        const compRasc = lerCompetencia(dados.dataCompetencia as string | undefined)
         setRascunhoAtual(rascunho)
         reset({
+          competencia: compRasc ? competenciaParaInput(compRasc) : '',
+          tomadorCep: endRasc.cep ? formatCep(endRasc.cep) : '',
+          tomadorLogradouro: endRasc.logradouro ?? '',
+          tomadorNumero: endRasc.numero ?? '',
+          tomadorComplemento: endRasc.complemento ?? '',
+          tomadorBairro: endRasc.bairro ?? '',
+          tomadorMunicipio: endRasc.municipio ?? '',
+          tomadorMunicipioIbge: endRasc.municipioIbge ?? '',
+          tomadorUf: endRasc.uf ?? '',
+          codigoTributacaoNacional: (dados.codigoTributacaoNacional as string | null | undefined) ?? '',
+          codigoNbs: (dados.codigoNbs as string | null | undefined) ?? '',
+          municipioPrestacaoIbge: (dados.municipioPrestacaoIbge as string | null | undefined) ?? '',
+          informacoesComplementares: (dados.informacoesComplementares as string | null | undefined) ?? '',
           clienteId: rascunho.clienteId ?? '',
           competenciaId: (rascunho.competenciaId as string | null | undefined) ?? (dados.competenciaId as string | null | undefined) ?? null,
           tomadorNome: (dados.tomadorNome as string | undefined) ?? (dados.tomador as Record<string, unknown> | undefined)?.razaoSocial as string | undefined ?? rascunho.clienteNome ?? '',
           tomadorCpfCnpj: (dados.tomadorCpfCnpj as string | undefined) ?? (dados.tomador as Record<string, unknown> | undefined)?.cpfCnpj as string | undefined ?? '',
           tomadorEmail: (dados.tomadorEmail as string | undefined) ?? (dados.tomador as Record<string, unknown> | undefined)?.email as string | undefined ?? '',
-          descricaoServico: (dados.descricaoServico as string | undefined) ?? (dados.servico as Record<string, unknown> | undefined)?.discriminacao as string | undefined ?? '',
+          descricaoServico: (dados.descricaoServicoModelo as string | undefined) ?? (dados.descricaoServico as string | undefined) ?? (dados.servico as Record<string, unknown> | undefined)?.discriminacao as string | undefined ?? '',
           codigoServico: (dados.codigoServico as string | undefined) ?? (dados.servico as Record<string, unknown> | undefined)?.codigoServico as string | undefined ?? '',
           itemListaServico: (dados.itemListaServico as string | undefined) ?? (dados.servico as Record<string, unknown> | undefined)?.itemListaServico as string | undefined ?? '',
           valorServico: Number((dados.valorServico as number | undefined) ?? (dados.servico as Record<string, unknown> | undefined)?.valorServico ?? 0),
@@ -219,6 +372,27 @@ export function NfseEmissaoForm({
     })
       .catch(() => { setUltimoRascunho(null); setTemplates([]) })
       .finally(() => setLoadingUltimoRasc(false))
+  }, [selectedClienteId, rascunhoIdParam])
+
+  // Notas emitidas do prestador, para "Copiar de nota anterior". Índice
+  // (tenantId, clienteId, dataEmissao desc) existe; se a consulta ordenada falhar
+  // (índice ainda construindo, emulador), cai no filtro por igualdade e ordena aqui.
+  useEffect(() => {
+    if (!selectedClienteId || rascunhoIdParam) { setNotasCliente(null); return }
+    let ativo = true
+    setNotasCliente(null)
+    // Aviso de cópia e sugestão eram do prestador anterior.
+    setCopiaOrigem(null)
+    setSugestaoModelo(null)
+    listDocuments<NotaEmitidaParaCopia>('nfse_emitidas', [
+      where('clienteId', '==', selectedClienteId),
+      orderBy('dataEmissao', 'desc'),
+      limit(25),
+    ])
+      .catch(() => listDocuments<NotaEmitidaParaCopia>('nfse_emitidas', [where('clienteId', '==', selectedClienteId), limit(200)]))
+      .then((rows) => { if (ativo) setNotasCliente({ clienteId: selectedClienteId, notas: notasParaCopia(rows, 20) }) })
+      .catch(() => { if (ativo) setNotasCliente({ clienteId: selectedClienteId, notas: [] }) })
+    return () => { ativo = false }
   }, [selectedClienteId, rascunhoIdParam])
 
   function applyRascunhoData(r: RascunhoNfse) {
@@ -265,8 +439,18 @@ export function NfseEmissaoForm({
     ]).then(([fiscal]) => {
       if (!ativo) return
       setConfigFiscal({ clienteId: selectedClienteId, dados: fiscal ?? null })
+      // Competência: regra do cliente (padrão "mês da emissão", o comportamento de antes).
+      if (!watch('competencia')) {
+        const sugerida = competenciaPadrao(normalizarRegraCompetencia(fiscal?.competenciaPadrao), new Date())
+        if (sugerida) setValue('competencia', competenciaParaInput(sugerida))
+      }
       if (rascunhoAtual) return
       if (!fiscal) return
+      const ibgePrestador = normalizarIbge((fiscal.municipioIbge ?? fiscal.codigoMunicipioIbge) as string | undefined)
+      if (!watch('municipioPrestacaoIbge') && /^\d{7}$/.test(ibgePrestador)) setValue('municipioPrestacaoIbge', ibgePrestador)
+      if (!watch('informacoesComplementares') && typeof fiscal.informacoesComplementaresPadrao === 'string') {
+        setValue('informacoesComplementares', fiscal.informacoesComplementaresPadrao)
+      }
       if (!watch('codigoServico') && fiscal.codigoServicoPadrao) setValue('codigoServico', fiscal.codigoServicoPadrao as string)
       if (!watch('itemListaServico') && fiscal.itemListaServico) setValue('itemListaServico', fiscal.itemListaServico as string)
       if (!watch('descricaoServico') && fiscal.descricaoServicoPadrao) setValue('descricaoServico', fiscal.descricaoServicoPadrao as string)
@@ -280,6 +464,144 @@ export function NfseEmissaoForm({
       .finally(() => setLoadingCompetencias(false))
     return () => { ativo = false }
   }, [selectedClienteId, clientes, setValue, watch, rascunhoAtual])
+
+  /**
+   * Aplica valores copiados. O tomador é trocado por inteiro (campo ausente na
+   * origem fica vazio — não mistura o endereço do tomador anterior); no serviço,
+   * campo ausente mantém o que já está (padrões da configuração fiscal).
+   */
+  function aplicarValores(v: ValoresCopiados) {
+    const opts = { shouldDirty: true } as const
+    for (const campo of CAMPOS_TOMADOR) {
+      const valor = v[campo]
+      if (campo === 'tomadorCpfCnpj') setValue(campo, valor ? formatCpfCnpj(valor) : '', opts)
+      else if (campo === 'tomadorCep') setValue(campo, valor ? formatCep(valor) : '', opts)
+      else setValue(campo, valor ?? '', opts)
+    }
+    if (v.descricaoServico !== undefined) setValue('descricaoServico', v.descricaoServico, opts)
+    if (v.codigoServico !== undefined) setValue('codigoServico', v.codigoServico, opts)
+    if (v.itemListaServico !== undefined) setValue('itemListaServico', v.itemListaServico, opts)
+    setValue('codigoTributacaoNacional', v.codigoTributacaoNacional ?? '', opts)
+    setValue('codigoNbs', v.codigoNbs ?? '', opts)
+    if (v.municipioPrestacaoIbge !== undefined) setValue('municipioPrestacaoIbge', v.municipioPrestacaoIbge, opts)
+    if (v.valorServico !== undefined) setValue('valorServico', v.valorServico, opts)
+    if (v.aliquota !== undefined) setValue('aliquota', v.aliquota, opts)
+    if (v.issRetido !== undefined) setValue('issRetido', v.issRetido, opts)
+    if (v.informacoesComplementares !== undefined) setValue('informacoesComplementares', v.informacoesComplementares, opts)
+    setTomadorCarteiraId(null)
+  }
+
+  function usarNotaComoBase(nota: NotaEmitidaParaCopia) {
+    const { valores, competenciaOrigem, numeroNfse } = valoresDaNotaEmitida(nota, extrairDadosXmlNfse(nota.xmlNfse))
+    aplicarValores(valores)
+    const origem = competenciaOrigem ?? (nota.competenciaId ? competenciasPorId[nota.competenciaId] : undefined) ?? null
+    const desc = valores.descricaoServico
+    setSugestaoModelo(desc && !contemVariaveis(desc) ? sugerirModeloComVariaveis(desc, origem) : null)
+    setCopiaOrigem(numeroNfse ? `Dados copiados da NFS-e nº ${numeroNfse}` : 'Dados copiados de uma NFS-e anterior')
+    toast.success(numeroNfse ? `Dados da NFS-e nº ${numeroNfse} aplicados.` : 'Dados da nota anterior aplicados.')
+  }
+
+  function usarModeloPadrao() {
+    const valores = valoresDoModelo(fiscalDoCliente?.modeloNfse)
+    if (!valores) return
+    aplicarValores(valores)
+    setSugestaoModelo(null)
+    setCopiaOrigem('Dados copiados do modelo padrão do cliente')
+    toast.success('Modelo padrão do cliente aplicado.')
+  }
+
+  function aceitarSugestaoModelo() {
+    if (!sugestaoModelo) return
+    setValue('descricaoServico', sugestaoModelo.depois, { shouldDirty: true, shouldValidate: true })
+    setSugestaoModelo(null)
+    toast.success('Descrição convertida em modelo com variáveis.')
+  }
+
+  function inserirVariavel(nome: string) {
+    const atual = watch('descricaoServico') ?? ''
+    const sep = atual && !/\s$/.test(atual) ? ' ' : ''
+    setValue('descricaoServico', `${atual}${sep}${nome}`, { shouldDirty: true, shouldValidate: true })
+  }
+
+  async function salvarModeloPadrao() {
+    const docId = (fiscalDoCliente as { id?: string } | null | undefined)?.id
+    if (!docId) {
+      toast.error('Cliente sem configuração fiscal — configure antes de salvar um modelo.')
+      return
+    }
+    const v = watch()
+    setSalvandoModelo(true)
+    try {
+      const modeloNfse = modeloDoFormulario({
+        ...v,
+        tomadorCpfCnpj: v.tomadorCpfCnpj ?? undefined,
+        valorServico: Number.isFinite(v.valorServico) ? Number(v.valorServico) : undefined,
+        aliquota: Number.isFinite(v.aliquota) ? Number(v.aliquota) : undefined,
+        issRetido: v.issRetido === true,
+      } as ValoresCopiados, new Date())
+      await updateDocument('clientes_fiscal', docId, { modeloNfse })
+      setConfigFiscal((atual) => atual && atual.dados
+        ? { ...atual, dados: { ...atual.dados, modeloNfse } }
+        : atual)
+      toast.success(
+        contemVariaveis(modeloNfse.descricaoServico)
+          ? 'Modelo padrão salvo — a descrição usa variáveis de competência.'
+          : 'Modelo padrão salvo para este cliente.'
+      )
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Não foi possível salvar o modelo padrão. Verifique sua permissão fiscal.'))
+    } finally {
+      setSalvandoModelo(false)
+    }
+  }
+
+  async function preencherPeloCep(valor: string) {
+    if (digitosDe(valor).length !== 8) return
+    const r = await buscarCep(valor)
+    if (!r) return
+    const opts = { shouldDirty: true, shouldValidate: true } as const
+    if (r.logradouro) setValue('tomadorLogradouro', r.logradouro, opts)
+    if (r.bairro) setValue('tomadorBairro', r.bairro, opts)
+    if (r.cidade) setValue('tomadorMunicipio', r.cidade, opts)
+    if (r.uf) setValue('tomadorUf', r.uf, opts)
+    if (r.ibge) setValue('tomadorMunicipioIbge', r.ibge, opts)
+  }
+
+  async function buscarTomadorPeloCnpj() {
+    const cnpj = digitosDe(watch('tomadorCpfCnpj'))
+    if (cnpj.length !== 14) {
+      toast.error('Informe um CNPJ com 14 dígitos para buscar na Receita.')
+      return
+    }
+    setBuscandoCnpjTomador(true)
+    try {
+      const d = await buscarDadosCnpj(cnpj)
+      const opts = { shouldDirty: true, shouldValidate: true } as const
+      if (d.razaoSocial) setValue('tomadorNome', d.razaoSocial, opts)
+      if (d.email && !watch('tomadorEmail')) setValue('tomadorEmail', d.email, opts)
+      if (d.cep) setValue('tomadorCep', formatCep(d.cep), opts)
+      setValue('tomadorLogradouro', d.logradouro ?? '', opts)
+      setValue('tomadorNumero', d.numero ?? '', opts)
+      setValue('tomadorComplemento', d.complemento ?? '', opts)
+      setValue('tomadorBairro', d.bairro ?? '', opts)
+      if (d.municipio) setValue('tomadorMunicipio', d.municipio, opts)
+      if (d.uf) setValue('tomadorUf', d.uf, opts)
+      if (d.municipioIbge) setValue('tomadorMunicipioIbge', d.municipioIbge, opts)
+      setTomadorCarteiraId(null)
+      toast.success(d.situacao && d.situacao.toUpperCase() !== 'ATIVA'
+        ? `Dados da Receita preenchidos — atenção: situação cadastral ${d.situacao}.`
+        : 'Dados da Receita preenchidos — confira antes de emitir.')
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Não foi possível buscar o CNPJ na Receita.'))
+    } finally {
+      setBuscandoCnpjTomador(false)
+    }
+  }
+
+  /** Descrição como vai para a DPS (variáveis já substituídas pela competência da nota). */
+  function descricaoFinal(data: Pick<NfseFormData, 'descricaoServico' | 'competencia'>): string {
+    return renderizarDescricao(data.descricaoServico ?? '', lerCompetencia(data.competencia))
+  }
 
   async function handleSaveRascunho(data: NfseFormData) {
     setSaving(true)
@@ -296,9 +618,16 @@ export function NfseEmissaoForm({
           tomadorNome:      data.tomadorNome,
           tomadorCpfCnpj:   data.tomadorCpfCnpj.replace(/\D/g, ''),
           tomadorEmail:     data.tomadorEmail || null,
-          descricaoServico: data.descricaoServico,
+          tomadorEndereco:  enderecoDoFormulario(data),
+          descricaoServico: descricaoFinal(data),
+          descricaoServicoModelo: contemVariaveis(data.descricaoServico) ? data.descricaoServico : null,
           codigoServico:    data.codigoServico,
           itemListaServico: data.itemListaServico,
+          codigoTributacaoNacional: data.codigoTributacaoNacional?.trim() || null,
+          codigoNbs:        data.codigoNbs?.trim() || null,
+          municipioPrestacaoIbge: data.municipioPrestacaoIbge?.trim() || null,
+          informacoesComplementares: data.informacoesComplementares?.trim() || null,
+          dataCompetencia:  lerCompetencia(data.competencia) ? competenciaParaData(lerCompetencia(data.competencia)!) : null,
           valorServico:     data.valorServico,
           aliquota:         data.aliquota ?? null,
           issRetido:        data.issRetido,
@@ -349,19 +678,29 @@ export function NfseEmissaoForm({
         'emitirNfse'
       )
 
+      const competencia = lerCompetencia(data.competencia)
+      const endereco = enderecoDoFormulario(data)
       const payload = {
         clienteId:     data.clienteId,
         rascunhoId:    rascunhoAtual?.id,
         competenciaId: data.competenciaId ?? null,
+        // Competência explícita da tela; o backend ainda limita à data de emissão.
+        dataCompetencia: competencia ? competenciaParaData(competencia) : undefined,
         tomador: {
           razaoSocial: data.tomadorNome,
           cpfCnpj:     data.tomadorCpfCnpj.replace(/\D/g, ''),
           email:       data.tomadorEmail || undefined,
+          endereco:    endereco ?? undefined,
         },
         servico: {
-          discriminacao:    data.descricaoServico,
+          discriminacao:    descricaoFinal(data),
+          descricaoModelo:  contemVariaveis(data.descricaoServico) ? data.descricaoServico : undefined,
           codigoServico:    data.codigoServico,
           itemListaServico: data.itemListaServico,
+          codigoTributacaoNacional: data.codigoTributacaoNacional?.trim() || undefined,
+          codigoNbs:        data.codigoNbs?.trim() || undefined,
+          municipioPrestacao: data.municipioPrestacaoIbge?.trim() || undefined,
+          informacoesComplementares: data.informacoesComplementares?.trim() || undefined,
           valorServico:     data.valorServico,
           aliquota:         data.aliquota ?? undefined,
           issRetido:        data.issRetido,
@@ -429,8 +768,25 @@ export function NfseEmissaoForm({
   const previewTomadorCpf = watch('tomadorCpfCnpj')
   const previewTomadorEmail = watch('tomadorEmail')
   const previewDescricao = watch('descricaoServico')
+  const previewCompetenciaNota = lerCompetencia(watch('competencia'))
+  const previewDescricaoFinal = renderizarDescricao(previewDescricao ?? '', previewCompetenciaNota)
+  const previewLocalPrestacao = watch('municipioPrestacaoIbge')
+  const previewNbs = watch('codigoNbs')
+  const previewCTribNac = watch('codigoTributacaoNacional')
+  const previewInfoCompl = watch('informacoesComplementares')
+  const previewEndereco = enderecoDoFormulario(watchedValues)
+  // Mesma precedência do backend: nota > configuração fiscal > item LC 116.
+  const cTribNacConfig = typeof fiscalDoCliente?.codigoTributacaoNacional === 'string' && /^\d{6}$/.test(fiscalDoCliente.codigoTributacaoNacional)
+    ? fiscalDoCliente.codigoTributacaoNacional
+    : undefined
+  const cTribNacDerivado = cTribNacConfig ?? codigoNacionalDoItem(previewItemListaServico)
+  const regraCompetencia = normalizarRegraCompetencia(fiscalDoCliente?.competenciaPadrao)
+  const regraCompetenciaRotulo = regraCompetencia === 'mes_anterior'
+    ? 'mês anterior à emissão'
+    : regraCompetencia === 'manual' ? 'escolher a cada nota' : 'mês da emissão'
   const allFieldsFilled = Boolean(
     selectedClienteId
+    && previewCompetenciaNota
     && previewTomadorNome
     && previewTomadorCpf && isValidCpfCnpj(previewTomadorCpf)
     && previewDescricao && previewDescricao.length >= 10
@@ -490,18 +846,28 @@ export function NfseEmissaoForm({
                 <div><dt className="text-xs text-muted-foreground">Tomador</dt><dd className="font-medium">{previewTomadorNome || '—'}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">CPF / CNPJ tomador</dt><dd className="font-mono">{previewTomadorCpf ? formatCpfCnpj(previewTomadorCpf) : '—'}</dd></div>
                 {previewTomadorEmail && <div><dt className="text-xs text-muted-foreground">E-mail tomador</dt><dd>{previewTomadorEmail}</dd></div>}
-                {previewCompetencia && <div><dt className="text-xs text-muted-foreground">Competência</dt><dd>{String(previewCompetencia.mes).padStart(2, '0')}/{previewCompetencia.ano}</dd></div>}
+                <div><dt className="text-xs text-muted-foreground">Competência</dt><dd className="font-medium">{formatarCompetencia(previewCompetenciaNota)}</dd></div>
+                <div className="sm:col-span-2">
+                  <dt className="text-xs text-muted-foreground">Endereço do tomador</dt>
+                  <dd>{previewEndereco ? textoEndereco(previewEndereco) : 'Não informado'}</dd>
+                </div>
               </dl>
             </section>
             <section className="space-y-2">
               <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Serviço</h3>
               <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-sm">
-                <div className="sm:col-span-2"><dt className="text-xs text-muted-foreground">Descrição</dt><dd className="whitespace-pre-wrap">{previewDescricao || '—'}</dd></div>
+                <div className="sm:col-span-2"><dt className="text-xs text-muted-foreground">Descrição (como sai na nota)</dt><dd className="whitespace-pre-wrap">{previewDescricaoFinal || '—'}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">Código</dt><dd className="font-mono">{previewCodigo || '—'}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">Item Lista Serviço</dt><dd className="font-mono">{previewItemListaServico || '—'}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Código de tributação nacional</dt><dd className="font-mono">{previewCTribNac?.trim() || (cTribNacDerivado ? `${cTribNacDerivado} (automático)` : '—')}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">NBS</dt><dd className="font-mono">{previewNbs?.trim() || '—'}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Local da prestação</dt><dd>{previewLocalPrestacao ? `${nomeMunicipioConhecido(previewLocalPrestacao) ?? 'IBGE'} (${previewLocalPrestacao})` : 'Município do prestador'}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">Valor</dt><dd className="font-semibold tabular-nums">{Number.isFinite(previewValor) ? formatCurrency(Number(previewValor)) : '—'}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">Alíquota ISS</dt><dd>{Number.isFinite(previewAliquota) ? `${Number(previewAliquota)}%` : 'Padrão configuração'}</dd></div>
                 <div><dt className="text-xs text-muted-foreground">ISS retido</dt><dd>{previewIssRetido ? 'Sim' : 'Não'}</dd></div>
+                {previewInfoCompl?.trim() && (
+                  <div className="sm:col-span-2"><dt className="text-xs text-muted-foreground">Informações complementares</dt><dd className="whitespace-pre-wrap">{previewInfoCompl}</dd></div>
+                )}
               </dl>
             </section>
             <div className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2.5 text-xs text-warning-foreground">
@@ -565,7 +931,41 @@ export function NfseEmissaoForm({
                 </Select>
               )}
             />
+            <p className="text-xs text-muted-foreground">Vincula a nota ao fechamento do mês no escritório.</p>
           </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="competencia" required>Competência da nota (mês/ano)</Label>
+            <Input id="competencia" type="month" className="max-w-[220px]" {...register('competencia')} />
+            {errors.competencia
+              ? <p className="text-xs text-destructive">{errors.competencia.message}</p>
+              : (
+                  <p className="text-xs text-muted-foreground">
+                    Padrão do cliente: {regraCompetenciaRotulo}. Vai como data de competência (1º dia do mês) na NFS-e.
+                  </p>
+                )}
+          </div>
+
+          {selectedClienteId && !isEditingRascunho && (
+            <NfseCopiarNota
+              notas={notasCliente?.clienteId === selectedClienteId ? notasCliente.notas : []}
+              loading={notasCliente?.clienteId !== selectedClienteId}
+              temModelo={Boolean(valoresDoModelo(fiscalDoCliente?.modeloNfse))}
+              competenciasPorId={competenciasPorId}
+              onUsarNota={usarNotaComoBase}
+              onUsarModelo={usarModeloPadrao}
+            />
+          )}
+
+          {copiaOrigem && (
+            <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-xs">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+              <p className="flex-1 text-foreground">{copiaOrigem} — confira competência, valor e descrição.</p>
+              <button type="button" onClick={() => setCopiaOrigem(null)} className="text-muted-foreground hover:text-foreground" aria-label="Fechar aviso">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -588,6 +988,15 @@ export function NfseEmissaoForm({
                   setValue('tomadorNome', t.razaoSocial, { shouldValidate: true })
                   setValue('tomadorCpfCnpj', formatCpfCnpj(t.cpfCnpj), { shouldValidate: true })
                   setValue('tomadorEmail', t.email ?? '', { shouldValidate: true })
+                  const e = t.endereco ?? {}
+                  setValue('tomadorCep', e.cep ? formatCep(e.cep) : '', { shouldValidate: true })
+                  setValue('tomadorLogradouro', e.logradouro ?? '', { shouldValidate: true })
+                  setValue('tomadorNumero', e.numero ?? '', { shouldValidate: true })
+                  setValue('tomadorComplemento', e.complemento ?? '', { shouldValidate: true })
+                  setValue('tomadorBairro', e.bairro ?? '', { shouldValidate: true })
+                  setValue('tomadorMunicipio', e.municipio ?? '', { shouldValidate: true })
+                  setValue('tomadorMunicipioIbge', e.municipioIbge ? normalizarIbge(e.municipioIbge) : '', { shouldValidate: true })
+                  setValue('tomadorUf', e.uf ?? '', { shouldValidate: true })
                 }}
               />
               <p className="text-xs text-muted-foreground">
@@ -619,12 +1028,84 @@ export function NfseEmissaoForm({
                 )}
               />
               {errors.tomadorCpfCnpj && <p className="text-xs text-destructive">{errors.tomadorCpfCnpj.message}</p>}
+              {digitosDe(previewTomadorCpf).length === 14 && (
+                <Button type="button" variant="outline" size="sm" className="mt-1" onClick={buscarTomadorPeloCnpj} disabled={buscandoCnpjTomador}>
+                  {buscandoCnpjTomador ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Search className="mr-1.5 h-3.5 w-3.5" />}
+                  Buscar pelo CNPJ
+                </Button>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="tomadorEmail">E-mail</Label>
               <Input id="tomadorEmail" type="email" {...register('tomadorEmail')} placeholder="tomador@email.com" />
               {errors.tomadorEmail && <p className="text-xs text-destructive">{errors.tomadorEmail.message}</p>}
             </div>
+          </div>
+
+          <div className="space-y-3 rounded-md border border-border/70 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Endereço do tomador</p>
+            <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_110px]">
+              <div className="space-y-1.5">
+                <Label htmlFor="tomadorCep">CEP</Label>
+                <Controller name="tomadorCep" control={control} render={({ field }) => (
+                  <Input
+                    id="tomadorCep"
+                    inputMode="numeric"
+                    placeholder="00000-000"
+                    value={field.value ?? ''}
+                    onBlur={field.onBlur}
+                    onChange={(e) => {
+                      const v = formatCep(e.target.value)
+                      field.onChange(v)
+                      if (digitosDe(v).length === 8) void preencherPeloCep(v)
+                    }}
+                  />
+                )} />
+                {buscandoCep && <p className="text-xs text-muted-foreground">Buscando CEP…</p>}
+                {!buscandoCep && erroCep && <p className="text-xs text-warning">{erroCep}</p>}
+                {errors.tomadorCep && <p className="text-xs text-destructive">{errors.tomadorCep.message}</p>}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="tomadorLogradouro">Logradouro</Label>
+                <Input id="tomadorLogradouro" {...register('tomadorLogradouro')} placeholder="Rua, avenida…" />
+                {errors.tomadorLogradouro && <p className="text-xs text-destructive">{errors.tomadorLogradouro.message}</p>}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="tomadorNumero">Número</Label>
+                <Input id="tomadorNumero" {...register('tomadorNumero')} placeholder="S/N" />
+                {errors.tomadorNumero && <p className="text-xs text-destructive">{errors.tomadorNumero.message}</p>}
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="tomadorComplemento">Complemento</Label>
+                <Input id="tomadorComplemento" {...register('tomadorComplemento')} placeholder="Sala, andar…" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="tomadorBairro">Bairro</Label>
+                <Input id="tomadorBairro" {...register('tomadorBairro')} />
+                {errors.tomadorBairro && <p className="text-xs text-destructive">{errors.tomadorBairro.message}</p>}
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_80px_160px]">
+              <div className="space-y-1.5">
+                <Label htmlFor="tomadorMunicipio">Município</Label>
+                <Input id="tomadorMunicipio" {...register('tomadorMunicipio')} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="tomadorUf">UF</Label>
+                <Input id="tomadorUf" maxLength={2} {...register('tomadorUf')} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="tomadorMunicipioIbge">Código IBGE</Label>
+                <Input id="tomadorMunicipioIbge" inputMode="numeric" maxLength={7} placeholder="7 dígitos" {...register('tomadorMunicipioIbge')} />
+                {errors.tomadorMunicipioIbge && <p className="text-xs text-destructive">{errors.tomadorMunicipioIbge.message}</p>}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Opcional, mas se preencher precisa estar completo (CEP, logradouro, número, bairro e IBGE) — o CEP
+              preenche o resto sozinho.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -673,8 +1154,57 @@ export function NfseEmissaoForm({
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="descricaoServico" required>Descrição do Serviço</Label>
-            <Textarea id="descricaoServico" rows={3} {...register('descricaoServico')} placeholder="Descreva o serviço prestado conforme contrato..." />
+            <Textarea id="descricaoServico" rows={4} {...register('descricaoServico')} placeholder="Descreva o serviço prestado conforme contrato..." />
             {errors.descricaoServico && <p className="text-xs text-destructive">{errors.descricaoServico.message}</p>}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Inserir variável:</span>
+              {VARIAVEIS_DESCRICAO.map((v) => (
+                <button
+                  key={v.nome}
+                  type="button"
+                  title={`${v.ajuda} (ex.: ${v.exemplo})`}
+                  onClick={() => inserirVariavel(v.nome)}
+                  className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  {v.nome}
+                </button>
+              ))}
+            </div>
+            {contemVariaveis(previewDescricao) && (
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs">
+                <p className="font-medium text-muted-foreground">
+                  Como sai na nota{previewCompetenciaNota ? ` (competência ${formatarCompetencia(previewCompetenciaNota)})` : ''}:
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-foreground">
+                  {previewCompetenciaNota ? previewDescricaoFinal : 'Informe a competência para ver o texto final.'}
+                </p>
+              </div>
+            )}
+            {sugestaoModelo && (
+              <div className="space-y-2 rounded-md border border-primary/25 bg-primary/[0.04] px-3 py-2.5 text-xs">
+                <p className="flex items-center gap-1.5 font-semibold text-foreground">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  Converter em modelo com variáveis?
+                </p>
+                <p className="text-muted-foreground">
+                  A descrição cita a competência da nota copiada. Com variáveis, ela acompanha a competência de cada nova nota.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Antes</p>
+                    <p className="mt-0.5 whitespace-pre-wrap rounded border bg-background px-2 py-1.5">{sugestaoModelo.antes}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Depois</p>
+                    <p className="mt-0.5 whitespace-pre-wrap rounded border bg-background px-2 py-1.5 font-mono text-[11px]">{sugestaoModelo.depois}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" onClick={aceitarSugestaoModelo}>Converter</Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setSugestaoModelo(null)}>Manter como está</Button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -689,6 +1219,52 @@ export function NfseEmissaoForm({
                 <Lc116Picker value={field.value} onChange={field.onChange} />
               )} />
               {errors.itemListaServico && <p className="text-xs text-destructive">{errors.itemListaServico.message}</p>}
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="codigoTributacaoNacional">Código de tributação nacional</Label>
+              <Input
+                id="codigoTributacaoNacional"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder={cTribNacDerivado ? `Automático: ${cTribNacDerivado}` : 'Automático pelo item LC 116'}
+                {...register('codigoTributacaoNacional')}
+              />
+              {errors.codigoTributacaoNacional
+                ? <p className="text-xs text-destructive">{errors.codigoTributacaoNacional.message}</p>
+                : <p className="text-xs text-muted-foreground">6 dígitos. Vazio = o da configuração fiscal ou o derivado do item LC 116.</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="codigoNbs">Código NBS</Label>
+              <Input id="codigoNbs" placeholder="Ex.: 1.1501.10.00" {...register('codigoNbs')} />
+              {errors.codigoNbs
+                ? <p className="text-xs text-destructive">{errors.codigoNbs.message}</p>
+                : (
+                    <p className="text-xs text-muted-foreground">
+                      Opcional, 9 dígitos.{' '}
+                      <a
+                        href="https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline underline-offset-2 hover:text-foreground"
+                      >
+                        Tabela oficial (anexos do leiaute)
+                      </a>
+                    </p>
+                  )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="municipioPrestacaoIbge">Local da prestação (IBGE)</Label>
+              <Input id="municipioPrestacaoIbge" inputMode="numeric" maxLength={7} placeholder="Município do prestador" {...register('municipioPrestacaoIbge')} />
+              {errors.municipioPrestacaoIbge
+                ? <p className="text-xs text-destructive">{errors.municipioPrestacaoIbge.message}</p>
+                : (
+                    <p className="text-xs text-muted-foreground">
+                      {nomeMunicipioConhecido(previewLocalPrestacao) ?? (previewLocalPrestacao ? 'Município fora da lista da plataforma' : 'Vazio = município do prestador')}
+                    </p>
+                  )}
             </div>
           </div>
 
@@ -724,6 +1300,19 @@ export function NfseEmissaoForm({
                 )}
               />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="informacoesComplementares">Informações complementares</Label>
+            <Textarea
+              id="informacoesComplementares"
+              rows={3}
+              {...register('informacoesComplementares')}
+              placeholder="Ex.: dados bancários para pagamento"
+            />
+            {errors.informacoesComplementares
+              ? <p className="text-xs text-destructive">{errors.informacoesComplementares.message}</p>
+              : <p className="text-xs text-muted-foreground">Padrão vem da configuração fiscal do cliente. Na NFS-e, as quebras de linha viram &quot; | &quot;.</p>}
           </div>
         </CardContent>
       </Card>
@@ -787,7 +1376,10 @@ export function NfseEmissaoForm({
                   : 'Definido na configuração fiscal do cliente'}
             </div>
             <div><span className="text-muted-foreground">Prestador:</span> {previewCliente?.razaoSocial ?? 'Selecione o cliente'}</div>
-            <div><span className="text-muted-foreground">Competência:</span> {previewCompetencia ? `${String(previewCompetencia.mes).padStart(2, '0')}/${previewCompetencia.ano}` : 'Não vinculada'}</div>
+            <div>
+              <span className="text-muted-foreground">Competência:</span> {previewCompetenciaNota ? formatarCompetencia(previewCompetenciaNota) : 'Informe o mês/ano'}
+              {previewCompetencia ? ' (vinculada ao fechamento)' : ''}
+            </div>
             <div><span className="text-muted-foreground">Serviço:</span> {previewCodigo || 'Informe o código'}</div>
             <div><span className="text-muted-foreground">Valor:</span> {Number.isFinite(previewValor) ? formatCurrency(Number(previewValor)) : 'Informe o valor'}</div>
             <div><span className="text-muted-foreground">Alíquota:</span> {Number.isFinite(previewAliquota) ? `${Number(previewAliquota)}%` : 'Padrão da configuração'}</div>
@@ -817,6 +1409,19 @@ export function NfseEmissaoForm({
               {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
               {isEditingRascunho ? 'Liberar para lote' : 'Salvar rascunho'}
             </Button>
+            {selectedClienteId && fiscalDoCliente && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-center"
+                disabled={isLoading || salvandoModelo || !previewTomadorNome}
+                onClick={salvarModeloPadrao}
+                title="Guarda tomador, serviço, valor e descrição (com variáveis) como ponto de partida das próximas notas deste cliente"
+              >
+                {salvandoModelo ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileStack className="w-4 h-4 mr-2" />}
+                {valoresDoModelo(fiscalDoCliente.modeloNfse) ? 'Atualizar modelo padrão' : 'Salvar como modelo padrão'}
+              </Button>
+            )}
             <Button type="button" variant="ghost" className="w-full justify-center" disabled={isLoading} onClick={cancelFlow}>
               Cancelar
             </Button>
@@ -862,6 +1467,14 @@ export function NfseEmissaoForm({
                     <div>
                       <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">ISS retido</p>
                       <p className="mt-1 text-sm font-medium">{emissaoPendente.issRetido ? 'Sim' : 'Não'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Competência</p>
+                      <p className="mt-1 text-sm font-medium">{formatarCompetencia(lerCompetencia(emissaoPendente.competencia))}</p>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Descrição</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm">{descricaoFinal(emissaoPendente)}</p>
                     </div>
                   </div>
                   <p className="text-sm text-muted-foreground">

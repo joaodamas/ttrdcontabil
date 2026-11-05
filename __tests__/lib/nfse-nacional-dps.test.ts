@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { spawnSync } from 'node:child_process'
 import { createHash, createVerify, X509Certificate } from 'node:crypto'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -18,6 +18,8 @@ import {
   type DadosNota,
 } from '../../functions/src/nfse/nacional/dps'
 import { assinarXml, extrairChaveDoPfx } from '../../functions/src/nfse/xml/signer'
+import { montarDadosNotaNacional } from '../../functions/src/nfse/nacional/mapeamento'
+import type { ConfigFiscalCliente, EmitirNfseInput } from '../../functions/src/nfse/types'
 
 const SCHEMAS = path.resolve(__dirname, '../../scripts/poc-nfse-nacional/schemas')
 const TEM_XMLLINT = !spawnSync('xmllint', ['--version']).error
@@ -34,6 +36,32 @@ function validarXsd(xml: string, xsd: string): { ok: boolean; saida: string } {
 }
 
 const DH = '2026-11-05T10:00:00-03:00'
+
+/**
+ * XSD de PRODUÇÃO (v1.01-20260209) numa cópia com os `^`/`$` dos pattern
+ * removidos — em XSD eles são literais e o xmllint recusaria tudo (ver
+ * scripts/poc-nfse-nacional/schemas-producao/LEIAME.md).
+ */
+const SCHEMAS_PRODUCAO_ORIGEM = path.resolve(__dirname, '../../scripts/poc-nfse-nacional/schemas-producao')
+let schemasProducao: string | null = null
+function pastaSchemasProducao(): string {
+  if (schemasProducao) return schemasProducao
+  const destino = mkdtempSync(path.join(TMP, 'xsd-prod-'))
+  for (const nome of readdirSync(SCHEMAS_PRODUCAO_ORIGEM).filter((n) => n.endsWith('.xsd'))) {
+    const conteudo = readFileSync(path.join(SCHEMAS_PRODUCAO_ORIGEM, nome), 'utf8')
+      .replace(/value="\^([^"]*)\$"/g, 'value="$1"')
+    writeFileSync(path.join(destino, nome), conteudo)
+  }
+  schemasProducao = destino
+  return destino
+}
+
+function validarXsdProducao(xml: string): { ok: boolean; saida: string } {
+  const arq = path.join(TMP, `p-${Math.random().toString(36).slice(2)}.xml`)
+  writeFileSync(arq, xml)
+  const r = spawnSync('xmllint', ['--noout', '--nonet', '--schema', path.join(pastaSchemasProducao(), 'DPS_v1.01.xsd'), arq], { encoding: 'utf8' })
+  return { ok: r.status === 0, saida: `${r.stdout}${r.stderr}` }
+}
 
 function nota(over: Partial<DadosNota> = {}): DadosNota {
   return {
@@ -176,6 +204,89 @@ describe('montarDpsXml', () => {
     expect(xml).toContain('<IBSCBS><indFinal>0</indFinal><cIndOp>100301</cIndOp><indDest>0</indDest><valores><trib><CST>000</CST><cClassTrib>000001</cClassTrib></trib></valores></IBSCBS></infDPS>')
     const r = validarXsd(xml, 'DPS_v1.01.xsd')
     expect(r.saida).toContain('validates')
+  })
+})
+
+describe('DPS com os campos da emissão completa (endereço, NBS, local, inf. complementares)', () => {
+  const configCompleta: ConfigFiscalCliente = {
+    clienteId: 'c1',
+    municipioEmissor: 'Jundiaí',
+    municipioIbge: '3525904',
+    inscricaoMunicipal: '123456',
+    regimeTributario: 'simples_nacional',
+    optanteSimples: true,
+    incentivadorCultural: false,
+    itemListaServico: '17.19',
+    aliquotaPadrao: 6,
+    ambienteEmissao: 'producao',
+  }
+  const entrada: EmitirNfseInput = {
+    clienteId: 'c1',
+    tomador: {
+      cpfCnpj: '11444777000161',
+      razaoSocial: 'Tomador Exemplo Ltda',
+      email: 'financeiro@tomador.com.br',
+      endereco: {
+        logradouro: 'Rua das Flores', numero: '100', complemento: 'Sala 2', bairro: 'Centro',
+        municipioIbge: '3550308', uf: 'SP', cep: '01001-000',
+      },
+    },
+    servico: {
+      discriminacao: 'PRESTAÇÃO DE SERVIÇOS REFERENTE AO MÊS OUTUBRO DE 2026.\nDADOS PARA PAGAMENTO NO CAMPO ABAIXO.',
+      codigoServico: '0102',
+      itemListaServico: '1.02',
+      codigoTributacaoNacional: '010201',
+      codigoNbs: '1.1501.10.00',
+      municipioPrestacao: '3550308',
+      informacoesComplementares: 'Banco 001 – Ag. 1234\nC/C 98765-0 • PIX: financeiro@prestador.com.br',
+      valorServico: 3500,
+      issRetido: false,
+    },
+  }
+  const dados = () => montarDadosNotaNacional(entrada, configCompleta, {
+    cnpj: '11222333000181', inscricaoMunicipal: '123456', razaoSocial: 'Prestador', municipioIbge: '3525904',
+  }, { serie: '1', numero: '15', competencia: '2026-10-01' })
+
+  it('mapeia NBS, cTribNac da nota, local e informações complementares sem quebra de linha', () => {
+    const d = dados()
+    expect(d.servico).toMatchObject({
+      cTribNac: '010201',
+      cNBS: '115011000',
+      municipioPrestacao: '3550308',
+      informacoesComplementares: 'Banco 001 - Ag. 1234 | C/C 98765-0 - PIX: financeiro@prestador.com.br',
+    })
+    expect(d.tomador?.endereco).toEqual({
+      cep: '01001000', municipioIbge: '3550308', logradouro: 'Rua das Flores', numero: '100', complemento: 'Sala 2', bairro: 'Centro',
+    })
+  })
+
+  it('produção: cNBS vem DEPOIS de xDescServ; produção restrita: antes', () => {
+    const prod = montarDpsXml(dados(), { dhEmi: DH, ambiente: 'producao' }).xml
+    expect(prod).toMatch(/<cTribNac>010201<\/cTribNac><xDescServ>[^<]+<\/xDescServ><cNBS>115011000<\/cNBS><\/cServ>/)
+    const hom = montarDpsXml(dados(), { dhEmi: DH, ambiente: 'homologacao' }).xml
+    expect(hom).toMatch(/<cTribNac>010201<\/cTribNac><cNBS>115011000<\/cNBS><xDescServ>/)
+    expect(prod).toContain('<infoCompl><xInfComp>Banco 001 - Ag. 1234 | C/C 98765-0 - PIX: financeiro@prestador.com.br</xInfComp></infoCompl>')
+    expect(prod).toContain('<locPrest><cLocPrestacao>3550308</cLocPrestacao></locPrest>')
+    expect(prod).toContain('<end><endNac><cMun>3550308</cMun><CEP>01001000</CEP></endNac><xLgr>Rua das Flores</xLgr><nro>100</nro><xCpl>Sala 2</xCpl><xBairro>Centro</xBairro></end>')
+    expect(prod).toContain('<dCompet>2026-10-01</dCompet>')
+  })
+
+  it.skipIf(!TEM_XMLLINT)('passa no XSD de PRODUÇÃO (v1.01-20260209)', () => {
+    const { xml } = montarDpsXml(dados(), { dhEmi: DH, ambiente: 'producao' })
+    const r = validarXsdProducao(xml)
+    expect(r.saida).toContain('validates')
+    expect(r.ok).toBe(true)
+    // Prova de que a ordem importa: cNBS antes de xDescServ (leiaute NT 009) é recusado na produção.
+    const foraDeOrdem = xml.replace(/(<xDescServ>[^<]*<\/xDescServ>)(<cNBS>\d+<\/cNBS>)/, '$2$1')
+    expect(foraDeOrdem).not.toBe(xml)
+    expect(validarXsdProducao(foraDeOrdem).ok).toBe(false)
+  })
+
+  it.skipIf(!TEM_XMLLINT)('passa no XSD da produção restrita (homologação)', () => {
+    const { xml } = montarDpsXml(dados(), { dhEmi: DH, ambiente: 'homologacao' })
+    const r = validarXsd(xml, 'DPS_v1.01.xsd')
+    expect(r.saida).toContain('validates')
+    expect(r.ok).toBe(true)
   })
 })
 

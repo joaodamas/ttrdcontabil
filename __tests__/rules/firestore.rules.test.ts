@@ -704,6 +704,28 @@ describeIfEmulator('firestore.rules', () => {
     }))
   })
 
+  it('clientes_fiscal: fiscal grava o modelo padrão da NFS-e e os padrões da emissão (campos declarativos)', async () => {
+    await assertSucceeds(updateDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed'), {
+      modeloNfse: {
+        tomador: { nome: 'Tomador', cpfCnpj: '11444777000161', email: null, endereco: { cep: '01001000', municipioIbge: '3550308' } },
+        descricaoServico: 'SERVIÇOS DE {{MES_COMPETENCIA}} DE {{ANO_COMPETENCIA}}',
+        valorServico: 100,
+        issRetido: false,
+        salvoEm: '2026-11-05T12:00:00.000Z',
+      },
+      competenciaPadrao: 'mes_anterior',
+      informacoesComplementaresPadrao: 'Banco 001 | Ag 1234',
+    }))
+    // Junto com um campo de servidor, a escrita inteira continua recusada.
+    await assertFails(updateDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed'), {
+      modeloNfse: { descricaoServico: 'x' },
+      producaoLiberada: true,
+    }))
+    await assertFails(updateDoc(doc(dbAs('leitura-a'), 'clientes_fiscal/cf-seed'), {
+      modeloNfse: { descricaoServico: 'x' },
+    }))
+  })
+
   it('clientes_fiscal: nem fiscal nem admin gravam spedyCompanyId pelo navegador', async () => {
     await assertFails(updateDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed'), {
       spedyCompanyId: 'empresa-do-atacante',

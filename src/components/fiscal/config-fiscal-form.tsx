@@ -25,6 +25,8 @@ import { Switch } from '@/components/ui/switch'
 import { AlertTriangle } from 'lucide-react'
 import { buscarDadosCnpj } from '@/lib/cnpj-lookup'
 import { normalizarIbge } from '@/lib/ibge'
+import { Textarea } from '@/components/ui/textarea'
+import { REGRAS_COMPETENCIA, normalizarRegraCompetencia } from '@/lib/nfse-modelo'
 
 export const MUNICIPIOS = [
   { ibge: '3525904', nome: 'Jundiaí' },
@@ -81,9 +83,50 @@ const schema = z.object({
   aliquotaSimplesNacional:   z.number().min(0).max(100).optional().nullable(),
   // Emissão automática (sem revisão humana) no dia configurado abaixo
   emissaoAutomatica:   z.boolean().optional(),
+  // Padrões da tela de emissão (não mudam a DPS por si só)
+  competenciaPadrao:   z.enum(['mes_atual', 'mes_anterior', 'manual']).optional(),
+  informacoesComplementaresPadrao: z.string().max(2000, 'Até 2000 caracteres').optional().nullable(),
 })
 
 type FormData = z.input<typeof schema>
+
+/**
+ * Documento de clientes_fiscal → defaultValues do formulário. Único lugar que
+ * lista os campos: antes cada tela montava o objeto à mão e esquecia os do
+ * Ambiente Nacional (cTribNac, cTribMun, série, alíquota do Simples) — o
+ * formulário abria com eles vazios e salvar gravava null por cima.
+ */
+export function defaultsDaConfigFiscal(
+  fiscal: Record<string, unknown> | null | undefined,
+): (Partial<FormData> & { credenciais?: Record<string, unknown> }) | undefined {
+  if (!fiscal) return undefined
+  const s = (v: unknown) => (typeof v === 'string' ? v : undefined)
+  return {
+    municipioIbge:          s(fiscal.municipioIbge),
+    inscricaoMunicipal:     s(fiscal.inscricaoMunicipal),
+    inscricaoEstadual:      s(fiscal.inscricaoEstadual),
+    ambienteEmissao:        fiscal.ambienteEmissao === 'producao' ? 'producao' : 'homologacao',
+    regimeTributario:       s(fiscal.regimeTributario),
+    optanteSimples:         typeof fiscal.optanteSimples === 'boolean' ? fiscal.optanteSimples : true,
+    incentivadorCultural:   fiscal.incentivadorCultural === true,
+    naturezaOperacao:       s(fiscal.naturezaOperacao) ?? '1',
+    codigoServicoPadrao:    s(fiscal.codigoServicoPadrao),
+    descricaoServicoPadrao: s(fiscal.descricaoServicoPadrao),
+    itemListaServico:       s(fiscal.itemListaServico),
+    cnae:                   s(fiscal.cnae),
+    aliquotaPadrao:         typeof fiscal.aliquotaPadrao === 'number' ? fiscal.aliquotaPadrao : undefined,
+    issRetidoPadrao:        fiscal.issRetidoPadrao === true,
+    provedorNfse:           s(fiscal.provedorNfse) as FormData['provedorNfse'],
+    codigoTributacaoNacional:  s(fiscal.codigoTributacaoNacional) ?? '',
+    codigoTributacaoMunicipal: s(fiscal.codigoTributacaoMunicipal) ?? '',
+    serieDps:                  s(fiscal.serieDps) ?? '',
+    aliquotaSimplesNacional:   typeof fiscal.aliquotaSimplesNacional === 'number' ? fiscal.aliquotaSimplesNacional : null,
+    emissaoAutomatica:      fiscal.emissaoAutomatica === true,
+    competenciaPadrao:      normalizarRegraCompetencia(fiscal.competenciaPadrao),
+    informacoesComplementaresPadrao: s(fiscal.informacoesComplementaresPadrao) ?? '',
+    credenciais:            (fiscal.credenciais as Record<string, unknown> | undefined) ?? {},
+  }
+}
 
 interface Props {
   open: boolean
@@ -106,6 +149,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       naturezaOperacao: '1',
       provedorNfse:     'nacional',
       emissaoAutomatica:false,
+      competenciaPadrao:'mes_atual',
     },
   })
 
@@ -115,6 +159,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       ambienteEmissao:  'homologacao',
       optanteSimples:   true,
       naturezaOperacao: '1',
+      competenciaPadrao: 'mes_atual',
       ...defaultValues,
       // Config sem provedor (antiga ou nova) emite pelo Ambiente Nacional.
       // Só 'prefeitura' (escolha explícita) fica no conector municipal; o resto — inclusive o
@@ -185,6 +230,8 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
         serieDps:                  data.serieDps                  || null,
         aliquotaSimplesNacional:   Number.isFinite(data.aliquotaSimplesNacional) ? data.aliquotaSimplesNacional : null,
         emissaoAutomatica:    data.emissaoAutomatica ?? false,
+        competenciaPadrao:    normalizarRegraCompetencia(data.competenciaPadrao),
+        informacoesComplementaresPadrao: data.informacoesComplementaresPadrao?.trim() || null,
       }
 
       let savedDocId = docId
@@ -421,6 +468,40 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
                   </SelectContent>
                 </Select>
               )} />
+            </div>
+          </div>
+
+          {/* Padrões da tela de emissão */}
+          <div className="space-y-3 rounded-md border p-3">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Padrões da emissão</p>
+            <div className="space-y-1.5">
+              <Label>Competência padrão da nota</Label>
+              <Controller name="competenciaPadrao" control={control} render={({ field }) => (
+                <Select value={field.value ?? 'mes_atual'} onValueChange={field.onChange}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {REGRAS_COMPETENCIA.map((r) => (
+                      <SelectItem key={r.valor} value={r.valor}>{r.rotulo}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )} />
+              <p className="text-xs text-muted-foreground">
+                Sugestão inicial do campo Competência na emissão (sempre editável). Honorário faturado no mês seguinte
+                ao serviço costuma usar &quot;Mês anterior&quot;.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Informações complementares padrão</Label>
+              <Textarea
+                rows={3}
+                {...register('informacoesComplementaresPadrao')}
+                placeholder="Ex.: dados bancários para pagamento — Banco, agência, conta, PIX"
+              />
+              {errors.informacoesComplementaresPadrao && <p className="text-xs text-destructive">{errors.informacoesComplementaresPadrao.message}</p>}
+              <p className="text-xs text-muted-foreground">
+                Vem preenchido em cada nota e pode ser alterado nela. Na NFS-e, as quebras de linha viram &quot; | &quot;.
+              </p>
             </div>
           </div>
 
