@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { ExternalLink, ClipboardList, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { STATUS_CYCLE, STATUS_LABEL, STATUS_NOME, STATUS_STYLE } from './status-obrigacao'
+import { situacaoObrigacao, temPendencia } from '@/lib/fechamento-resumo'
 import { DataTableShell } from '@/components/ui/data-table-shell'
 import { EmptyState } from '@/components/ui/empty-state'
 
@@ -28,34 +30,6 @@ interface FechamentoTableProps {
   onUpdate: (id: string, field: string, value: string) => Promise<void>
   /** Mês travado após "Encerrar revisão" — status deixam de ser clicáveis. */
   travado?: boolean
-}
-
-// Ciclo de status ao clicar
-const STATUS_CYCLE: Record<string, StatusObrigacao[]> = {
-  das:     ['pendente', 'guia', 'sm', 'enviado', 'parcial', 'na'],
-  esocial: ['na', 'pendente', 'ok', 'sm', 'guia'],
-  reinf:   ['na', 'pendente', 'ok', 'sm', 'guia'],
-  fgts:    ['na', 'pendente', 'ok', 'sm', 'guia'],
-}
-
-const STATUS_STYLE: Record<StatusObrigacao, string> = {
-  pendente: 'bg-warning/10 text-warning border-warning/30 hover:bg-warning/20',
-  enviado:  'bg-success/10 text-success border-success/30 hover:bg-success/20',
-  parcial:  'bg-info/10 text-info border-info/30 hover:bg-info/20',
-  ok:       'bg-success/15 text-success border-success/35 hover:bg-success/25',
-  sm:       'bg-success/10 text-success border-success/30 hover:bg-success/20',
-  guia:     'bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20',
-  na:       'bg-muted text-muted-foreground border-border hover:bg-muted/80',
-}
-
-const STATUS_LABEL: Record<StatusObrigacao, string> = {
-  pendente: 'PEND',
-  enviado:  'ENV',
-  parcial:  'PAR/',
-  ok:       'OK',
-  sm:       'SM',
-  guia:     'GUIA',
-  na:       '—',
 }
 
 export function StatusCell({
@@ -96,7 +70,8 @@ export function StatusCell({
         loading && 'opacity-50 cursor-wait',
         travado && 'opacity-60 cursor-not-allowed hover:bg-transparent'
       )}
-      title={travado ? 'Mês revisado e travado — reabra para editar' : 'Clique para alterar status'}
+      title={travado ? `${STATUS_NOME[status]} — mês revisado e travado; reabra para editar` : `${STATUS_NOME[status]} — clique para alterar`}
+      aria-label={STATUS_NOME[status]}
     >
       {loading ? '...' : STATUS_LABEL[status]}
     </button>
@@ -144,8 +119,8 @@ export function FechamentoTable({ fechamentos, onUpdate, travado = false }: Fech
       }
       description={travado ? 'Status não podem ser alterados. Reabra o mês para editar.' : undefined}
     >
-      <table className="w-full min-w-[860px] text-sm">
-        <thead className="bg-muted/50 border-b">
+      <table className="w-full table-fixed text-sm md:table-auto md:min-w-[860px]">
+        <thead className="hidden bg-muted/50 border-b md:table-header-group">
           <tr>
             <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground w-12">COD</th>
             <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground">CLIENTE</th>
@@ -160,13 +135,14 @@ export function FechamentoTable({ fechamentos, onUpdate, travado = false }: Fech
           </tr>
         </thead>
         <tbody className="divide-y">
-          {fechamentos.map((f) => (
-            <tr key={f.id} className={cn(
-              'hover:bg-muted/30 transition-colors',
-              (f.dasStatus === 'guia' || f.esocialStatus === 'guia' || f.reinfStatus === 'guia' || f.fgtsStatus === 'guia' ||
-               f.dasStatus === 'pendente' || f.esocialStatus === 'pendente' || f.reinfStatus === 'pendente' || f.fgtsStatus === 'pendente')
-                ? 'bg-destructive/[0.03] hover:bg-destructive/[0.06] dark:bg-destructive/[0.08] dark:hover:bg-destructive/[0.14]'
-                : ''
+          {fechamentos.map((f) => {
+            const comPendencia = temPendencia(f)
+            const linhaPendente = 'bg-destructive/[0.03] hover:bg-destructive/[0.06] dark:bg-destructive/[0.08] dark:hover:bg-destructive/[0.14]'
+            return (
+            <Fragment key={f.id}>
+            <tr className={cn(
+              'hidden hover:bg-muted/30 transition-colors md:table-row',
+              comPendencia ? linhaPendente : ''
             )}>
               <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{f.clienteCodigo}</td>
               <td className="px-3 py-2 font-medium">{f.clienteNome}</td>
@@ -178,10 +154,10 @@ export function FechamentoTable({ fechamentos, onUpdate, travado = false }: Fech
               <td className="px-3 py-2 text-xs text-muted-foreground truncate max-w-[120px]">{f.responsavel || '—'}</td>
               <td className="px-3 py-2">
                 {(() => {
-                  const slots = [f.dasStatus, f.esocialStatus, f.reinfStatus, f.fgtsStatus]
-                  const done = slots.filter(s => !['pendente', 'guia'].includes(s) && s !== 'na').length
-                  const total = slots.filter(s => s !== 'na').length || 4
-                  const pct = Math.round((done / total) * 100)
+                  const slots = [f.dasStatus, f.esocialStatus, f.reinfStatus, f.fgtsStatus].map(situacaoObrigacao)
+                  const done = slots.filter((s) => s === 'concluida').length
+                  const total = slots.filter((s) => s !== 'nao_se_aplica').length
+                  const pct = total > 0 ? Math.round((done / total) * 100) : 100
                   return (
                     <div className="flex items-center gap-2">
                       <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
@@ -223,7 +199,53 @@ export function FechamentoTable({ fechamentos, onUpdate, travado = false }: Fech
                 )}
               </td>
             </tr>
-          ))}
+            <tr className={cn('md:hidden', comPendencia ? linhaPendente : '')}>
+              <td colSpan={10} className="px-3 py-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">
+                      <span className="mr-1.5 font-mono text-xs text-muted-foreground">{f.clienteCodigo}</span>
+                      {f.clienteNome}
+                    </p>
+                    <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span className={cn('rounded px-1.5 py-0.5 text-[11px] font-semibold', REGIME_COLOR[f.regime] ?? 'bg-muted text-muted-foreground')}>
+                        {REGIME_LABEL[f.regime] ?? f.regime}
+                      </span>
+                      <span className="truncate">{f.responsavel || '—'}</span>
+                    </p>
+                  </div>
+                  {f.portalUrl && f.portalUrl !== 'PROGRAMA' && f.portalUrl !== 'EMAIL' ? (
+                    <a
+                      href={f.portalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex shrink-0 items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Portal
+                    </a>
+                  ) : (
+                    <span className="shrink-0 text-xs text-muted-foreground">{f.formaEntrega ?? f.portalUrl ?? '—'}</span>
+                  )}
+                </div>
+                <div className="mt-2 grid grid-cols-4 gap-1.5 text-center text-[10px] font-medium text-muted-foreground">
+                  {([
+                    ['DAS/SN', f.dasStatus, 'das'],
+                    ['eSOCIAL', f.esocialStatus, 'esocial'],
+                    ['REINF', f.reinfStatus, 'reinf'],
+                    ['FGTS', f.fgtsStatus, 'fgts'],
+                  ] as const).map(([rotulo, st, campo]) => (
+                    <div key={campo} className="flex flex-col items-center gap-1">
+                      {rotulo}
+                      <StatusCell status={st} campo={campo} id={f.id} onUpdate={onUpdate} travado={travado} />
+                    </div>
+                  ))}
+                </div>
+              </td>
+            </tr>
+            </Fragment>
+            )
+          })}
         </tbody>
       </table>
     </DataTableShell>

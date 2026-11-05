@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 
+import { PageHeader } from '@/components/layout/page-header'
 import { formatCurrency } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -28,6 +29,7 @@ const FREQUENCIA_LABELS: Record<string, string> = {
 export default function AdminServicosPage() {
   const [servicos, setServicos] = useState<ServicoAdmin[]>([])
   const [loading, setLoading] = useState(true)
+  const [erroCarga, setErroCarga] = useState<string | null>(null)
   const [gerando, setGerando] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('codigo')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
@@ -35,9 +37,13 @@ export default function AdminServicosPage() {
 
   const load = useCallback(() => {
     setLoading(true)
+    setErroCarga(null)
     fetchServicosAdmin()
       .then(setServicos)
-      .catch((err) => toast.error(getErrorMessage(err, 'Nao foi possivel carregar os servicos cadastrados. Verifique sua permissao de acesso.')))
+      .catch((err) => {
+        console.error('[admin/servicos] falha ao carregar', err)
+        setErroCarga(getErrorMessage(err, 'Verifique sua conexão e sua permissão de acesso, e tente novamente.'))
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -72,7 +78,7 @@ export default function AdminServicosPage() {
       toast.success('Serviço inativado.')
       load()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Nao foi possivel inativar o servico.'))
+      toast.error(getErrorMessage(err, 'Não foi possível inativar o serviço.'))
     } finally {
       setServicoParaInativar(null)
     }
@@ -85,7 +91,7 @@ export default function AdminServicosPage() {
       toast.success('Tabela COB01–COB20 criada com sucesso!')
       load()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Nao foi possivel gerar a tabela COB. Verifique se ja existem servicos cadastrados e tente novamente.'))
+      toast.error(getErrorMessage(err, 'Não foi possível gerar a tabela COB. Verifique se já existem serviços cadastrados e tente novamente.'))
     } finally {
       setGerando(false)
     }
@@ -101,27 +107,21 @@ export default function AdminServicosPage() {
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
-        <div>
-          <h2 className="text-lg font-semibold">Tipos de Serviço</h2>
-          <p className="text-sm text-muted-foreground">
-            {servicos.length} serviço{servicos.length !== 1 ? 's' : ''} cadastrado{servicos.length !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {servicos.length === 0 && (
-            <button
-              onClick={gerarTabelaCob}
-              disabled={gerando}
-              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-dashed px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
-            >
-              {gerando && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Gerar Tabela COB01–COB20
-            </button>
-          )}
-          <ServicoForm onSaved={load} />
-        </div>
-      </div>
+      <PageHeader
+        title="Tipos de serviço"
+        description={`${servicos.length} serviço${servicos.length !== 1 ? 's' : ''} cadastrado${servicos.length !== 1 ? 's' : ''}`}
+        breadcrumbs={[{ label: 'Administração', href: '/admin' }, { label: 'Tipos de serviço' }]}
+        action={
+          <>
+            {servicos.length === 0 && (
+              <Button variant="outline" size="cta" className="border-dashed" onClick={gerarTabelaCob} loading={gerando}>
+                Gerar tabela COB01–COB20
+              </Button>
+            )}
+            <ServicoForm onSaved={load} />
+          </>
+        }
+      />
 
       <Card className="border-border/65 bg-card/95 card-shadow">
         <div className="overflow-hidden">
@@ -158,7 +158,15 @@ export default function AdminServicosPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {sorted.length === 0 ? (
+              {erroCarga ? (
+                <TableEmptyState
+                  colSpan={6}
+                  icon={BriefcaseBusiness}
+                  title="Não foi possível carregar os serviços"
+                  description={erroCarga}
+                  action={{ label: 'Tentar novamente', onClick: load }}
+                />
+              ) : sorted.length === 0 ? (
                 <TableEmptyState
                   colSpan={6}
                   icon={BriefcaseBusiness}

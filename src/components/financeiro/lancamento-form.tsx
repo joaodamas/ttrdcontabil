@@ -9,6 +9,7 @@ import { Timestamp } from 'firebase/firestore'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -23,6 +24,9 @@ import { Loader2 } from 'lucide-react'
 import { getClientes, getCompetencias, createDocument, updateDocument } from '@/lib/firestore-client'
 import { SELECT_NONE_VALUE } from '@/lib/select-values'
 import { formatWhatsApp, normalizeWhatsApp } from '@/lib/utils'
+import { useQueryClient } from '@tanstack/react-query'
+import { financeiroKeys } from '@/features/financeiro/queries'
+import { nomePreservado } from '@/lib/nome-preservado'
 
 const lancamentoSchema = z.object({
   clienteId:        z.string().optional().nullable(),
@@ -31,7 +35,7 @@ const lancamentoSchema = z.object({
   servicoId:        z.string().optional().nullable(),
   tipo:             z.enum(['receita', 'despesa']),
   descricao:        z.string().min(1, 'Descrição é obrigatória').max(200),
-  valor:            z.number().positive('Valor deve ser positivo'),
+  valor:            z.number({ error: 'Informe o valor' }).positive('Valor deve ser positivo'),
   dataVencimento:   z.string().min(1, 'Data de vencimento é obrigatória'),
   dataPagamento:    z.string().optional().nullable(),
   // 'atrasado' e 'estornado' NÃO são graváveis: 'atrasado' é sempre derivado
@@ -97,6 +101,11 @@ interface LancamentoFormProps {
 
 export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFormProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
+  // router.refresh() não toca o cache do React Query (static export): sem
+  // invalidar, a lista mostrava o registro antigo até o staleTime vencer.
+  const invalidarListas = () =>
+    Promise.all([queryClient.invalidateQueries({ queryKey: financeiroKeys.all })])
   const isEditing = !!initialData?.id
 
   const [clientes, setClientes]         = useState<ClienteItem[]>([])
@@ -170,7 +179,10 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
       ...data,
       clienteId: data.clienteId || null,
       competenciaId: data.competenciaId || null,
-      clienteNome: cliente?.razaoSocial ?? null,
+      clienteNome: nomePreservado(data.clienteId, cliente?.razaoSocial, {
+        id: initialData?.clienteId,
+        nome: (initialData as { clienteNome?: string | null } | undefined)?.clienteNome,
+      }),
       pagadorNome: data.pagadorNome || cliente?.razaoSocial || null,
       pagadorWhatsapp: normalizeWhatsApp(data.pagadorWhatsapp),
       dataVencimento: Timestamp.fromDate(new Date(`${data.dataVencimento}T12:00:00`)),
@@ -180,14 +192,16 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
     try {
       if (isEditing) {
         await updateDocument('lancamentos', initialData!.id!, payload)
+        await invalidarListas()
         toast.success('Lançamento atualizado!')
         if (onSuccess) onSuccess(initialData!.id!)
-        else { router.push('/financeiro'); router.refresh() }
+        else { router.push('/financeiro') }
       } else {
         const id = await createDocument('lancamentos', payload)
+        await invalidarListas()
         toast.success('Lançamento criado!')
         if (onSuccess) onSuccess(id)
-        else { router.push('/financeiro'); router.refresh() }
+        else { router.push('/financeiro') }
       }
     } catch {
       toast.error('Erro ao salvar lançamento. Verifique cliente, valor e vencimento.')
@@ -202,7 +216,7 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Tipo <span className="text-destructive">*</span></Label>
+            <Label required>Tipo</Label>
             <Controller
               name="tipo"
               control={control}
@@ -219,27 +233,32 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="descricao">Descrição <span className="text-destructive">*</span></Label>
+            <Label htmlFor="descricao" required>Descrição</Label>
             <Input id="descricao" {...register('descricao')} placeholder="Ex: Honorários contábeis — Janeiro/2025" />
             {errors.descricao && <p className="text-xs text-destructive">{errors.descricao.message}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="valor">Valor (R$) <span className="text-destructive">*</span></Label>
-              <Input
-                id="valor"
-                type="number"
-                step="0.01"
-                min="0.01"
-                placeholder="0,00"
-                {...register('valor', { valueAsNumber: true })}
+              <Label htmlFor="valor" required>Valor (R$)</Label>
+              <Controller
+                name="valor"
+                control={control}
+                render={({ field }) => (
+                  <CurrencyInput
+                    id="valor"
+                    ref={field.ref}
+                    value={field.value}
+                    onChange={(v) => field.onChange(v ?? NaN)}
+                    onBlur={field.onBlur}
+                  />
+                )}
               />
               {errors.valor && <p className="text-xs text-destructive">{errors.valor.message}</p>}
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="dataVencimento">Vencimento <span className="text-destructive">*</span></Label>
+              <Label htmlFor="dataVencimento" required>Vencimento</Label>
               <Input id="dataVencimento" type="date" {...register('dataVencimento')} />
               {errors.dataVencimento && <p className="text-xs text-destructive">{errors.dataVencimento.message}</p>}
             </div>
@@ -271,15 +290,15 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="dataPagamento">
-              Data de Pagamento {status === 'pago' ? <span className="text-destructive">*</span> : null}
+            <Label htmlFor="dataPagamento" required={status === 'pago'}>
+              Data de Pagamento
             </Label>
             <Input id="dataPagamento" type="date" {...register('dataPagamento')} className="max-w-48" />
             {errors.dataPagamento && <p className="text-xs text-destructive">{errors.dataPagamento.message}</p>}
           </div>
 
           <div className="space-y-1.5">
-            <Label>Cliente {tipo === 'receita' ? <span className="text-destructive">*</span> : null}</Label>
+            <Label required={tipo === 'receita'}>Cliente</Label>
             <Controller
               name="clienteId"
               control={control}

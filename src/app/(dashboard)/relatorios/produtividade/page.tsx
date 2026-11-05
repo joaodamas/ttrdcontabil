@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { InlineAlert } from '@/components/ui/inline-alert'
+import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Clock, User, TrendingUp, BarChart2, Download } from 'lucide-react'
 
@@ -129,12 +130,11 @@ export default function ProdutividadePage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-lg font-semibold">Produtividade individual</h1>
-          <p className="text-sm text-muted-foreground">Tempo registrado via timer no Cockpit Hoje</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <PageHeader
+        title="Produtividade"
+        description="Tempo individual registrado via timer no Cockpit Hoje."
+        action={
+        <>
           <Select value={periodo} onValueChange={v => { if (v) setPeriodo(v) }}>
             <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -148,16 +148,17 @@ export default function ProdutividadePage() {
               {usuarios.map(u => <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" className="h-9 rounded-xl" disabled={exportDisabled} onClick={exportarExcel}>
-            <Download className="h-4 w-4" />
+          <Button variant="outline" size="cta" disabled={exportDisabled} onClick={exportarExcel}>
+            <Download />
             Excel
           </Button>
-          <Button variant="outline" size="sm" className="h-9 rounded-xl" disabled={exportDisabled} onClick={exportarCsv}>
-            <Download className="h-4 w-4" />
+          <Button variant="outline" size="cta" disabled={exportDisabled} onClick={exportarCsv}>
+            <Download />
             CSV
           </Button>
-        </div>
-      </div>
+        </>
+        }
+      />
 
       {error ? (
         <InlineAlert

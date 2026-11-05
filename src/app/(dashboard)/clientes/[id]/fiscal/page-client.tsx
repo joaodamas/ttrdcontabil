@@ -1,15 +1,18 @@
 'use client'
 
 import { useCallback, useState, useEffect } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
-import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
 
 import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { Badge } from '@/components/ui/badge'
+import { PageHeader } from '@/components/layout/page-header'
+import { AmbienteBadge, NfseStatusBadge } from '@/components/ui/status-badge'
+import { RecordUnavailable, type RecordLoadFailure } from '@/components/ui/record-unavailable'
+import { getErrorMessage } from '@/lib/error-message'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, Loader2, Pencil, Plus, ShieldCheck, ShieldAlert, ShieldOff, AlertTriangle } from 'lucide-react'
+import { Loader2, Pencil, Plus, ShieldCheck, ShieldAlert, ShieldOff, AlertTriangle, Package, Truck } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
@@ -23,40 +26,37 @@ const REGIME_LABELS: Record<string, string> = {
   isento:           'Isento / Imune',
 }
 
-const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  emitida:                 { label: 'Emitida',    variant: 'default' },
-  cancelada:               { label: 'Cancelada',  variant: 'destructive' },
-  pendente_processamento:  { label: 'Pendente',   variant: 'outline' },
-  erro_integracao:         { label: 'Erro',       variant: 'destructive' },
-  rejeitada:               { label: 'Rejeitada',  variant: 'destructive' },
-}
-
 export default function ClienteFiscalPage() {
   const pathname = usePathname()
   const id = getPathSegmentAfter(pathname, 'clientes')
-  const router  = useRouter()
 
   const [cliente,   setCliente]   = useState<Record<string, unknown> | null>(null)
   const [fiscal,    setFiscal]    = useState<Record<string, unknown> | null>(null)
   const [notas,     setNotas]     = useState<Array<Record<string, unknown>>>([])
   const [loading,   setLoading]   = useState(true)
+  const [falha,     setFalha]     = useState<{ reason: RecordLoadFailure; message?: string } | null>(null)
   const [configOpen, setConfigOpen] = useState(false)
   const [emitirOpen, setEmitirOpen] = useState(false)
 
   const load = useCallback(() => {
     if (!id) return
     setLoading(true)
+    setFalha(null)
     Promise.all([
       getDocument('clientes', id),
       listDocuments('clientes_fiscal', [where('clienteId', '==', id), limit(1)]),
       listDocuments('nfse_emitidas', [where('clienteId', '==', id), orderBy('dataEmissao', 'desc'), limit(10)]),
     ]).then(([clienteData, fiscalData, notasData]) => {
-      if (!clienteData) { router.push('/clientes'); return }
+      if (!clienteData) { setCliente(null); setFalha({ reason: 'nao_encontrado' }); return }
       setCliente(clienteData as Record<string, unknown>)
       setFiscal(fiscalData.length > 0 ? fiscalData[0] as Record<string, unknown> : null)
       setNotas(notasData as Array<Record<string, unknown>>)
+    }).catch((err: unknown) => {
+      console.error('[clientes/fiscal] falha ao carregar', err)
+      setCliente(null)
+      setFalha({ reason: 'erro', message: getErrorMessage(err, 'Verifique sua conexão e tente novamente.') })
     }).finally(() => setLoading(false))
-  }, [id, router])
+  }, [id])
 
   useEffect(() => {
     queueMicrotask(() => { void load() })
@@ -70,8 +70,23 @@ export default function ClienteFiscalPage() {
     )
   }
 
-  if (!cliente) return null
+  if (!cliente) {
+    return (
+      <RecordUnavailable
+        reason={falha?.reason ?? 'nao_encontrado'}
+        notFoundTitle="Cliente não encontrado"
+        errorTitle="Não foi possível carregar os dados fiscais do cliente"
+        errorDescription={falha?.message}
+        backHref={falha?.reason === 'erro' && id ? `/clientes/${id}` : '/clientes'}
+        backLabel={falha?.reason === 'erro' && id ? 'Voltar para o cliente' : 'Voltar para clientes'}
+        onRetry={load}
+      />
+    )
+  }
 
+  // Ver mesma lógica em ../page-client.tsx: categoriaFiscal vem do CNAE
+  // (scripts/classificar-clientes-fiscal.mjs) e decide NFS-e × NF-e × CT-e.
+  const categoriaFiscal = (cliente.categoriaFiscal as string) ?? 'servico'
   const creds       = (fiscal?.credenciais ?? {}) as Record<string, unknown>
   const ibge        = fiscal?.municipioIbge as string | undefined
   const tipo        = ibge ? MUNICIPIO_TIPO[ibge] : undefined
@@ -108,26 +123,57 @@ export default function ClienteFiscalPage() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href={`/clientes/${id}`}>
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="w-4 h-4 mr-1" />
-              Voltar
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Clientes', href: '/clientes' },
+          { label: cliente.razaoSocial as string, href: `/clientes/${id}` },
+          { label: 'Fiscal' },
+        ]}
+        title={`Fiscal — ${cliente.razaoSocial as string}`}
+        description={
+          categoriaFiscal === 'produto' ? 'NF-e — emitida fora da plataforma'
+            : categoriaFiscal === 'transporte' ? 'CT-e — autoemitido fora da plataforma'
+            : 'Configurações fiscais e NFS-e emitidas'
+        }
+        action={
+          categoriaFiscal === 'produto' || categoriaFiscal === 'transporte' ? null : (
+            <Button size="cta" onClick={() => setEmitirOpen(true)}>
+              <Plus />
+              Emitir NFS-e
             </Button>
-          </Link>
-          <div>
-            <h2 className="text-lg font-semibold">Fiscal — {cliente.razaoSocial as string}</h2>
-            <p className="text-sm text-muted-foreground">Configurações fiscais e NFS-e emitidas</p>
-          </div>
-        </div>
-        <Button size="sm" onClick={() => setEmitirOpen(true)}>
-          <Plus className="w-4 h-4 mr-1" />
-          Emitir NFS-e
-        </Button>
-      </div>
+          )
+        }
+      />
 
+      {categoriaFiscal === 'produto' ? (
+        <Card>
+          <CardHeader className="flex flex-row items-center gap-2">
+            <Package className="w-4 h-4 text-primary" />
+            <CardTitle className="text-sm">NF-e (produto)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Este cliente foi classificado pelo CNAE como emissor de <strong>NF-e</strong> (nota fiscal de
+              produto/mercadoria). A plataforma não emite NF-e — a emissão é direta, sem integrador, e
+              hoje cobre só NFS-e. Este cliente emite a NF-e por fora da plataforma.
+            </p>
+          </CardContent>
+        </Card>
+      ) : categoriaFiscal === 'transporte' ? (
+        <Card>
+          <CardHeader className="flex flex-row items-center gap-2">
+            <Truck className="w-4 h-4 text-warning" />
+            <CardTitle className="text-sm">CT-e (transporte)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Este cliente foi classificado pelo CNAE como emissor de <strong>CT-e</strong> (conhecimento de
+              transporte). A plataforma não emite CT-e — este cliente autoemite por fora dela.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+      <>
       {/* Dados Fiscais */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -163,10 +209,7 @@ export default function ClienteFiscalPage() {
               <div>
                 <dt className="text-muted-foreground text-xs">Ambiente</dt>
                 <dd className="font-medium">
-                  {fiscal.ambienteEmissao === 'producao'
-                    ? <Badge variant="default" className="text-xs">Produção</Badge>
-                    : <Badge variant="secondary" className="text-xs">Homologação</Badge>
-                  }
+                  <AmbienteBadge ambiente={fiscal.ambienteEmissao === 'producao' ? 'producao' : 'homologacao'} />
                 </dd>
               </div>
               <div>
@@ -257,7 +300,6 @@ export default function ClienteFiscalPage() {
               </thead>
               <tbody className="divide-y">
                 {notas.map((n) => {
-                  const st = STATUS_MAP[n.status as string] ?? { label: n.status as string, variant: 'outline' as const }
                   const dt = n.dataEmissao instanceof Timestamp ? n.dataEmissao.toDate() : null
                   return (
                     <tr key={n.id as string} className="hover:bg-muted/30">
@@ -272,7 +314,7 @@ export default function ClienteFiscalPage() {
                         {dt ? dt.toLocaleDateString('pt-BR') : '—'}
                       </td>
                       <td className="px-4 py-2">
-                        <Badge variant={st.variant}>{st.label}</Badge>
+                        <NfseStatusBadge status={n.status as string} />
                       </td>
                     </tr>
                   )
@@ -282,6 +324,8 @@ export default function ClienteFiscalPage() {
           )}
         </CardContent>
       </Card>
+      </>
+      )}
 
       {/* Config Form Dialog */}
       <ConfigFiscalForm

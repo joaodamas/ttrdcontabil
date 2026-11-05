@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { PageHeader } from '@/components/layout/page-header'
 import { formatDate , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -13,6 +14,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { fetchUsuariosAdmin } from '@/features/admin/services'
+import { getErrorMessage } from '@/lib/error-message'
 import type { UsuarioAdmin } from '@/features/admin/types'
 
 const PERFIL_LABELS: Record<string, string> = {
@@ -34,11 +36,17 @@ const PERFIL_COLORS: Record<string, string> = {
 export default function AdminUsuariosPage() {
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([])
   const [loading, setLoading]   = useState(true)
+  const [erroCarga, setErroCarga] = useState<string | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
+    setErroCarga(null)
     fetchUsuariosAdmin()
       .then(setUsuarios)
+      .catch((err: unknown) => {
+        console.error('[admin/usuarios] falha ao carregar', err)
+        setErroCarga(getErrorMessage(err, 'Verifique sua conexão e tente novamente.'))
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -56,15 +64,12 @@ export default function AdminUsuariosPage() {
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
-        <div>
-          <h2 className="text-lg font-semibold">Usuários</h2>
-          <p className="text-sm text-muted-foreground">
-            {usuarios.length} usuário{usuarios.length !== 1 ? 's' : ''} cadastrado{usuarios.length !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <UsuarioForm onSaved={load} />
-      </div>
+      <PageHeader
+        title="Usuários"
+        description={`${usuarios.length} usuário${usuarios.length !== 1 ? 's' : ''} cadastrado${usuarios.length !== 1 ? 's' : ''}`}
+        breadcrumbs={[{ label: 'Administração', href: '/admin' }, { label: 'Usuários' }]}
+        action={<UsuarioForm onSaved={load} />}
+      />
 
       <Card className="border-border/65 bg-card/95 card-shadow">
         <div className="overflow-x-auto">
@@ -81,7 +86,15 @@ export default function AdminUsuariosPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {usuarios.length === 0 ? (
+              {erroCarga ? (
+                <TableEmptyState
+                  colSpan={7}
+                  icon={UsersRound}
+                  title="Não foi possível carregar os usuários"
+                  description={erroCarga}
+                  action={{ label: 'Tentar novamente', onClick: load }}
+                />
+              ) : usuarios.length === 0 ? (
                 <TableEmptyState
                   colSpan={7}
                   icon={UsersRound}

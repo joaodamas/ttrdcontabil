@@ -24,26 +24,27 @@ import { Lc116Picker } from '@/components/fiscal/lc116-picker'
 import { Switch } from '@/components/ui/switch'
 import { AlertTriangle } from 'lucide-react'
 import { buscarDadosCnpj } from '@/lib/cnpj-lookup'
+import { normalizarIbge } from '@/lib/ibge'
 
 export const MUNICIPIOS = [
   { ibge: '3525904', nome: 'Jundiaí' },
   { ibge: '3509502', nome: 'Campinas' },
-  { ibge: '3508900', nome: 'Cajamar' },
+  { ibge: '3509205', nome: 'Cajamar' },
   { ibge: '3550308', nome: 'São Paulo' },
   { ibge: '3505708', nome: 'Barueri' },
   { ibge: '3547304', nome: 'Santana de Parnaíba' },
-  { ibge: '3552502', nome: 'Taboão da Serra' },
+  { ibge: '3552809', nome: 'Taboão da Serra' },
   { ibge: '3513009', nome: 'Cotia' },
 ]
 
 export const MUNICIPIO_TIPO: Record<string, 'abrasf_a1' | 'geisweb_a1' | 'simpliss' | 'conam' | 'giap'> = {
   '3525904': 'abrasf_a1',
   '3509502': 'abrasf_a1',
-  '3508900': 'abrasf_a1',
+  '3509205': 'abrasf_a1',
   '3550308': 'abrasf_a1',
   '3505708': 'abrasf_a1',
   '3547304': 'simpliss',
-  '3552502': 'conam',
+  '3552809': 'conam',
   '3513009': 'giap',
 }
 
@@ -70,9 +71,8 @@ const schema = z.object({
   conamCodigoContribuinte: z.string().optional().nullable(),
   giaplogin:           z.string().optional().nullable(),
   giapSenha:           z.string().optional().nullable(),
-  // Spedy (API agregadora — cobre qualquer município)
+  // Só 'municipio' é gravado; 'spedy' pode vir de config antiga (ver aviso abaixo).
   provedorNfse:        z.enum(['municipio', 'spedy']).optional(),
-  spedyApiKey:         z.string().optional().nullable(),
   // Emissão automática (sem revisão humana) no dia configurado abaixo
   emissaoAutomatica:   z.boolean().optional(),
 })
@@ -98,7 +98,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       ambienteEmissao:  'homologacao',
       optanteSimples:   true,
       naturezaOperacao: '1',
-      provedorNfse:     'spedy',
+      provedorNfse:     'municipio',
       emissaoAutomatica:false,
     },
   })
@@ -109,13 +109,15 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       ambienteEmissao:  'homologacao',
       optanteSimples:   true,
       naturezaOperacao: '1',
-      provedorNfse:     'spedy',
+      provedorNfse:     'municipio',
       ...defaultValues,
+      // Config antiga pode ter o código IBGE errado de Cajamar/Taboão (ver src/lib/ibge.ts).
+      municipioIbge:    normalizarIbge(defaultValues?.municipioIbge as string | undefined) || undefined,
       // Credenciais NUNCA são pré-preenchidas: o que vem de defaultValues.credenciais
       // já está criptografado (formato iv:authTag:ciphertext). Preencher o campo com
       // isso e salvar de novo sem alterar reencripta o ciphertext por cima do
-      // ciphertext a cada edição — foi exatamente o que corrompeu a chave de API da
-      // Spedy do JPProject (694 caracteres depois de 3 salvamentos). Campo fica
+      // ciphertext a cada edição (já corrompeu uma chave de API: 694 caracteres
+      // depois de 3 salvamentos). Campo fica
       // sempre vazio; só é enviado pro backend se o usuário digitar algo novo.
       simplissToken:          null,
       usuario:                null,
@@ -124,12 +126,11 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       conamCodigoContribuinte:null,
       giaplogin:              null,
       giapSenha:              null,
-      spedyApiKey:            null,
     })
   }, [open, defaultValues, reset])
 
   const municipioIbge = watch('municipioIbge')
-  const provedorNfse = watch('provedorNfse') ?? 'spedy'
+  const provedorNfse = watch('provedorNfse') ?? 'municipio'
   const tipo = MUNICIPIO_TIPO[municipioIbge]
   const municipioNome = MUNICIPIOS.find(m => m.ibge === municipioIbge)?.nome ?? ''
   const credenciais = (defaultValues?.credenciais ?? {}) as Record<string, unknown>
@@ -163,7 +164,8 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
         cnae:                 data.cnae              || null,
         aliquotaPadrao:       data.aliquotaPadrao    ?? null,
         issRetidoPadrao:      data.issRetidoPadrao   ?? false,
-        provedorNfse:         data.provedorNfse ?? 'spedy',
+        // Spedy foi descontinuada (sem integrador): salvar migra a config antiga.
+        provedorNfse:         'municipio',
         emissaoAutomatica:    data.emissaoAutomatica ?? false,
       }
 
@@ -181,7 +183,6 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       if (tipo === 'conam'    && data.conamCodigoContribuinte)  credenciais.conamCodigoContribuinte = data.conamCodigoContribuinte
       if (tipo === 'giap'     && data.giaplogin)                credenciais.giaplogin = data.giaplogin
       if (tipo === 'giap'     && data.giapSenha)                credenciais.giapSenha = data.giapSenha
-      if (data.provedorNfse === 'spedy' && data.spedyApiKey)    credenciais.spedyApiKey = data.spedyApiKey
 
       if (Object.keys(credenciais).length > 0) {
         const functions = getFunctions(getFirebaseApp(), 'southamerica-east1')
@@ -193,7 +194,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       onOpenChange(false)
       onSaved?.()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Nao foi possivel salvar a configuracao fiscal. Verifique permissao, municipio e credenciais.'))
+      toast.error(getErrorMessage(err, 'Não foi possível salvar a configuração fiscal. Verifique permissão, município e credenciais.'))
     } finally {
       setSaving(false)
     }
@@ -218,7 +219,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       const avisos: string[] = []
       if (!dados.regimeTributario) avisos.push('regime tributário (Lucro Presumido/Real) precisa ser confirmado manualmente')
       if (dados.municipioIbge && !municipioConhecido) {
-        avisos.push(`município (${dados.municipio ?? dados.municipioIbge}/${dados.uf ?? '?'}) não tem conector direto — mantenha "Spedy" como provedor`)
+        avisos.push(`município (${dados.municipio ?? dados.municipioIbge}/${dados.uf ?? '?'}) não tem conector direto — a plataforma ainda não emite NFS-e para este município`)
       }
       toast.success(
         avisos.length > 0
@@ -248,24 +249,13 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
             Buscar dados do CNPJ
           </Button>
 
-          {/* Provedor de emissão */}
-          <div className="space-y-1.5">
-            <Label>Provedor de Emissão *</Label>
-            <Controller name="provedorNfse" control={control} render={({ field }) => (
-              <Select value={field.value ?? 'municipio'} onValueChange={field.onChange}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="municipio">Conector direto do município (padrão)</SelectItem>
-                  <SelectItem value="spedy">Spedy (API — qualquer município)</SelectItem>
-                </SelectContent>
-              </Select>
-            )} />
-            <p className="text-xs text-muted-foreground">
-              {provedorNfse === 'spedy'
-                ? 'Emite via API da Spedy — cobre qualquer município do Brasil, não só os 8 com conector próprio.'
-                : 'Usa o conector escrito para o município selecionado abaixo (só cobre os municípios listados).'}
-            </p>
-          </div>
+          {/* Config antiga apontando para a Spedy (conta encerrada, sem integrador) */}
+          {provedorNfse === 'spedy' && (
+            <div className="rounded-md border border-warning/30 bg-warning/8 p-3 text-xs text-muted-foreground">
+              Este cliente estava configurado para emitir pela Spedy, que foi descontinuada. Ao salvar, ele passa
+              a usar o conector direto do município selecionado abaixo.
+            </div>
+          )}
 
           {/* Emissão automática — reverte a trava de revisão humana, por cliente */}
           <div className="space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
@@ -291,7 +281,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
           {/* Município + Ambiente */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Município de Emissão *</Label>
+              <Label required>Município de Emissão</Label>
               <Controller name="municipioIbge" control={control} render={({ field }) => (
                 <Select value={field.value ?? ''} onValueChange={field.onChange}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
@@ -306,7 +296,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
             </div>
 
             <div className="space-y-1.5">
-              <Label>Ambiente *</Label>
+              <Label required>Ambiente</Label>
               <Controller name="ambienteEmissao" control={control} render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -322,7 +312,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
           {/* Inscrições */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Inscrição Municipal *</Label>
+              <Label required>Inscrição Municipal</Label>
               <Input {...register('inscricaoMunicipal')} placeholder="Ex: 123456" />
               {errors.inscricaoMunicipal && <p className="text-xs text-destructive">{errors.inscricaoMunicipal.message}</p>}
             </div>
@@ -335,7 +325,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
           {/* Regime + Simples */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Regime Tributário *</Label>
+              <Label required>Regime Tributário</Label>
               <Controller name="regimeTributario" control={control} render={({ field }) => (
                 <Select value={field.value ?? ''} onValueChange={field.onChange}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
@@ -351,7 +341,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
               {errors.regimeTributario && <p className="text-xs text-destructive">{errors.regimeTributario.message}</p>}
             </div>
             <div className="space-y-1.5">
-              <Label>Optante Simples *</Label>
+              <Label required>Optante Simples</Label>
               <Controller name="optanteSimples" control={control} render={({ field }) => (
                 <Select value={field.value ? 'sim' : 'nao'} onValueChange={v => field.onChange(v === 'sim')}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -472,26 +462,8 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
             </div>
           )}
 
-          {/* Credenciais: Spedy */}
-          {provedorNfse === 'spedy' && (
-            <div className="border rounded-md p-3 bg-muted/30 space-y-3">
-              <p className="text-xs font-semibold uppercase text-muted-foreground">Credenciais — Spedy (API)</p>
-              <div className="space-y-1.5">
-                <Label>Chave de API</Label>
-                <Input
-                  type="password"
-                  {...register('spedyApiKey')}
-                  placeholder={credenciais.spedyApiKey ? 'Já configurada — deixe em branco para manter' : 'Cole a chave de API da Spedy (aba Geral → Credenciais da API)'}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Criptografada antes de salvar — nunca fica em texto puro. Deixe em branco pra manter a chave já salva; só preencha se for trocar. O certificado A1 continua sendo enviado direto no painel da Spedy, não aqui.
-                </p>
-              </div>
-            </div>
-          )}
-
           {/* Aviso certificado A1 */}
-          {provedorNfse !== 'spedy' && (tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
+          {(tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
             <div className="space-y-3 rounded-md border border-warning/25 bg-warning/8 p-3">
               <p className="text-xs text-warning">
                 <strong>Certificado A1 necessário.</strong> O upload pode ser feito aqui mesmo na configuração fiscal do cliente.

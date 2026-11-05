@@ -31,7 +31,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // Divisão (2 primeiros dígitos do CNAE) -> categoria fiscal. Segue as seções do
 // IBGE CNAE 2.0: indústria/agropecuária e comércio emitem produto (NF-e/NFC-e);
-// transporte emite CT-e (Spedy não cobre — autoemitem); o resto é serviço (NFS-e).
+// transporte emite CT-e (a plataforma não emite — autoemitem); o resto é serviço (NFS-e).
 function categoriaFiscal(cnae) {
   const divisao = Number(String(cnae ?? '').slice(0, 2))
   if (!divisao) return 'indefinido'

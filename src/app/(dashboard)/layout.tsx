@@ -5,7 +5,6 @@ import { AuthGuard } from '@/components/auth/auth-guard'
 import { AppSidebar, MobileSidebarTrigger } from '@/components/layout/app-sidebar'
 import { CommandPalette } from '@/components/layout/command-palette'
 import { MobileFab } from '@/components/layout/mobile-fab'
-import { ThemeToggle } from '@/components/layout/theme-toggle'
 import { Toaster } from '@/components/ui/sonner'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { QueryProvider } from '@/components/providers/query-provider'
@@ -31,14 +30,13 @@ function TopBar() {
           ⌘K
         </kbd>
       </button>
-      <ThemeToggle />
       {usuario && (
         <Link
           href="/fiscal?emitir=1"
-          className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-foreground text-background text-sm font-semibold hover:bg-foreground/90 transition-colors"
+          className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
         >
           <Plus size={13} strokeWidth={2.5} />
-          <span className="hidden sm:inline">Novo</span>
+          <span className="sr-only sm:not-sr-only">Nova NFS-e</span>
         </Link>
       )}
     </header>
@@ -61,7 +59,11 @@ function DashboardChrome({ children }: { children: React.ReactNode }) {
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
         <TopBar />
         <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-[1280px]">
+          {/* 1280px deixava ~300px de vão morto de cada lado num monitor de
+              1920 — a sidebar já come 272. Numa ferramenta de tabela (119
+              clientes em 8 colunas) esse espaço é conteúdo, não respiro. O teto
+              agora existe só para não esticar linha de texto em ultrawide. */}
+          <div className="mx-auto w-full max-w-[1600px]">
             <ErrorBoundary>
               {children}
             </ErrorBoundary>

@@ -16,7 +16,10 @@ import { getErrorMessage } from '@/lib/error-message'
 import { fetchClientes } from '@/features/clientes/services'
 import type { ClienteRecord } from '@/features/clientes/types'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { NfseStatusBadge } from '@/components/ui/status-badge'
+import { getStatusLabel } from '@/lib/status-semantics'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { TableEmptyState } from '@/components/ui/empty-state'
@@ -24,18 +27,9 @@ import { AppModal } from '@/components/ui/app-modal'
 import { FilterBtn } from '@/components/ui/filter-btn'
 import { DataTableShell } from '@/components/ui/data-table-shell'
 import { Textarea } from '@/components/ui/textarea'
-import { ArrowLeft, ChevronDown, Download, Eye, FileText, Loader2, RefreshCw, Search, XCircle, History } from 'lucide-react'
+import { ChevronDown, Download, Eye, FileText, Loader2, RefreshCw, Search, XCircle, History } from 'lucide-react'
 import { LogsNfseModal } from '@/components/fiscal/logs-nfse-modal'
 import { HeatmapFiscal } from '@/components/fiscal/heatmap-fiscal'
-
-const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  emitida: { label: 'Emitida', variant: 'default' },
-  pendente_processamento: { label: 'Pendente', variant: 'outline' },
-  cancelamento_pendente: { label: 'Cancelamento pendente', variant: 'outline' },
-  rejeitada: { label: 'Rejeitada', variant: 'destructive' },
-  cancelada: { label: 'Cancelada', variant: 'secondary' },
-  erro_integracao: { label: 'Erro', variant: 'destructive' },
-}
 
 const TIPO_LABEL: Record<string, string> = { nfe: 'NF-e', nfse: 'NFS-e' }
 
@@ -64,6 +58,7 @@ function FiscalHistoricoContent() {
 
   const [notas, setNotas] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(true)
+  const [erroCarga, setErroCarga] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [lastCursor, setLastCursor] = useState<FirestoreCursor | null>(null)
   const [clientes, setClientes] = useState<ClienteRecord[]>([])
@@ -122,6 +117,7 @@ function FiscalHistoricoContent() {
 
   const loadNotas = useCallback(() => {
     setLoading(true)
+    setErroCarga(null)
     const cursor = buscaAtiva ? null : (activePagination.cursorStack[page - 1] ?? null)
     const hasDateWindow = Boolean(ano && (!mes || (mes >= 1 && mes <= 12)))
     const inicioPeriodo = hasDateWindow
@@ -172,7 +168,8 @@ function FiscalHistoricoContent() {
         setLastCursor(filtered.length > PAGE_SIZE ? (data.cursors[PAGE_SIZE - 1] ?? null) : null)
       }
     }).catch((err) => {
-      toast.error(getErrorMessage(err, 'Nao foi possivel carregar o historico de emissoes. Verifique os filtros e tente novamente.'))
+      console.error('[fiscal/historico] falha ao carregar', err)
+      setErroCarga(getErrorMessage(err, 'Verifique sua conexão e os filtros, e tente novamente.'))
       setNotas([])
       setHasMore(false)
       setLastCursor(null)
@@ -195,9 +192,9 @@ function FiscalHistoricoContent() {
   const exportColumns = [
     { key: 'cliente', label: 'Cliente' },
     { key: 'tipo', label: 'Tipo' },
-    { key: 'numero', label: 'Numero' },
+    { key: 'numero', label: 'Número' },
     { key: 'tomador', label: 'Tomador' },
-    { key: 'emissao', label: 'Emissao' },
+    { key: 'emissao', label: 'Emissão' },
     { key: 'valor', label: 'Valor' },
     { key: 'status', label: 'Status' },
     { key: 'origem', label: 'Origem' },
@@ -234,7 +231,7 @@ function FiscalHistoricoContent() {
       toast.success(data.message)
       loadNotas()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Nao foi possivel consultar a NFS-e. Verifique a configuracao fiscal do cliente.'))
+      toast.error(getErrorMessage(err, 'Não foi possível consultar a NFS-e. Verifique a configuração fiscal do cliente.'))
     }
   }
 
@@ -262,7 +259,7 @@ function FiscalHistoricoContent() {
       setMotivoCancelamento('')
       loadNotas()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Nao foi possivel solicitar o cancelamento. Verifique o status da nota e a configuracao fiscal.'))
+      toast.error(getErrorMessage(err, 'Não foi possível solicitar o cancelamento. Verifique o status da nota e a configuração fiscal.'))
     } finally {
       setCancelando(false)
     }
@@ -297,38 +294,34 @@ function FiscalHistoricoContent() {
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle flex flex-wrap items-center gap-3 border px-4 py-4 sm:px-5">
-        <Link href="/fiscal">
-          <Button variant="outline" size="sm" className="h-10 w-10 rounded-xl p-0">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div>
-          <h2 className="text-lg font-semibold">Histórico de Emissões</h2>
-          <p className="text-sm text-muted-foreground">
-            {total} documento{total !== 1 ? 's' : ''} encontrado{total !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <Button variant="outline" size="sm" className="ml-auto h-9 rounded-xl" onClick={exportarExcel}>
-          <Download className="h-4 w-4" />
-          Excel
-        </Button>
-        <Button variant="outline" size="sm" className="h-9 rounded-xl" onClick={exportarCsv}>
-          <Download className="h-4 w-4" />
-          CSV
-        </Button>
-      </div>
+      <PageHeader
+        title="Histórico de NFS-e"
+        description={`${total} documento${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`}
+        breadcrumbs={[{ label: 'Emitir NFS-e', href: '/fiscal' }, { label: 'Histórico de NFS-e' }]}
+        action={
+          <>
+            <Button variant="outline" size="cta" onClick={exportarExcel}>
+              <Download />
+              Excel
+            </Button>
+            <Button variant="outline" size="cta" onClick={exportarCsv}>
+              <Download />
+              CSV
+            </Button>
+          </>
+        }
+      />
 
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-xl border border-border/70 bg-card/95 px-4 py-3 card-shadow">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+        <div className="rounded-xl border border-border/70 bg-card/95 px-3 py-2.5 card-shadow sm:px-4 sm:py-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Emitidas</p>
           <p className="mt-1 text-2xl font-bold tabular-nums text-success">{totalEmitidas}</p>
         </div>
-        <div className="rounded-xl border border-border/70 bg-card/95 px-4 py-3 card-shadow">
+        <div className="rounded-xl border border-border/70 bg-card/95 px-3 py-2.5 card-shadow sm:px-4 sm:py-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Erros/Rejeitadas</p>
           <p className="mt-1 text-2xl font-bold tabular-nums text-destructive">{totalRejeitadas}</p>
         </div>
-        <div className="rounded-xl border border-border/70 bg-card/95 px-4 py-3 card-shadow">
+        <div className="col-span-2 rounded-xl border border-border/70 bg-card/95 px-3 py-2.5 card-shadow sm:col-span-1 sm:px-4 sm:py-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Valor total</p>
           <p className="mt-1 text-2xl font-bold tabular-nums">{formatCurrency(valorTotal)}</p>
         </div>
@@ -405,14 +398,14 @@ function FiscalHistoricoContent() {
       <div className="surface-subtle flex flex-wrap items-center gap-2 border px-3 py-2.5">
         {['', 'emitida', 'pendente_processamento', 'cancelamento_pendente', 'rejeitada', 'cancelada', 'erro_integracao'].map(s => (
           <FilterBtn key={s} href={buildUrl({ status: s })} active={status === s}>
-            {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+            {s === '' ? 'Todos' : getStatusLabel('nfse', s)}
           </FilterBtn>
         ))}
       </div>
 
       <DataTableShell density="compact">
-        <table className="min-w-[920px] w-full text-sm">
-          <thead className="bg-muted/50 text-muted-foreground">
+        <table className="w-full table-fixed text-sm md:table-auto md:min-w-[920px]">
+          <thead className="hidden bg-muted/50 text-muted-foreground md:table-header-group">
             <tr>
               <th className="px-4 py-3 text-left font-medium">Cliente</th>
               <th className="px-4 py-3 text-left font-medium">Tipo</th>
@@ -425,7 +418,15 @@ function FiscalHistoricoContent() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {notas.length === 0 ? (
+            {erroCarga && !loading ? (
+              <TableEmptyState
+                colSpan={8}
+                icon={FileText}
+                title="Não foi possível carregar o histórico de emissões"
+                description={erroCarga}
+                action={{ label: 'Tentar novamente', onClick: loadNotas }}
+              />
+            ) : notas.length === 0 ? (
               <TableEmptyState
                 colSpan={8}
                 icon={FileText}
@@ -446,13 +447,47 @@ function FiscalHistoricoContent() {
                     </td>
                   </tr>
                   {group.notas.map((n) => {
-                    const st = STATUS_MAP[n.status as string] ?? {
-                      label: n.status as string,
-                      variant: 'outline' as const,
-                    }
                     const dataEmissao = n.dataEmissao as Timestamp | undefined
+                    const comErro = n.status === 'rejeitada' || n.status === 'erro_integracao'
+                    // Mesmas ações na linha (desktop) e no card (celular).
+                    const acoes = (
+                    <div className="flex justify-end gap-1.5">
+                      <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Ver logs de emissão" onClick={() => setLogNota(n)}>
+                        <History className="h-3.5 w-3.5" />
+                      </Button>
+                      <Link
+                        href={`/fiscal/${n.id as string}`}
+                        title="Ver detalhe"
+                        aria-label="Ver detalhe"
+                        className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-8 w-8 p-0' })}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </Link>
+                      <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Consultar status" onClick={() => consultarStatus(n.id as string)}>
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      </Button>
+                      {n.pdfUrl ? (
+                        <a
+                          href={n.pdfUrl as string}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Baixar PDF"
+                          aria-label="Baixar PDF"
+                          className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-8 w-8 p-0' })}
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </a>
+                      ) : null}
+                      {n.status === 'emitida' ? (
+                        <Button variant="outline" size="sm" className="h-8 w-8 p-0 text-destructive" title="Solicitar cancelamento" onClick={() => abrirCancelamento(n.id as string)}>
+                          <XCircle className="h-3.5 w-3.5" />
+                        </Button>
+                      ) : null}
+                      </div>
+                    )
                     return (
-                      <tr key={n.id as string} className={cn('transition-colors hover:bg-muted/35', (n.status === 'rejeitada' || n.status === 'erro_integracao') && 'bg-destructive/[0.03] border-l-2 border-l-destructive')}>
+                      <Fragment key={n.id as string}>
+                      <tr className={cn('hidden transition-colors hover:bg-muted/35 md:table-row', comErro && 'bg-destructive/[0.03] border-l-2 border-l-destructive')}>
                         <td className="px-4 py-3 font-medium">
                           <div className="flex items-center gap-1.5">
                             <span>{(n.clienteNome as string) ?? '—'}</span>
@@ -479,36 +514,38 @@ function FiscalHistoricoContent() {
                           {formatCurrency(valorDocumento(n))}
                         </td>
                         <td className="px-4 py-3">
-                          <Badge variant={st.variant}>{st.label}</Badge>
+                          <NfseStatusBadge status={n.status as string} />
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex justify-end gap-1.5">
-                            <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Ver logs de emissão" onClick={() => setLogNota(n)}>
-                              <History className="h-3.5 w-3.5" />
-                            </Button>
-                            <Link href={`/fiscal/${n.id as string}`}>
-                              <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Ver detalhe">
-                                <Eye className="h-3.5 w-3.5" />
-                              </Button>
-                            </Link>
-                            <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Consultar status" onClick={() => consultarStatus(n.id as string)}>
-                              <RefreshCw className="h-3.5 w-3.5" />
-                            </Button>
-                            {n.pdfUrl ? (
-                              <a href={n.pdfUrl as string} target="_blank" rel="noreferrer">
-                                <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Baixar PDF">
-                                  <Download className="h-3.5 w-3.5" />
-                                </Button>
-                              </a>
-                            ) : null}
-                            {n.status === 'emitida' ? (
-                              <Button variant="outline" size="sm" className="h-8 w-8 p-0 text-destructive" title="Solicitar cancelamento" onClick={() => abrirCancelamento(n.id as string)}>
-                                <XCircle className="h-3.5 w-3.5" />
-                              </Button>
-                            ) : null}
+                          {acoes}
+                        </td>
+                      </tr>
+                      <tr className={cn('md:hidden', comErro && 'bg-destructive/[0.03] border-l-2 border-l-destructive')}>
+                        <td colSpan={8} className="px-3 py-2.5">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="flex items-center gap-1.5 text-sm font-medium">
+                                <span className="truncate">{(n.clienteNome as string) ?? '—'}</span>
+                                {n.origemEmissao === 'automatica' && (
+                                  <span title="Emitida automaticamente, sem revisão humana" className="shrink-0 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-destructive">
+                                    Auto
+                                  </span>
+                                )}
+                              </p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {TIPO_LABEL[tipoDocumentoDe(n)]} {(n.numeroNfse as string) ?? '—'} · {dataEmissao ? formatDate(tsToDate(dataEmissao)) : '—'}
+                                {n.tomadorNome ? ` · ${n.tomadorNome as string}` : ''}
+                              </p>
+                            </div>
+                            <p className="shrink-0 text-sm font-semibold tabular-nums">{formatCurrency(valorDocumento(n))}</p>
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+                            <NfseStatusBadge status={n.status as string} />
+                            {acoes}
                           </div>
                         </td>
                       </tr>
+                      </Fragment>
                     )
                   })}
                 </Fragment>

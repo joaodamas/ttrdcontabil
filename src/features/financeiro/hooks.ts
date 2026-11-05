@@ -4,6 +4,22 @@ import type { FinanceiroListFilters, LancamentoRecord } from './types'
 
 const PAGE_SIZE = 20
 
+/**
+ * 'atrasado' nunca é gravado em `status`: é derivado de pendente + vencido, e
+ * o service já traduz o filtro na própria query para
+ * (status == 'pendente' && dataVencimento < hoje).
+ *
+ * Armadilha: o refiltro em memória comparava `l.status !== filters.status`
+ * direto. As linhas voltam como 'pendente', 'pendente' !== 'atrasado', e a
+ * tabela zerava — o caminho do Painel para a inadimplência morria aqui.
+ * Então para 'atrasado' conferimos só a parte que é dado (pendente); a parte
+ * que é relógio fica com o service, que é quem tem o `hoje` da consulta.
+ */
+function correspondeAoStatus(lancamento: LancamentoRecord, status: string): boolean {
+  if (status === 'atrasado') return lancamento.status === 'pendente'
+  return lancamento.status === status
+}
+
 export function useFinanceiroList(
   filters: FinanceiroListFilters & { tipo: string; status: string; page: number }
 ) {
@@ -13,7 +29,7 @@ export function useFinanceiroList(
     const all = (query.data?.allLancamentos ?? []) as LancamentoRecord[]
     return all.filter((l) => {
       if (filters.tipo && l.tipo !== filters.tipo) return false
-      if (filters.status && l.status !== filters.status) return false
+      if (filters.status && !correspondeAoStatus(l, filters.status)) return false
       return true
     })
   }, [query.data?.allLancamentos, filters.tipo, filters.status])

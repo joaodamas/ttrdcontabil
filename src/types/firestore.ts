@@ -413,6 +413,142 @@ export interface NfseFilaDoc {
 }
 
 // ============================================================
+// CARTEIRA DE TOMADORES E FATURAMENTO RECORRENTE
+// ============================================================
+// A NFS-e sai EM NOME DO CLIENTE do escritório: o PRESTADOR é o cliente, e o
+// TOMADOR é o cliente DELE. Esse segundo nível não existia no modelo — o
+// gerador de rascunhos preenchia o tomador com o próprio prestador
+// (functions/src/nfse/rascunhos.ts) e a nota recorrente saía do cliente para
+// ele mesmo, inválida em qualquer prefeitura.
+//
+// NÃO CONFUNDIR com `clientes_servicos` (ClienteServicoDoc, acima): aquilo é o
+// honorário que o ESCRITÓRIO cobra do cliente, consumido pelo gerador de
+// lançamentos. Aqui é o que o CLIENTE cobra da carteira dele. Foi a confusão
+// entre as duas que originou o bug de prestador == tomador.
+
+/**
+ * Campos que `withActorMetadata` + create/updateDocument
+ * (src/lib/firestore-client.ts) gravam em TODA escrita vinda do navegador.
+ * Declarados de propósito: os tipos antigos deste arquivo os omitem, e quem lê
+ * só a interface não consegue distinguir "campo que ninguém grava" de "campo
+ * que ninguém declarou".
+ */
+export interface MetadadosEscrita {
+  criadoEm: Timestamp
+  atualizadoEm: Timestamp
+  criadoPorId?: string
+  criadoPorNome?: string
+  atualizadoPorId?: string
+  atualizadoPorNome?: string
+}
+
+/**
+ * Endereço do tomador. Fica em tipo próprio porque é gravado como MAPA
+ * aninhado (`endereco.municipioIbge`) — diferente de ClienteDoc, que achata o
+ * endereço na raiz do documento.
+ */
+export interface TomadorEnderecoDoc {
+  cep?: string
+  logradouro?: string
+  numero?: string
+  complemento?: string
+  bairro?: string
+  /** Nome do município, só para exibir na tela. Quem vai na nota é o IBGE. */
+  municipio?: string
+  /**
+   * Código IBGE de 7 dígitos. Opcional no CADASTRO (um tomador pode nascer só
+   * com CNPJ e razão social), obrigatório na EMISSÃO em prefeitura que exige
+   * endereço do tomador: Cajamar manda este código como <Cidade> do tomador e
+   * como <MunicipioPrestacaoServico> (functions/src/nfse/municipios/cajamar.ts),
+   * e sem ele a nota volta rejeitada. A cobrança do campo é da validação de
+   * emissão, não do formulário.
+   *
+   * O ViaCEP já devolve este código (campo `ibge`), mas o use-viacep.ts o
+   * descarta hoje — sem o patch daquele hook, o cadastro nunca preenche aqui.
+   */
+  municipioIbge?: string
+  uf?: string
+}
+
+// Coleção: tomadores — a carteira de quem RECEBE a nota, uma por cliente.
+export interface TomadorDoc extends MetadadosEscrita {
+  /**
+   * Gravado por withActorMetadata e EXIGIDO pelas regras (sameTenantNew), além
+   * de ser o filtro que listDocuments injeta em toda query desta coleção.
+   * Declarado aqui, ao contrário dos tipos vizinhos, porque um campo que as
+   * regras exigem não pode ficar invisível para quem lê a interface.
+   */
+  tenantId: string
+  /**
+   * PRESTADOR: o cliente do escritório dono desta carteira. A nota sai DELE
+   * para o tomador — inverter os dois é exatamente o bug que este modelo veio
+   * corrigir.
+   */
+  clienteId: string
+  /** Só dígitos (11 CPF / 14 CNPJ): é assim que todo conector envia à prefeitura. */
+  cpfCnpj: string
+  razaoSocial: string
+  email?: string
+  telefone?: string
+  /**
+   * Inscrição municipal do TOMADOR — só a prefeitura do próprio município
+   * cobra, e só quando o ISS é retido na fonte (issRetido no contrato).
+   */
+  inscricaoMunicipal?: string
+  endereco?: TomadorEnderecoDoc
+  ativo: boolean
+  /**
+   * Soft-delete: tomador que já saiu em nota emitida não pode sumir do
+   * histórico. ATENÇÃO: não use `softDeleteDocument()` aqui — ele grava
+   * `status: 'inativo'`, campo que esta coleção não tem, e deixaria o tomador
+   * ativo para o gerador. Inativar tomador é `ativo: false` + `deletedAt`.
+   */
+  deletedAt?: Timestamp
+}
+
+// Coleção: nfse_recorrentes — o contrato de faturamento: quem fatura quem, de
+// quanto, em que dia.
+export interface NfseRecorrenteDoc extends MetadadosEscrita {
+  tenantId: string
+  /** PRESTADOR (cliente do escritório) — quem emite a nota. */
+  clienteId: string
+  /** Documento em `tomadores`, obrigatoriamente da carteira deste clienteId. */
+  tomadorId: string
+  /**
+   * Denormalizados para o gerador montar o rascunho sem um join por contrato —
+   * são exatamente os dois campos que o rascunho já grava em `dados`.
+   * Quem os regrava quando o tomador muda de razão social/documento é a tela de
+   * tomadores; nota já emitida guarda a versão da época, e isso é correto.
+   */
+  tomadorNome: string
+  tomadorCpfCnpj: string
+  /** O texto que sai na nota (discriminação do serviço). */
+  descricao: string
+  valor: number
+  /** Dia do mês, 1–31. Mês curto exige clamp na geração (ver clampDay). */
+  diaEmissao: number
+  /**
+   * Vazios de propósito: quando ausentes, herdam de `clientes_fiscal`
+   * (codigoServicoPadrao / itemListaServico / aliquotaPadrao). Preencher aqui é
+   * a exceção — o contrato cujo serviço difere do padrão do cliente.
+   */
+  itemListaServico?: string
+  codigoServico?: string
+  /** Em % (ex.: 5 para 5%), igual a aliquotaPadrao de clientes_fiscal. */
+  aliquota?: number
+  issRetido: boolean
+  /**
+   * Vigência. São dois desligamentos diferentes e ambos são necessários:
+   * `ativo` desliga na mão (contrato suspenso), `dataFim` desliga na data —
+   * sem ele, contrato encerrado fatura para sempre, que é o que já aconteceu
+   * em clientes_servicos antes de vigenteNoMes().
+   */
+  dataInicio: Timestamp
+  dataFim?: Timestamp
+  ativo: boolean
+}
+
+// ============================================================
 // MÓDULO FECHAMENTO MENSAL
 // ============================================================
 

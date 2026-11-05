@@ -217,7 +217,7 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
       } else if (msg.includes('weak-password')) {
         toast.error('Senha muito fraca. Use ao menos 6 caracteres.')
       } else {
-        toast.error(getErrorMessage(err, 'Nao foi possivel salvar o usuario. Verifique seu perfil de acesso e os dados obrigatorios.'))
+        toast.error(getErrorMessage(err, 'Não foi possível salvar o usuário. Verifique seu perfil de acesso e os dados obrigatórios.'))
         console.error(err)
       }
     }
@@ -231,8 +231,8 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
             <Pencil className="w-4 h-4 mr-1" /> Editar
           </Button>
         ) : (
-          <Button size="sm" className="cursor-pointer">
-            <Plus className="w-4 h-4 mr-1" /> Novo Usuário
+          <Button size="cta" className="cursor-pointer">
+            <Plus /> Novo usuário
           </Button>
         )}
       </DialogTrigger>
@@ -262,12 +262,12 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="nome">Nome completo <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="nome" required>Nome completo</Label>
                   <Input id="nome" {...register('nome')} placeholder="João da Silva" />
                   {errors.nome && <p className="text-xs text-destructive">{errors.nome.message}</p>}
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="email">E-mail <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="email" required>E-mail</Label>
                   <Input
                     id="email"
                     type="email"
@@ -282,7 +282,7 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
 
               {!isEditing && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="senha">Senha <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="senha" required>Senha</Label>
                   <Input id="senha" type="password" {...register('senha' as keyof EditData)} placeholder="••••••••" autoComplete="new-password" />
                   {(errors as Record<string, { message?: string }>).senha && (
                     <p className="text-xs text-destructive">{(errors as Record<string, { message?: string }>).senha?.message}</p>

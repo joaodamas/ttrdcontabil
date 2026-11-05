@@ -1,44 +1,35 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { where, orderBy, Timestamp } from 'firebase/firestore'
 
 import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { formatDate, tsToDate } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
+import { TarefaPrioridadeBadge, TarefaStatusBadge } from '@/components/ui/status-badge'
+import { RecordUnavailable, type RecordLoadFailure } from '@/components/ui/record-unavailable'
+import { getErrorMessage } from '@/lib/error-message'
+import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TarefaComentarios } from '@/components/tarefas/tarefa-comentarios'
-import { ArrowLeft, Pencil, Loader2 } from 'lucide-react'
-
-const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  pendente: { label: 'Pendente', variant: 'outline' },
-  em_andamento: { label: 'Em andamento', variant: 'secondary' },
-  concluida: { label: 'Concluída', variant: 'default' },
-  cancelada: { label: 'Cancelada', variant: 'destructive' },
-}
-
-const PRIORIDADE_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive'; className?: string; pulse?: boolean }> = {
-  baixa: { label: 'Baixa', variant: 'outline' },
-  normal: { label: 'Normal', variant: 'secondary' },
-  alta: { label: 'Alta', variant: 'outline', className: 'border-warning/50 text-warning bg-warning/10' },
-  urgente: { label: 'Urgente', variant: 'destructive', pulse: true },
-}
+import { Pencil, Loader2 } from 'lucide-react'
 
 export default function TarefaDetalhePage() {
   const { id } = useParams<{ id: string }>()
-  const router = useRouter()
 
   const [tarefa, setTarefa] = useState<Record<string, unknown> | null>(null)
   const [comentariosSerializados, setComentariosSerializados] = useState<Array<{ id: string; texto: string; criadoEm: string; usuarioNome: string }>>([])
   const [loading, setLoading] = useState(true)
+  const [falha, setFalha] = useState<{ reason: RecordLoadFailure; message?: string } | null>(null)
+  const [tentativa, setTentativa] = useState(0)
 
   useEffect(() => {
     if (!id) return
     queueMicrotask(() => {
       setLoading(true)
+      setFalha(null)
       Promise.all([
         getDocument('tarefas', id),
         listDocuments('tarefas_comentarios', [
@@ -47,7 +38,8 @@ export default function TarefaDetalhePage() {
         ]),
       ]).then(([tarefaData, comentariosData]) => {
         if (!tarefaData) {
-          router.push('/tarefas')
+          setTarefa(null)
+          setFalha({ reason: 'nao_encontrado' })
           return
         }
         setTarefa(tarefaData as Record<string, unknown>)
@@ -58,9 +50,13 @@ export default function TarefaDetalhePage() {
           usuarioNome: (d.usuarioNome as string) ?? '—',
         }))
         setComentariosSerializados(serialized)
+      }).catch((err: unknown) => {
+        console.error('[tarefas/detalhe] falha ao carregar', err)
+        setTarefa(null)
+        setFalha({ reason: 'erro', message: getErrorMessage(err, 'Verifique sua conexão e tente novamente.') })
       }).finally(() => setLoading(false))
     })
-  }, [id, router])
+  }, [id, tentativa])
 
   if (loading) {
     return (
@@ -70,17 +66,22 @@ export default function TarefaDetalhePage() {
     )
   }
 
-  if (!tarefa) return null
+  if (!tarefa) {
+    return (
+      <RecordUnavailable
+        reason={falha?.reason ?? 'nao_encontrado'}
+        notFoundTitle="Tarefa não encontrada"
+        errorTitle="Não foi possível carregar a tarefa"
+        errorDescription={falha?.message}
+        backHref="/tarefas"
+        backLabel="Voltar para tarefas"
+        onRetry={() => setTentativa((n) => n + 1)}
+      />
+    )
+  }
 
   const hoje = new Date()
   const dataPrazo = tarefa.dataPrazo as Timestamp | undefined
-  const st = STATUS_MAP[tarefa.status as string] ?? {
-    label: tarefa.status as string,
-    variant: 'outline' as const,
-  }
-  const pr = tarefa.prioridade
-    ? PRIORIDADE_MAP[tarefa.prioridade as string] ?? null
-    : null
 
   const vencida =
     dataPrazo &&
@@ -89,38 +90,23 @@ export default function TarefaDetalhePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Link href="/tarefas">
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-lg font-semibold">{tarefa.titulo as string}</h2>
-              <Badge variant={st.variant}>{st.label}</Badge>
-              {pr ? (
-                <Badge variant={pr.variant} className={pr.className}>
-                  {pr.pulse && (
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-current mr-1 animate-pulse" />
-                  )}
-                  {pr.label}
-                </Badge>
-              ) : null}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {(tarefa.clienteNome as string) ?? 'Sem cliente'}
-            </p>
-          </div>
-        </div>
-        <Link href={`/tarefas/${id}/editar`}>
-          <Button variant="outline" size="sm">
-            <Pencil className="h-4 w-4 mr-1" />
+      <PageHeader
+        breadcrumbs={[{ label: 'Tarefas', href: '/tarefas' }, { label: tarefa.titulo as string }]}
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            {tarefa.titulo as string}
+              <TarefaStatusBadge status={tarefa.status as string} />
+              {tarefa.prioridade ? <TarefaPrioridadeBadge prioridade={tarefa.prioridade as string} /> : null}
+          </span>
+        }
+        description={(tarefa.clienteNome as string) ?? 'Sem cliente'}
+        action={
+          <Link href={`/tarefas/${id}/editar`} className={buttonVariants({ variant: 'outline', size: 'cta' })}>
+            <Pencil />
             Editar
-          </Button>
-        </Link>
-      </div>
+          </Link>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-4">
@@ -183,13 +169,8 @@ export default function TarefaDetalhePage() {
 
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Prioridade</p>
-                {pr ? (
-                  <Badge variant={pr.variant} className={pr.className}>
-                    {pr.pulse && (
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-current mr-1 animate-pulse" />
-                    )}
-                    {pr.label}
-                  </Badge>
+                {tarefa.prioridade ? (
+                  <TarefaPrioridadeBadge prioridade={tarefa.prioridade as string} />
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )}
@@ -209,7 +190,7 @@ export default function TarefaDetalhePage() {
 
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Status</p>
-                <Badge variant={st.variant}>{st.label}</Badge>
+                <TarefaStatusBadge status={tarefa.status as string} />
               </div>
 
               {tarefa.criadoEm ? (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, Suspense } from 'react'
+import { Fragment, useMemo, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Timestamp } from 'firebase/firestore'
@@ -12,11 +12,15 @@ import { exportToExcel } from '@/lib/export-excel'
 import { deleteDocument } from '@/lib/firestore-client'
 import { getErrorMessage } from '@/lib/error-message'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { PagamentoStatusBadge } from '@/components/ui/status-badge'
+import { getStatusLabel } from '@/lib/status-semantics'
 import { KpiCard } from '@/components/ui/kpi-card'
 import { LancamentoBaixar } from '@/components/financeiro/lancamento-baixar'
 import { FilaCobrancaItem } from '@/components/financeiro/fila-cobranca'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { InlineAlert } from '@/components/ui/inline-alert'
 import { useAuth } from '@/contexts/auth-context'
 import { Download, Plus, TrendingUp, CheckCircle, AlertTriangle, Receipt, Trash2, Clock, MoreHorizontal, Send, Pause, Play, CalendarClock, History } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -28,7 +32,9 @@ import { AppModal } from '@/components/ui/app-modal'
 import { DataTableShell } from '@/components/ui/data-table-shell'
 import { financeiroBaseFiltroSchema } from '@/features/financeiro/schemas'
 import { useFinanceiroList } from '@/features/financeiro/hooks'
-import { financeiroKeys } from '@/features/financeiro/queries'
+import { financeiroKeys, useFinanceiroAgregadosQuery } from '@/features/financeiro/queries'
+import { agruparInadimplencia, paraItemAging } from '@/features/financeiro/aging'
+import type { LancamentoRecord } from '@/features/financeiro/types'
 import { scoreCobranca, motivoPrioridade } from '@/lib/financeiro-prioridade'
 import { CentralCobranca } from '@/components/financeiro/central-cobranca'
 import { AlertasFinanceiros } from '@/components/financeiro/alertas-financeiros'
@@ -36,14 +42,6 @@ import { TimelineFinanceiraModal } from '@/components/financeiro/timeline-financ
 import type { FirestoreCursor } from '@/lib/firestore-client'
 import { fetchWhatsappHistory, pauseWhatsappRuleForLancamento, rescheduleWhatsappRuleForLancamento, resumeWhatsappRuleForLancamento, sendWhatsappNow } from '@/features/whatsapp/services'
 import { WHATSAPP_STATUS_LABELS } from '@/features/whatsapp/types'
-
-const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  pendente: { label: 'Pendente', variant: 'outline' },
-  pago: { label: 'Pago', variant: 'default' },
-  cancelado: { label: 'Cancelado', variant: 'destructive' },
-  atrasado: { label: 'Atrasado', variant: 'destructive' },
-  estornado: { label: 'Estornado', variant: 'secondary' },
-}
 
 const TIPO_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   receita: { label: 'Receita', variant: 'default' },
@@ -87,13 +85,47 @@ function FinanceiroContent() {
   const page = activePagination.page
   const cursor = activePagination.cursorStack[page - 1] ?? null
   const cursorKey = cursor?.id ?? 'first-page'
-  const { lancamentos, filteredLancamentos, total, totalPages, hasMore, lastCursor, somaAReceber, somaRecebidoMes, somaEmAtraso, isLoading } =
+  const { lancamentos, totalPages, hasMore, lastCursor, somaAReceber, somaRecebidoMes, somaEmAtraso, isLoading, isError, error, refetch } =
     useFinanceiroList({ clienteId, competenciaId, tipo, status, page, cursor, cursorKey })
-  const agora = new Date()
-  const filaCobranca = [...filteredLancamentos]
-    .filter((l) => l.tipo === 'receita' && l.status === 'pendente')
-    .sort((a, b) => scoreCobranca(b, agora) - scoreCobranca(a, agora))
-    .slice(0, 5)
+  /**
+   * Segunda query, de propósito: a tabela mostra 20 linhas, os agregados varrem
+   * a base inteira do filtro. Antes tudo aqui embaixo — aging, inadimplentes,
+   * alertas, fila e os dois exports — era calculado sobre a página aberta, e a
+   * planilha de inadimplência saía com 20 linhas parecendo o relatório completo.
+   */
+  const agregados = useFinanceiroAgregadosQuery({ clienteId, competenciaId, tipo, status })
+  const lancamentosCompletos = useMemo(
+    () => (agregados.data?.lancamentos ?? []) as LancamentoRecord[],
+    [agregados.data]
+  )
+  const agregadosProntos = !!agregados.data && !agregados.isError
+  const truncado = agregados.data?.truncado ?? false
+  /**
+   * Armadilha: em falha o hook devolve as somas como 0 e a lista como vazia —
+   * são defaults de leitura, não fatos sobre o caixa do escritório. Exibir
+   * "R$ 0,00 em atraso" quando a query morreu afirma que ninguém deve nada, e
+   * alguém decide não cobrar em cima disso. Enquanto o dado não for confiável,
+   * todo número vira "—" (ausência de informação) e o export fica travado,
+   * porque uma planilha de inadimplência vazia é a mesma mentira em arquivo.
+   */
+  const semDados = isLoading || isError
+  // Truncado também trava o export: meia planilha com cara de planilha inteira
+  // é o mesmo erro que esta tarefa veio corrigir, só que com mais linhas.
+  const exportDisabled = !agregadosProntos || truncado || lancamentosCompletos.length === 0
+  // Instante da leitura dos agregados, não de cada re-render: "atrasado há N
+  // dias" tem que ser contado a partir do momento a que os números se referem.
+  const agora = useMemo(
+    () => (agregados.dataUpdatedAt ? new Date(agregados.dataUpdatedAt) : new Date()),
+    [agregados.dataUpdatedAt]
+  )
+  const filaCobranca = useMemo(
+    () =>
+      [...lancamentosCompletos]
+        .filter((l) => l.tipo === 'receita' && l.status === 'pendente')
+        .sort((a, b) => scoreCobranca(b, agora) - scoreCobranca(a, agora))
+        .slice(0, 5),
+    [lancamentosCompletos, agora]
+  )
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [historyLancamentoId, setHistoryLancamentoId] = useState<string | null>(null)
   const [historyItems, setHistoryItems] = useState<Array<Record<string, unknown>>>([])
@@ -101,10 +133,10 @@ function FinanceiroContent() {
   const [timelineLancamento, setTimelineLancamento] = useState<Record<string, unknown> | null>(null)
   const [filterSheetOpen, setFilterSheetOpen] = useState(false)
 
+  // Invalida tabela E agregados: baixar um lançamento muda o aging, a fila e a
+  // inadimplência tanto quanto muda a linha da tabela.
   async function refreshFinanceiro() {
-    await queryClient.invalidateQueries({
-      queryKey: financeiroKeys.snapshot({ clienteId, competenciaId, tipo, status, page }),
-    })
+    await queryClient.invalidateQueries({ queryKey: financeiroKeys.all })
   }
 
   async function handleDeleteLancamento() {
@@ -145,30 +177,19 @@ function FinanceiroContent() {
     }
   }
 
+  // Sai da base inteira do filtro, não da página: é a planilha que o escritório
+  // usa para cobrar, e antes ela tinha 20 linhas.
   function exportarInadimplencia() {
-    const hoje = new Date()
-    const agrupado = new Map<string, { cliente: string; quantidade: number; total: number; vencimentoMaisAntigo: string }>()
-
-    for (const lancamento of filteredLancamentos) {
-      const vencimento = tsToDate(lancamento.dataVencimento)
-      if (lancamento.tipo !== 'receita' || lancamento.status !== 'pendente' || !vencimento || vencimento >= hoje) continue
-      const cliente = (lancamento.clienteNome as string | undefined) ?? 'Sem cliente'
-      const atual = agrupado.get(cliente) ?? {
-        cliente,
-        quantidade: 0,
-        total: 0,
-        vencimentoMaisAntigo: formatDate(vencimento),
-      }
-      atual.quantidade += 1
-      atual.total += (lancamento.valor as number | undefined) ?? 0
-      const antigo = new Date(atual.vencimentoMaisAntigo.split('/').reverse().join('-'))
-      if (vencimento < antigo) atual.vencimentoMaisAntigo = formatDate(vencimento)
-      agrupado.set(cliente, atual)
-    }
+    const linhas = agruparInadimplencia(lancamentosCompletos.map(paraItemAging), agora)
 
     exportToExcel(
       'relatorio-inadimplencia',
-      Array.from(agrupado.values()).sort((a, b) => b.total - a.total),
+      linhas.map((l) => ({
+        cliente: l.cliente,
+        quantidade: l.quantidade,
+        total: l.total,
+        vencimentoMaisAntigo: formatDate(l.vencimentoMaisAntigo),
+      })),
       [
         { key: 'cliente', label: 'Cliente' },
         { key: 'quantidade', label: 'Lancamentos em atraso' },
@@ -181,14 +202,14 @@ function FinanceiroContent() {
   function exportarLancamentos() {
     exportToExcel(
       'financeiro-lancamentos',
-      filteredLancamentos.map((l) => {
+      lancamentosCompletos.map((l) => {
         const vencimento = tsToDate(l.dataVencimento)
         const pagamento = tsToDate(l.dataPagamento)
         return {
           descricao: l.descricao ?? '',
           cliente: l.clienteNome ?? '',
           tipo: TIPO_MAP[l.tipo as string]?.label ?? l.tipo ?? '',
-          status: STATUS_MAP[l.status as string]?.label ?? l.status ?? '',
+          status: (l.status ? getStatusLabel('pagamento', l.status as string) : ''),
           valor: formatCurrency(l.valor as number),
           vencimento: vencimento ? formatDate(vencimento) : '',
           pagamento: pagamento ? formatDate(pagamento) : '',
@@ -196,57 +217,97 @@ function FinanceiroContent() {
         }
       }),
       [
-        { key: 'descricao', label: 'Descricao' },
+        { key: 'descricao', label: 'Descrição' },
         { key: 'cliente', label: 'Cliente' },
         { key: 'tipo', label: 'Tipo' },
         { key: 'status', label: 'Status' },
         { key: 'valor', label: 'Valor' },
         { key: 'vencimento', label: 'Vencimento' },
         { key: 'pagamento', label: 'Pagamento' },
-        { key: 'competencia', label: 'Competencia' },
+        { key: 'competencia', label: 'Competência' },
       ]
     )
   }
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
-        <div>
-          <h2 className="text-lg font-semibold">Financeiro</h2>
-          <p className="text-sm text-muted-foreground">
-            {total} lançamento{total !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <FilterSheetTrigger
-            onClick={() => setFilterSheetOpen(true)}
-            activeCount={(tipo ? 1 : 0) + (status ? 1 : 0)}
-          />
-          <Button variant="outline" size="sm" className="h-10 rounded-xl" onClick={exportarLancamentos}>
-            <Download className="w-4 h-4 mr-1" />
-            Exportar lista
-          </Button>
-          <Button variant="outline" size="sm" className="h-10 rounded-xl" onClick={exportarInadimplencia}>
-            <Download className="w-4 h-4 mr-1" />
-            Inadimplência
-          </Button>
-          <Link href="/financeiro/novo">
-            <Button size="sm" className="h-10 rounded-xl">
-              <Plus className="w-4 h-4 mr-1" />
-              Novo Lançamento
+      {/* Descrição: antes mostrava o tamanho da página (sempre "20 lançamentos").
+          Agora é a contagem do filtro inteiro; "+" quando bateu o teto. */}
+      <PageHeader
+        title="Financeiro"
+        description={
+          !agregadosProntos
+            ? '—'
+            : `${agregados.data!.total.toLocaleString('pt-BR')}${truncado ? '+' : ''} lançamento${agregados.data!.total !== 1 ? 's' : ''}`
+        }
+        action={
+          <>
+            <FilterSheetTrigger
+              onClick={() => setFilterSheetOpen(true)}
+              activeCount={(tipo ? 1 : 0) + (status ? 1 : 0)}
+            />
+            <Button variant="outline" size="cta" disabled={exportDisabled} onClick={exportarLancamentos}>
+              <Download />
+              Exportar lista
             </Button>
-          </Link>
-        </div>
+            <Button variant="outline" size="cta" disabled={exportDisabled} onClick={exportarInadimplencia}>
+              <Download />
+              Inadimplência
+            </Button>
+            <Link href="/financeiro/novo" className={buttonVariants({ size: 'cta' })}>
+              <Plus />
+              Novo lançamento
+            </Link>
+          </>
+        }
+      />
+
+      {isError ? (
+        <InlineAlert
+          tone="danger"
+          title="Não foi possível carregar o financeiro."
+          description={getErrorMessage(error, 'Ocorreu um erro ao buscar os lançamentos. Os valores abaixo não representam a situação real do escritório.')}
+          action={{ label: 'Tentar novamente', onClick: () => void refetch() }}
+        />
+      ) : null}
+
+      {agregados.isError ? (
+        /* A tabela pode ter carregado e estes números não. Sem este aviso o
+           aging e a fila simplesmente sumiriam da tela, como se não houvesse
+           nada a cobrar. */
+        <InlineAlert
+          tone="danger"
+          title="Não foi possível calcular o aging e a inadimplência."
+          description={getErrorMessage(agregados.error, 'A leitura da base inteira falhou. Aging, inadimplentes, alertas e os exports ficam indisponíveis até a releitura.')}
+          action={{ label: 'Tentar novamente', onClick: () => void agregados.refetch() }}
+        />
+      ) : null}
+
+      {truncado ? (
+        <InlineAlert
+          tone="warning"
+          title="Base maior que o limite de leitura desta tela"
+          description={`Foram lidos ${agregados.data!.teto.toLocaleString('pt-BR')} lançamentos e há mais. O aging, os inadimplentes e a previsão abaixo estão incompletos, e os exports ficam bloqueados — filtre por cliente ou competência para reduzir o conjunto.`}
+        />
+      ) : null}
+
+      {/* Os KPIs somam o escritório inteiro no servidor e ignoram os filtros da
+          tela de propósito; o aging logo abaixo segue os filtros. A descrição
+          existe para os dois números não parecerem a mesma coisa discordando. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+        <KpiCard label="A Receber" value={semDados ? '—' : formatCurrency(somaAReceber)} icon={TrendingUp} description="Escritório inteiro — não segue os filtros." />
+        <KpiCard label="Recebido no Mês" value={semDados ? '—' : formatCurrency(somaRecebidoMes)} icon={CheckCircle} tone="success" description="Escritório inteiro — não segue os filtros." />
+        <KpiCard label="Em Atraso" value={semDados ? '—' : formatCurrency(somaEmAtraso)} icon={AlertTriangle} tone="danger" description="Escritório inteiro — não segue os filtros." className="col-span-2 sm:col-span-1" />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <KpiCard label="A Receber" value={formatCurrency(somaAReceber)} icon={TrendingUp} />
-        <KpiCard label="Recebido no Mês" value={formatCurrency(somaRecebidoMes)} icon={CheckCircle} tone="success" />
-        <KpiCard label="Em Atraso" value={formatCurrency(somaEmAtraso)} icon={AlertTriangle} tone="danger" />
-      </div>
-
-      <CentralCobranca lancamentos={filteredLancamentos as Record<string, unknown>[]} agora={agora} />
-      <AlertasFinanceiros lancamentos={filteredLancamentos as Record<string, unknown>[]} agora={agora} />
+      {/* Só renderiza com dado na mão: painel vazio por falha de leitura afirma
+          que não há nada em atraso. */}
+      {agregadosProntos ? (
+        <>
+          <CentralCobranca lancamentos={lancamentosCompletos as Record<string, unknown>[]} agora={agora} />
+          <AlertasFinanceiros lancamentos={lancamentosCompletos as Record<string, unknown>[]} agora={agora} />
+        </>
+      ) : null}
 
       <FilterSheet
         open={filterSheetOpen}
@@ -269,7 +330,7 @@ function FinanceiroContent() {
           <div className="flex flex-wrap gap-2">
             {(['', 'pendente', 'atrasado', 'pago', 'cancelado', 'estornado'] as const).map(s => (
               <FilterBtn key={s} onClick={() => { setStatus(s); setPagination({ filterKey, page: 1, cursorStack: [null] }) }} active={status === s}>
-                {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+                {s === '' ? 'Todos' : getStatusLabel('pagamento', s)}
               </FilterBtn>
             ))}
           </div>
@@ -290,7 +351,7 @@ function FinanceiroContent() {
           <span className="text-xs text-muted-foreground mr-1">Status:</span>
           {(['', 'pendente', 'atrasado', 'pago', 'cancelado', 'estornado'] as const).map((s) => (
             <FilterBtn key={s} onClick={() => { setStatus(s); setPagination({ filterKey, page: 1, cursorStack: [null] }) }} active={status === s}>
-              {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+              {s === '' ? 'Todos' : getStatusLabel('pagamento', s)}
             </FilterBtn>
           ))}
         </div>
@@ -315,11 +376,7 @@ function FinanceiroContent() {
                 key={item.id as string}
                 item={item}
                 agora={agora}
-                onBaixado={() =>
-                  void queryClient.invalidateQueries({
-                    queryKey: financeiroKeys.snapshot({ clienteId, competenciaId, tipo, status, page }),
-                  })
-                }
+                onBaixado={() => void refreshFinanceiro()}
               />
             ))}
           </div>
@@ -327,8 +384,8 @@ function FinanceiroContent() {
       ) : null}
 
       <DataTableShell density="compact">
-        <table className="min-w-[1180px] w-full text-sm">
-          <thead className="bg-muted/50">
+        <table className="w-full table-fixed text-sm md:table-auto md:min-w-[1180px]">
+          <thead className="hidden bg-muted/50 md:table-header-group">
             <tr>
               <th className="px-4 py-3 text-left section-label">Pagador</th>
               <th className="px-4 py-3 text-left section-label">WhatsApp</th>
@@ -346,6 +403,16 @@ function FinanceiroContent() {
           <tbody className="divide-y">
             {isLoading ? (
               <TableRowSkeleton cols={11} rows={8} />
+            ) : isError ? (
+              /* Sem este ramo a tabela caía no vazio genérico e convidava a criar
+                 lançamento — como se a base estivesse limpa, e não ilegível. */
+              <TableEmptyState
+                colSpan={11}
+                icon={AlertTriangle}
+                title="Não foi possível carregar os lançamentos"
+                description="A lista está vazia por falha de leitura, não porque não existem lançamentos."
+                action={{ label: 'Tentar novamente', variant: 'outline', onClick: () => void refetch() }}
+              />
             ) : lancamentos.length === 0 ? (
               <TableEmptyState
                 colSpan={11}
@@ -355,10 +422,6 @@ function FinanceiroContent() {
                 action={!tipo && !status ? { label: 'Novo Lançamento', href: '/financeiro/novo' } : undefined}
               />
             ) : lancamentos.map((l) => {
-                const st = STATUS_MAP[l.status as string] ?? {
-                  label: l.status as string,
-                  variant: 'outline' as const,
-                }
                 const dataVenc = tsToDate(l.dataVencimento)
                 const dataPagamento = tsToDate(l.dataPagamento)
                 const atrasado =
@@ -381,9 +444,60 @@ function FinanceiroContent() {
                 const whatsappPausado = Boolean(l.whatsappCobrancaPausada)
                 const pagadorNome = (l.pagadorNome as string | undefined) ?? (l.clienteNome as string | undefined) ?? '—'
                 const pagadorWhatsapp = (l.pagadorWhatsapp as string | undefined) ?? '—'
+                // Mesmas ações na linha (desktop) e no card (celular).
+                const acoes = (
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground" title="Ver timeline" onClick={() => setTimelineLancamento(l as Record<string, unknown>)}>
+                      <Clock className="h-3.5 w-3.5" />
+                    </Button>
+                    {l.status === 'pendente' ? (
+                      <LancamentoBaixar
+                        lancamentoId={l.id as string}
+                        valor={l.valor as number}
+                        clienteNome={l.clienteNome as string | undefined}
+                        descricao={l.descricao as string | undefined}
+                        dataVencimento={l.dataVencimento as Timestamp | undefined}
+                        onBaixado={() => void refreshFinanceiro()}
+                      />
+                    ) : null}
+                    {(l.tipo === 'receita' || usuario?.perfil === 'admin') && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
+                          <MoreHorizontal className="h-3.5 w-3.5" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {l.tipo === 'receita' ? (
+                            <>
+                              <DropdownMenuItem onClick={() => void handleWhatsappAction('send', l.id as string)}>
+                                <Send className="h-3.5 w-3.5 mr-2" />Enviar cobrança agora
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleWhatsappAction(whatsappPausado ? 'resume' : 'pause', l.id as string)}>
+                                {whatsappPausado ? <Play className="h-3.5 w-3.5 mr-2" /> : <Pause className="h-3.5 w-3.5 mr-2" />}
+                                {whatsappPausado ? 'Retomar régua' : 'Pausar régua'}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleWhatsappAction('reschedule', l.id as string)}>
+                                <CalendarClock className="h-3.5 w-3.5 mr-2" />Reagendar régua
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void openWhatsappHistory(l.id as string)}>
+                                <History className="h-3.5 w-3.5 mr-2" />Histórico WhatsApp
+                              </DropdownMenuItem>
+                            </>
+                          ) : null}
+                          {l.tipo === 'receita' && usuario?.perfil === 'admin' ? <DropdownMenuSeparator /> : null}
+                          {usuario?.perfil === 'admin' ? (
+                            <DropdownMenuItem onClick={() => setDeleteId(l.id as string)} className="text-destructive">
+                              <Trash2 className="h-3.5 w-3.5 mr-2" />Excluir
+                            </DropdownMenuItem>
+                          ) : null}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
+                )
 
                 return (
-                  <tr key={l.id as string} className={`transition-colors hover:bg-muted/35${riscoMotivo ? ' border-l-2 border-l-destructive' : ''}`}>
+                  <Fragment key={l.id as string}>
+                  <tr className={`hidden transition-colors hover:bg-muted/35 md:table-row${riscoMotivo ? ' border-l-2 border-l-destructive' : ''}`}>
                     <td className="px-4 py-3">
                       <div className="min-w-0">
                         <p className="font-medium">{pagadorNome}</p>
@@ -412,7 +526,7 @@ function FinanceiroContent() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col items-start gap-1">
-                        <Badge variant={st.variant}>{st.label}</Badge>
+                        <PagamentoStatusBadge status={l.status as string} />
                         {riscoMotivo
                           ? <span className="text-[11px] font-medium text-destructive leading-tight">{riscoMotivo}</span>
                           : <span className={`text-xs ${atrasado ? 'text-destructive' : 'text-muted-foreground'}`}>{statusOperacional}</span>
@@ -434,55 +548,35 @@ function FinanceiroContent() {
                       {proximaAcao ? formatDateTime(proximaAcao) : '—'}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground" title="Ver timeline" onClick={() => setTimelineLancamento(l as Record<string, unknown>)}>
-                          <Clock className="h-3.5 w-3.5" />
-                        </Button>
-                        {l.status === 'pendente' ? (
-                          <LancamentoBaixar
-                            lancamentoId={l.id as string}
-                            valor={l.valor as number}
-                            clienteNome={l.clienteNome as string | undefined}
-                            descricao={l.descricao as string | undefined}
-                            dataVencimento={l.dataVencimento as Timestamp | undefined}
-                            onBaixado={() => void refreshFinanceiro()}
-                          />
-                        ) : null}
-                        {(l.tipo === 'receita' || usuario?.perfil === 'admin') && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
-                              <MoreHorizontal className="h-3.5 w-3.5" />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {l.tipo === 'receita' ? (
-                                <>
-                                  <DropdownMenuItem onClick={() => void handleWhatsappAction('send', l.id as string)}>
-                                    <Send className="h-3.5 w-3.5 mr-2" />Enviar cobrança agora
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => void handleWhatsappAction(whatsappPausado ? 'resume' : 'pause', l.id as string)}>
-                                    {whatsappPausado ? <Play className="h-3.5 w-3.5 mr-2" /> : <Pause className="h-3.5 w-3.5 mr-2" />}
-                                    {whatsappPausado ? 'Retomar régua' : 'Pausar régua'}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => void handleWhatsappAction('reschedule', l.id as string)}>
-                                    <CalendarClock className="h-3.5 w-3.5 mr-2" />Reagendar régua
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => void openWhatsappHistory(l.id as string)}>
-                                    <History className="h-3.5 w-3.5 mr-2" />Histórico WhatsApp
-                                  </DropdownMenuItem>
-                                </>
-                              ) : null}
-                              {l.tipo === 'receita' && usuario?.perfil === 'admin' ? <DropdownMenuSeparator /> : null}
-                              {usuario?.perfil === 'admin' ? (
-                                <DropdownMenuItem onClick={() => setDeleteId(l.id as string)} className="text-destructive">
-                                  <Trash2 className="h-3.5 w-3.5 mr-2" />Excluir
-                                </DropdownMenuItem>
-                              ) : null}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
+                      {acoes}
+                    </td>
+                  </tr>
+                  <tr className={`md:hidden${riscoMotivo ? ' border-l-2 border-l-destructive' : ''}`}>
+                    <td colSpan={11} className="px-3 py-2.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{pagadorNome}</p>
+                          <p className="truncate text-xs text-muted-foreground">{(l.descricao as string) ?? '—'}</p>
+                        </div>
+                        <p className="shrink-0 text-sm font-semibold tabular-nums">{formatCurrency(l.valor as number)}</p>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Venc. <span className={atrasado ? 'text-destructive font-medium' : ''}>{dataVenc ? formatDate(dataVenc) : '—'}</span>
+                        {dataPagamento ? ` · Pago ${formatDate(dataPagamento)}` : ''}
+                      </p>
+                      <div className="mt-1.5 flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-1">
+                          <PagamentoStatusBadge status={l.status as string} />
+                          <Badge variant={WHATSAPP_VARIANT_MAP[whatsappStatus] ?? 'outline'}>
+                            {WHATSAPP_STATUS_LABELS[whatsappStatus] ?? whatsappStatus}
+                          </Badge>
+                          {riscoMotivo ? <span className="text-[11px] font-medium text-destructive leading-tight">{riscoMotivo}</span> : null}
+                        </div>
+                        <div className="shrink-0">{acoes}</div>
                       </div>
                     </td>
                   </tr>
+                  </Fragment>
                 )
               })}
           </tbody>

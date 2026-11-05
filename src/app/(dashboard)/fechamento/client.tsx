@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/auth-context'
 import { FechamentoTable } from '@/components/fechamento/fechamento-table'
 import { FechamentoPendenciasCards } from '@/components/fechamento/fechamento-pendencias-cards'
+import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
@@ -22,7 +23,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
-import { RefreshCw, Plus, CheckCircle2, Clock, AlertCircle, ClipboardList, LockOpen } from 'lucide-react'
+import { RefreshCw, Plus, CheckCircle2, Clock, ListChecks, ClipboardList, LockOpen } from 'lucide-react'
 import {
   updateFechamentoField,
   gerarFechamentoMensal,
@@ -35,6 +36,7 @@ import { fechamentoFiltroSchema } from '@/features/fechamento/schemas'
 import { useFechamentoList } from '@/features/fechamento/hooks'
 import { fechamentoKeys } from '@/features/fechamento/queries'
 import { getErrorMessage } from '@/lib/error-message'
+import { resumirFechamentos, temPendencia } from '@/lib/fechamento-resumo'
 import type { FechamentoFilters, FechamentoRecord } from '@/features/fechamento/types'
 
 const MESES = [
@@ -79,7 +81,7 @@ function FechamentoContent() {
   const mesLabel = MESES.find((m) => m.value === mes)?.label ?? ''
 
   const [fechamentos, setFechamentos] = useState<FechamentoRecord[]>([])
-  const { fechamentos: fechamentosData, isLoading: loading, refetch } = useFechamentoList(parsed)
+  const { fechamentos: fechamentosData, isLoading: loading, isError, error, refetch } = useFechamentoList(parsed)
   const { usuario } = useAuth()
   const [gerando, setGerando] = useState(false)
   const [confirmGeracaoOpen, setConfirmGeracaoOpen] = useState(false)
@@ -196,14 +198,12 @@ function FechamentoContent() {
     }
   }
 
-  // Resumo stats
-  const total = fechamentos.length
-  const enviados = fechamentos.filter(
-    (f) => f.dasStatus === 'enviado' || f.dasStatus === 'ok' || f.dasStatus === 'sm'
-  ).length
-  const pendentes = fechamentos.filter((f) => f.dasStatus === 'pendente').length
-  const parciais = fechamentos.filter((f) => f.dasStatus === 'parcial').length
-  const pct = total > 0 ? Math.round((enviados / total) * 100) : 0
+  // Resumo — uma única definição de pendência (ver lib/fechamento-resumo).
+  const resumo = resumirFechamentos(fechamentos)
+  const total = resumo.totalClientes
+  // O snapshot da revisão (auditoria) continua registrando a contagem do DAS.
+  const { enviados, pendentes, parciais } = resumo.das
+  const pct = resumo.pctConcluido
   const statusSnapshot = fechamentos.reduce<Record<string, number>>((acc, fechamento) => {
     for (const field of ['dasStatus', 'esocialStatus', 'reinfStatus', 'fgtsStatus'] as const) {
       const key = `${field}:${fechamento[field]}`
@@ -211,61 +211,58 @@ function FechamentoContent() {
     }
     return acc
   }, {})
-  const statusComPendencia = new Set(['pendente', 'guia', 'parcial'])
-  const fechamentosComPendencia = fechamentos.filter((f) =>
-    [f.dasStatus, f.esocialStatus, f.reinfStatus, f.fgtsStatus].some((status) => statusComPendencia.has(status))
-  )
-  const totalObrigacoesPendentes = fechamentos.reduce((acc, f) =>
-    acc + [f.dasStatus, f.esocialStatus, f.reinfStatus, f.fgtsStatus].filter((status) => statusComPendencia.has(status)).length
-  , 0)
+  const fechamentosComPendencia = fechamentos.filter(temPendencia)
+  const totalObrigacoesPendentes = resumo.obrigacoesEmAberto
 
   return (
     <div className="stack-6">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="text-title">Fechamento Mensal</h2>
-          <p className="text-subtle">{mesLabel} / {ano}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <PageHeader
+        title="Fechamento mensal"
+        description={`${mesLabel} / ${ano}`}
+        action={
+          <>
           <Button
             variant="outline"
-            size="sm"
+            size="cta"
             onClick={() => { startTransition(() => load()) }}
             disabled={isPending || loading}
           >
-            <RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={loading ? 'animate-spin' : undefined} />
             Atualizar
           </Button>
           {travado ? (
             isAdmin ? (
               <Button
                 variant="outline"
-                size="sm"
+                size="cta"
                 onClick={() => setConfirmReabrirOpen(true)}
                 disabled={loading || revisaoLoading || reabrindo}
               >
-                <LockOpen className="w-4 h-4 mr-1" />
+                <LockOpen />
                 {reabrindo ? 'Reabrindo...' : 'Reabrir mês'}
               </Button>
             ) : null
           ) : (
             <Button
               variant="outline"
-              size="sm"
+              size="cta"
               onClick={() => setRevisaoDialogOpen(true)}
-              disabled={loading || revisaoLoading}
+              // A revisão trava o mês INTEIRO (id ano_mes), mas o snapshot sai da
+              // lista na tela — com regime filtrado ele registraria só parte.
+              disabled={loading || revisaoLoading || Boolean(regime)}
+              title={regime ? 'Remova o filtro de regime para encerrar a revisão do mês inteiro.' : undefined}
             >
-              <ClipboardList className="w-4 h-4 mr-1" />
+              <ClipboardList />
               Encerrar revisão do mês
             </Button>
           )}
-          <Button size="sm" onClick={() => setConfirmGeracaoOpen(true)} disabled={gerando || loading}>
-            <Plus className="w-4 h-4 mr-1" />
-            {gerando ? 'Gerando...' : 'Gerar Fechamento'}
+          <Button size="cta" onClick={() => setConfirmGeracaoOpen(true)} disabled={gerando || loading}>
+            <Plus />
+            {gerando ? 'Gerando...' : 'Gerar fechamento'}
           </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <Dialog open={revisaoDialogOpen} onOpenChange={setRevisaoDialogOpen}>
         <DialogContent className="max-w-md" showCloseButton>
@@ -355,11 +352,11 @@ function FechamentoContent() {
         />
       ) : null}
 
-      {pendentes > 0 && (
+      {resumo.clientesComPendencia > 0 && (
         <InlineAlert
           tone="warning"
-          title={`${pendentes} cliente(s) com pendência de fechamento`}
-          description="Use os filtros e atualização em lote para avançar os status críticos primeiro."
+          title={`${resumo.clientesComPendencia} de ${total} cliente(s) com pendência de fechamento`}
+          description={`${totalObrigacoesPendentes} obrigação(ões) em aberto (pendente, parcial ou com guia) entre DAS, eSocial, Reinf e FGTS. Os clientes estão listados logo abaixo.`}
         />
       )}
 
@@ -414,16 +411,16 @@ function FechamentoContent() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Card>
             <CardContent className="pt-4 pb-3">
-              <p className="text-xs text-muted-foreground">Total</p>
-              <p className="text-2xl font-bold">{total}</p>
+              <p className="text-xs text-muted-foreground">Clientes no mês</p>
+              <p className="text-2xl font-bold tabular-nums">{total}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4 pb-3 flex items-start gap-2">
               <CheckCircle2 className="w-4 h-4 text-success mt-1 shrink-0" />
               <div>
-                <p className="text-xs text-muted-foreground">Enviados</p>
-                <p className="text-2xl font-bold text-success">{enviados}</p>
+                <p className="text-xs text-muted-foreground">Clientes em dia</p>
+                <p className="text-2xl font-bold tabular-nums text-success">{resumo.clientesEmDia}</p>
               </div>
             </CardContent>
           </Card>
@@ -431,17 +428,18 @@ function FechamentoContent() {
             <CardContent className="pt-4 pb-3 flex items-start gap-2">
               <Clock className="w-4 h-4 text-warning mt-1 shrink-0" />
               <div>
-                <p className="text-xs text-muted-foreground">Pendentes</p>
-                <p className="text-2xl font-bold text-warning">{pendentes}</p>
+                <p className="text-xs text-muted-foreground">Clientes com pendência</p>
+                <p className="text-2xl font-bold tabular-nums text-amber-800 dark:text-warning">{resumo.clientesComPendencia}</p>
               </div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4 pb-3 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-info mt-1 shrink-0" />
+              <ListChecks className="w-4 h-4 text-muted-foreground mt-1 shrink-0" />
               <div>
-                <p className="text-xs text-muted-foreground">Parciais</p>
-                <p className="text-2xl font-bold text-info">{parciais}</p>
+                <p className="text-xs text-muted-foreground">Obrigações em aberto</p>
+                <p className="text-2xl font-bold tabular-nums">{totalObrigacoesPendentes}</p>
+                <p className="text-[11px] text-muted-foreground">de {resumo.obrigacoesAplicaveis} aplicáveis</p>
               </div>
             </CardContent>
           </Card>
@@ -452,8 +450,8 @@ function FechamentoContent() {
       {total > 0 && (
         <div className="space-y-1">
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>Progresso do mês</span>
-            <span>{pct}% concluído</span>
+            <span>Progresso do mês — {resumo.obrigacoesConcluidas} de {resumo.obrigacoesAplicaveis} obrigações concluídas</span>
+            <span>{pct}%</span>
           </div>
           <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
             <div
@@ -485,6 +483,13 @@ function FechamentoContent() {
               </tbody>
             </table>
           </div>
+        ) : isError ? (
+          <InlineAlert
+            tone="danger"
+            title="Não foi possível carregar os fechamentos"
+            description={getErrorMessage(error, 'Verifique sua conexão e suas permissões, e tente novamente.')}
+            action={{ label: 'Tentar novamente', onClick: () => { void refetch() } }}
+          />
         ) : (
           <FechamentoTable fechamentos={fechamentos} onUpdate={handleUpdate} travado={travado} />
         )}

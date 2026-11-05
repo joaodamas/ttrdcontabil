@@ -2,8 +2,9 @@ import * as admin from 'firebase-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { assertCanAccessCliente } from '../authz'
-import { DEFAULT_TENANT_ID } from '../tenant'
+import { DEFAULT_TENANT_ID, requireEnvironmentTenant } from '../tenant'
 import { dispatchWhatsappJob, ensureWhatsappDefaults, queueWhatsappJob } from './core'
+import { twilioSecrets } from './secrets'
 
 const db = () => admin.firestore()
 
@@ -15,6 +16,15 @@ async function getLancamentoOwnedByActor(uid: string, lancamentoId: string) {
   return { ref: snap.ref, data }
 }
 
+async function assertAdminUser(uid: string) {
+  const snap = await db().collection('usuarios').doc(uid).get()
+  if (!snap.exists) throw new HttpsError('permission-denied', 'Usuário sem perfil cadastrado.')
+  const usuario = snap.data() ?? {}
+  if (usuario.ativo === false) throw new HttpsError('permission-denied', 'Usuário inativo.')
+  if (usuario.perfil !== 'admin') throw new HttpsError('permission-denied', 'Apenas administradores podem editar o catálogo de mensagens.')
+  return { id: uid, tenantId: requireEnvironmentTenant(usuario.tenantId, 'Usuário') }
+}
+
 export const inicializarConfiguracaoWhatsapp = onCall({ region: 'southamerica-east1' }, async (request) => {
   const uid = request.auth?.uid
   if (!uid) throw new HttpsError('unauthenticated', 'Autenticação necessária.')
@@ -22,7 +32,7 @@ export const inicializarConfiguracaoWhatsapp = onCall({ region: 'southamerica-ea
   return { status: 'ok' }
 })
 
-export const dispararCobrancaWhatsappAgora = onCall({ region: 'southamerica-east1' }, async (request) => {
+export const dispararCobrancaWhatsappAgora = onCall({ region: 'southamerica-east1', secrets: twilioSecrets }, async (request) => {
   const uid = request.auth?.uid
   if (!uid) throw new HttpsError('unauthenticated', 'Autenticação necessária.')
   const lancamentoId = String(request.data?.lancamentoId ?? '')
@@ -82,4 +92,26 @@ export const reagendarCobrancaWhatsappLancamento = onCall({ region: 'southameric
   }, { merge: true })
   const queued = await queueWhatsappJob(lancamentoId, { manual: true })
   return { status: 'reagendado', jobKey: queued.jobKey }
+})
+
+export const atualizarTemplateWhatsapp = onCall({ region: 'southamerica-east1' }, async (request) => {
+  const uid = request.auth?.uid
+  if (!uid) throw new HttpsError('unauthenticated', 'Autenticação necessária.')
+  const { tenantId } = await assertAdminUser(uid)
+
+  const templateKey = String(request.data?.templateKey ?? '')
+  if (!templateKey) throw new HttpsError('invalid-argument', 'templateKey obrigatório.')
+
+  const docId = `${tenantId}_${templateKey}`
+  const ref = db().collection('whatsapp_templates').doc(docId)
+  const snap = await ref.get()
+  if (!snap.exists) throw new HttpsError('not-found', 'Template não encontrado.')
+
+  const updates: Record<string, unknown> = { atualizadoEm: FieldValue.serverTimestamp() }
+  if (typeof request.data?.providerContentSid === 'string') updates.providerContentSid = request.data.providerContentSid.trim()
+  if (typeof request.data?.ativo === 'boolean') updates.ativo = request.data.ativo
+  if (typeof request.data?.aprovadoProvider === 'boolean') updates.aprovadoProvider = request.data.aprovadoProvider
+
+  await ref.set(updates, { merge: true })
+  return { status: 'ok' }
 })

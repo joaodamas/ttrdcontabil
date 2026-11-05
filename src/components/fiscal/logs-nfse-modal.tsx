@@ -1,7 +1,7 @@
 'use client'
 
 import { AppModal } from '@/components/ui/app-modal'
-import { Badge } from '@/components/ui/badge'
+import { NfseStatusBadge } from '@/components/ui/status-badge'
 import { tsToDate, formatDateTime, formatCurrency } from '@/lib/utils'
 import { FileText, CheckCircle2, XCircle, Clock, RefreshCw, Send } from 'lucide-react'
 import { Timestamp } from 'firebase/firestore'
@@ -139,7 +139,7 @@ export function LogsNfseModal({ nota, open, onOpenChange }: LogsNfseModalProps) 
       title={`Logs — NFS-e ${(nota.numeroNfse as string) ?? (nota.id as string)}`}
       description={`${(nota.clienteNome as string) ?? 'Cliente'} · ${(nota.tomadorNome as string) ?? '—'}`}
       icon={<FileText className="size-4" />}
-      badge={<Badge variant={statusInfo === 'emitida' ? 'success' : statusInfo === 'rejeitada' || statusInfo === 'erro_integracao' ? 'destructive' : 'outline'}>{statusInfo}</Badge>}
+      badge={<NfseStatusBadge status={statusInfo} />}
       size="md"
     >
       {logs.length === 0 ? (

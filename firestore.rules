@@ -34,6 +34,11 @@ service cloud.firestore {
     function isOperacional() { return isAtivo() && userDoc().perfil in ['admin', 'operacional']; }
     function isFiscal()      { return isAtivo() && userDoc().perfil in ['admin', 'fiscal']; }
     function isFinanceiro()  { return isAtivo() && userDoc().perfil in ['admin', 'financeiro']; }
+    // Quem toca a rotina contábil: o fiscal também cria/conclui tarefas, edita
+    // competências, IR e células do fechamento — PERFIL_DEFAULT_TELAS dá essas
+    // telas a ele, e sem isto ele as via mas tomava permission-denied ao salvar.
+    // Exclusões continuam com isOperacional()/isAdmin().
+    function isEquipeContabil() { return isAtivo() && userDoc().perfil in ['admin', 'operacional', 'fiscal']; }
     function canRead()       { return isAtivo(); }
 
     // [P1] Espelha canAccessTela() (src/lib/permissions.ts): quando o admin concede
@@ -60,6 +65,18 @@ service cloud.firestore {
     function canReadIr()           { return isFiscal() || hasTela('ir'); }
     function canReadFinanceiro()   { return isFinanceiro() || hasTela('financeiro'); }
     function canReadFechamento()   { return isOperacional() || isFiscal() || hasTela('fechamento'); }
+
+    // [P0-B] Quem produz conteúdo no Cliente 360 (POP, notas internas e
+    // comentários da timeline). Não dá para usar isOperacional() aqui: o POP tem
+    // uma seção Fiscal e uma Financeiro, e quem preenche cada uma é justamente o
+    // perfil correspondente — 'fiscal' ficaria trancado fora do próprio campo.
+    // Fica de fora só 'leitura', que enxerga a tela 'clientes' mas não escreve.
+    function podeColaborarCliente() { return isOperacional() || isFiscal() || isFinanceiro(); }
+
+    // [P0-B] Relatório de produtividade cruza o tempo de TODO mundo, então a
+    // leitura de tarefas_timers segue a tela em que ele está pendurado ('admin',
+    // ver app-sidebar.tsx), não o perfil de quem cronometra.
+    function canReadProdutividade() { return isAdmin() || hasTela('admin'); }
 
     // [P1] Update de fechamento_revisoes que REABRE o mês (seta travado explicitamente
     // para false) exige admin. Ausência do campo `travado` no payload (não deveria
@@ -186,6 +203,106 @@ service cloud.firestore {
         && statusCompetenciaValido(request.resource.data.status);
     }
 
+    // [P0-A] Campos de clientes_fiscal que SÓ a Cloud Function pode gravar (o
+    // Admin SDK ignora estas regras, então lá continuam graváveis). `credenciais`
+    // guarda a chave de API da Spedy, o caminho do .pfx no Storage e a senha do
+    // certificado A1; `spedyCompanyId` decide para qual empresa da Spedy o
+    // enviarCertificadoSpedy manda esse .pfx.
+    // A armadilha: `allow update: if isFiscal() && sameTenantUpdate()` não olhava
+    // campo nenhum, então um perfil 'fiscal' apontava spedyCompanyId para uma
+    // empresa dele, gravava a própria spedyApiKey via salvarCredenciaisFiscais e
+    // recebia o certificado A1 do cliente na conta dele — A1 vazado emite nota
+    // fiscal em nome da empresa da vítima. O formulário
+    // (config-fiscal-form.tsx) nunca grava nenhum destes campos: as credenciais
+    // sobem cifradas pela callable salvarCredenciaisFiscais.
+    // `producaoLiberada` é a trava que separa homologação de nota real: se o
+    // fiscal pudesse ligá-la, a liberação por município não valeria nada. Nenhuma
+    // tela grava este campo — a liberação é feita pelo console/Admin SDK.
+    function camposFiscalDoServidor() {
+      return ['credenciais', 'spedyCompanyId', 'spedyProvisionadoEm', 'spedyCertificadoEnviadoEm', 'producaoLiberada'];
+    }
+
+    // Armadilha: no create não existe resource.data para o diff() comparar. Se só
+    // o update fosse protegido, bastava CRIAR um segundo clientes_fiscal para o
+    // mesmo clienteId já com spedyCompanyId e credenciais forjados — as functions
+    // buscam a config por `where('clienteId','==',...).limit(1)`.
+    function fiscalCreateSemCampoDeServidor() {
+      return !request.resource.data.keys().hasAny(camposFiscalDoServidor());
+    }
+
+    function fiscalUpdateSemCampoDeServidor() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(camposFiscalDoServidor());
+    }
+
+    // [PRESTADOR→TOMADOR] O par (clienteId, cpfCnpj) é o que identifica um
+    // tomador na carteira do prestador. Sem `clienteId` a carteira vira global e
+    // o contrato recorrente fatura o tomador de outro cliente; sem `cpfCnpj`
+    // não existe nota em prefeitura nenhuma. `ativo` é exigido porque a tela e o
+    // gerador filtram por ele — tomador sem o campo é tomador invisível.
+    // O formato de cpfCnpj é conferido aqui de propósito: TODO conector faz
+    // replace(/\D/g,'') antes de enviar, então guardar "12.345.678/0001-90"
+    // quebra dedup e comparação em silêncio, sem quebrar a emissão.
+    function tomadorPayloadValido() {
+      return ('clienteId' in request.resource.data)
+        && (request.resource.data.clienteId is string)
+        && (request.resource.data.clienteId.size() > 0)
+        && ('cpfCnpj' in request.resource.data)
+        && (request.resource.data.cpfCnpj is string)
+        && request.resource.data.cpfCnpj.matches('^[0-9]{11}$|^[0-9]{14}$')
+        && ('razaoSocial' in request.resource.data)
+        && (request.resource.data.razaoSocial is string)
+        && (request.resource.data.razaoSocial.size() > 0)
+        && (request.resource.data.razaoSocial.size() <= 200)
+        && ('ativo' in request.resource.data)
+        && (request.resource.data.ativo is bool);
+    }
+
+    // [PRESTADOR→TOMADOR] O contrato precisa dizer, no mínimo, QUEM fatura QUEM,
+    // de quanto e em que dia — contrato sem tomadorId reabre exatamente o buraco
+    // que fazia a nota sair com prestador == tomador. `valor` numérico e > 0
+    // porque valor zero/negativo vira nota inválida na prefeitura e string
+    // "1.234,56" quebra o cálculo do ISS sem erro nenhum. `ativo` ausente faz o
+    // cron (where ativo == true) simplesmente nunca faturar o contrato — falha
+    // silenciosa que só aparece quando o cliente reclama da nota que não saiu.
+    function nfseRecorrentePayloadValido() {
+      return ('clienteId' in request.resource.data)
+        && (request.resource.data.clienteId is string)
+        && (request.resource.data.clienteId.size() > 0)
+        && ('tomadorId' in request.resource.data)
+        && (request.resource.data.tomadorId is string)
+        && (request.resource.data.tomadorId.size() > 0)
+        && ('descricao' in request.resource.data)
+        && (request.resource.data.descricao is string)
+        && (request.resource.data.descricao.size() > 0)
+        && (request.resource.data.descricao.size() <= 2000)
+        && ('valor' in request.resource.data)
+        && (request.resource.data.valor is number)
+        && (request.resource.data.valor > 0)
+        && ('diaEmissao' in request.resource.data)
+        && (request.resource.data.diaEmissao is int)
+        && (request.resource.data.diaEmissao >= 1)
+        && (request.resource.data.diaEmissao <= 31)
+        && ('ativo' in request.resource.data)
+        && (request.resource.data.ativo is bool);
+    }
+
+    // [PRESTADOR→TOMADOR] O contrato só aponta para tomador da carteira DO
+    // PRÓPRIO prestador. Sem isto o cliente A fatura o tomador do cliente B — e
+    // a carteira de B, que é a lista de clientes dele, vaza para dentro das
+    // notas de A.
+    // Tolerante a tomadorId inexistente de propósito: quem não existe não é de
+    // ninguém, e travar aqui quebraria qualquer fluxo que grave o contrato antes
+    // do tomador. O abuso real é apontar para um tomador que EXISTE e é de
+    // outro prestador. Só é avaliada depois de nfseRecorrentePayloadValido()
+    // (o && curto-circuita), que garante tomadorId string não vazia — path
+    // montado com campo ausente quebraria a regra inteira.
+    function tomadorDaCarteiraDoPrestador() {
+      let tomadorPath = /databases/$(database)/documents/tomadores/$(request.resource.data.tomadorId);
+      return !exists(tomadorPath)
+        || get(tomadorPath).data.clienteId == request.resource.data.clienteId;
+    }
+
     // ─── Usuários ─────────────────────────────────────────────────────────────
 
     match /usuarios/{uid} {
@@ -228,6 +345,47 @@ service cloud.firestore {
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
+    // ─── Cliente 360: POP, notas internas e comentários ───────────────────────
+    // [P0-B] Três coleções em uso pelo app (clientes/[id]/page-client.tsx) que não
+    // tinham regra nenhuma. O Firestore nega por padrão o que não está declarado,
+    // então as abas POP, Notas internas e Comentários da timeline morreriam com
+    // permission-denied no primeiro dia.
+    //
+    // NOTA DE ISOLAMENTO: nenhuma delas está em TENANT_SCOPED_COLLECTIONS
+    // (src/lib/firestore-client.ts), então `listDocuments` NÃO injeta
+    // `where('tenantId','==',...)` na query — exigir tenantId no `list` derrubaria
+    // a query inteira, não filtraria nada. Vale o mesmo raciocínio já documentado
+    // em `usuarios`: o ambiente é single-tenant por deploy. O `get` continua
+    // conferindo tenant e a escrita grava tenantId (withActorMetadata preenche).
+    // Assim que essas coleções entrarem em TENANT_SCOPED_COLLECTIONS, trocar o
+    // `list` por `canRead() && sameTenantExisting()`.
+
+    match /clientes_pop/{id} {
+      allow get: if canRead() && sameTenantExisting();
+      allow list: if canRead();
+      allow create: if podeColaborarCliente() && sameTenantWrite();
+      allow update: if podeColaborarCliente() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
+    }
+
+    // Notas internas do POP: a UI é append-only (textarea que só acrescenta).
+    // Reescrever ou apagar histórico fica com o admin, igual tarefas_comentarios.
+    match /clientes_pop_notas/{id} {
+      allow get: if canRead() && sameTenantExisting();
+      allow list: if canRead();
+      allow create: if podeColaborarCliente() && sameTenantNew();
+      allow update: if isAdmin() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
+    }
+
+    match /clientes_comentarios/{id} {
+      allow get: if canRead() && sameTenantExisting();
+      allow list: if canRead();
+      allow create: if podeColaborarCliente() && sameTenantNew();
+      allow update: if isAdmin() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
+    }
+
     // ─── Serviços (tipos cadastrais do escritório) ────────────────────────────
 
     match /servicos/{id} {
@@ -241,10 +399,10 @@ service cloud.firestore {
 
     match /competencias/{id} {
       allow read: if canRead() && sameTenantExisting();
-      allow create: if isOperacional() && competenciaPayloadValido() && sameTenantWrite();
+      allow create: if isEquipeContabil() && competenciaPayloadValido() && sameTenantWrite();
       // [MATRIZ DE TRANSIÇÃO] Reabrir concluída/ressuscitar cancelada exige
       // admin (competenciaTransicaoPermitida) — ver auditoria 2026-07-02.
-      allow update: if isOperacional() && competenciaPayloadValido() && sameTenantUpdate()
+      allow update: if isEquipeContabil() && competenciaPayloadValido() && sameTenantUpdate()
         && competenciaTransicaoPermitida();
       allow delete: if isAdmin() && sameTenantExisting();
     }
@@ -253,11 +411,11 @@ service cloud.firestore {
 
     match /tarefas/{id} {
       allow read: if canRead() && sameTenantExisting();
-      // Todos os ativos podem criar e atualizar tarefas (payload validado).
-      allow create: if isOperacional() && tarefaPayloadValido() && sameTenantWrite();
+      // Equipe contábil (admin/operacional/fiscal) cria e atualiza tarefas (payload validado).
+      allow create: if isEquipeContabil() && tarefaPayloadValido() && sameTenantWrite();
       // [MATRIZ DE TRANSIÇÃO] Reabrir concluída/ressuscitar cancelada exige
       // admin ou o responsável atual (tarefaTransicaoPermitida).
-      allow update: if isOperacional() && tarefaPayloadValido() && sameTenantUpdate()
+      allow update: if isEquipeContabil() && tarefaPayloadValido() && sameTenantUpdate()
         && tarefaTransicaoPermitida();
       // [MELHORIA 2] Delete separado: apenas operacional+ pode deletar tarefas.
       allow delete: if isOperacional() && sameTenantExisting();
@@ -265,8 +423,27 @@ service cloud.firestore {
 
     match /tarefas_comentarios/{id} {
       allow read: if canRead() && sameTenantExisting();
-      allow create: if isOperacional() && sameTenantNew();
+      allow create: if isEquipeContabil() && sameTenantNew();
       allow update: if isAdmin() && sameTenantUpdate();
+      allow delete: if isAdmin() && sameTenantExisting();
+    }
+
+    // [P0-B] Sessões do timer por tarefa (task-timer.tsx → relatório de
+    // produtividade). Estava sem regra nenhuma, ou seja: negada por padrão.
+    // Mesma NOTA DE ISOLAMENTO das coleções do Cliente 360 acima — tarefas_timers
+    // não está em TENANT_SCOPED_COLLECTIONS, a query da tela Produtividade não
+    // manda tenantId, e exigir tenantId no `list` derrubaria o relatório inteiro.
+    match /tarefas_timers/{id} {
+      allow get: if canReadProdutividade() && sameTenantExisting();
+      allow list: if canReadProdutividade();
+      // Qualquer usuário ativo cronometra a própria tarefa no cockpit Hoje (tela
+      // 'hoje' é default de todos os perfis), mas só em nome de si mesmo: sem
+      // amarrar usuarioId ao uid, dava para inflar a produtividade de terceiros.
+      allow create: if isAtivo() && sameTenantNew()
+        && ('usuarioId' in request.resource.data)
+        && request.resource.data.usuarioId == request.auth.uid;
+      // Registro de tempo é fato consumado: não se edita depois de gravado.
+      allow update: if false;
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
@@ -277,16 +454,16 @@ service cloud.firestore {
       // concedida via override (hasTela) — tela 'ir' em PERFIL_DEFAULT_TELAS não é
       // liberada por padrão para operacional/financeiro/leitura.
       allow read: if canReadIr() && sameTenantExisting();
-      allow create: if isOperacional() && sameTenantWrite();
-      allow update: if isOperacional() && sameTenantUpdate();
+      allow create: if isEquipeContabil() && sameTenantWrite();
+      allow update: if isEquipeContabil() && sameTenantUpdate();
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
     match /ir_checklist/{id} {
       // [P1] Mesma coleção-irmã de ir_declaracoes — mesma gate de leitura.
       allow read: if canReadIr() && sameTenantExisting();
-      allow create: if isOperacional() && sameTenantWrite();
-      allow update: if isOperacional() && sameTenantUpdate();
+      allow create: if isEquipeContabil() && sameTenantWrite();
+      allow update: if isEquipeContabil() && sameTenantUpdate();
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
@@ -318,12 +495,12 @@ service cloud.firestore {
       // a tela 'fechamento' concedida via override (hasTela) — não liberada por
       // padrão para financeiro/leitura.
       allow read: if canReadFechamento() && sameTenantExisting();
-      allow create: if isOperacional() && sameTenantWrite();
+      allow create: if isEquipeContabil() && sameTenantWrite();
       // [P1] Enforcement server-side da trava mensal: espelha o check client-side
       // em updateFechamentoField — nega update se o mês (ano/mes do próprio doc)
       // tiver uma revisão travada em fechamento_revisoes. Reabrir o mês (admin,
       // via fechamento_revisoes.update) libera este update novamente.
-      allow update: if isOperacional() && sameTenantUpdate() && !mesFechamentoTravado();
+      allow update: if isEquipeContabil() && sameTenantUpdate() && !mesFechamentoTravado();
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
@@ -349,8 +526,11 @@ service cloud.firestore {
       // concedida via override — dado fiscal sensível, hoje legível por qualquer
       // ativo (inclusive 'leitura') via canRead().
       allow read: if canReadFiscalConfig() && sameTenantExisting();
-      allow create: if isFiscal() && sameTenantWrite();
-      allow update: if isFiscal() && sameTenantUpdate();
+      // [P0-A] O navegador escreve só a configuração declarativa (município,
+      // regime, alíquota, provedor). Credenciais e IDs da Spedy são território
+      // exclusivo das Cloud Functions — ver camposFiscalDoServidor().
+      allow create: if isFiscal() && sameTenantWrite() && fiscalCreateSemCampoDeServidor();
+      allow update: if isFiscal() && sameTenantUpdate() && fiscalUpdateSemCampoDeServidor();
       // Configuração fiscal nunca deve ser deletada sem supervisão admin.
       allow delete: if isAdmin() && sameTenantExisting();
     }
@@ -422,6 +602,43 @@ service cloud.firestore {
       // [P0-1] Leitura restrita a admin/fiscal/financeiro (ver canReadNfse()).
       allow read: if canReadNfse() && sameTenantExisting();
       allow write: if false;
+    }
+
+    // ─── Carteira de tomadores e contrato de faturamento ──────────────────────
+    // A NFS-e sai EM NOME DO CLIENTE: o prestador é o cliente do escritório e o
+    // tomador é o cliente DELE. `tomadores` é a carteira de cada prestador e
+    // `nfse_recorrentes` é o contrato (quem fatura quem, de quanto, quando).
+    //
+    // NÃO CONFUNDIR com `clientes_servicos` (acima), que é o honorário do
+    // ESCRITÓRIO — a confusão entre as duas é a origem do bug de
+    // prestador == tomador.
+    //
+    // Escrita direta do navegador é OK aqui, ao contrário de clientes_fiscal:
+    // nenhuma das duas guarda credencial, só cadastro do tomador e o contrato.
+    // O gate segue a tela 'fiscal', que é quem configura emissão; a LEITURA usa
+    // canReadNfse() (inclui 'financeiro') porque estes são os mesmos dados que o
+    // financeiro já enxerga denormalizados em nfse_emitidas ao conciliar
+    // cobrança — restringir aqui não esconderia nada e quebraria a conciliação.
+
+    match /tomadores/{id} {
+      allow read: if canReadNfse() && sameTenantExisting();
+      allow create: if isFiscal() && tomadorPayloadValido() && sameTenantWrite();
+      allow update: if isFiscal() && tomadorPayloadValido() && sameTenantUpdate();
+      // Tomador que já saiu em nota emitida não pode sumir do histórico: a
+      // inativação normal é `ativo: false` + `deletedAt`. Delete físico exige
+      // admin, mesma regra de clientes.
+      allow delete: if isAdmin() && sameTenantExisting();
+    }
+
+    match /nfse_recorrentes/{id} {
+      allow read: if canReadNfse() && sameTenantExisting();
+      allow create: if isFiscal() && sameTenantWrite()
+        && nfseRecorrentePayloadValido() && tomadorDaCarteiraDoPrestador();
+      allow update: if isFiscal() && sameTenantUpdate()
+        && nfseRecorrentePayloadValido() && tomadorDaCarteiraDoPrestador();
+      // Encerrar contrato é `ativo: false` (ou `dataFim`), não apagar: o
+      // histórico do que foi faturado precisa continuar explicável.
+      allow delete: if isAdmin() && sameTenantExisting();
     }
 
     // ─── WhatsApp (régua de cobrança) ─────────────────────────────────────────

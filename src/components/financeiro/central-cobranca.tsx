@@ -1,59 +1,41 @@
 'use client'
 
+import { useMemo } from 'react'
 import Link from 'next/link'
-import { formatCurrency, tsToDate } from '@/lib/utils'
+import { formatCurrency } from '@/lib/utils'
 import { topConcentracaoClientes, somaReceitaPendenteProximasHoras } from '@/lib/financeiro-prioridade'
+import { calcularAging, paraItemAging, totalEmAberto, totalVencido } from '@/features/financeiro/aging'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ArrowRight, TrendingDown, Users2, Clock } from 'lucide-react'
 
 type Lancamento = Record<string, unknown>
 
-type AgingBucket = {
-  label: string
-  dias: [number, number] // [min, max] — max = Infinity para aberto
-  variant: 'success' | 'warning' | 'destructive' | 'neutral'
-}
-
-const AGING_BUCKETS: AgingBucket[] = [
-  { label: 'A vencer',   dias: [-Infinity, 0],  variant: 'success' },
-  { label: '1–15 dias',  dias: [1, 15],          variant: 'warning' },
-  { label: '16–30 dias', dias: [16, 30],          variant: 'warning' },
-  { label: '31–60 dias', dias: [31, 60],          variant: 'destructive' },
-  { label: '61+ dias',   dias: [61, Infinity],    variant: 'destructive' },
-]
-
-function calcAging(lancamentos: Lancamento[], agora: Date) {
-  return AGING_BUCKETS.map(bucket => {
-    let total = 0
-    let count = 0
-    for (const l of lancamentos) {
-      if (l.tipo !== 'receita' || l.status !== 'pendente') continue
-      const venc = tsToDate(l.dataVencimento)
-      if (!venc) continue
-      const diasAtraso = Math.floor((agora.getTime() - venc.getTime()) / 86_400_000)
-      const [min, max] = bucket.dias
-      if (diasAtraso >= min && diasAtraso <= max) {
-        total += Number(l.valor) || 0
-        count++
-      }
-    }
-    return { ...bucket, total, count }
-  })
-}
-
 interface CentralCobrancaProps {
+  /** Base inteira do filtro atual, não a página da tabela. */
   lancamentos: Lancamento[]
   agora: Date
 }
 
 export function CentralCobranca({ lancamentos, agora }: CentralCobrancaProps) {
-  const aging = calcAging(lancamentos, agora)
-  const totalEmAtraso = aging.filter(b => b.dias[0] >= 1).reduce((s, b) => s + b.total, 0)
-  const concentracao = topConcentracaoClientes(lancamentos, agora, 5)
-  const { total: proximasCash, qtd: proximasQtd } = somaReceitaPendenteProximasHoras(lancamentos, agora, 168) // 7 dias
+  // Memo porque agora esta lista é a base inteira, não 20 linhas: sem isto o
+  // aging seria recalculado a cada abertura de menu ou modal da página.
+  const aging = useMemo(
+    () => calcularAging(lancamentos.map(paraItemAging), agora),
+    [lancamentos, agora]
+  )
+  const totalEmAtraso = totalVencido(aging)
+  const totalAberto = totalEmAberto(aging)
+  const concentracao = useMemo(
+    () => topConcentracaoClientes(lancamentos, agora, 5),
+    [lancamentos, agora]
+  )
+  const { total: proximasCash, qtd: proximasQtd } = useMemo(
+    () => somaReceitaPendenteProximasHoras(lancamentos, agora, 168), // 7 dias
+    [lancamentos, agora]
+  )
 
-  if (aging.every(b => b.count === 0) && concentracao.length === 0) return null
+  if (aging.every(b => b.quantidade === 0) && concentracao.length === 0) return null
 
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
@@ -78,12 +60,12 @@ export function CentralCobranca({ lancamentos, agora }: CentralCobrancaProps) {
                 {bucket.total > 0 && (
                   <div
                     className={`h-full rounded-full ${bucket.variant === 'destructive' ? 'bg-destructive' : bucket.variant === 'warning' ? 'bg-warning' : 'bg-success'}`}
-                    style={{ width: `${Math.min(100, (bucket.total / Math.max(1, totalEmAtraso + aging[0].total)) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (bucket.total / Math.max(1, totalAberto)) * 100)}%` }}
                   />
                 )}
               </div>
               <div className="flex items-center gap-2 min-w-[140px] justify-end">
-                <Badge variant={bucket.variant} className="text-[10px]">{bucket.count}</Badge>
+                <Badge variant={bucket.variant} className="text-[10px]">{bucket.quantidade}</Badge>
                 <span className="text-xs font-semibold tabular-nums">{formatCurrency(bucket.total)}</span>
               </div>
             </div>

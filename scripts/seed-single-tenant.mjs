@@ -39,11 +39,11 @@ const SERVICOS_BASE = [
 const CONECTORES_BASE = [
   ['jundiai-sp', 'Jundiaí', '3525904', 'abrasf_a1', true],
   ['campinas-sp', 'Campinas', '3509502', 'abrasf_a1', true],
-  ['cajamar-sp', 'Cajamar', '3508900', 'abrasf_a1', true],
+  ['cajamar-sp', 'Cajamar', '3509205', 'abrasf_a1', true],
   ['sao-paulo-sp', 'São Paulo', '3550308', 'proprietario_a1', true],
   ['barueri-sp', 'Barueri', '3505708', 'proprietario_a1', true],
   ['santana-parnaiba-sp', 'Santana de Parnaíba', '3547304', 'simpliss_token', false],
-  ['taboao-serra-sp', 'Taboão da Serra', '3552502', 'portal_token', false],
+  ['taboao-serra-sp', 'Taboão da Serra', '3552809', 'portal_token', false],
   ['cotia-sp', 'Cotia', '3513009', 'portal_credencial', false],
 ]
 

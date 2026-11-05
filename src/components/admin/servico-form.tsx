@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -87,7 +88,7 @@ export function ServicoForm({ servico, onSaved }: ServicoFormProps) {
       reset()
       onSaved?.()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Nao foi possivel salvar o servico. Verifique codigo, valor e permissao de acesso.'))
+      toast.error(getErrorMessage(err, 'Não foi possível salvar o serviço. Verifique código, valor e permissão de acesso.'))
     }
   }
 
@@ -99,9 +100,9 @@ export function ServicoForm({ servico, onSaved }: ServicoFormProps) {
           Editar
         </Button>
       ) : (
-        <Button size="sm" onClick={() => setOpen(true)}>
-          <Plus className="w-4 h-4 mr-1" />
-          Novo Serviço
+        <Button size="cta" onClick={() => setOpen(true)}>
+          <Plus />
+          Novo serviço
         </Button>
       )}
 
@@ -116,8 +117,8 @@ export function ServicoForm({ servico, onSaved }: ServicoFormProps) {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {/* Nome */}
             <div className="space-y-1.5">
-              <Label htmlFor="nome">
-                Nome <span className="text-destructive">*</span>
+              <Label htmlFor="nome" required>
+                Nome
               </Label>
               <Input
                 id="nome"
@@ -131,8 +132,8 @@ export function ServicoForm({ servico, onSaved }: ServicoFormProps) {
 
             {/* Código */}
             <div className="space-y-1.5">
-              <Label htmlFor="codigo">
-                Código interno <span className="text-destructive">*</span>
+              <Label htmlFor="codigo" required>
+                Código interno
               </Label>
               <Input
                 id="codigo"
@@ -183,15 +184,18 @@ export function ServicoForm({ servico, onSaved }: ServicoFormProps) {
 
               <div className="space-y-1.5">
                 <Label htmlFor="valorPadrao">Valor Padrão (R$)</Label>
-                <Input
-                  id="valorPadrao"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0,00"
-                  {...register('valorPadrao', {
-                    setValueAs: (v) => (v === '' || v === null ? null : Number(v)),
-                  })}
+                <Controller
+                  name="valorPadrao"
+                  control={control}
+                  render={({ field }) => (
+                    <CurrencyInput
+                      id="valorPadrao"
+                      ref={field.ref}
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                    />
+                  )}
                 />
                 {errors.valorPadrao && (
                   <p className="text-xs text-destructive">{errors.valorPadrao.message}</p>

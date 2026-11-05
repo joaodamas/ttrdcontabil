@@ -1,6 +1,6 @@
 import { initializeApp, getApps, type FirebaseApp, type FirebaseOptions } from 'firebase/app'
-import { getAuth, type Auth } from 'firebase/auth'
-import { getFirestore, type Firestore } from 'firebase/firestore'
+import { connectAuthEmulator, getAuth, type Auth } from 'firebase/auth'
+import { connectFirestoreEmulator, getFirestore, type Firestore } from 'firebase/firestore'
 import { getStorage, type FirebaseStorage } from 'firebase/storage'
 
 export const firebaseConfig: FirebaseOptions = {
@@ -48,7 +48,20 @@ export function getFirebaseApp(): FirebaseApp {
     )
   }
   appInstance = initializeApp(firebaseConfig)
+  conectarEmuladores(appInstance)
   return appInstance
+}
+
+/**
+ * Só em desenvolvimento, com NEXT_PUBLIC_USE_FIREBASE_EMULATORS=1: aponta Auth e
+ * Firestore para os emuladores locais (dados fictícios, revisão visual, e2e).
+ * Em build de produção a variável não existe e nada muda.
+ */
+function conectarEmuladores(app: FirebaseApp): void {
+  if (process.env.NODE_ENV !== 'development') return
+  if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS !== '1') return
+  connectAuthEmulator(getAuth(app), 'http://127.0.0.1:9099', { disableWarnings: true })
+  connectFirestoreEmulator(getFirestore(app), '127.0.0.1', 8080)
 }
 
 /** Sempre derivado do app atual — evita instâncias órfãs após hot reload. */

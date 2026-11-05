@@ -7,7 +7,7 @@ import { rotearCancelamento, rotearConsulta } from './municipios/router'
 import { decrypt, isEncrypted } from './encrypt'
 import { credentialSecrets } from './secrets'
 import { isProducaoLiberadaPorConfigOuConector } from './conectores'
-import { pfxBase64FromStorageBuffer } from './certificado'
+import { assertCaminhoCertificado, pfxBase64FromStorageBuffer } from './certificado'
 import { assertCanAccessCliente } from '../authz'
 import { requireEnvironmentTenant } from '../tenant'
 import { redactAuditData, writeAuditLog } from '../audit'
@@ -112,9 +112,12 @@ function decryptSenhaCertificado(senhaRaw: string | undefined): string {
 }
 
 async function getCertificado(config: ConfigFiscalCliente): Promise<CertificadoA1 | undefined> {
-  const path = config.credenciais?.certificadoStoragePath
-  if (!path) return undefined
-  const file = getStorage().bucket().file(path as string)
+  const pathPersistido = config.credenciais?.certificadoStoragePath
+  // Nunca baixa pelo campo cru — ver a armadilha em certificado.ts. Cliente sem
+  // certificado continua sendo caminho válido e segue sem A1.
+  if (!pathPersistido) return undefined
+  const path = assertCaminhoCertificado(config.clienteId, pathPersistido)
+  const file = getStorage().bucket().file(path)
   const [exists] = await file.exists()
   if (!exists) return undefined
   const [buffer] = await file.download()
@@ -146,7 +149,12 @@ async function montarContextoFiscal(nota: Record<string, unknown>, operacao: 'co
   return { config, prestador, cert: await getCertificado(config) }
 }
 
-function normalizarRascunho(id: string, data: Record<string, unknown>): EmitirNfseInput {
+/**
+ * Achata um documento de `nfse_rascunhos` no payload de emissão, cobrindo os
+ * dois formatos que a coleção tem (o antigo, com campos soltos em `dados`, e o
+ * novo, com `dados.tomador`/`dados.servico`).
+ */
+export function normalizarRascunho(id: string, data: Record<string, unknown>): EmitirNfseInput {
   const dados = (data.dados ?? {}) as Record<string, unknown>
   const tomadorRaw = dados.tomador as Record<string, unknown> | undefined
   const servicoRaw = dados.servico as Record<string, unknown> | undefined
@@ -237,6 +245,7 @@ async function consultarRpsAntesRetry(
     clienteId: input.clienteId,
     numeroRps: input.numeroRps,
     serieRps: input.serieRps,
+    rascunhoId: input.rascunhoId,
   }, config, prestador, cert)
 
   await registrarEvento(input.rascunhoId ?? input.numeroRps, 'retry_consulta_rps', uid, 'Consulta prévia por RPS executada antes do retry.', {
@@ -286,6 +295,7 @@ export const consultarNfse = onCall(
       codigoVerificacao: data.codigoVerificacao as string | undefined,
       numeroRps: data.numeroRps as string | undefined,
       serieRps: data.serieRps as string | undefined,
+      rascunhoId: data.rascunhoId as string | undefined,
     }, config, prestador, cert)
 
     await registrarEvento(nfseId, 'consulta_status', request.auth.uid, 'Consulta de status executada.', {
@@ -364,6 +374,7 @@ export const cancelarNfse = onCall(
       codigoVerificacao: nota.codigoVerificacao as string | undefined,
       numeroRps: nota.numeroRps as string | undefined,
       serieRps: nota.serieRps as string | undefined,
+      rascunhoId: nota.rascunhoId as string | undefined,
       motivo: motivo.trim(),
     }, config, prestador, cert)
 

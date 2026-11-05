@@ -15,6 +15,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Timestamp } from 'firebase/firestore'
+import { dateFromIsoLocal, isoDateLocal } from '@/lib/form-dates'
 import { toast } from 'sonner'
 import { GripVertical, Users } from 'lucide-react'
 import { cn, tsToDate } from '@/lib/utils'
@@ -36,11 +37,11 @@ const COLS: Array<{ grupo: Grupo; label: string; cor: string; header: string }> 
 ]
 
 function isoToday() {
-  return new Date().toISOString().slice(0, 10)
+  return isoDateLocal()
 }
 function isoTomorrow() {
   const d = new Date(); d.setDate(d.getDate() + 1)
-  return d.toISOString().slice(0, 10)
+  return isoDateLocal(d)
 }
 function targetDateForGrupo(grupo: Grupo): string {
   if (grupo === 'atrasada') return isoToday()
@@ -186,10 +187,10 @@ export function KanbanBoard({ fila, selected, toggle, usuarios, quickAssign, swi
     if (!targetGrupo || targetGrupo === draggedItem.grupo) return
 
     const isoDate = targetDateForGrupo(targetGrupo)
-    const dataPrazo = Timestamp.fromDate(new Date(isoDate + 'T00:00:00'))
+    const dataPrazo = Timestamp.fromDate(dateFromIsoLocal(isoDate))
     try {
       await updateDocument('tarefas', draggedItem.id, { dataPrazo })
-      toast.success(`Prazo ajustado para ${new Date(isoDate + 'T00:00:00').toLocaleDateString('pt-BR')}`)
+      toast.success(`Prazo ajustado para ${dateFromIsoLocal(isoDate).toLocaleDateString('pt-BR')}`)
       await onChanged?.()
     } catch {
       toast.error('Não foi possível mover a tarefa.')

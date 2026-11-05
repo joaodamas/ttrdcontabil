@@ -42,6 +42,16 @@ export type FinanceiroListFilters = FinanceiroBaseFilters & {
   cursorKey?: string
 }
 
+/**
+ * Os agregados usam os mesmos filtros da tabela, menos paginação.
+ * Página e cursor ficam de fora de propósito: agregado que depende de página é
+ * exatamente o defeito que esta separação existe para corrigir.
+ */
+export type FinanceiroAgregadosFilters = FinanceiroBaseFilters & {
+  tipo?: string
+  status?: string
+}
+
 export type FinanceiroSnapshot = {
   allLancamentos: LancamentoRecord[]
   hasMore: boolean
@@ -49,4 +59,17 @@ export type FinanceiroSnapshot = {
   somaAReceber: number
   somaRecebidoMes: number
   somaEmAtraso: number
+}
+
+/**
+ * Base inteira do filtro atual — não a página. Alimenta aging, inadimplentes,
+ * alertas, fila de cobrança e os dois exports.
+ */
+export type FinanceiroAgregados = {
+  lancamentos: LancamentoRecord[]
+  /** Quantos lançamentos o filtro atual tem de verdade. */
+  total: number
+  /** Bateu o teto de leitura: os números abaixo estão incompletos. */
+  truncado: boolean
+  teto: number
 }

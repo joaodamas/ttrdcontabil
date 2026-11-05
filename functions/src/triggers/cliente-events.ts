@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin'
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore'
+import { detectouBaixaDePagamento } from '../whatsapp/decisao'
 
 const db = () => admin.firestore()
 
@@ -117,12 +118,56 @@ export const eventoLancamentoCriado = onDocumentCreated(
   }
 )
 
+/**
+ * Confirmação de pagamento no WhatsApp, disparada pela baixa do lançamento.
+ *
+ * O import de `whatsapp/core` é DINÂMICO de propósito. Aquele módulo carrega o
+ * SDK da Twilio no topo, e este arquivo está em produção: um import estático
+ * faria TODAS as functions do deploy pagarem esse require em cada cold start
+ * por causa de um caminho que só interessa quando alguém dá baixa. O módulo de
+ * decisão (`whatsapp/decisao`) é puro e pode ser importado normalmente.
+ *
+ * A confirmação é utilidade, não obrigação: qualquer falha aqui fica no log e o
+ * registro do evento do lançamento segue. Trocar o essencial pelo acessório
+ * seria deixar de gravar a linha do tempo do cliente por causa de uma mensagem.
+ */
+async function confirmarBaixaNoWhatsapp(
+  lancamentoId: string,
+  before: FirebaseFirestore.DocumentData,
+  after: FirebaseFirestore.DocumentData
+) {
+  const baixou = detectouBaixaDePagamento(
+    { status: before.status as string | undefined, temDataPagamento: Boolean(before.dataPagamento) },
+    { status: after.status as string | undefined, temDataPagamento: Boolean(after.dataPagamento) },
+  )
+  if (!baixou) return
+
+  try {
+    const { queueConfirmacaoPagamento } = await import('../whatsapp/core')
+    const resultado = await queueConfirmacaoPagamento(lancamentoId)
+    if (!resultado.enfileirado) {
+      // Não é erro: o motivo (sem consentimento, canal desligado, baixa
+      // retroativa) é o que o operador precisa ler quando perguntar por que o
+      // cliente não recebeu nada.
+      console.info('[whatsapp][confirmacao-nao-enfileirada]', JSON.stringify({ lancamentoId, motivo: resultado.motivo }))
+    }
+  } catch (error) {
+    console.error('[whatsapp][confirmacao-falhou]', JSON.stringify({ lancamentoId, erro: String((error as Error)?.message ?? error) }))
+  }
+}
+
 export const eventoLancamentoAtualizado = onDocumentUpdated(
   { document: 'lancamentos/{id}', region: 'southamerica-east1' },
   async (event) => {
     const before = event.data?.before?.data()
     const after = event.data?.after?.data()
     if (!before || !after) return
+
+    // Antes do early-return de status: a baixa pode chegar como "dataPagamento
+    // preenchida" num lançamento que já estava marcado como pago, e nesse caso
+    // o status não muda — a confirmação sumiria.
+    await confirmarBaixaNoWhatsapp(event.params.id, before, after)
+
     const statusAntes = before.status as string | undefined
     const statusDepois = after.status as string | undefined
     if (statusAntes === statusDepois) return

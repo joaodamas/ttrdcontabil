@@ -644,8 +644,12 @@ Scripts principais:
 - `npm run test:e2e`;
 - `npm run smoke:prod`;
 - `npm run backfill:tenant`;
-- `npm run seed:connectors`;
-- `npm run reset:clientes`.
+- `npm run seed:connectors`.
+
+> `reset:clientes` foi removido em 31/07/2026. O script apagava a base inteira de
+> clientes e a recriava a partir de 46 razões sociais e CNPJs reais escritos
+> dentro do próprio arquivo, com `PROJECT_ID` apontando para produção por padrão.
+> Estava a um `--write` de destruir os 119 clientes do escritório.
 
 Testes existentes:
 

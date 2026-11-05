@@ -9,7 +9,7 @@ import { rotearEmissao } from './municipios/router'
 import { encrypt, decrypt, isEncrypted } from './encrypt'
 import { credentialSecrets } from './secrets'
 import { isProducaoLiberadaPorConfigOuConector } from './conectores'
-import { pfxBase64FromStorageBuffer } from './certificado'
+import { assertCaminhoCertificado, pfxBase64FromStorageBuffer } from './certificado'
 import { assertCanAccessCliente } from '../authz'
 import { validarPayloadFiscal } from './validacao'
 import { writeAuditLog, SYSTEM_ACTOR, type AuditActor } from '../audit'
@@ -105,10 +105,14 @@ function decryptSenhaCertificado(senhaRaw: string | undefined): string {
 }
 
 async function getCertificado(clienteId: string, config: ConfigFiscalCliente): Promise<CertificadoA1 | undefined> {
-  const path = config.credenciais?.certificadoStoragePath
-  if (!path) return undefined
+  const pathPersistido = config.credenciais?.certificadoStoragePath
+  // Sem certificado é caminho legítimo (município autenticado por token) — segue sem A1. Mas se HÁ caminho, ele não pode ser usado cru:
+  // assertCaminhoCertificado confere contra o derivado de clienteId e devolve o
+  // derivado. Ver a armadilha documentada em certificado.ts.
+  if (!pathPersistido) return undefined
+  const path = assertCaminhoCertificado(clienteId, pathPersistido)
   const bucket = getStorage().bucket()
-  const file   = bucket.file(path as string)
+  const file   = bucket.file(path)
   const [exists] = await file.exists()
   if (!exists) return undefined
   const [buffer] = await file.download()
@@ -142,7 +146,12 @@ function resumoTentativaNfse(input: EmitirNfseInput, config: ConfigFiscalCliente
   }
 }
 
-export async function processarEmissao(input: EmitirNfseInput, uid: string) {
+/** Campos extras gravados em nfse_emitidas (ex.: marcação de lote). */
+export interface OpcoesEmissao {
+  extrasNotaEmitida?: Record<string, unknown>
+}
+
+export async function processarEmissao(input: EmitirNfseInput, uid: string, opcoes: OpcoesEmissao = {}) {
   const actor: AuditActor = { id: uid, nome: 'Usuário autenticado' }
 
   // ─── RPS: aloca (ou reusa) e PERSISTE antes de enviar à prefeitura ───────────
@@ -197,6 +206,54 @@ export async function processarEmissao(input: EmitirNfseInput, uid: string) {
   // se, por algum motivo, nada tiver sido alocado acima).
   input = { ...input, numeroRps, serieRps }
 
+  try {
+    return await enviarEmissao(input, uid, actor, numeroRps, serieRps, opcoes)
+  } catch (err) {
+    // Falha ANTES de a prefeitura responder (config ausente, payload inválido,
+    // certificado, exceção do conector): sem isto o rascunho ficava preso em
+    // 'processando' até o alerta diário. O RPS alocado continua gravado no
+    // rascunho, então o retry reusa o mesmo número.
+    // Só destrava se ainda estiver em 'processando': se a nota chegou a ser
+    // gravada (rascunho já 'emitida'), uma falha depois disso não pode fazê-lo
+    // voltar para a fila de retry — reemitir com o mesmo RPS duplica a nota.
+    if (input.rascunhoId) {
+      const msg = err instanceof Error ? err.message : String(err)
+      const rascunhoRef = db().collection('nfse_rascunhos').doc(input.rascunhoId)
+      await db().runTransaction(async (tx) => {
+        const atual = await tx.get(rascunhoRef)
+        if (atual.data()?.status !== 'processando') return
+        tx.update(rascunhoRef, {
+          status: 'erro_integracao',
+          erroUltimaTentativa: msg,
+          codigoErroUltimaTentativa: err instanceof HttpsError ? err.code : null,
+          ultimaTentativaEm: Timestamp.now(),
+          atualizadoEm: Timestamp.now(),
+          atualizadoPorId: uid,
+        })
+      }).catch((updateErr) => {
+        console.error('[processarEmissao] Falha ao destravar rascunho:', updateErr)
+      })
+    }
+    throw err
+  }
+}
+
+// Depois que a prefeitura respondeu, a auditoria não pode derrubar a emissão:
+// lançar aqui faria a nota emitida parecer falha e reentrar no retry.
+async function auditarSemFalhar(params: Parameters<typeof writeAuditLog>[0]) {
+  await writeAuditLog(params).catch((err) => {
+    console.error('[processarEmissao] Falha ao gravar auditoria:', err)
+  })
+}
+
+async function enviarEmissao(
+  input: EmitirNfseInput,
+  uid: string,
+  actor: AuditActor,
+  numeroRps: string | undefined,
+  serieRps: string | undefined,
+  opcoes: OpcoesEmissao,
+) {
   const [config, cliente] = await Promise.all([
     getConfigFiscal(input.clienteId),
     getCliente(input.clienteId),
@@ -259,6 +316,7 @@ export async function processarEmissao(input: EmitirNfseInput, uid: string) {
       origemEmissao:     uid === SYSTEM_ACTOR.id ? 'automatica' : 'manual',
       ambienteEmissao:   config.ambienteEmissao,
       valorDeducoes:     input.servico.valorDeducoes ?? 0,
+      ...(opcoes.extrasNotaEmitida ?? {}),
     })
 
     if (input.rascunhoId) {
@@ -273,7 +331,7 @@ export async function processarEmissao(input: EmitirNfseInput, uid: string) {
         atualizadoPorId: uid,
       })
     }
-    await writeAuditLog({
+    await auditarSemFalhar({
       tenantId,
       actor,
       entidade: 'nfse_emitidas',
@@ -320,7 +378,7 @@ export async function processarEmissao(input: EmitirNfseInput, uid: string) {
         'dados.serieRps': serieRps ?? null,
       })
     }
-    await writeAuditLog({
+    await auditarSemFalhar({
       tenantId,
       actor,
       entidade: 'nfse_erros',

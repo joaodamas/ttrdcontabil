@@ -26,7 +26,11 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="min-h-full font-sans" style={brandVars}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        {/* Claro por padrão, e não 'system': seguir o tema do SO fazia o app
+            abrir escuro para quem tem o Windows no escuro, sem nunca ter
+            pedido isso. Quem quiser escuro liga no rodapé da sidebar, e a
+            escolha persiste. */}
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <TooltipProvider>
             {children}
           </TooltipProvider>

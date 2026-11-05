@@ -7,8 +7,10 @@ import { Timestamp } from 'firebase/firestore'
 
 import { formatDate , tsToDate } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error-message'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
+import { IrStatusBadge } from '@/components/ui/status-badge'
+import { getStatusLabel } from '@/lib/status-semantics'
+import { buttonVariants } from '@/components/ui/button'
 import { Plus, FileText } from 'lucide-react'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
@@ -16,14 +18,6 @@ import { FilterBtn } from '@/components/ui/filter-btn'
 import { irFiltroSchema } from '@/features/ir/schemas'
 import type { IrDeclaracaoRecord, IrFilters } from '@/features/ir/types'
 import { useIrList } from '@/features/ir/hooks'
-
-const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  pendente: { label: 'Pendente', variant: 'outline' },
-  em_andamento: { label: 'Em andamento', variant: 'secondary' },
-  entregue: { label: 'Entregue', variant: 'default' },
-  retificado: { label: 'Retificado', variant: 'secondary' },
-  cancelado: { label: 'Cancelado', variant: 'destructive' },
-}
 
 function IrContent() {
   const searchParams = useSearchParams()
@@ -50,20 +44,16 @@ function IrContent() {
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
-        <div>
-          <h2 className="text-lg font-semibold">Declarações de IR</h2>
-          <p className="text-sm text-muted-foreground">
-            {isError ? `Ano-base ${anoBase}` : <>{total} declaraç{total !== 1 ? 'ões' : 'ão'} — Ano-base {anoBase}</>}
-          </p>
-        </div>
-        <Link href="/ir/nova">
-          <Button size="sm" className="h-10 rounded-xl">
-            <Plus className="w-4 h-4 mr-1" />
-            Nova Declaração
-          </Button>
-        </Link>
-      </div>
+      <PageHeader
+        title="Imposto de Renda"
+        description={isError ? `Ano-base ${anoBase}` : <>{total} declaraç{total !== 1 ? 'ões' : 'ão'} — Ano-base {anoBase}</>}
+        action={
+          <Link href="/ir/nova" className={buttonVariants({ size: 'cta' })}>
+            <Plus />
+            Nova declaração
+          </Link>
+        }
+      />
 
       <div className="surface-subtle flex flex-wrap items-center gap-3 border px-3 py-2.5">
         <div className="flex items-center gap-1">
@@ -76,7 +66,7 @@ function IrContent() {
         <div className="flex items-center gap-1">
           {(['', 'pendente', 'em_andamento', 'entregue', 'retificado', 'cancelado'] as const).map((s) => (
             <FilterBtn key={s} href={buildUrl({ status: s, page: 1 })} active={status === s}>
-              {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+              {s === '' ? 'Todos' : getStatusLabel('ir', s)}
             </FilterBtn>
           ))}
         </div>
@@ -114,10 +104,6 @@ function IrContent() {
               />
             ) : (
               declaracoes.map((d: IrDeclaracaoRecord) => {
-                const s = STATUS_MAP[d.status as string] ?? {
-                  label: d.status as string,
-                  variant: 'outline' as const,
-                }
                 const dataEntrega = d.dataEntrega as Timestamp | undefined
                 return (
                   <tr key={d.id as string} className="transition-colors hover:bg-muted/35">
@@ -131,7 +117,7 @@ function IrContent() {
                     </td>
                     <td className="px-4 py-3">{d.anoBase as number}</td>
                     <td className="px-4 py-3">
-                      <Badge variant={s.variant}>{s.label}</Badge>
+                      <IrStatusBadge status={d.status as string} />
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {(d.responsavelNome as string) ?? '—'}
@@ -154,17 +140,13 @@ function IrContent() {
           </p>
           <div className="flex gap-2">
             {page > 1 ? (
-              <Link href={buildUrl({ page: page - 1 })}>
-                <Button variant="outline" size="sm" className="h-9 rounded-xl">
-                  Anterior
-                </Button>
+              <Link href={buildUrl({ page: page - 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
+                Anterior
               </Link>
             ) : null}
             {page < totalPages ? (
-              <Link href={buildUrl({ page: page + 1 })}>
-                <Button variant="outline" size="sm" className="h-9 rounded-xl">
-                  Próxima
-                </Button>
+              <Link href={buildUrl({ page: page + 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
+                Próxima
               </Link>
             ) : null}
           </div>

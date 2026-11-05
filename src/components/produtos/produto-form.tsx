@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -45,6 +46,8 @@ const produtoSchema = z.object({
   pisAliquota: z.number().min(0).max(100).optional().nullable(),
   cofinsCst:   z.string().optional().nullable(),
   cofinsAliquota: z.number().min(0).max(100).optional().nullable(),
+  ibsCbsCst:   z.string().optional().nullable(),
+  cClassTrib:  z.string().optional().nullable(),
   ativo:       z.boolean().default(true),
 })
 
@@ -88,6 +91,8 @@ export function ProdutoForm({ clienteId, produto, onSaved }: ProdutoFormProps) {
           pisAliquota:   produto.pisAliquota != null ? Number(produto.pisAliquota) : undefined,
           cofinsCst:     (produto.cofinsCst as string) ?? '',
           cofinsAliquota: produto.cofinsAliquota != null ? Number(produto.cofinsAliquota) : undefined,
+          ibsCbsCst:     (produto.ibsCbsCst as string) ?? '',
+          cClassTrib:    (produto.cClassTrib as string) ?? '',
           ativo:         produto.ativo !== false,
         }
       : { unidade: 'UN', origem: '0', ativo: true },
@@ -122,9 +127,9 @@ export function ProdutoForm({ clienteId, produto, onSaved }: ProdutoFormProps) {
           Editar
         </Button>
       ) : (
-        <Button size="sm" onClick={() => setOpen(true)}>
-          <Plus className="w-4 h-4 mr-1" />
-          Novo Produto
+        <Button size="cta" onClick={() => setOpen(true)}>
+          <Plus />
+          Novo produto
         </Button>
       )}
 
@@ -132,7 +137,7 @@ export function ProdutoForm({ clienteId, produto, onSaved }: ProdutoFormProps) {
         open={open}
         onOpenChange={setOpen}
         title={isEditing ? 'Editar Produto' : 'Novo Produto'}
-        description="Ficha fiscal do produto para NF-e/NFC-e. Preencha conforme o regime da empresa emissora — a Spedy transmite o que for informado aqui."
+        description="Ficha fiscal do produto para NF-e/NFC-e. Preencha conforme o regime da empresa emissora — a plataforma ainda não emite NF-e; a ficha fica pronta para quando emitir."
         icon={<Package className="size-4" />}
         size="md"
       >
@@ -142,24 +147,24 @@ export function ProdutoForm({ clienteId, produto, onSaved }: ProdutoFormProps) {
             <p className="section-label">Identificação</p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="codigo">Código <span className="text-destructive">*</span></Label>
+                <Label htmlFor="codigo" required>Código</Label>
                 <Input id="codigo" {...register('codigo')} placeholder="Ex: P001" className="font-mono" />
                 {errors.codigo && <p className="text-xs text-destructive">{errors.codigo.message}</p>}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="unidade">Unidade <span className="text-destructive">*</span></Label>
+                <Label htmlFor="unidade" required>Unidade</Label>
                 <Input id="unidade" {...register('unidade')} placeholder="UN" className="uppercase" />
                 {errors.unidade && <p className="text-xs text-destructive">{errors.unidade.message}</p>}
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="descricao">Descrição <span className="text-destructive">*</span></Label>
+              <Label htmlFor="descricao" required>Descrição</Label>
               <Input id="descricao" {...register('descricao')} placeholder="Descrição do produto" />
               {errors.descricao && <p className="text-xs text-destructive">{errors.descricao.message}</p>}
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="ncm">NCM <span className="text-destructive">*</span></Label>
+                <Label htmlFor="ncm" required>NCM</Label>
                 <Input id="ncm" {...register('ncm')} placeholder="00000000" className="font-mono" />
                 {errors.ncm && <p className="text-xs text-destructive">{errors.ncm.message}</p>}
               </div>
@@ -189,8 +194,9 @@ export function ProdutoForm({ clienteId, produto, onSaved }: ProdutoFormProps) {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="valorUnitario">Valor unitário padrão (R$)</Label>
-              <Input id="valorUnitario" type="number" step="0.01" min="0" placeholder="0,00"
-                {...register('valorUnitario', { setValueAs: asNum })} />
+              <Controller name="valorUnitario" control={control} render={({ field }) => (
+                <CurrencyInput id="valorUnitario" ref={field.ref} value={field.value} onChange={field.onChange} onBlur={field.onBlur} />
+              )} />
             </div>
           </div>
 
@@ -262,6 +268,26 @@ export function ProdutoForm({ clienteId, produto, onSaved }: ProdutoFormProps) {
                   <Input id="cofinsAliquota" type="number" step="0.0001" min="0" placeholder="7,6"
                     {...register('cofinsAliquota', { setValueAs: asNum })} className="font-mono" />
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Reforma Tributária ── */}
+          <div className="space-y-3 border-t pt-4">
+            <div>
+              <p className="section-label">Reforma Tributária (IBS/CBS)</p>
+              <p className="text-[11px] text-amber-600 mt-1">
+                ⚠ Ainda não é transmitido — a plataforma não emite NF-e hoje. Preencha pra deixar pronto.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="ibsCbsCst">CST da Reforma</Label>
+                <Input id="ibsCbsCst" {...register('ibsCbsCst')} placeholder="Ex: 000" className="font-mono" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cClassTrib">Classificação Tributária (cClassTrib)</Label>
+                <Input id="cClassTrib" {...register('cClassTrib')} placeholder="Ex: 000001" className="font-mono" />
               </div>
             </div>
           </div>

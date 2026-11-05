@@ -61,6 +61,15 @@ async function seedBaseData() {
       tenantId: 'tenant-a',
       telas: ['hoje', 'clientes', 'tarefas', 'competencias', 'fechamento', 'fiscal'],
     })
+    // [P0-B] Override concedendo a tela 'admin' a um perfil que não é admin —
+    // usado para provar que canReadProdutividade() acompanha a UI (o link de
+    // Produtividade aparece por telaKey 'admin', não por perfil).
+    await setDoc(doc(db, 'usuarios/operacional-telas-admin'), {
+      perfil: 'operacional',
+      ativo: true,
+      tenantId: 'tenant-a',
+      telas: ['hoje', 'clientes', 'tarefas', 'admin'],
+    })
     await setDoc(doc(db, 'clientes/cliente-a'), {
       tenantId: 'tenant-a',
       status: 'ativo',
@@ -129,10 +138,20 @@ async function seedBaseData() {
       clienteId: 'cliente-a',
       item: 'documentos_pendentes',
     })
+    // [P0-A] cf-seed já provisionado na Spedy: spedyCompanyId + credenciais
+    // (chave de API, caminho e senha do certificado A1) existem no doc para que
+    // os testes de diff() consigam distinguir "não mexeu" de "tentou sobrescrever".
     await setDoc(doc(db, 'clientes_fiscal/cf-seed'), {
       tenantId: 'tenant-a',
       clienteId: 'cliente-a',
       regime: 'simples_nacional',
+      provedorNfse: 'spedy',
+      spedyCompanyId: 'empresa-legitima-do-cliente',
+      credenciais: {
+        spedyApiKey: 'cifrado:chave-do-cliente',
+        certificadoStoragePath: 'certificados/cliente-a.pfx.enc',
+        certificadoSenha: 'cifrado:senha-do-a1',
+      },
     })
     await setDoc(doc(db, 'clientes_fiscal_integracao/cfi-seed'), {
       tenantId: 'tenant-a',
@@ -206,7 +225,103 @@ async function seedBaseData() {
       status: 'cancelada',
       responsavelId: 'operacional-a',
     })
+    // [P0-B] Coleções do Cliente 360 e do timer que rodavam sem regra nenhuma.
+    await setDoc(doc(db, 'clientes_pop/pop-seed'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      fiscal: 'Enviar guias até o dia 15',
+      financeiro: '',
+      operacional: '',
+      geral: '',
+    })
+    await setDoc(doc(db, 'clientes_pop_notas/nota-seed'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      texto: 'Cliente pediu retorno por e-mail',
+      autorId: 'operacional-a',
+    })
+    await setDoc(doc(db, 'clientes_comentarios/coment-seed'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      texto: 'Documentacao de janeiro recebida',
+      autorId: 'operacional-a',
+    })
+    await setDoc(doc(db, 'clientes_comentarios/coment-seed-b'), {
+      tenantId: 'tenant-b',
+      clienteId: 'cliente-b',
+      texto: 'Comentario de outro tenant',
+      autorId: 'operacional-b',
+    })
+    await setDoc(doc(db, 'tarefas_timers/timer-seed'), {
+      tenantId: 'tenant-a',
+      tarefaId: 'tarefa-pendente',
+      tarefaTitulo: 'Tarefa pendente',
+      usuarioId: 'operacional-a',
+      usuarioNome: 'Operacional A',
+      duracaoMs: 60000,
+    })
+    // [PRESTADOR→TOMADOR] Carteira de tomadores e contratos de faturamento.
+    // cliente-a2 existe só para provar que a carteira é POR PRESTADOR: o tomador
+    // dele não pode ser faturado por um contrato de cliente-a, mesmo os dois
+    // vivendo no mesmo tenant.
+    await setDoc(doc(db, 'clientes/cliente-a2'), {
+      tenantId: 'tenant-a',
+      status: 'ativo',
+      razaoSocial: 'Cliente A2 Ltda',
+    })
+    await setDoc(doc(db, 'tomadores/tomador-seed'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      cpfCnpj: '12345678000190',
+      razaoSocial: 'Tomador do Cliente A',
+      ativo: true,
+    })
+    await setDoc(doc(db, 'tomadores/tomador-de-outro-prestador'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a2',
+      cpfCnpj: '98765432000199',
+      razaoSocial: 'Tomador do Cliente A2',
+      ativo: true,
+    })
+    await setDoc(doc(db, 'tomadores/tomador-seed-b'), {
+      tenantId: 'tenant-b',
+      clienteId: 'cliente-b',
+      cpfCnpj: '11222333000181',
+      razaoSocial: 'Tomador do Cliente B',
+      ativo: true,
+    })
+    await setDoc(doc(db, 'nfse_recorrentes/recorrente-seed'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      tomadorId: 'tomador-seed',
+      tomadorNome: 'Tomador do Cliente A',
+      tomadorCpfCnpj: '12345678000190',
+      descricao: 'Consultoria mensal',
+      valor: 1500,
+      diaEmissao: 10,
+      issRetido: false,
+      ativo: true,
+    })
   })
+}
+
+// Contrato mínimo aceito por nfseRecorrentePayloadValido() — os testes de
+// payload partem daqui e estragam UM campo por vez, para que a falha aponte o
+// campo e não "algo no payload".
+function contratoValido(overrides: Record<string, unknown> = {}) {
+  return {
+    tenantId: 'tenant-a',
+    clienteId: 'cliente-a',
+    tomadorId: 'tomador-seed',
+    tomadorNome: 'Tomador do Cliente A',
+    tomadorCpfCnpj: '12345678000190',
+    descricao: 'Consultoria mensal',
+    valor: 1500,
+    diaEmissao: 10,
+    issRetido: false,
+    ativo: true,
+    ...overrides,
+  }
 }
 
 function dbAs(uid: string) {
@@ -540,6 +655,23 @@ describeIfEmulator('firestore.rules', () => {
     await assertSucceeds(updateDoc(doc(dbAs('admin-a'), 'tarefas/tarefa-pendente'), { status: 'concluida' }))
   })
 
+  it('tarefas: fiscal (que tem a tela por padrao) cria e conclui tarefa; leitura nao', async () => {
+    await assertSucceeds(updateDoc(doc(dbAs('fiscal-a'), 'tarefas/tarefa-pendente'), { status: 'em_andamento' }))
+    await assertSucceeds(setDoc(doc(dbAs('fiscal-a'), 'tarefas/tarefa-do-fiscal'), {
+      tenantId: 'tenant-a',
+      titulo: 'Apurar ISS',
+      prioridade: 'normal',
+      status: 'pendente',
+    }))
+    await assertFails(updateDoc(doc(dbAs('leitura-a'), 'tarefas/tarefa-pendente'), { status: 'concluida' }))
+    // Excluir segue restrito a operacional/admin.
+    await assertFails(deleteDoc(doc(dbAs('fiscal-a'), 'tarefas/tarefa-pendente')))
+  })
+
+  it('fechamentos: fiscal edita celula do mes aberto', async () => {
+    await assertSucceeds(updateDoc(doc(dbAs('fiscal-a'), 'fechamentos/fechamento-seed'), { observacao: 'conferido' }))
+  })
+
   it('tarefas: reabrir concluida bloqueada para quem nao e admin nem responsavel', async () => {
     // operacional-telas-financeiro é perfil 'operacional' (isOperacional() == true)
     // mas não é admin nem o responsável ('operacional-a') pela tarefa.
@@ -557,5 +689,379 @@ describeIfEmulator('firestore.rules', () => {
 
   it('tarefas: nunca permite ir de cancelada direto para concluida', async () => {
     await assertFails(updateDoc(doc(dbAs('admin-a'), 'tarefas/tarefa-cancelada'), { status: 'concluida' }))
+  })
+
+  // ─── P0-A: exfiltração do certificado A1 via clientes_fiscal ────────────────
+  // A cadeia de ataque: gravar spedyCompanyId apontando para uma empresa do
+  // atacante + a apiKey dele em credenciais, e chamar enviarCertificadoSpedy —
+  // o .pfx da vítima e a senha saem para a conta Spedy do atacante.
+
+  it('clientes_fiscal: fiscal salva a config declarativa normalmente', async () => {
+    await assertSucceeds(updateDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed'), {
+      aliquotaPadrao: 5,
+      provedorNfse: 'spedy',
+      inscricaoMunicipal: '123456',
+    }))
+  })
+
+  it('clientes_fiscal: nem fiscal nem admin gravam spedyCompanyId pelo navegador', async () => {
+    await assertFails(updateDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed'), {
+      spedyCompanyId: 'empresa-do-atacante',
+    }))
+    await assertFails(updateDoc(doc(dbAs('admin-a'), 'clientes_fiscal/cf-seed'), {
+      spedyCompanyId: 'empresa-do-atacante',
+    }))
+  })
+
+  it('clientes_fiscal: credenciais (chave Spedy, caminho e senha do A1) sao intocaveis pelo cliente', async () => {
+    await assertFails(updateDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed'), {
+      credenciais: {
+        spedyApiKey: 'chave-do-atacante',
+        certificadoStoragePath: 'certificados/vitima.pfx.enc',
+        certificadoSenha: '1234',
+      },
+    }))
+    // Update por caminho aninhado: o diff() compara o valor do mapa inteiro, então
+    // 'credenciais' entra em affectedKeys mesmo mexendo em uma única subchave.
+    await assertFails(updateDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed'), {
+      'credenciais.spedyApiKey': 'chave-do-atacante',
+    }))
+    await assertFails(updateDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed'), {
+      'credenciais.certificadoStoragePath': 'certificados/outro-cliente.pfx.enc',
+    }))
+    await assertFails(updateDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed'), {
+      spedyCertificadoEnviadoEm: new Date(),
+    }))
+  })
+
+  it('clientes_fiscal: trava de producao (producaoLiberada) nao e liberada pelo navegador', async () => {
+    await assertFails(updateDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed'), {
+      producaoLiberada: true,
+    }))
+    await assertFails(updateDoc(doc(dbAs('admin-a'), 'clientes_fiscal/cf-seed'), {
+      producaoLiberada: true,
+    }))
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-forjado-prod'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      ambienteEmissao: 'producao',
+      producaoLiberada: true,
+    }))
+  })
+
+  it('clientes_fiscal: create tambem nao aceita spedyCompanyId nem credenciais', async () => {
+    // Sem esta trava bastava criar um SEGUNDO doc para o mesmo clienteId — as
+    // functions buscam a config por where('clienteId','==',...).limit(1).
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-forjado'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      spedyCompanyId: 'empresa-do-atacante',
+    }))
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-forjado-cred'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      credenciais: { spedyApiKey: 'chave-do-atacante' },
+    }))
+    await assertSucceeds(setDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-novo'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      municipioIbge: '3525904',
+      provedorNfse: 'spedy',
+    }))
+  })
+
+  // ─── P0-B: as quatro colecoes que rodavam sem regra (negadas por padrao) ────
+
+  it('clientes_pop: le quem ve o cliente; escreve operacional/fiscal/financeiro, nunca leitura', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('leitura-a'), 'clientes_pop/pop-seed')))
+    await assertSucceeds(updateDoc(doc(dbAs('operacional-a'), 'clientes_pop/pop-seed'), { operacional: 'texto' }))
+    // 'fiscal' precisa escrever: o POP tem uma secao Fiscal que so ele preenche.
+    await assertSucceeds(updateDoc(doc(dbAs('fiscal-a'), 'clientes_pop/pop-seed'), { fiscal: 'texto fiscal' }))
+    await assertSucceeds(updateDoc(doc(dbAs('financeiro-a'), 'clientes_pop/pop-seed'), { financeiro: 'texto fin' }))
+    await assertFails(updateDoc(doc(dbAs('leitura-a'), 'clientes_pop/pop-seed'), { geral: 'nao pode' }))
+  })
+
+  it('clientes_pop: cria no proprio tenant e nunca em outro', async () => {
+    await assertSucceeds(setDoc(doc(dbAs('fiscal-a'), 'clientes_pop/pop-novo'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      fiscal: 'novo POP',
+    }))
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'clientes_pop/pop-cross'), {
+      tenantId: 'tenant-b',
+      clienteId: 'cliente-b',
+      fiscal: 'POP de outro tenant',
+    }))
+  })
+
+  it('clientes_comentarios: cria quem colabora, historico so admin edita/apaga', async () => {
+    await assertSucceeds(setDoc(doc(dbAs('fiscal-a'), 'clientes_comentarios/coment-novo'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      texto: 'Comentario novo',
+      autorId: 'fiscal-a',
+    }))
+    await assertFails(setDoc(doc(dbAs('leitura-a'), 'clientes_comentarios/coment-leitura'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      texto: 'Nao deveria entrar',
+      autorId: 'leitura-a',
+    }))
+    await assertFails(updateDoc(doc(dbAs('operacional-a'), 'clientes_comentarios/coment-seed'), { texto: 'adulterado' }))
+    await assertFails(deleteDoc(doc(dbAs('operacional-a'), 'clientes_comentarios/coment-seed')))
+    await assertSucceeds(updateDoc(doc(dbAs('admin-a'), 'clientes_comentarios/coment-seed'), { texto: 'corrigido' }))
+  })
+
+  it('clientes_comentarios: get isolado por tenant, list funciona sem filtro de tenantId', async () => {
+    await assertFails(getDoc(doc(dbAs('operacional-a'), 'clientes_comentarios/coment-seed-b')))
+    // O client atual (listDocuments) nao injeta where('tenantId') nesta colecao —
+    // a regra de `list` precisa funcionar com a query como ela e hoje.
+    await assertSucceeds(getDocs(collection(dbAs('operacional-a'), 'clientes_comentarios')))
+    await assertFails(getDocs(collection(testEnv.unauthenticatedContext().firestore(), 'clientes_comentarios')))
+  })
+
+  it('clientes_pop_notas: append-only — cria quem colabora, edicao/exclusao so admin', async () => {
+    await assertSucceeds(setDoc(doc(dbAs('financeiro-a'), 'clientes_pop_notas/nota-nova'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      texto: 'Nota interna',
+      autorId: 'financeiro-a',
+    }))
+    await assertFails(setDoc(doc(dbAs('leitura-a'), 'clientes_pop_notas/nota-leitura'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      texto: 'Nao deveria entrar',
+      autorId: 'leitura-a',
+    }))
+    await assertFails(updateDoc(doc(dbAs('fiscal-a'), 'clientes_pop_notas/nota-seed'), { texto: 'adulterada' }))
+    await assertFails(deleteDoc(doc(dbAs('fiscal-a'), 'clientes_pop_notas/nota-seed')))
+  })
+
+  it('tarefas_timers: leitura segue a tela admin (perfil admin ou override de telas)', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('admin-a'), 'tarefas_timers/timer-seed')))
+    await assertSucceeds(getDoc(doc(dbAs('operacional-telas-admin'), 'tarefas_timers/timer-seed')))
+    await assertFails(getDoc(doc(dbAs('operacional-a'), 'tarefas_timers/timer-seed')))
+    await assertFails(getDoc(doc(dbAs('leitura-a'), 'tarefas_timers/timer-seed')))
+  })
+
+  it('tarefas_timers: a query do relatorio de produtividade passa sem filtro de tenantId', async () => {
+    // tarefas_timers nao esta em TENANT_SCOPED_COLLECTIONS: a tela Produtividade
+    // consulta a colecao sem where('tenantId'). Exigir tenant no `list` mataria
+    // o relatorio inteiro — este teste tranca esse contrato.
+    await assertSucceeds(getDocs(collection(dbAs('admin-a'), 'tarefas_timers')))
+    await assertFails(getDocs(collection(dbAs('operacional-a'), 'tarefas_timers')))
+  })
+
+  it('tarefas_timers: usuario ativo cronometra so em nome de si mesmo', async () => {
+    await assertSucceeds(setDoc(doc(dbAs('leitura-a'), 'tarefas_timers/timer-proprio'), {
+      tenantId: 'tenant-a',
+      tarefaId: 'tarefa-pendente',
+      usuarioId: 'leitura-a',
+      duracaoMs: 1000,
+    }))
+    await assertFails(setDoc(doc(dbAs('leitura-a'), 'tarefas_timers/timer-forjado'), {
+      tenantId: 'tenant-a',
+      tarefaId: 'tarefa-pendente',
+      usuarioId: 'operacional-a',
+      duracaoMs: 999999,
+    }))
+    await assertFails(setDoc(doc(dbAs('operacional-a'), 'tarefas_timers/timer-cross'), {
+      tenantId: 'tenant-b',
+      tarefaId: 'tarefa-pendente',
+      usuarioId: 'operacional-a',
+      duracaoMs: 1000,
+    }))
+  })
+
+  it('tarefas_timers: sessao gravada nunca e editada; delete so admin', async () => {
+    await assertFails(updateDoc(doc(dbAs('admin-a'), 'tarefas_timers/timer-seed'), { duracaoMs: 999999 }))
+    await assertFails(deleteDoc(doc(dbAs('operacional-a'), 'tarefas_timers/timer-seed')))
+    await assertSucceeds(deleteDoc(doc(dbAs('admin-a'), 'tarefas_timers/timer-seed')))
+  })
+
+  // ─── tomadores: a carteira de quem RECEBE a nota de cada cliente ───────────
+  // Coleção nova do modelo prestador→tomador. Mesmo gate de leitura das demais
+  // nfse_* (canReadNfse), escrita pelo perfil fiscal — não há credencial aqui,
+  // ao contrário de clientes_fiscal.
+
+  it('tomadores: leitura restrita a admin/fiscal/financeiro', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('admin-a'), 'tomadores/tomador-seed')))
+    await assertSucceeds(getDoc(doc(dbAs('fiscal-a'), 'tomadores/tomador-seed')))
+    // Financeiro concilia a cobrança com a nota emitida, onde o tomador já
+    // aparece denormalizado — esconder a carteira dele não protegeria nada.
+    await assertSucceeds(getDoc(doc(dbAs('financeiro-a'), 'tomadores/tomador-seed')))
+    await assertFails(getDoc(doc(dbAs('operacional-a'), 'tomadores/tomador-seed')))
+    await assertFails(getDoc(doc(dbAs('leitura-a'), 'tomadores/tomador-seed')))
+    // Override de tela acompanha a UI, igual nas outras coleções fiscais.
+    await assertSucceeds(getDoc(doc(dbAs('operacional-telas-fiscal'), 'tomadores/tomador-seed')))
+  })
+
+  it('tomadores: leitura isolada por tenant', async () => {
+    await assertFails(getDoc(doc(dbAs('fiscal-a'), 'tomadores/tomador-seed-b')))
+    await assertFails(getDoc(doc(dbAs('operacional-b'), 'tomadores/tomador-seed')))
+  })
+
+  it('tomadores: fiscal cadastra no proprio tenant; outros perfis nao escrevem', async () => {
+    await assertSucceeds(setDoc(doc(dbAs('fiscal-a'), 'tomadores/tomador-novo'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      cpfCnpj: '11122233344',
+      razaoSocial: 'Tomador Pessoa Fisica',
+      ativo: true,
+    }))
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'tomadores/tomador-cross'), {
+      tenantId: 'tenant-b',
+      clienteId: 'cliente-b',
+      cpfCnpj: '12345678000190',
+      razaoSocial: 'Tomador de outro tenant',
+      ativo: true,
+    }))
+    await assertFails(setDoc(doc(dbAs('financeiro-a'), 'tomadores/tomador-financeiro'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      cpfCnpj: '12345678000190',
+      razaoSocial: 'Financeiro nao cadastra tomador',
+      ativo: true,
+    }))
+    await assertFails(setDoc(doc(dbAs('operacional-a'), 'tomadores/tomador-operacional'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      cpfCnpj: '12345678000190',
+      razaoSocial: 'Operacional nao cadastra tomador',
+      ativo: true,
+    }))
+  })
+
+  it('tomadores: payload sem clienteId, sem razaoSocial ou sem ativo e recusado', async () => {
+    // Sem clienteId a carteira vira global — o contrato recorrente passaria a
+    // faturar tomador de outro prestador.
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'tomadores/sem-cliente'), {
+      tenantId: 'tenant-a',
+      cpfCnpj: '12345678000190',
+      razaoSocial: 'Sem prestador',
+      ativo: true,
+    }))
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'tomadores/sem-razao'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      cpfCnpj: '12345678000190',
+      razaoSocial: '',
+      ativo: true,
+    }))
+    // Sem `ativo` o tomador some das listas que filtram por ele.
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'tomadores/sem-ativo'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      cpfCnpj: '12345678000190',
+      razaoSocial: 'Sem flag ativo',
+    }))
+  })
+
+  it('tomadores: cpfCnpj so aceita digitos (11 ou 14)', async () => {
+    // Todo conector faz replace(/\D/g,'') antes de enviar: documento mascarado
+    // emite igual e quebra dedup/comparacao em silencio.
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'tomadores/mascarado'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      cpfCnpj: '12.345.678/0001-90',
+      razaoSocial: 'Documento mascarado',
+      ativo: true,
+    }))
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'tomadores/curto'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      cpfCnpj: '1234567',
+      razaoSocial: 'Documento incompleto',
+      ativo: true,
+    }))
+    await assertFails(updateDoc(doc(dbAs('fiscal-a'), 'tomadores/tomador-seed'), {
+      cpfCnpj: '12.345.678/0001-90',
+    }))
+  })
+
+  it('tomadores: inativacao e update normal; delete fisico so admin', async () => {
+    // Inativar é `ativo: false` + `deletedAt` — o histórico da nota emitida
+    // continua explicável.
+    await assertSucceeds(updateDoc(doc(dbAs('fiscal-a'), 'tomadores/tomador-seed'), {
+      ativo: false,
+      deletedAt: new Date(),
+    }))
+    await assertFails(deleteDoc(doc(dbAs('fiscal-a'), 'tomadores/tomador-seed')))
+    await assertSucceeds(deleteDoc(doc(dbAs('admin-a'), 'tomadores/tomador-seed')))
+  })
+
+  // ─── nfse_recorrentes: o contrato de faturamento ───────────────────────────
+
+  it('nfse_recorrentes: leitura restrita a admin/fiscal/financeiro e isolada por tenant', async () => {
+    await assertSucceeds(getDoc(doc(dbAs('fiscal-a'), 'nfse_recorrentes/recorrente-seed')))
+    await assertSucceeds(getDoc(doc(dbAs('financeiro-a'), 'nfse_recorrentes/recorrente-seed')))
+    await assertFails(getDoc(doc(dbAs('operacional-a'), 'nfse_recorrentes/recorrente-seed')))
+    await assertFails(getDoc(doc(dbAs('leitura-a'), 'nfse_recorrentes/recorrente-seed')))
+    await assertFails(getDoc(doc(dbAs('operacional-b'), 'nfse_recorrentes/recorrente-seed')))
+  })
+
+  it('nfse_recorrentes: fiscal cria contrato valido, outros perfis nao', async () => {
+    await assertSucceeds(setDoc(doc(dbAs('fiscal-a'), 'nfse_recorrentes/contrato-novo'), contratoValido()))
+    await assertFails(setDoc(doc(dbAs('financeiro-a'), 'nfse_recorrentes/contrato-financeiro'), contratoValido()))
+    await assertFails(setDoc(doc(dbAs('operacional-a'), 'nfse_recorrentes/contrato-operacional'), contratoValido()))
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'nfse_recorrentes/contrato-cross'), contratoValido({
+      tenantId: 'tenant-b',
+    })))
+  })
+
+  it('nfse_recorrentes: contrato sem tomadorId e recusado', async () => {
+    // É o buraco que fazia a nota sair com prestador == tomador.
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'nfse_recorrentes/sem-tomador'), contratoValido({
+      tomadorId: '',
+    })))
+  })
+
+  it('nfse_recorrentes: valor precisa ser numero positivo', async () => {
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'nfse_recorrentes/valor-zero'), contratoValido({ valor: 0 })))
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'nfse_recorrentes/valor-negativo'), contratoValido({ valor: -10 })))
+    // String quebraria o calculo do ISS sem levantar erro nenhum.
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'nfse_recorrentes/valor-string'), contratoValido({
+      valor: '1500',
+    })))
+    await assertFails(updateDoc(doc(dbAs('fiscal-a'), 'nfse_recorrentes/recorrente-seed'), { valor: 0 }))
+  })
+
+  it('nfse_recorrentes: diaEmissao precisa ser dia de mes (1 a 31)', async () => {
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'nfse_recorrentes/dia-zero'), contratoValido({ diaEmissao: 0 })))
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'nfse_recorrentes/dia-32'), contratoValido({ diaEmissao: 32 })))
+    await assertSucceeds(setDoc(doc(dbAs('fiscal-a'), 'nfse_recorrentes/dia-31'), contratoValido({ diaEmissao: 31 })))
+  })
+
+  it('nfse_recorrentes: contrato sem ativo e recusado', async () => {
+    // Sem o campo, o cron (where ativo == true) nunca fatura este contrato —
+    // falha silenciosa que so aparece quando o cliente reclama.
+    const semAtivo = contratoValido()
+    delete (semAtivo as Record<string, unknown>).ativo
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'nfse_recorrentes/sem-ativo'), semAtivo))
+  })
+
+  it('nfse_recorrentes: nao aponta para tomador da carteira de outro prestador', async () => {
+    // cliente-a faturando o tomador de cliente-a2 vazaria a carteira de a2 —
+    // que e a lista de clientes dele — para dentro das notas de a.
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'nfse_recorrentes/carteira-alheia'), contratoValido({
+      tomadorId: 'tomador-de-outro-prestador',
+    })))
+    await assertFails(updateDoc(doc(dbAs('fiscal-a'), 'nfse_recorrentes/recorrente-seed'), {
+      tomadorId: 'tomador-de-outro-prestador',
+    }))
+    // Tomador inexistente passa de proposito: quem nao existe nao e de ninguem,
+    // e travar aqui quebraria fluxo que grave o contrato antes do tomador.
+    await assertSucceeds(setDoc(doc(dbAs('fiscal-a'), 'nfse_recorrentes/tomador-futuro'), contratoValido({
+      tomadorId: 'tomador-que-ainda-nao-existe',
+    })))
+  })
+
+  it('nfse_recorrentes: encerrar e ativo:false; delete fisico so admin', async () => {
+    await assertSucceeds(updateDoc(doc(dbAs('fiscal-a'), 'nfse_recorrentes/recorrente-seed'), {
+      ativo: false,
+      dataFim: new Date(),
+    }))
+    await assertFails(deleteDoc(doc(dbAs('fiscal-a'), 'nfse_recorrentes/recorrente-seed')))
+    await assertSucceeds(deleteDoc(doc(dbAs('admin-a'), 'nfse_recorrentes/recorrente-seed')))
   })
 })

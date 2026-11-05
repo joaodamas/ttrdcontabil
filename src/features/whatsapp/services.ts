@@ -55,3 +55,13 @@ export async function fetchWhatsappTemplates() {
   const rows = await listDocuments<WhatsappTemplate>('whatsapp_templates', [limit(50)])
   return rows.sort((a, b) => String(a.templateKey ?? '').localeCompare(String(b.templateKey ?? ''), 'pt-BR'))
 }
+
+export async function updateWhatsappTemplate(input: {
+  templateKey: string
+  providerContentSid?: string
+  ativo?: boolean
+  aprovadoProvider?: boolean
+}) {
+  const fn = httpsCallable<typeof input, { status: string }>(functions(), 'atualizarTemplateWhatsapp')
+  return (await fn(input)).data
+}

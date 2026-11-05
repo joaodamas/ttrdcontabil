@@ -11,6 +11,25 @@ const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
   cancelled: 'Operação cancelada.',
   aborted: 'Conflito ao salvar. Tente novamente.',
   'invalid-argument': 'Dados inválidos.',
+  internal: 'Erro interno no servidor. Tente novamente em instantes.',
+  unknown: 'Erro inesperado. Tente novamente em instantes.',
+  unimplemented: 'Operação não disponível nesta versão.',
+  'data-loss': 'Erro interno no servidor. Tente novamente em instantes.',
+}
+
+/**
+ * Mensagens que são só o código técnico ("internal", "INTERNAL [0]",
+ * "unavailable") ou dumps do SDK não servem para o usuário: nesses casos
+ * usamos a tradução do código ou o fallback da tela.
+ */
+export function isTechnicalErrorMessage(message: string, code?: string): boolean {
+  const msg = message.trim()
+  if (!msg) return true
+  const semPrefixo = code?.includes('/') ? code.slice(code.indexOf('/') + 1) : code
+  if (semPrefixo && msg.toLowerCase() === semPrefixo.toLowerCase()) return true
+  if (/^[a-z_-]+(\s*\[\d+\])?$/i.test(msg)) return true
+  if (/^(FirebaseError|INTERNAL ASSERTION FAILED)/i.test(msg)) return true
+  return false
 }
 
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
@@ -38,11 +57,13 @@ export function getErrorMessage(error: unknown, fallback: string): string {
     // fallback genérico — mesmo quando o backend já explicava exatamente
     // o que deu errado.
     if (code.startsWith('functions/')) {
-      return message ?? getFirebaseErrorMessage(code.slice('functions/'.length), fallback)
+      const semPrefixo = code.slice('functions/'.length)
+      if (message && !isTechnicalErrorMessage(message, code)) return message
+      return getFirebaseErrorMessage(semPrefixo, fallback)
     }
     return getFirebaseErrorMessage(code, fallback)
   }
-  if (message) return message
-  if (typeof error === 'string' && error.trim()) return error
+  if (message) return isTechnicalErrorMessage(message) ? fallback : message
+  if (typeof error === 'string' && error.trim()) return isTechnicalErrorMessage(error) ? fallback : error
   return fallback
 }

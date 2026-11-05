@@ -23,12 +23,17 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { TarefaPrioridadeBadge } from '@/components/ui/status-badge'
+import { getStatusLabel } from '@/lib/status-semantics'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { InlineAlert } from '@/components/ui/inline-alert'
+import { EmptyState } from '@/components/ui/empty-state'
+import { getErrorMessage } from '@/lib/error-message'
 import { formatDate, tsToDate, cn } from '@/lib/utils'
 import { TaskTimer } from '@/components/tarefas/task-timer'
 import { useAuth } from '@/contexts/auth-context'
@@ -42,24 +47,11 @@ import { hojeKeys } from '@/features/hoje/queries'
 import { useHojeData } from '@/features/hoje/hooks'
 import type { HojeTask, HojeUsuario } from '@/features/hoje/types'
 import { PageHeader } from '@/components/layout/page-header'
+import { dateFromIsoLocal, isoDateLocal } from '@/lib/form-dates'
 
 type FilaItem = HojeTask & {
   grupo: 'atrasada' | 'hoje' | 'proximos'
   score: number
-}
-
-const PRIORIDADE_LABEL: Record<string, string> = {
-  urgente: 'Urgente',
-  alta: 'Alta',
-  normal: 'Normal',
-  baixa: 'Baixa',
-}
-
-const PRIORIDADE_BADGE: Record<string, 'destructive' | 'warning' | 'outline' | 'secondary'> = {
-  urgente: 'destructive',
-  alta: 'warning',
-  normal: 'outline',
-  baixa: 'secondary',
 }
 
 function prioridadePeso(prioridade?: string) {
@@ -127,22 +119,16 @@ function EmptyCockpit() {
       <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
         <CheckCircle2 className="h-10 w-10 text-success/70" />
         <div className="space-y-1">
-          <h2 className="text-base font-semibold">Nenhuma tarefa acionavel para hoje</h2>
+          <h2 className="text-base font-semibold">Nenhuma tarefa acionável para hoje</h2>
           <p className="max-w-xl text-sm text-muted-foreground">
-            Se este ambiente ainda esta sendo preparado, comece vinculando servicos aos clientes,
-            gerando competencias do mes e criando tarefas com responsavel e prazo.
+            Se este ambiente ainda está sendo preparado, comece vinculando serviços aos clientes,
+            gerando competências do mês e criando tarefas com responsável e prazo.
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2">
-          <Link href="/clientes">
-            <Button variant="outline">Ver clientes</Button>
-          </Link>
-          <Link href="/competencias/nova">
-            <Button variant="outline">Criar competencia</Button>
-          </Link>
-          <Link href="/tarefas/nova">
-            <Button>Nova tarefa</Button>
-          </Link>
+          <Link href="/clientes" className={buttonVariants({ variant: 'outline' })}>Ver clientes</Link>
+          <Link href="/competencias/nova" className={buttonVariants({ variant: 'outline' })}>Criar competência</Link>
+          <Link href="/tarefas/nova" className={buttonVariants()}>Nova tarefa</Link>
         </div>
       </CardContent>
     </Card>
@@ -162,7 +148,6 @@ function TaskRow({
 }) {
   const prazo = tsToDate(item.dataPrazo)
   const atraso = diasAtraso(prazo)
-  const badge = PRIORIDADE_BADGE[item.prioridade ?? 'normal'] ?? 'outline'
   const semResponsavel = !item.responsavelId
   const [editingPrazo, setEditingPrazo] = useState(false)
   const [savingPrazo,  setSavingPrazo]  = useState(false)
@@ -172,7 +157,7 @@ function TaskRow({
     if (!isoDate) { setEditingPrazo(false); return }
     setSavingPrazo(true)
     try {
-      const dataPrazo = Timestamp.fromDate(new Date(isoDate + 'T00:00:00'))
+      const dataPrazo = Timestamp.fromDate(dateFromIsoLocal(isoDate))
       await updateDocument('tarefas', item.id, { dataPrazo })
       toast.success('Prazo atualizado.')
       await queryClient.invalidateQueries({ queryKey: hojeKeys.all })
@@ -193,9 +178,9 @@ function TaskRow({
       <div className="min-w-0 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <Link href={`/tarefas/${item.id}`} className="font-medium hover:underline">
-            {item.titulo ?? 'Tarefa sem titulo'}
+            {item.titulo ?? 'Tarefa sem título'}
           </Link>
-          <Badge variant={badge}>{PRIORIDADE_LABEL[item.prioridade ?? 'normal'] ?? item.prioridade ?? 'Normal'}</Badge>
+          <TarefaPrioridadeBadge prioridade={item.prioridade ?? 'normal'} />
           {impactoPeso(item) >= 3 && (
             <span className="rounded-full border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-[10px] font-semibold text-warning">fiscal</span>
           )}
@@ -228,7 +213,7 @@ function TaskRow({
             <input
               type="date"
               autoFocus
-              defaultValue={prazo ? prazo.toISOString().slice(0, 10) : ''}
+              defaultValue={prazo ? isoDateLocal(prazo) : ''}
               disabled={savingPrazo}
               onBlur={e => void handlePrazoChange(e.target.value)}
               onKeyDown={e => {
@@ -364,6 +349,16 @@ export default function HojePage() {
   const [saving, setSaving] = useState(false)
 
   const { cockpit, usuarios, isLoading } = useHojeData(responsavelId === 'todos' ? undefined : responsavelId)
+  /**
+   * Armadilha: quando o cockpit falha, `cockpit.data` fica undefined e todo o
+   * resto degrada para 0 / lista vazia. A primeira tela do menu passava a
+   * afirmar "nenhuma tarefa acionável para hoje" com um check verde — ou seja,
+   * a falha de leitura era apresentada como fim de expediente. Enquanto o dado
+   * não voltar, contador vira "—" (ausência de informação, não zero) e o vazio
+   * vira erro explícito com "Tentar novamente".
+   * Só o estado do cockpit manda aqui: `usuarios` alimenta seletores, não os KPIs.
+   */
+  const semDados = cockpit.isLoading || cockpit.isError
   const filaBase = useMemo(() => buildFila(cockpit.data), [cockpit.data])
   const fila = useMemo(() => {
     let result = filaBase
@@ -429,7 +424,7 @@ export default function HojePage() {
       if (action === 'reatribuir') {
         const usuario = usuariosData.find((u) => u.id === bulkResponsavelId)
         if (!usuario?.id) {
-          toast.error('Selecione o responsavel.')
+          toast.error('Selecione o responsável.')
           return
         }
         await bulkReatribuirTarefas(selectedIds, usuario.id, usuario.nome ?? 'Responsavel')
@@ -447,7 +442,7 @@ export default function HojePage() {
       await refresh()
     } catch (err) {
       console.error(err)
-      toast.error('Nao foi possivel executar a acao em lote.')
+      toast.error('Não foi possível executar a ação em lote.')
     } finally {
       setSaving(false)
     }
@@ -461,8 +456,8 @@ export default function HojePage() {
         title="Hoje"
         description="Fila operacional priorizada por prazo, prioridade e responsável."
         action={
-          <div className="flex flex-wrap gap-2">
-          <div className="flex rounded-lg border border-border overflow-hidden">
+          <>
+          <div className="flex h-9 rounded-lg border border-border overflow-hidden">
             <button
               type="button"
               onClick={() => setModoView('lista')}
@@ -488,7 +483,7 @@ export default function HojePage() {
           {modoView === 'kanban' && (
             <Button
               variant={swimlanes ? 'default' : 'outline'}
-              size="sm"
+              size="cta"
               onClick={() => setSwimlanes(v => !v as boolean)}
             >
               <Users className="h-3.5 w-3.5" />
@@ -497,14 +492,14 @@ export default function HojePage() {
           )}
           <Button
             variant={modoFoco ? 'default' : 'outline'}
-            size="sm"
+            size="cta"
             onClick={() => setModoFoco(v => !v)}
           >
             <Zap className="h-3.5 w-3.5" />
             {modoFoco ? 'Modo foco ativo' : 'Modo foco'}
           </Button>
           <Select value={responsavelId} onValueChange={(value) => setResponsavelId(value ?? 'todos')}>
-            <SelectTrigger className="w-52">
+            <SelectTrigger className="w-52 max-w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -514,13 +509,22 @@ export default function HojePage() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={isLoading}>
+          <Button variant="outline" size="cta" onClick={() => void refresh()} disabled={isLoading}>
             <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
             Atualizar
           </Button>
-        </div>
+          </>
         }
       />
+
+      {cockpit.isError ? (
+        <InlineAlert
+          tone="danger"
+          title="Não foi possível carregar a fila de hoje."
+          description={getErrorMessage(cockpit.error, 'Ocorreu um erro ao buscar as tarefas. Os contadores abaixo não refletem a operação real.')}
+          action={{ label: 'Tentar novamente', onClick: () => void refresh() }}
+        />
+      ) : null}
 
       {/* Filtros de prioridade */}
       <div className="flex flex-wrap gap-1.5">
@@ -536,7 +540,7 @@ export default function HojePage() {
                 : 'border-border bg-background text-muted-foreground hover:bg-muted'
             )}
           >
-            {p === 'todos' ? 'Todas' : PRIORIDADE_LABEL[p] ?? p}
+            {p === 'todos' ? 'Todas' : getStatusLabel('tarefaPrioridade', p)}
           </button>
         ))}
         {semResponsavelCount > 0 && (
@@ -546,12 +550,14 @@ export default function HojePage() {
         )}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
         <Card size="sm">
           <CardContent className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground">Atrasadas</p>
-              <p className="text-2xl font-bold text-destructive">{cockpit.data?.atrasadas.length ?? 0}</p>
+              <p className={cn('text-2xl font-bold', semDados ? 'text-muted-foreground' : 'text-destructive')}>
+                {semDados ? '—' : cockpit.data?.atrasadas.length ?? 0}
+              </p>
             </div>
             <AlertTriangle className="h-5 w-5 text-destructive" />
           </CardContent>
@@ -560,7 +566,9 @@ export default function HojePage() {
           <CardContent className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground">Hoje</p>
-              <p className="text-2xl font-bold text-warning">{cockpit.data?.hoje.length ?? 0}</p>
+              <p className={cn('text-2xl font-bold', semDados ? 'text-muted-foreground' : 'text-warning')}>
+                {semDados ? '—' : cockpit.data?.hoje.length ?? 0}
+              </p>
             </div>
             <CalendarClock className="h-5 w-5 text-warning" />
           </CardContent>
@@ -568,8 +576,8 @@ export default function HojePage() {
         <Card size="sm">
           <CardContent className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground">Proximos 7 dias</p>
-              <p className="text-2xl font-bold">{cockpit.data?.proximos7Dias.length ?? 0}</p>
+              <p className="text-xs text-muted-foreground">Próximos 7 dias</p>
+              <p className="text-2xl font-bold">{semDados ? '—' : cockpit.data?.proximos7Dias.length ?? 0}</p>
             </div>
             <ClipboardList className="h-5 w-5 text-muted-foreground" />
           </CardContent>
@@ -578,7 +586,7 @@ export default function HojePage() {
           <CardContent className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground">Bloqueios fechamento</p>
-              <p className="text-2xl font-bold">{bloqueios.length}</p>
+              <p className="text-2xl font-bold">{semDados ? '—' : bloqueios.length}</p>
             </div>
             <FolderOpen className="h-5 w-5 text-muted-foreground" />
           </CardContent>
@@ -617,7 +625,11 @@ export default function HojePage() {
                 <div key={g.id} className="flex items-center gap-3 px-4 py-2.5">
                   <Icon className={`h-4 w-4 shrink-0 ${g.cor}`} />
                   <p className="flex-1 text-xs text-muted-foreground">{g.texto}</p>
-                  <Link href="/hoje" className="text-[11px] font-medium text-primary hover:underline shrink-0">{g.acao}</Link>
+                  {/* Os três rótulos apontavam para "/hoje": clicar só recarregava esta
+                      mesma tela. Não existe rota que filtre "sem responsável" ou "sem
+                      prazo", então o rótulo fica como instrução em vez de fingir ser um
+                      atalho. A ação real está na própria linha da tarefa, na fila abaixo. */}
+                  <span className="text-[11px] font-medium text-muted-foreground shrink-0">{g.acao}</span>
                 </div>
               )
             })}
@@ -648,7 +660,7 @@ export default function HojePage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2">
               <ClipboardList className="h-4 w-4" />
-              Fila de execucao
+              Fila de execução
             </CardTitle>
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <Checkbox
@@ -666,7 +678,7 @@ export default function HojePage() {
               </Button>
               <Select value={bulkResponsavelId} onValueChange={(value) => setBulkResponsavelId(value ?? '')}>
                 <SelectTrigger className="w-56">
-                  <SelectValue placeholder="Novo responsavel" />
+                  <SelectValue placeholder="Novo responsável" />
                 </SelectTrigger>
                 <SelectContent>
                   {usuariosData.map((u) => (
@@ -705,6 +717,16 @@ export default function HojePage() {
                 </div>
               ))}
             </div>
+          ) : cockpit.isError ? (
+            /* Antes de tudo: erro nunca cai no EmptyCockpit. O check verde de lá
+               é uma afirmação sobre a operação ("não há o que fazer"), e a query
+               nem chegou a responder. */
+            <EmptyState
+              icon={AlertTriangle}
+              title="Não foi possível carregar a fila"
+              description="A fila está vazia porque a leitura falhou — isso não significa que não há tarefas pendentes."
+              action={{ label: 'Tentar novamente', variant: 'outline', onClick: () => void refresh() }}
+            />
           ) : fila.length === 0 ? (
             <EmptyCockpit />
           ) : (

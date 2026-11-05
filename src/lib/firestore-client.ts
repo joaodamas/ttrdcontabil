@@ -5,7 +5,7 @@
 import {
   collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, limit, serverTimestamp, Timestamp, documentId, setDoc,
-  startAfter,
+  startAfter, getAggregateFromServer, sum,
   type DocumentData,
   type QueryDocumentSnapshot,
   type QueryConstraint,
@@ -26,6 +26,11 @@ const AUDITED_COLLECTIONS = new Set([
   'clientes_fiscal',
   'nfse_rascunhos',
   'nfse_emitidas',
+  // Auditadas pelo que causam, não pelo que são: o tomador define PARA QUEM a
+  // nota sai, e o contrato recorrente dispara emissão real sem ninguém clicar.
+  // Alterar qualquer um dos dois é o tipo de mudança que precisa de rastro.
+  'tomadores',
+  'nfse_recorrentes',
   'ir_declaracoes',
   'ir_checklist',
   'usuarios',
@@ -56,6 +61,14 @@ const TENANT_SCOPED_COLLECTIONS = new Set([
   'nfse_emitidas',
   'nfse_eventos',
   'nfse_fila_processamento',
+  // As regras de `tomadores` e `nfse_recorrentes` exigem sameTenantExisting().
+  // Fora deste Set o efeito é assimétrico e silencioso: a ESCRITA passa (o
+  // createDocument injeta o tenantId por getAuditActor) mas a LEITURA é negada,
+  // porque a query de lista sai sem o `where('tenantId','==',...)` que a regra
+  // espera. Na prática o contador cadastra o tomador, recebe confirmação, e ele
+  // não aparece na tela.
+  'tomadores',
+  'nfse_recorrentes',
   'events',
   'logs_auditoria',
   'dashboard_kpis',
@@ -126,12 +139,13 @@ async function getAuditActor() {
     // Perfil indisponível não deve impedir o write principal.
   }
 
-  _actorCache = {
+  // Sem cachear: um ator sem tenantId preso no cache fazia toda query seguinte
+  // sair sem o filtro de tenant (e ser negada) até recarregar a página.
+  return {
     uid: authUser.uid,
     nome,
     email: authUser.email ?? '',
   }
-  return _actorCache
 }
 
 function redactAuditData(value: unknown): unknown {
@@ -163,7 +177,18 @@ async function writeAuditLog(params: {
   const actor = await getAuditActor()
   if (!actor) return
 
+  // Armadilha: a regra de logs_auditoria exige sameTenantNew(), ou seja,
+  // 'tenantId' precisa vir DENTRO do documento. Sem ele todo create era negado
+  // e o auditSafely engolia o erro — a trilha simplesmente não existia.
+  // O tenant sai do mesmo actor que listDocuments usa para escopar as queries.
+  if (!actor.tenantId) {
+    throw new Error(
+      `Usuário ${actor.uid} sem tenantId resolvido — log de auditoria seria negado pelas regras.`
+    )
+  }
+
   await addDoc(collection(getClientDb(), 'logs_auditoria'), {
+    tenantId: actor.tenantId,
     usuarioId: actor.uid,
     usuarioNome: actor.nome,
     usuarioEmail: actor.email,
@@ -246,6 +271,30 @@ export async function listDocumentsPage<T>(
     lastCursor: snap.docs.at(-1) ?? null,
     cursors: snap.docs,
   }
+}
+
+/**
+ * Soma um campo numérico no servidor, via agregação do Firestore.
+ *
+ * Existe porque somar em memória obriga a um limit(): passando do teto o KPI
+ * para de crescer em silêncio, sem erro nenhum na tela. A agregação percorre
+ * a coleção inteira do lado do servidor, respeita as mesmas regras e índices
+ * da query equivalente e não traz documento algum para o cliente.
+ *
+ * Mesma escopagem por tenantId de listDocuments — a agregação é avaliada
+ * pelas regras como um `list`, então o filtro precisa estar presente.
+ */
+export async function sumDocuments(
+  col: string,
+  field: string,
+  constraints: QueryConstraint[] = []
+): Promise<number> {
+  const actor = TENANT_SCOPED_COLLECTIONS.has(col) ? await getAuditActor() : null
+  const tenantConstraint = actor?.tenantId ? [where('tenantId', '==', actor.tenantId)] : []
+  const q = query(collection(getClientDb(), col), ...tenantConstraint, ...constraints)
+  const snap = await getAggregateFromServer(q, { total: sum(field) })
+  const total = snap.data().total
+  return Number.isFinite(total) ? total : 0
 }
 
 function stripUndefined(data: Record<string, unknown>): Record<string, unknown> {

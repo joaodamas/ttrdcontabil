@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -23,6 +24,7 @@ export default function ProdutosPage() {
   const [produtos, setProdutos] = useState<ProdutoRecord[]>([])
   const [loadingClientes, setLoadingClientes] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [erroCarga, setErroCarga] = useState<string | null>(null)
   const [paraInativar, setParaInativar] = useState<ProdutoRecord | null>(null)
 
   useEffect(() => {
@@ -35,9 +37,13 @@ export default function ProdutosPage() {
   const load = useCallback(() => {
     if (!clienteId) { setProdutos([]); return }
     setLoading(true)
+    setErroCarga(null)
     fetchProdutos({ clienteId })
       .then(setProdutos)
-      .catch((err) => toast.error(getErrorMessage(err, 'Não foi possível carregar os produtos. Verifique sua permissão de acesso.')))
+      .catch((err) => {
+        console.error('[fiscal/produtos] falha ao carregar', err)
+        setErroCarga(getErrorMessage(err, 'Verifique sua conexão e sua permissão de acesso, e tente novamente.'))
+      })
       .finally(() => setLoading(false))
   }, [clienteId])
 
@@ -60,16 +66,15 @@ export default function ProdutosPage() {
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle flex flex-wrap items-end justify-between gap-3 border px-4 py-4 sm:px-5">
-        <div className="space-y-1.5">
-          <h2 className="text-lg font-semibold">Catálogo de Produtos</h2>
-          <p className="text-sm text-muted-foreground">Ficha fiscal por produto, para NF-e e NFC-e.</p>
-        </div>
-        <div className="flex items-end gap-2">
-          <div className="space-y-1.5">
+      <PageHeader
+        title="Produtos"
+        description="Ficha fiscal por produto, para NF-e e NFC-e. A plataforma ainda não emite NF-e — o catálogo fica pronto para quando emitir."
+        action={
+        <div className="flex w-full flex-wrap items-end gap-2 sm:w-auto">
+          <div className="min-w-0 flex-1 space-y-1.5 sm:flex-none">
             <p className="section-label">Empresa emissora</p>
             <Select value={clienteId} onValueChange={(v) => setClienteId(v ?? '')}>
-              <SelectTrigger className="w-[260px]">
+              <SelectTrigger className="w-full sm:w-[260px]">
                 <SelectValue placeholder={loadingClientes ? 'Carregando...' : 'Selecione o cliente'} />
               </SelectTrigger>
               <SelectContent>
@@ -81,7 +86,8 @@ export default function ProdutosPage() {
           </div>
           {clienteId && <ProdutoForm clienteId={clienteId} onSaved={load} />}
         </div>
-      </div>
+        }
+      />
 
       {!clienteId ? (
         <Card className="border-border/65 bg-card/95 card-shadow">
@@ -107,12 +113,20 @@ export default function ProdutosPage() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {produtos.length === 0 ? (
+                {erroCarga ? (
+                  <TableEmptyState
+                    colSpan={7}
+                    icon={Package}
+                    title="Não foi possível carregar os produtos"
+                    description={erroCarga}
+                    action={{ label: 'Tentar novamente', onClick: load }}
+                  />
+                ) : produtos.length === 0 ? (
                   <TableEmptyState
                     colSpan={7}
                     icon={Package}
                     title="Nenhum produto cadastrado"
-                    description="Cadastre o primeiro produto com a ficha fiscal para emitir NF-e/NFC-e desta empresa."
+                    description="Cadastre o primeiro produto com a ficha fiscal desta empresa."
                   />
                 ) : (
                   produtos.map((p) => (

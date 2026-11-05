@@ -14,9 +14,30 @@ import type {
   ResultadoEmissao,
   ResultadoOperacaoNfse,
 } from '../types'
+import { normalizarIbge } from '../types'
+
+/** Prestador com o IBGE corrigido (configs antigas guardam código errado — ver IBGE_LEGADO). */
+function comIbgeCorreto(prestador: Prestador): Prestador {
+  return { ...prestador, municipioIbge: normalizarIbge(prestador.municipioIbge) }
+}
 
 // Municípios que exigem certificado A1
-const IBGE_A1 = new Set(['3525904', '3509502', '3508900', '3550308', '3505708'])
+const IBGE_A1 = new Set(['3525904', '3509502', '3509205', '3550308', '3505708'])
+
+/** Rascunho de origem da nota — conectores que não usam simplesmente ignoram. */
+export type ChaveProvedor = { rascunhoId?: string }
+
+/**
+ * Clientes ainda gravados com provedorNfse 'spedy' (conta encerrada em 2026-09):
+ * falha com instrução clara em vez de erro de credencial de uma API que não existe.
+ */
+const PROVEDOR_DESCONTINUADO = {
+  sucesso: false as const,
+  codigoErro: 'PROVEDOR_DESCONTINUADO',
+  erro: 'Este cliente ainda está configurado com a Spedy, que foi descontinuada. Em Clientes → Fiscal, troque o provedor para "Conector direto do município".',
+}
+export type ConsultarNfseInputRoteado = ConsultarNfseInput & ChaveProvedor
+export type CancelarNfseInputRoteado = CancelarNfseInput & ChaveProvedor
 
 export async function rotearEmissao(
   input:     EmitirNfseInput,
@@ -24,12 +45,8 @@ export async function rotearEmissao(
   prestador: Prestador,
   cert?:     CertificadoA1,
 ): Promise<ResultadoEmissao> {
-  // Spedy é agnóstico de município (cobre 1.200+ via API própria) — quando
-  // configurado, ignora o roteamento por IBGE e o conector caseiro inteiro.
-  if (config.provedorNfse === 'spedy') {
-    const { SpedyConector } = await import('../provedores/spedy')
-    return new SpedyConector().emitir(input, config, prestador)
-  }
+  if (config.provedorNfse === 'spedy') return PROVEDOR_DESCONTINUADO
+  prestador = comIbgeCorreto(prestador)
 
   const ibge = prestador.municipioIbge
 
@@ -50,7 +67,7 @@ export async function rotearEmissao(
       return new CampinasConector().emitir(input, config, cert!, prestador)
     }
 
-    case '3508900': { // Cajamar
+    case '3509205': { // Cajamar
       const { CajamarConector } = await import('./cajamar')
       return new CajamarConector().emitir(input, config, cert!, prestador)
     }
@@ -72,7 +89,7 @@ export async function rotearEmissao(
       return new SantanaParnaibhaConector().emitir(input, config, prestador)
     }
 
-    case '3552502': { // Taboão da Serra
+    case '3552809': { // Taboão da Serra
       const { TaboaoSerraConector } = await import('./taboao-serra')
       return new TaboaoSerraConector().emitir(input, config, prestador)
     }
@@ -115,7 +132,7 @@ async function carregarConector(ibge: string): Promise<CicloConector | null> {
       const { CampinasConector } = await import('./campinas')
       return new CampinasConector()
     }
-    case '3508900': {
+    case '3509205': {
       const { CajamarConector } = await import('./cajamar')
       return new CajamarConector()
     }
@@ -131,7 +148,7 @@ async function carregarConector(ibge: string): Promise<CicloConector | null> {
       const { SantanaParnaibhaConector } = await import('./santana-parnaiba')
       return new SantanaParnaibhaConector() as unknown as CicloConector
     }
-    case '3552502': {
+    case '3552809': {
       const { TaboaoSerraConector } = await import('./taboao-serra')
       return new TaboaoSerraConector() as unknown as CicloConector
     }
@@ -145,14 +162,13 @@ async function carregarConector(ibge: string): Promise<CicloConector | null> {
 }
 
 export async function rotearConsulta(
-  input: ConsultarNfseInput,
+  input: ConsultarNfseInputRoteado,
   config: ConfigFiscalCliente,
   prestador: Prestador,
   cert?: CertificadoA1,
 ): Promise<ResultadoOperacaoNfse> {
-  if (config.provedorNfse === 'spedy') {
-    return { sucesso: false, codigoErro: 'CONSULTA_NAO_IMPLEMENTADA', erro: 'Consulta via Spedy ainda não implementada — só a emissão está integrada por enquanto.' }
-  }
+  if (config.provedorNfse === 'spedy') return PROVEDOR_DESCONTINUADO
+  prestador = comIbgeCorreto(prestador)
   const conector = await carregarConector(prestador.municipioIbge)
   if (!conector) {
     return { sucesso: false, erro: `Município com código IBGE ${prestador.municipioIbge} ainda não integrado.` }
@@ -164,14 +180,13 @@ export async function rotearConsulta(
 }
 
 export async function rotearCancelamento(
-  input: CancelarNfseInput,
+  input: CancelarNfseInputRoteado,
   config: ConfigFiscalCliente,
   prestador: Prestador,
   cert?: CertificadoA1,
 ): Promise<ResultadoOperacaoNfse> {
-  if (config.provedorNfse === 'spedy') {
-    return { sucesso: false, codigoErro: 'CANCELAMENTO_NAO_IMPLEMENTADO', erro: 'Cancelamento via Spedy ainda não implementado — só a emissão está integrada por enquanto.' }
-  }
+  if (config.provedorNfse === 'spedy') return PROVEDOR_DESCONTINUADO
+  prestador = comIbgeCorreto(prestador)
   const conector = await carregarConector(prestador.municipioIbge)
   if (!conector) {
     return { sucesso: false, erro: `Município com código IBGE ${prestador.municipioIbge} ainda não integrado.` }

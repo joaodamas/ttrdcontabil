@@ -52,10 +52,13 @@ export type ParametrosEscritorio = {
   tenantId: string
   diaVencimentoPadrao: number
   ambienteFiscalPadrao: 'homologacao' | 'producao'
+  // Interruptor geral da emissão automática de NFS-e. O switch por cliente
+  // (clientes_fiscal.emissaoAutomatica) diz QUEM pode ser emitido sozinho;
+  // este diz SE alguém pode. Ver emissaoAutomaticaLiberadaNoEscritorio em
+  // functions/src/nfse/rascunhos.ts — o cron falha fechado sem ele.
+  emissaoAutomaticaNfseHabilitada: boolean
   whatsappCloudApiEnabled: boolean
-  whatsappBusinessAccountId: string
-  whatsappPhoneNumberId: string
-  whatsappWebhookVerifyToken: string
+  whatsappTwilioFromNumber: string
   whatsappJanelaHoraMinima: string
   whatsappJanelaHoraMaxima: string
   whatsappUsaDiasUteis: boolean

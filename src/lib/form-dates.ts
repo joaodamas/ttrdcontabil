@@ -42,3 +42,19 @@ export function toDateInputValue(value: unknown): string {
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
+
+/**
+ * Data de hoje (ou de `d`) no fuso do navegador, em YYYY-MM-DD.
+ * `toISOString()` usa UTC: em Brasília, depois das 21h ele já devolve amanhã.
+ */
+export function isoDateLocal(d: Date = new Date()): string {
+  return toDateInputValue(d)
+}
+
+/**
+ * Converte YYYY-MM-DD em Date ao meio-dia local — mesmo padrão `T12:00` do
+ * resto do app, que mantém o dia certo em qualquer fuso do Brasil.
+ */
+export function dateFromIsoLocal(iso: string): Date {
+  return new Date(`${iso.slice(0, 10)}T12:00:00`)
+}

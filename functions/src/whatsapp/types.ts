@@ -27,9 +27,7 @@ export type WhatsappCampaignRule = {
 export type WhatsappTenantConfig = {
   tenantId: string
   whatsappCloudApiEnabled: boolean
-  whatsappBusinessAccountId?: string
-  whatsappPhoneNumberId?: string
-  whatsappWebhookVerifyToken?: string
+  whatsappTwilioFromNumber?: string
   whatsappJanelaHoraMinima?: string
   whatsappJanelaHoraMaxima?: string
   whatsappUsaDiasUteis?: boolean

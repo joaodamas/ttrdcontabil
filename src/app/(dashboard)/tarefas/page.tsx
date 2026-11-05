@@ -7,8 +7,10 @@ import { Timestamp } from 'firebase/firestore'
 import { useQueryClient } from '@tanstack/react-query'
 
 import { formatDate , tsToDate } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
+import { TarefaPrioridadeBadge, TarefaStatusBadge } from '@/components/ui/status-badge'
+import { getStatusLabel } from '@/lib/status-semantics'
 import { toast } from 'sonner'
 import { Plus, Loader2, ClipboardList, CheckCheck, UserX, ClockAlert, MoreHorizontal, Eye, UserCog, CalendarClock, Search } from 'lucide-react'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
@@ -31,20 +33,6 @@ import { tarefasKeys } from '@/features/tarefas/queries'
 import { getErrorMessage } from '@/lib/error-message'
 import type { TarefaRecord, TarefasFilters } from '@/features/tarefas/types'
 
-const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  pendente: { label: 'Pendente', variant: 'outline' },
-  em_andamento: { label: 'Em andamento', variant: 'secondary' },
-  concluida: { label: 'Concluída', variant: 'default' },
-  cancelada: { label: 'Cancelada', variant: 'destructive' },
-}
-
-const PRIORIDADE_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive'; className?: string; pulse?: boolean }> = {
-  baixa:   { label: 'Baixa',   variant: 'outline' },
-  normal:  { label: 'Normal',  variant: 'secondary' },
-  alta:    { label: 'Alta',    variant: 'outline', className: 'border-warning/50 text-warning bg-warning/10' },
-  urgente: { label: 'Urgente', variant: 'destructive', pulse: true },
-}
-
 function TarefasContent() {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -58,7 +46,7 @@ function TarefasContent() {
     page: parseInt(searchParams.get('page') ?? '1'),
   })
   const { status, prioridade, responsavelId, clienteId, competenciaId, page } = filters
-  const { tarefas, total, totalPages, isLoading } = useTarefasList(filters)
+  const { tarefas, total, totalPages, isLoading, isError, error, refetch } = useTarefasList(filters)
 
   const [concluding, setConcluding] = useState<string | null>(null)
   const [confirmUrgente, setConfirmUrgente] = useState<{ id: string; titulo: string } | null>(null)
@@ -141,26 +129,22 @@ function TarefasContent() {
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
-        <div>
-          <h2 className="text-lg font-semibold">Tarefas</h2>
-          <p className="text-sm text-muted-foreground">
-            {total} tarefa{total !== 1 ? 's' : ''} encontrada{total !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <FilterSheetTrigger
-            onClick={() => setFilterSheetOpen(true)}
-            activeCount={(status ? 1 : 0) + (prioridade ? 1 : 0)}
-          />
-          <Link href="/tarefas/nova">
-            <Button size="sm" className="h-10 rounded-xl">
-              <Plus className="w-4 h-4 mr-1" />
-              Nova Tarefa
-            </Button>
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title="Tarefas"
+        description={`${total} tarefa${total !== 1 ? 's' : ''} encontrada${total !== 1 ? 's' : ''}`}
+        action={
+          <>
+            <FilterSheetTrigger
+              onClick={() => setFilterSheetOpen(true)}
+              activeCount={(status ? 1 : 0) + (prioridade ? 1 : 0)}
+            />
+            <Link href="/tarefas/nova" className={buttonVariants({ size: 'cta' })}>
+              <Plus />
+              Nova tarefa
+            </Link>
+          </>
+        }
+      />
 
       <FilterSheet
         open={filterSheetOpen}
@@ -173,7 +157,7 @@ function TarefasContent() {
           <div className="flex flex-wrap gap-2">
             {(['', 'pendente', 'em_andamento', 'concluida', 'cancelada'] as const).map((s) => (
               <FilterBtn key={s} href={buildUrl({ status: s, page: 1 })} active={status === s}>
-                {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+                {s === '' ? 'Todos' : getStatusLabel('tarefa', s)}
               </FilterBtn>
             ))}
           </div>
@@ -183,7 +167,7 @@ function TarefasContent() {
           <div className="flex flex-wrap gap-2">
             {(['', 'baixa', 'normal', 'alta', 'urgente'] as const).map((p) => (
               <FilterBtn key={p} href={buildUrl({ prioridade: p, page: 1 })} active={prioridade === p}>
-                {p === '' ? 'Qualquer' : PRIORIDADE_MAP[p]?.label ?? p}
+                {p === '' ? 'Qualquer' : getStatusLabel('tarefaPrioridade', p)}
               </FilterBtn>
             ))}
           </div>
@@ -194,14 +178,14 @@ function TarefasContent() {
         <div className="flex items-center gap-1">
           {(['', 'pendente', 'em_andamento', 'concluida', 'cancelada'] as const).map((s) => (
             <FilterBtn key={s} href={buildUrl({ status: s, page: 1 })} active={status === s}>
-              {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+              {s === '' ? 'Todos' : getStatusLabel('tarefa', s)}
             </FilterBtn>
           ))}
         </div>
         <div className="flex items-center gap-1">
           {(['', 'baixa', 'normal', 'alta', 'urgente'] as const).map((p) => (
             <FilterBtn key={p} href={buildUrl({ prioridade: p, page: 1 })} active={prioridade === p}>
-              {p === '' ? 'Qualquer' : PRIORIDADE_MAP[p]?.label ?? p}
+              {p === '' ? 'Qualquer' : getStatusLabel('tarefaPrioridade', p)}
             </FilterBtn>
           ))}
         </div>
@@ -218,8 +202,8 @@ function TarefasContent() {
       </div>
 
       <DataTableShell density="compact">
-        <table className="min-w-[940px] w-full text-sm">
-          <thead className="bg-muted/50">
+        <table className="w-full table-fixed text-sm sm:table-auto sm:min-w-[940px]">
+          <thead className="hidden bg-muted/50 sm:table-header-group">
             <tr>
               <th className="px-3 py-2 text-left section-label">Título</th>
               <th className="px-3 py-2 text-left section-label">Cliente</th>
@@ -233,6 +217,14 @@ function TarefasContent() {
           <tbody className="divide-y">
             {isLoading ? (
               <TableRowSkeleton cols={7} rows={8} />
+            ) : isError ? (
+              <TableEmptyState
+                colSpan={7}
+                icon={ClipboardList}
+                title="Não foi possível carregar as tarefas"
+                description={getErrorMessage(error, 'Verifique sua conexão e tente novamente.')}
+                action={{ label: 'Tentar novamente', onClick: () => { void refetch() } }}
+              />
             ) : tarefas.length === 0 ? (
               <TableEmptyState
                 colSpan={7}
@@ -242,14 +234,6 @@ function TarefasContent() {
                 action={!status && !prioridade ? { label: 'Nova Tarefa', href: '/tarefas/nova' } : undefined}
               />
             ) : tarefasFiltradas.map((t) => {
-                const st = STATUS_MAP[t.status as string] ?? {
-                  label: t.status as string,
-                  variant: 'outline' as const,
-                }
-                const pr = PRIORIDADE_MAP[t.prioridade as string] ?? {
-                  label: (t.prioridade as string) ?? '—',
-                  variant: 'outline' as const,
-                }
                 const dataPrazo = t.dataPrazo as Timestamp | undefined
                 const vencida =
                   dataPrazo &&
@@ -272,12 +256,7 @@ function TarefasContent() {
                     </td>
                     <td className="px-3 py-1.5">
                       {t.prioridade ? (
-                        <Badge variant={pr.variant} className={pr.className}>
-                          {pr.pulse && (
-                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-current mr-1 animate-pulse" />
-                          )}
-                          {pr.label}
-                        </Badge>
+                        <TarefaPrioridadeBadge prioridade={t.prioridade as string} />
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
@@ -305,9 +284,10 @@ function TarefasContent() {
                       )}
                     </td>
                     <td className="px-3 py-1.5">
-                      <Badge variant={st.variant}>{st.label}</Badge>
+                      <TarefaStatusBadge status={t.status as string} />
                     </td>
                     <td className="px-3 py-1.5">
+                      <div className="flex items-center justify-end gap-1">
                       {!['concluida', 'cancelada'].includes(t.status as string) && (
                         <button
                           onClick={() => handleConcluirClick(t)}
@@ -327,7 +307,7 @@ function TarefasContent() {
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 ml-1"
+                              className="h-7 w-7"
                               title="Mais ações"
                             />
                           }
@@ -349,6 +329,7 @@ function TarefasContent() {
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
+                      </div>
                     </td>
                   </tr>
                   <tr className="sm:hidden">
@@ -364,14 +345,9 @@ function TarefasContent() {
                             {dataPrazo ? ` · ${formatDate(tsToDate(dataPrazo))}` : ''}
                           </p>
                           <div className="flex flex-wrap gap-1 mt-1">
-                            <Badge variant={st.variant}>{st.label}</Badge>
+                            <TarefaStatusBadge status={t.status as string} />
                             {t.prioridade && (
-                              <Badge variant={pr.variant} className={pr.className}>
-                                {pr.pulse && (
-                                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-current mr-1 animate-pulse" />
-                                )}
-                                {pr.label}
-                              </Badge>
+                              <TarefaPrioridadeBadge prioridade={t.prioridade as string} />
                             )}
                           </div>
                         </div>
@@ -404,17 +380,13 @@ function TarefasContent() {
           </p>
           <div className="flex gap-2">
             {page > 1 ? (
-              <Link href={buildUrl({ page: page - 1 })}>
-                <Button variant="outline" size="sm" className="h-9 rounded-xl">
-                  Anterior
-                </Button>
+              <Link href={buildUrl({ page: page - 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
+                Anterior
               </Link>
             ) : null}
             {page < totalPages ? (
-              <Link href={buildUrl({ page: page + 1 })}>
-                <Button variant="outline" size="sm" className="h-9 rounded-xl">
-                  Próxima
-                </Button>
+              <Link href={buildUrl({ page: page + 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
+                Próxima
               </Link>
             ) : null}
           </div>
