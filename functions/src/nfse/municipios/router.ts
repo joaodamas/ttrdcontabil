@@ -1,5 +1,9 @@
 /**
- * Roteador de municípios — mapeia código IBGE para o conector correto.
+ * Roteador de emissão. Provedor efetivo (provedor.ts → resolverProvedorNfse):
+ *  - 'nacional' (padrão): NacionalConector (Sefin Nacional/ADN) para qualquer
+ *    município; exige o A1 do prestador;
+ *  - 'municipio' (legado): mapeia o código IBGE para o conector da prefeitura;
+ *  - 'spedy': descontinuado.
  *
  * Imports dinâmicos: evitam carregar node-forge/xml-crypto e todos os conectores
  * na análise do deploy do Firebase (timeout ~10s ao carregar o entrypoint).
@@ -15,6 +19,7 @@ import type {
   ResultadoOperacaoNfse,
 } from '../types'
 import { normalizarIbge } from '../types'
+import { resolverProvedorNfse } from '../provedor'
 
 /** Prestador com o IBGE corrigido (configs antigas guardam código errado — ver IBGE_LEGADO). */
 function comIbgeCorreto(prestador: Prestador): Prestador {
@@ -34,7 +39,19 @@ export type ChaveProvedor = { rascunhoId?: string }
 const PROVEDOR_DESCONTINUADO = {
   sucesso: false as const,
   codigoErro: 'PROVEDOR_DESCONTINUADO',
-  erro: 'Este cliente ainda está configurado com a Spedy, que foi descontinuada. Em Clientes → Fiscal, troque o provedor para "Conector direto do município".',
+  erro: 'Este cliente ainda está configurado com a Spedy, que foi descontinuada. Em Clientes → Fiscal, abra e salve a configuração: o cliente passa a emitir pelo Ambiente Nacional.',
+}
+
+const CERTIFICADO_NACIONAL_AUSENTE = {
+  sucesso: false as const,
+  codigoErro: 'CERTIFICADO_AUSENTE',
+  erro: 'Certificado A1 não encontrado. O Ambiente Nacional exige o A1 do próprio cliente — faça o upload na configuração fiscal.',
+}
+
+/** Ambiente Nacional (padrão): mesmo conector para todo município conveniado. */
+async function carregarNacional() {
+  const { NacionalConector } = await import('../provedores/nacional')
+  return new NacionalConector()
 }
 export type ConsultarNfseInputRoteado = ConsultarNfseInput & ChaveProvedor
 export type CancelarNfseInputRoteado = CancelarNfseInput & ChaveProvedor
@@ -45,9 +62,16 @@ export async function rotearEmissao(
   prestador: Prestador,
   cert?:     CertificadoA1,
 ): Promise<ResultadoEmissao> {
-  if (config.provedorNfse === 'spedy') return PROVEDOR_DESCONTINUADO
+  const provedor = resolverProvedorNfse(config)
+  if (provedor === 'spedy') return PROVEDOR_DESCONTINUADO
   prestador = comIbgeCorreto(prestador)
 
+  if (provedor === 'nacional') {
+    if (!cert) return CERTIFICADO_NACIONAL_AUSENTE
+    return (await carregarNacional()).emitir(input, config, cert, prestador)
+  }
+
+  // ── Legado: conector direto do webservice da prefeitura ─────────────────
   const ibge = prestador.municipioIbge
 
   // Valida certificado A1 para municípios que exigem
@@ -167,8 +191,13 @@ export async function rotearConsulta(
   prestador: Prestador,
   cert?: CertificadoA1,
 ): Promise<ResultadoOperacaoNfse> {
-  if (config.provedorNfse === 'spedy') return PROVEDOR_DESCONTINUADO
+  const provedor = resolverProvedorNfse(config)
+  if (provedor === 'spedy') return PROVEDOR_DESCONTINUADO
   prestador = comIbgeCorreto(prestador)
+  if (provedor === 'nacional') {
+    if (!cert) return CERTIFICADO_NACIONAL_AUSENTE
+    return (await carregarNacional()).consultar(input, config, cert, prestador)
+  }
   const conector = await carregarConector(prestador.municipioIbge)
   if (!conector) {
     return { sucesso: false, erro: `Município com código IBGE ${prestador.municipioIbge} ainda não integrado.` }
@@ -185,8 +214,13 @@ export async function rotearCancelamento(
   prestador: Prestador,
   cert?: CertificadoA1,
 ): Promise<ResultadoOperacaoNfse> {
-  if (config.provedorNfse === 'spedy') return PROVEDOR_DESCONTINUADO
+  const provedor = resolverProvedorNfse(config)
+  if (provedor === 'spedy') return PROVEDOR_DESCONTINUADO
   prestador = comIbgeCorreto(prestador)
+  if (provedor === 'nacional') {
+    if (!cert) return CERTIFICADO_NACIONAL_AUSENTE
+    return (await carregarNacional()).cancelar(input, config, cert, prestador)
+  }
   const conector = await carregarConector(prestador.municipioIbge)
   if (!conector) {
     return { sucesso: false, erro: `Município com código IBGE ${prestador.municipioIbge} ainda não integrado.` }

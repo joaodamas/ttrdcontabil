@@ -7,13 +7,17 @@ notas geradas lá **não têm validade jurídica**.
 
 ## Garantias de segurança
 
-- **Só produção restrita.** `lib/ambiente.ts` só deixa sair requisição para
+- **Só produção restrita.** O CLI usa só as funções travadas de
+  `functions/src/nfse/nacional/ambiente.ts` (`montarUrl`,
+  `assertXmlHomologacao` — mesma fonte de verdade do `NacionalConector` da
+  plataforma), que só deixam sair requisição para
   `sefin.producaorestrita.nfse.gov.br` e `adn.producaorestrita.nfse.gov.br`.
   `sefin.nfse.gov.br` / `adn.nfse.gov.br` (produção) e qualquer outro host são
   recusados **antes** de abrir conexão. Não existe flag ou variável que mude
   isso. Há teste automatizado da trava (`__tests__/lib/nfse-nacional-ambiente.test.ts`).
-- **tpAmb = 2 sempre.** O montador da DPS e do evento só escreve `tpAmb=2`
-  (não tem parâmetro). Antes de enviar, o CLI ainda confere o XML e recusa se
+- **tpAmb = 2 sempre.** O montador da DPS e do evento
+  (`functions/src/nfse/nacional/dps.ts`) usa `tpAmb=2` quando não recebe
+  ambiente — e o CLI nunca passa ambiente. Antes de enviar, o CLI ainda confere o XML e recusa se
   achar outro valor.
 - **Certificado e senha:** o `.pfx` vem de `--pfx` ou `NFSE_PFX`; a senha vem
   de `NFSE_PFX_SENHA` ou é **digitada no terminal sem eco**. A senha nunca é
@@ -92,7 +96,7 @@ São Paulo 3550308.
    `municipioPrestacao`), `valores` (`valorServico`, `tribISSQN`, `tpRetISSQN`,
    `aliquotaIss?`, `pisCofins?`, retenções, `totTrib`), `dps` (`serie`,
    `numero`, `competencia`) e `ibscbs` (opcional — ver abaixo). Os tipos estão
-   documentados em `lib/dps.ts`.
+   documentados em `functions/src/nfse/nacional/dps.ts`.
    - **ME/EPP do Simples:** `totTrib: {"pTotTribSN": <percentual>}` (E0712 proíbe
      `indTotTrib`). **MEI / não optante:** `{"indTotTrib": 0}`.
    - Série/número: use uma série só para teste (ex.: `900`) e incremente
@@ -135,6 +139,21 @@ suspensa (ver abaixo) — o script diz isso claramente.
 Opção geral `--sefin api|raiz`: base da Sefin (`/API/SefinNacional`, padrão,
 igual ao link oficial do Swagger; ou `/SefinNacional`). Se o `POST /nfse`
 devolver 404, tente `--sefin raiz`.
+
+## Testar o conector da plataforma (sem Firebase)
+
+`emitir-conector.mjs` roda o **mesmo** `NacionalConector` das Cloud Functions
+(compilado em `functions/lib/`), sem Firestore/Storage, sempre na produção
+restrita (`ambienteEmissao` forçado para `homologacao`):
+
+```bash
+cp scripts/poc-nfse-nacional/exemplo-conector.json ~/nota-conector.json   # preencher fora do repo
+NFSE_PFX=~/certs/cliente.pfx NFSE_PFX_SENHA='...' \
+  npm run poc:nfse:conector -- --dados ~/nota-conector.json --consultar
+# cancelar logo em seguida:  ... --cancelar "Teste de cancelamento do conector"
+```
+
+Número da DPS: `--numero N` (padrão: derivado do relógio) e `--serie` (padrão 900).
 
 ## Grupo IBS/CBS (opcional)
 
