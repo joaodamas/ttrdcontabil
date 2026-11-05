@@ -36,6 +36,7 @@ import { fetchTomadores } from '@/features/tomadores/services'
 import type { TomadorRecord } from '@/features/tomadores/types'
 import { provedorNfseEfetivo } from '@/features/fiscal/services'
 import { fetchChaveNfseNacional } from '@/features/admin/services'
+import { situacaoNacional } from '@/lib/nfse-nacional-convenio'
 
 function isValidCpfCnpj(raw: string): boolean {
   const digits = raw.replace(/\D/g, '')
@@ -408,6 +409,8 @@ export function NfseEmissaoForm({
   // Sem o campo = Ambiente Nacional (mesma regra do backend).
   const provedorEmissao = fiscalDoCliente ? provedorNfseEfetivo(fiscalDoCliente) : undefined
   const credenciaisDoCliente = (fiscalDoCliente?.credenciais ?? {}) as Record<string, unknown>
+  const situacaoMunicipio = situacaoNacional((fiscalDoCliente?.municipioIbge ?? fiscalDoCliente?.codigoMunicipioIbge) as string | undefined)
+  const municipioForaDoNacional = situacaoMunicipio === 'prefeitura' || situacaoMunicipio === 'sem_convenio'
   const semA1Nacional = provedorEmissao === 'nacional'
     && !(typeof credenciaisDoCliente.certificadoStoragePath === 'string' && credenciaisDoCliente.certificadoStoragePath && credenciaisDoCliente.certValido === true)
   // Barra a emissão ANTES do último clique: antes, um cliente ainda com a Spedy
@@ -418,7 +421,9 @@ export function NfseEmissaoForm({
         ? { titulo: 'Cliente sem configuração fiscal.', detalhe: 'Configure município, inscrição municipal e certificado antes de emitir.' }
         : provedorEmissao === 'nacional' && ambienteEmissao === 'producao' && producaoNacionalLiberada === false
           ? { titulo: 'Emissão em produção pelo Ambiente Nacional ainda não liberada.', detalhe: 'Um administrador libera em Administração → Conectores (chave "Ambiente Nacional"). Para testar, deixe o cliente em Homologação.' }
-          : semA1Nacional
+          : provedorEmissao === 'nacional' && ambienteEmissao === 'producao' && municipioForaDoNacional
+            ? { titulo: `${(fiscalDoCliente.municipioEmissor as string | undefined) ?? 'O município do cliente'} não emite pelo Ambiente Nacional.`, detalhe: 'Pelo Sistema Nacional, a emissão neste município é feita no sistema da própria prefeitura. Não é possível emitir pelo Nacional para este cliente.' }
+            : semA1Nacional
             ? { titulo: 'Cliente sem certificado A1 válido.', detalhe: 'A emissão pelo Ambiente Nacional é assinada com o A1 do próprio cliente. Envie o certificado na configuração fiscal.' }
             : null
   const previewTomadorCpf = watch('tomadorCpfCnpj')

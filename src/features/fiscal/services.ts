@@ -5,6 +5,7 @@ import { deleteDocument, listDocuments } from '@/lib/firestore-client'
 import { getFirebaseApp } from '@/lib/firebase'
 import type { FiscalReadiness, FiscalReadinessCliente, FiscalSnapshot, NotaFiscalRecord } from './types'
 import { normalizarIbge } from '@/lib/ibge'
+import { situacaoNacional } from '@/lib/nfse-nacional-convenio'
 
 const MUNICIPIO_TIPO: Record<string, 'abrasf_a1' | 'geisweb_a1' | 'simpliss' | 'conam' | 'giap'> = {
   '3525904': 'abrasf_a1',
@@ -193,7 +194,12 @@ export async function fetchFiscalReadiness(): Promise<FiscalReadiness> {
         if (!hasText(fiscal.descricaoServicoPadrao)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.descricaoAusente)
         if (!hasPositiveNumber(fiscal.aliquotaPadrao)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.aliquotaAusente)
         bloqueiosEmissao.push(...getCredenciaisBloqueios(fiscal))
-        if (fiscal.ambienteEmissao === 'producao' && fiscal.producaoLiberada !== true) {
+        if (provedorNfseEfetivo(fiscal) === 'nacional') {
+          // Liberação de produção do Nacional é a chave única do escritório (não
+          // por cliente); aqui só o que é do cliente: o município emitir pelo Nacional.
+          const situacao = situacaoNacional(municipioIbge as string | undefined)
+          if (situacao === 'prefeitura' || situacao === 'sem_convenio') bloqueiosEmissao.push(BLOQUEIO_FISCAL.municipioNaoEmiteNacional)
+        } else if (fiscal.ambienteEmissao === 'producao' && fiscal.producaoLiberada !== true) {
           bloqueiosEmissao.push(BLOQUEIO_FISCAL.producaoNaoLiberada)
         }
       }
