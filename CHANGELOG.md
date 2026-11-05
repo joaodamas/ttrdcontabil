@@ -13,6 +13,24 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Alterado — coerência de UI/UX (2026-11-05, revisão visual de 39 telas)
+- **Cabeçalho único:** todas as telas usam `PageHeader`, com um `<h1>` só e breadcrumbs no lugar dos três estilos de "Voltar". No celular, título e descrição ficam acima das ações e nada vaza para o lado (antes, /hoje e /clientes perdiam o título e cortavam botões).
+- **Botões:** um tamanho de CTA (`size: 'cta'`) para a ação principal e as secundárias; "+ Novo" do topo na cor primária; rótulos em sentence case; ~27 `Link` envolvendo `Button` viraram `Link` com `buttonVariants`.
+- **Nomes:** o mesmo nome em menu, busca rápida (⌘K) e título (Painel, Emitir NFS-e, Histórico de NFS-e, Administração…); a busca rápida passou a cobrir todos os destinos do menu. `layout/header.tsx` (morto) removido.
+- **Status:** uma só regra de cor (`src/lib/status-semantics.ts` + `status-badge.tsx`) no lugar de ~17 mapas locais — verde concluído/pago/emitida, âmbar pendente, azul em andamento, vermelho erro/atraso, cinza cancelado.
+- **Erro não vira vazio:** listas mostram erro com "Tentar novamente"; detalhe e edição mostram "não encontrado"/"erro" (`RecordUnavailable`) em vez de página em branco ou carregamento eterno; o Painel não mostra mais "internal [0]".
+- **Fechamento coerente:** uma definição de pendência para banner, KPIs, cartões e tabela; KPIs somam o total.
+- **Prontidão fiscal** com bloqueios em frases curtas e acentuadas.
+- **Textos:** varredura de acentos nas mensagens (12× "Nao foi possivel", /hoje, bloqueios fiscais).
+- **Formulários:** `CurrencyInput` (R$ no padrão brasileiro, sem mudar com o scroll) em lançamento, NFS-e, produto, serviço, contrato e recorrência; obrigatórios marcados só com `Label required`.
+- **Tabelas e celular:** cartões abaixo de `md` em Financeiro, Histórico, Conectores, Fechamento e Fiscal; /clientes em uma linha por cliente; KPIs em 2 colunas no celular; linhas de Tarefas com altura igual.
+- **Pendente:** o Painel lê `dashboard_kpis/{id}`, criado pela rotina `recalcularDashboardKpis`; antes da primeira execução (ambiente novo) a regra `sameTenantExisting()` nega a leitura do documento inexistente e a tela mostra erro em vez de "ainda sem dados".
+- **Mensalidade:** /clientes (e o PDF) mostra o mesmo valor da Carteira — MRR dos contratos vigentes —, caindo para `cliente.mensalidade` só sem contrato.
+
+### Adicionado
+- **PoC da NFS-e pelo Ambiente Nacional** (`scripts/poc-nfse-nacional/`, `npm run poc:nfse`): consulta de convênio e parâmetros, emissão, consulta, cancelamento e DANFSe, travado na produção restrita e sem integrador; DPS validada nos XSD oficiais. Aguarda o A1 de um cliente piloto — ver o README da pasta. `signer.ts` ganhou a opção `posicao: 'after'` (padrão ABRASF inalterado).
+- **Revisão local com emuladores** (`scripts/seed-emulador.mjs`, `NEXT_PUBLIC_USE_FIREBASE_EMULATORS=1`): dados fictícios para conferir telas sem tocar em produção.
+
 ### Removido — Spedy e qualquer integrador (2026-11-05, decisão do dono)
 - **Spedy fora do código.** A conta foi encerrada e a decisão é não usar integrador nenhum: a emissão é direta (conector da prefeitura hoje; Ambiente Nacional em avaliação). Saíram o conector (`provedores/spedy.ts`, `spedy-evento.ts`), webhook, provisionamento, envio de certificado, a NF-e de produto (`emitir-produto.ts`, `idempotencia.ts`, tela `/fiscal/emitir-nfe` e o modal) e o script de cadastro do webhook. Clientes ainda gravados com `provedorNfse: 'spedy'` recebem `PROVEDOR_DESCONTINUADO` com instrução, e salvar a Configuração Fiscal migra para o conector do município. O catálogo `/fiscal/produtos` fica, com aviso de que a plataforma não emite NF-e.
 - **Destrava o deploy:** o secret `SPEDY_WEBHOOK_SECRET` deixou de ser exigido. O deploy de functions remove `emitirNfeProduto` e `enviarCertificadoSpedy` de produção (ver `docs/DEPLOY-2026-08-03.md`).
