@@ -27,6 +27,7 @@ import { formatWhatsApp, normalizeWhatsApp } from '@/lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
 import { financeiroKeys } from '@/features/financeiro/queries'
 import { nomePreservado } from '@/lib/nome-preservado'
+import { ClientePicker } from '@/components/ui/cliente-picker'
 
 const lancamentoSchema = z.object({
   clienteId:        z.string().optional().nullable(),
@@ -77,7 +78,7 @@ type LancamentoPayload = Omit<LancamentoFormData, 'dataVencimento' | 'dataPagame
   dataPagamento?: Timestamp | null
 }
 
-interface ClienteItem { id: string; razaoSocial: string }
+interface ClienteItem { id: string; razaoSocial: string; nomeFantasia?: string; cpfCnpj?: string }
 interface CompetenciaItem { id: string; mes: number; ano: number; servicoNome?: string }
 
 // Status legado que pode vir gravado em documentos antigos (Firestore não
@@ -303,17 +304,13 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
               name="clienteId"
               control={control}
               render={({ field }) => (
-                <Select value={field.value ?? SELECT_NONE_VALUE} onValueChange={(v) => field.onChange(v === SELECT_NONE_VALUE ? null : v)} disabled={loadingClientes}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={loadingClientes ? 'Carregando...' : 'Selecione o cliente'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={SELECT_NONE_VALUE}>Nenhum</SelectItem>
-                    {clientes.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.razaoSocial}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ClientePicker
+                  clientes={clientes}
+                  value={field.value}
+                  onChange={field.onChange}
+                  loading={loadingClientes}
+                  opcaoVazia="Nenhum"
+                />
               )}
             />
             {errors.clienteId && <p className="text-xs text-destructive">{errors.clienteId.message}</p>}

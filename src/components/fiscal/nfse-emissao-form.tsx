@@ -31,6 +31,9 @@ import { getFirebaseApp } from '@/lib/firebase'
 import { getErrorMessage } from '@/lib/error-message'
 import { SELECT_NONE_VALUE } from '@/lib/select-values'
 import { Lc116Picker } from '@/components/fiscal/lc116-picker'
+import { ClientePicker } from '@/components/ui/cliente-picker'
+import { fetchTomadores } from '@/features/tomadores/services'
+import type { TomadorRecord } from '@/features/tomadores/types'
 
 function isValidCpfCnpj(raw: string): boolean {
   const digits = raw.replace(/\D/g, '')
@@ -68,7 +71,7 @@ const nfseSchema = z.object({
 
 type NfseFormData = z.input<typeof nfseSchema>
 
-interface Cliente { id: string; razaoSocial: string; cpfCnpj?: string; email?: string }
+interface Cliente { id: string; razaoSocial: string; nomeFantasia?: string; cpfCnpj?: string; email?: string }
 interface Competencia { id: string; mes: number; ano: number; servicoNome?: string }
 type RascunhoNfse = {
   id: string
@@ -112,6 +115,9 @@ export function NfseEmissaoForm({
   const [loadingCompetencias,setLoadingCompetencias]= useState(false)
   const [loadingRascunho, setLoadingRascunho] = useState(Boolean(rascunhoIdParam))
   const [rascunhoAtual, setRascunhoAtual] = useState<RascunhoNfse | null>(null)
+  const [carteira, setCarteira] = useState<TomadorRecord[]>([])
+  const [carteiraClienteId, setCarteiraClienteId] = useState<string | null>(null)
+  const [tomadorCarteiraId, setTomadorCarteiraId] = useState<string | null>(null)
   const [saving,             setSaving]             = useState(false)
   const [emitting,           setEmitting]           = useState(false)
   const [emissaoPendente,    setEmissaoPendente]    = useState<NfseFormData | null>(null)
@@ -218,21 +224,24 @@ export function NfseEmissaoForm({
     toast.success('Dados do último rascunho aplicados.')
   }
 
-  // When client selected: auto-fill tomador + load competencias
+  // Cliente escolhido: carrega competências e a carteira de tomadores dele.
+  // O tomador NÃO é mais preenchido com os dados do próprio cliente: a nota sai
+  // em nome do cliente (prestador) PARA o cliente dele — copiar o prestador no
+  // tomador emitia nota para o próprio CNPJ se ninguém corrigisse o campo.
   useEffect(() => {
     if (!selectedClienteId) {
       setCompetencias([])
       return
     }
 
-    const cliente = clientes.find((c) => c.id === selectedClienteId)
-    if (cliente) {
-      if (!rascunhoAtual) {
-        setValue('tomadorNome', cliente.razaoSocial)
-        if (cliente.cpfCnpj) setValue('tomadorCpfCnpj', cliente.cpfCnpj)
-        if (cliente.email)   setValue('tomadorEmail', cliente.email)
-      }
-    }
+    let ativo = true
+    fetchTomadores(selectedClienteId)
+      .then(({ tomadores }) => {
+        if (!ativo) return
+        setCarteira(tomadores.filter((t) => t.ativo !== false))
+        setCarteiraClienteId(selectedClienteId)
+      })
+      .catch(() => { if (ativo) { setCarteira([]); setCarteiraClienteId(selectedClienteId) } })
 
     // Pré-preenche com os padrões da configuração fiscal do cliente (código de
     // serviço, item LC 116, alíquota, descrição) — sem sobrescrever um rascunho
@@ -255,6 +264,7 @@ export function NfseEmissaoForm({
       .then((data) => setCompetencias(data as unknown as Competencia[]))
       .catch((err) => toast.error(getErrorMessage(err, 'Não foi possível carregar competências do cliente selecionado.')))
       .finally(() => setLoadingCompetencias(false))
+    return () => { ativo = false }
   }, [selectedClienteId, clientes, setValue, watch, rascunhoAtual])
 
   async function handleSaveRascunho(data: NfseFormData) {
@@ -471,23 +481,14 @@ export function NfseEmissaoForm({
             <Controller
               name="clienteId"
               control={control}
-              render={({ field }) => {
-                const selected = clientes.find((c) => c.id === field.value)
-                return (
-                <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={loadingClientes}>
-                  <SelectTrigger>
-                    <span className={selected ? 'truncate text-left' : 'truncate text-left text-muted-foreground'}>
-                      {selected?.razaoSocial ?? (loadingClientes ? 'Carregando...' : 'Selecione o cliente')}
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clientes.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.razaoSocial}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                )
-              }}
+              render={({ field }) => (
+                <ClientePicker
+                  clientes={clientes}
+                  value={field.value}
+                  onChange={(id) => field.onChange(id ?? '')}
+                  loading={loadingClientes}
+                />
+              )}
             />
             {errors.clienteId && <p className="text-xs text-destructive">{errors.clienteId.message}</p>}
           </div>
@@ -532,6 +533,29 @@ export function NfseEmissaoForm({
       <Card className={cardClassByLayout[layout]}>
         <CardHeader><CardTitle className="text-sm">Dados do Tomador</CardTitle></CardHeader>
         <CardContent className="space-y-4">
+          {selectedClienteId && (
+            <div className="space-y-1.5">
+              <Label>Tomador da carteira do cliente</Label>
+              <ClientePicker
+                clientes={carteiraClienteId === selectedClienteId ? carteira : []}
+                value={tomadorCarteiraId}
+                loading={carteiraClienteId !== selectedClienteId}
+                placeholder={carteira.length ? 'Escolher tomador cadastrado' : 'Nenhum tomador na carteira deste cliente'}
+                onChange={(id) => {
+                  setTomadorCarteiraId(id)
+                  const t = carteira.find((x) => x.id === id)
+                  if (!t) return
+                  setValue('tomadorNome', t.razaoSocial, { shouldValidate: true })
+                  setValue('tomadorCpfCnpj', formatCpfCnpj(t.cpfCnpj), { shouldValidate: true })
+                  setValue('tomadorEmail', t.email ?? '', { shouldValidate: true })
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Ou preencha abaixo. A carteira de tomadores fica em Clientes → (cliente) → Tomadores.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <Label htmlFor="tomadorNome" required>Nome / Razão Social</Label>
             <Input id="tomadorNome" {...register('tomadorNome')} placeholder="Nome completo ou razão social" />

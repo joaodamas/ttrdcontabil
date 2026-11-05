@@ -7,7 +7,6 @@ import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Loader2, Package, Ban } from 'lucide-react'
 import { toast } from 'sonner'
 import { getErrorMessage } from '@/lib/error-message'
@@ -17,6 +16,7 @@ import type { ClienteRecord } from '@/features/clientes/types'
 import { fetchProdutos, updateProduto } from '@/features/produtos/services'
 import type { ProdutoRecord } from '@/features/produtos/types'
 import { ProdutoForm } from '@/components/produtos/produto-form'
+import { ClientePicker } from '@/components/ui/cliente-picker'
 
 export default function ProdutosPage() {
   const [clientes, setClientes] = useState<ClienteRecord[]>([])
@@ -73,16 +73,13 @@ export default function ProdutosPage() {
         <div className="flex w-full flex-wrap items-end gap-2 sm:w-auto">
           <div className="min-w-0 flex-1 space-y-1.5 sm:flex-none">
             <p className="section-label">Empresa emissora</p>
-            <Select value={clienteId} onValueChange={(v) => setClienteId(v ?? '')}>
-              <SelectTrigger className="w-full sm:w-[260px]">
-                <SelectValue placeholder={loadingClientes ? 'Carregando...' : 'Selecione o cliente'} />
-              </SelectTrigger>
-              <SelectContent>
-                {clientes.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{clienteNome(c)}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ClientePicker
+              className="w-full sm:w-[320px]"
+              clientes={clientes.map((c) => ({ id: c.id, razaoSocial: clienteNome(c), nomeFantasia: c.nomeFantasia as string | undefined, cpfCnpj: c.cpfCnpj as string | undefined }))}
+              value={clienteId || null}
+              onChange={(id) => setClienteId(id ?? '')}
+              loading={loadingClientes}
+            />
           </div>
           {clienteId && <ProdutoForm clienteId={clienteId} onSaved={load} />}
         </div>

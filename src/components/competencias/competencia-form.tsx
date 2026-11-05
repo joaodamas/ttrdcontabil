@@ -37,6 +37,7 @@ import { competenciaPodeTransicionar, opcoesStatusCompetencia } from '@/lib/stat
 import type { StatusCompetencia } from '@/types/firestore'
 import { useQueryClient } from '@tanstack/react-query'
 import { competenciasKeys } from '@/features/competencias/queries'
+import { ClientePicker } from '@/components/ui/cliente-picker'
 
 const competenciaSchema = z.object({
   clienteId:        z.string().min(1, 'Selecione o cliente'),
@@ -57,7 +58,7 @@ const STATUS_LABELS: Record<StatusCompetencia, string> = {
   cancelada:    'Cancelada',
 }
 
-interface ClienteItem { id: string; razaoSocial: string }
+interface ClienteItem { id: string; razaoSocial: string; nomeFantasia?: string; cpfCnpj?: string }
 interface ServicoItem { id: string; servicoId?: string; servicoNome: string; servicoCodigo?: string | null }
 interface UsuarioItem { id: string; nome: string }
 
@@ -285,16 +286,13 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
               name="clienteId"
               control={control}
               render={({ field }) => (
-                <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={isEditing || loadingClientes}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder={loadingClientes ? 'Carregando...' : 'Selecione o cliente'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clientes.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.razaoSocial}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ClientePicker
+                  clientes={clientes}
+                  value={field.value}
+                  onChange={(id) => field.onChange(id ?? '')}
+                  loading={loadingClientes}
+                  disabled={isEditing}
+                />
               )}
             />
             {errors.clienteId && <p className="text-xs text-destructive">{errors.clienteId.message}</p>}

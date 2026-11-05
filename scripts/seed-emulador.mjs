@@ -166,6 +166,16 @@ for (let i = 0; i < 6; i++) {
   void c
 }
 
+// Carteira de tomadores (clientes DOS clientes) dos 3 primeiros prestadores.
+const tomadoresBase = [['Mercado Bom Preço Ltda', '11444777000161'], ['Hotel Vista Serra Ltda', '04252011000110'], ['Maria Aparecida Souza', '52998224725']]
+for (let i = 0; i < 3; i++) {
+  for (const [j, [razaoSocial, cpfCnpj]] of tomadoresBase.entries()) {
+    await put('tomadores', `tom-${i + 1}-${j + 1}`, {
+      clienteId: clientes[i].id, razaoSocial, cpfCnpj, email: `financeiro${j + 1}@exemplo.com.br`, ativo: true,
+    })
+  }
+}
+
 const conectores = [
   ['jundiai-sp', 'Jundiaí', '3525904', true], ['campinas-sp', 'Campinas', '3509502', true],
   ['sao-paulo-sp', 'São Paulo', '3550308', true], ['barueri-sp', 'Barueri', '3505708', false],
