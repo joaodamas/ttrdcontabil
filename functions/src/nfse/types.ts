@@ -220,6 +220,8 @@ export interface EmitirNfseInput {
   tomador: Tomador
   servico: Servico
   competenciaId?: string
+  /** Competência da nota (AAAA-MM-DD). Preenchida a partir da competência vinculada; ver nacional/competencia.ts. */
+  dataCompetencia?: string
   // Numero RPS gerado pelo sistema (se vazio, gera automaticamente)
   numeroRps?: string
   serieRps?: string

@@ -108,6 +108,19 @@ Certificado A1 da **JP PROJECT MANAGER LTDA** (59.360.092/0001-63, Cajamar/SP, S
 - **Próximo passo:** repetir o `emitir` com o A1 de um cliente de **Barueri, São Paulo ou Campinas** — aí deve sair a NFS-e de teste (chave de acesso), seguida de `consultar` e `cancelar`.
 - **Bug achado no caminho (corrigido):** a plataforma gravava Cajamar como 3508900 (Caiabu) e Taboão da Serra como 3552502 (Suzano). Corretos: 3509205 e 3552809. Configs antigas são normalizadas (`IBGE_LEGADO`).
 
+## ✅ Homologação concluída — ciclo completo (2026-11-05)
+
+Prestador **ARTE & PRIME PLANEJADOS LTDA** (33.854.681/0001-04, São Paulo), produção restrita, competência 15/08/2025 (única janela com alíquota vigente no ambiente de testes de SP), serviço 01.01.01:
+
+| Etapa | Script PoC | Conector da plataforma (`NacionalConector`) |
+|---|---|---|
+| Emitir | ✔ HTTP 201, NFS-e nº 1 | ✔ NFS-e nº 2, chave `3550308223385468100010400000000000022611…` |
+| Consultar pela chave | ✔ HTTP 200 + XML | ✔ status "emitida" + XML |
+| Consultar pela DPS (`/dps/{id}` com prefixo "DPS") | ✔ HTTP 200 | — (usado na consulta prévia do retry) |
+| Cancelar (evento 101101) | ✔ HTTP 201 | ✔ "Cancelamento registrado" |
+
+Confirmado também: resposta de sucesso traz `chaveAcesso` e `nfseXmlGZipB64`; `/dps/{id}` usa o id com prefixo "DPS"; Santana de Parnaíba **não** tem convênio ativo (como Cajamar).
+
 ## Teste do conector da plataforma (2026-11-05, tarde)
 
 Mesmo `NacionalConector` das Functions, rodado local contra a produção restrita com o A1 da JP PROJECT MANAGER (Cajamar):

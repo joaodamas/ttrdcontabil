@@ -287,6 +287,18 @@ export async function processarEmissao(input: EmitirNfseInput, uid: string, opco
   // se, por algum motivo, nada tiver sido alocado acima).
   input = { ...input, numeroRps, serieRps }
 
+  // Competência vinculada → competência da nota (honorário de outubro emitido em
+  // novembro sai com competência de outubro). Sem vínculo, o conector usa a data
+  // de emissão. Falha de leitura não bloqueia: cai no padrão.
+  if (input.competenciaId && !input.dataCompetencia) {
+    const comp = await db().collection('competencias').doc(input.competenciaId).get().catch(() => null)
+    const mes = Number(comp?.data()?.mes)
+    const ano = Number(comp?.data()?.ano)
+    if (mes >= 1 && mes <= 12 && ano >= 2000) {
+      input = { ...input, dataCompetencia: `${ano}-${String(mes).padStart(2, '0')}-01` }
+    }
+  }
+
   try {
     return await enviarEmissao(input, uid, actor, numeroRps, serieRps, opcoes)
   } catch (err) {

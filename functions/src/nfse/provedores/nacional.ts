@@ -34,6 +34,7 @@ import {
   explicarStatusHttp, mensagemMunicipioSemConvenio, mensagemMunicipioSemEmissorNacional, traduzirErrosSefin,
 } from '../nacional/erros'
 import { numeroDpsValido, serieDpsValida } from '../nacional/numeracao'
+import { dataCompetenciaDps } from '../nacional/competencia'
 
 // ─── Transporte HTTP (injetável nos testes) ─────────────────────────────────
 
@@ -229,7 +230,7 @@ export class NacionalConector {
       const dados = montarDadosNotaNacional(input, config, { ...prestador, municipioIbge: ibge }, {
         serie: input.serieRps,
         numero: input.numeroRps,
-        competencia: dhEmi.slice(0, 10),
+        competencia: dataCompetenciaDps(input.dataCompetencia, dhEmi.slice(0, 10)),
       })
       const { xml, id } = montarDpsXml(dados, { dhEmi, ambiente: sessao.ambiente })
       assertXmlDoAmbiente(xml, sessao.ambiente)
