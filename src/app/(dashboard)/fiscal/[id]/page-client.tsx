@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import { orderBy, Timestamp, where } from 'firebase/firestore'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { toast } from 'sonner'
-import { Download, Loader2, RefreshCw, XCircle } from 'lucide-react'
+import { Check, Copy, ExternalLink, FileCode, FileText, Loader2, RefreshCw, XCircle } from 'lucide-react'
 
 import { PageHeader } from '@/components/layout/page-header'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -18,6 +18,13 @@ import { Textarea } from '@/components/ui/textarea'
 import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { getFirebaseApp } from '@/lib/firebase'
 import { formatCurrency, formatDate, tsToDate } from '@/lib/utils'
+import { useNfseArquivos } from '@/components/fiscal/use-nfse-arquivos'
+import {
+  chaveAcessoDaNota,
+  podeObterDanfse,
+  temXmlNfse,
+  urlConsultaPublicaNfse,
+} from '@/features/fiscal/nfse-arquivos'
 
 export default function NfseDetalhePage() {
   const params = useParams<{ id: string }>()
@@ -29,6 +36,7 @@ export default function NfseDetalhePage() {
   const [cancelamentoOpen, setCancelamentoOpen] = useState(false)
   const [motivoCancelamento, setMotivoCancelamento] = useState('')
   const [cancelando, setCancelando] = useState(false)
+  const [chaveCopiada, setChaveCopiada] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -55,6 +63,20 @@ export default function NfseDetalhePage() {
   useEffect(() => {
     load()
   }, [load])
+
+  // Sem recarregar a página ao gerar o PDF: o callable reaproveita o arquivo já salvo.
+  const { baixarXml, abrirDanfse, gerandoPdfId } = useNfseArquivos()
+
+  async function copiarChave(chave: string) {
+    try {
+      await navigator.clipboard.writeText(chave)
+      setChaveCopiada(true)
+      toast.success('Chave de acesso copiada.')
+      setTimeout(() => setChaveCopiada(false), 2000)
+    } catch {
+      toast.error('Não foi possível copiar. Selecione a chave e copie manualmente.')
+    }
+  }
 
   async function consultarStatus() {
     try {
@@ -117,6 +139,8 @@ export default function NfseDetalhePage() {
   }
 
   const dataEmissao = nota.dataEmissao as Timestamp | undefined
+  const chaveAcesso = chaveAcessoDaNota(nota)
+  const gerandoPdf = gerandoPdfId === id
 
   return (
     <div className="space-y-5">
@@ -133,16 +157,23 @@ export default function NfseDetalhePage() {
               <RefreshCw />
               Consultar
             </Button>
-            {nota.pdfUrl ? (
-              <a
-                href={nota.pdfUrl as string}
-                target="_blank"
-                rel="noreferrer"
-                className={buttonVariants({ variant: 'outline', size: 'cta' })}
+            {temXmlNfse(nota) ? (
+              <Button variant="outline" size="cta" onClick={() => baixarXml(nota)}>
+                <FileCode />
+                Baixar XML
+              </Button>
+            ) : null}
+            {podeObterDanfse(nota) ? (
+              <Button
+                variant="outline"
+                size="cta"
+                onClick={() => { void abrirDanfse(nota) }}
+                disabled={gerandoPdf}
+                aria-busy={gerandoPdf}
               >
-                <Download />
-                PDF
-              </a>
+                {gerandoPdf ? <Loader2 className="animate-spin" /> : <FileText />}
+                {gerandoPdf ? 'Gerando PDF…' : 'Baixar PDF (DANFSe)'}
+              </Button>
             ) : null}
             {nota.status === 'emitida' ? (
               <Button variant="outline" size="cta" className="text-destructive" onClick={() => setCancelamentoOpen(true)}>
@@ -153,6 +184,40 @@ export default function NfseDetalhePage() {
           </>
         }
       />
+
+      {chaveAcesso ? (
+        <Card>
+          <CardHeader><CardTitle className="text-sm">Chave de acesso</CardTitle></CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <code className="min-w-0 break-all rounded-md bg-muted px-3 py-2 font-mono text-sm tracking-wide sm:text-base">
+                {chaveAcesso}
+              </code>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { void copiarChave(chaveAcesso) }}
+                aria-label="Copiar chave de acesso"
+              >
+                {chaveCopiada ? <Check /> : <Copy />}
+                {chaveCopiada ? 'Copiada' : 'Copiar'}
+              </Button>
+            </div>
+            <a
+              href={urlConsultaPublicaNfse(chaveAcesso)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({ variant: 'link', size: 'sm', className: 'h-auto px-0' })}
+            >
+              <ExternalLink />
+              Consultar no portal nacional
+            </a>
+            <p className="text-xs text-muted-foreground">
+              Abre a consulta pública oficial (nfse.gov.br) já com esta chave. Se o portal pedir, cole a chave copiada acima.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
