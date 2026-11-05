@@ -13,6 +13,9 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Adicionado — relatório da ficha completa dos clientes ativos (2026-11-05)
+- Clientes → **"Ficha completa (Excel)"** baixa um relatório de TODOS os clientes ativos (não só a página/filtro): aba **Clientes ativos** com cada campo da ficha + "Preenchidos", "% completo" e "Campos em branco" (por nome); aba **Resumo por campo** (quantos preenchidos × em branco); aba **Fiscal NFS-e** (município, se emite pelo Ambiente Nacional, inscrição municipal, regime, certificado A1, ambiente). Senhas aparecem como "✔ preenchida"; **administrador** pode baixar "Com senhas visíveis" (confirmação + registro `exportacao_sensivel` no log de auditoria, arquivo com sufixo `-COM-SENHAS`). `src/lib/clientes-relatorio.ts`, testado.
+
 ### Adicionado — XML, chave de acesso e DANFSe da NFS-e na plataforma (2026-11-05)
 - **Baixar XML**: botão no detalhe da nota e nas ações do histórico; baixa o XML oficial gravado (`xmlNfse`) como `NFSe-<número>-<chave>.xml` (UTF-8), direto no navegador. Some quando a nota não tem XML.
 - **Chave de acesso** em destaque no detalhe, com botão copiar e link **"Consultar no portal nacional"** → `https://www.nfse.gov.br/ConsultaPublica/?tpc=1&chave=<chave>` (endereço oficial do QR Code definido na NT 008/2026, item 2.4.3).

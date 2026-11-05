@@ -203,6 +203,34 @@ async function writeAuditLog(params: {
   })
 }
 
+/**
+ * Registra no log de auditoria uma exportação de dados sensíveis (ex.: relatório
+ * de clientes com senhas visíveis). Falha de log não bloqueia a exportação,
+ * mas fica no console.
+ */
+export async function registrarExportacaoSensivel(entidade: string, detalhe: Record<string, unknown>) {
+  try {
+    const actor = await getAuditActor()
+    if (!actor?.tenantId) throw new Error('Usuário sem tenantId resolvido')
+    await addDoc(collection(getClientDb(), 'logs_auditoria'), {
+      tenantId: actor.tenantId,
+      usuarioId: actor.uid,
+      usuarioNome: actor.nome,
+      usuarioEmail: actor.email,
+      entidade,
+      entidadeId: null,
+      acao: 'exportacao_sensivel',
+      dadosAntes: null,
+      dadosDepois: detalhe,
+      origem: 'client',
+      path: typeof window !== 'undefined' ? window.location.pathname : null,
+      criadoEm: serverTimestamp(),
+    })
+  } catch (err) {
+    console.error('[audit] Falha ao registrar exportação sensível', err)
+  }
+}
+
 async function auditSafely(params: Parameters<typeof writeAuditLog>[0]) {
   try {
     await writeAuditLog(params)
