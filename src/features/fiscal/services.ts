@@ -37,10 +37,9 @@ function getFiscalDocForCliente(
  * só 'prefeitura' (escolha explícita) usa o conector municipal; 'municipio'
  * gravado pelo formulário antigo e config sem o campo vão pelo Ambiente Nacional.
  */
-export function provedorNfseEfetivo(fiscal: Record<string, unknown> | null | undefined): 'nacional' | 'municipio' | 'spedy' {
+export function provedorNfseEfetivo(fiscal: Record<string, unknown> | null | undefined): 'nacional' | 'municipio' {
   const p = fiscal?.provedorNfse
-  if (p === 'prefeitura') return 'municipio'
-  return p === 'spedy' ? 'spedy' : 'nacional'
+  return p === 'prefeitura' ? 'municipio' : 'nacional'
 }
 
 function temCertificadoA1Valido(credenciais: Record<string, unknown>) {
@@ -193,7 +192,6 @@ export async function fetchFiscalReadiness(): Promise<FiscalReadiness> {
         if (!hasText(fiscal.itemListaServico)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.itemListaAusente)
         if (!hasText(fiscal.descricaoServicoPadrao)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.descricaoAusente)
         if (!hasPositiveNumber(fiscal.aliquotaPadrao)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.aliquotaAusente)
-        if (provedorNfseEfetivo(fiscal) === 'spedy') bloqueiosEmissao.push(BLOQUEIO_FISCAL.provedorDescontinuado)
         bloqueiosEmissao.push(...getCredenciaisBloqueios(fiscal))
         if (fiscal.ambienteEmissao === 'producao' && fiscal.producaoLiberada !== true) {
           bloqueiosEmissao.push(BLOQUEIO_FISCAL.producaoNaoLiberada)

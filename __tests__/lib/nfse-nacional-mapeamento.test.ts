@@ -177,7 +177,8 @@ describe('provedor', () => {
     expect(resolverProvedorNfse({ provedorNfse: 'nacional' })).toBe('nacional')
     // Só a escolha explícita do legado usa o conector da prefeitura.
     expect(resolverProvedorNfse({ provedorNfse: 'prefeitura' })).toBe('municipio')
-    expect(resolverProvedorNfse({ provedorNfse: 'spedy' })).toBe('spedy')
+    // Spedy (descontinuada) também vai pelo Nacional — sem precisar reabrir a config.
+    expect(resolverProvedorNfse({ provedorNfse: 'spedy' })).toBe('nacional')
   })
 
   it('homologar o conector da prefeitura não libera o nacional (e vice-versa)', () => {

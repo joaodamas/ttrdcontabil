@@ -9,14 +9,13 @@ export const PROVEDOR_PADRAO: ProvedorNfse = 'nacional'
  * Provedor efetivo da config — decisão do dono (2026-11-05): emitir pelo
  * Ambiente Nacional, não pelas prefeituras. Só 'prefeitura' (escolha explícita
  * do conector legado) vai para o webservice municipal. 'municipio' gravado vem
- * do formulário antigo, que o punha em TODO cliente sem perguntar — conta como
- * Nacional. 'spedy' continua reconhecido para a mensagem de descontinuado.
+ * do formulário antigo, que o punha em TODO cliente sem perguntar, e 'spedy'
+ * vem da conta encerrada — ambos contam como Nacional.
  */
 export function resolverProvedorNfse(config: Pick<ConfigFiscalCliente, 'provedorNfse'> | null | undefined): ProvedorNfse {
-  const p = config?.provedorNfse
-  if (p === 'prefeitura') return 'municipio'
-  if (p === 'spedy') return 'spedy'
-  return PROVEDOR_PADRAO
+  // Spedy (descontinuada) também cai no Nacional: o cliente não precisa reabrir
+  // e salvar a configuração para voltar a emitir.
+  return config?.provedorNfse === 'prefeitura' ? 'municipio' : PROVEDOR_PADRAO
 }
 
 export type OperacaoFiscal = 'emissao' | 'consulta' | 'cancelamento'

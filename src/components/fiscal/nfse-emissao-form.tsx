@@ -408,9 +408,7 @@ export function NfseEmissaoForm({
     !selectedClienteId || fiscalDoCliente === undefined ? null
       : fiscalDoCliente === null
         ? { titulo: 'Cliente sem configuração fiscal.', detalhe: 'Configure município, inscrição municipal e certificado antes de emitir.' }
-        : fiscalDoCliente.provedorNfse === 'spedy'
-          ? { titulo: 'Cliente ainda configurado com a Spedy (descontinuada).', detalhe: 'Abra a configuração fiscal e salve: o cliente passa a emitir pelo Ambiente Nacional.' }
-          : semA1Nacional
+        : semA1Nacional
             ? { titulo: 'Cliente sem certificado A1 válido.', detalhe: 'A emissão pelo Ambiente Nacional é assinada com o A1 do próprio cliente. Envie o certificado na configuração fiscal.' }
             : null
   const previewTomadorCpf = watch('tomadorCpfCnpj')
@@ -771,9 +769,7 @@ export function NfseEmissaoForm({
                 ? 'Ambiente Nacional (Sefin Nacional)'
                 : provedorEmissao === 'municipio'
                   ? 'Prefeitura (conector legado)'
-                  : provedorEmissao === 'spedy'
-                    ? 'Spedy (descontinuada)'
-                    : 'Definido na configuração fiscal do cliente'}
+                  : 'Definido na configuração fiscal do cliente'}
             </div>
             <div><span className="text-muted-foreground">Prestador:</span> {previewCliente?.razaoSocial ?? 'Selecione o cliente'}</div>
             <div><span className="text-muted-foreground">Competência:</span> {previewCompetencia ? `${String(previewCompetencia.mes).padStart(2, '0')}/${previewCompetencia.ano}` : 'Não vinculada'}</div>
