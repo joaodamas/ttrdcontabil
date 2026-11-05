@@ -78,38 +78,130 @@ const SHEET_CLIENTES = 'Clientes'
 const SHEET_SERVICOS = 'Serviços'
 const SHEET_INSTRUCOES = 'Instruções'
 
-export function gerarTemplateClientesXlsx() {
+// ─── Modelo de importação com exemplos reais ─────────────────────────────────
+// O modelo é gerado pela plataforma com os dados do próprio escritório: as abas
+// "Clientes" e "Serviços" vêm vazias (prontas para importar), e abas extras —
+// ignoradas pela importação — mostram clientes já cadastrados como referência e
+// os códigos de serviço válidos.
+
+type Registro = Record<string, unknown>
+
+export interface DadosModeloClientes {
+  clientes: Registro[]
+  servicosDosClientes: Registro[]
+  tiposServico: Registro[]
+}
+
+// Dados pessoais do responsável não vão no exemplo: a planilha circula fora da
+// plataforma. Mostra só o formato esperado.
+const CAMPOS_MASCARADOS: Record<string, string> = {
+  responsavelCpf: '000.000.000-00',
+  responsavelRg: '00.000.000-0',
+  responsavelDataNascimento: 'dd/mm/aaaa',
+}
+
+function texto(v: unknown): string {
+  if (v == null) return ''
+  if (typeof v === 'object' && 'toDate' in (v as object)) {
+    const d = (v as { toDate: () => Date }).toDate()
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+  }
+  return String(v).trim()
+}
+
+function documentoFormatado(v: unknown): string {
+  const d = texto(v).replace(/\D/g, '')
+  if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+  if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')
+  return texto(v)
+}
+
+function preenchidos(c: Registro): number {
+  return CLIENTE_COLUMNS.filter((col) => texto(c[col.key]) !== '').length
+}
+
+/** Os `quantidade` clientes de cadastro mais completo — melhores exemplos. */
+export function escolherClientesExemplo(clientes: Registro[], quantidade = 3): Registro[] {
+  return [...clientes]
+    .filter((c) => !c.deletedAt && texto(c.razaoSocial))
+    .sort((a, b) => preenchidos(b) - preenchidos(a))
+    .slice(0, quantidade)
+}
+
+export function montarModeloClientes(dados: DadosModeloClientes) {
+  const cabCliente = CLIENTE_COLUMNS.map((c) => c.label)
+  const cabServico = SERVICO_COLUMNS.map((c) => c.label)
+
+  const exemplosClientes = [cabCliente, ...dados.clientes.map((c) =>
+    CLIENTE_COLUMNS.map((col) => {
+      if (col.key in CAMPOS_MASCARADOS && texto(c[col.key])) return CAMPOS_MASCARADOS[col.key]
+      if (col.key === 'cpfCnpj') return documentoFormatado(c.cpfCnpj)
+      return texto(c[col.key])
+    }),
+  )]
+
+  const tipoPorId = new Map(dados.tiposServico.map((t) => [String(t.id), t]))
+  const docPorCliente = new Map(dados.clientes.map((c) => [String(c.id), documentoFormatado(c.cpfCnpj)]))
+  const exemplosServicos = [cabServico, ...dados.servicosDosClientes
+    .filter((s) => docPorCliente.has(String(s.clienteId)))
+    .map((s) => [
+      docPorCliente.get(String(s.clienteId)) ?? '',
+      texto(tipoPorId.get(String(s.servicoId))?.codigo) || texto(s.servicoNome),
+      texto(s.valor),
+      texto(s.diaVencimento),
+      texto(s.dataInicio),
+      texto(s.observacoes),
+    ])]
+
+  const tiposServico = [['Código', 'Serviço', 'Valor padrão (R$)', 'Frequência'], ...dados.tiposServico
+    .filter((t) => t.ativo !== false)
+    .map((t) => [texto(t.codigo), texto(t.nome), texto(t.valorPadrao), texto(t.frequencia)])]
+
+  return {
+    clientes: [cabCliente],
+    servicos: [cabServico],
+    exemplosClientes,
+    exemplosServicos,
+    tiposServico,
+  }
+}
+
+export function gerarTemplateClientesXlsx(dados?: DadosModeloClientes) {
   const wb = XLSX.utils.book_new()
+  const modelo = montarModeloClientes(dados ?? { clientes: [], servicosDosClientes: [], tiposServico: [] })
 
   const instrucoes = [
     ['Como preencher esta planilha'],
     [''],
-    ['1. Preencha a aba "Clientes" — uma linha por cliente. CPF/CNPJ e Razão Social são obrigatórios.'],
-    ['2. Preencha a aba "Serviços" — uma linha por serviço vinculado a um cliente (um cliente pode ter várias linhas). O CPF/CNPJ precisa bater com uma linha da aba Clientes.'],
-    ['3. O campo "Código do Serviço" precisa ser o código exato (ex: COB04) de um serviço já cadastrado em Configurações → Tipos de Serviço — não o nome, porque vários serviços podem ter o mesmo nome com códigos e valores diferentes.'],
-    ['4. Não inclua senhas, certificados ou credenciais em nenhuma aba — isso é feito depois, individualmente, pela tela de cada cliente.'],
-    ['5. Salve o arquivo e suba pela tela Clientes → Importar. O sistema mostra um preview com o que vai ser criado e o que tem erro antes de gravar qualquer coisa.'],
+    ['1. Preencha a aba "Clientes" — uma linha por cliente novo. CPF/CNPJ e Razão Social são obrigatórios.'],
+    ['2. Preencha a aba "Serviços" — uma linha por serviço contratado (um cliente pode ter várias linhas). O CPF/CNPJ precisa bater com uma linha da aba Clientes.'],
+    ['3. Use as abas "Exemplo – Clientes" e "Exemplo – Serviços" como referência: são clientes já cadastrados na plataforma, preenchidos do jeito que a importação aceita. Elas NÃO são importadas.'],
+    ['4. "Código do Serviço" precisa ser um dos códigos da aba "Tipos de Serviço" (ex: COB04) — não o nome.'],
+    ['5. Não inclua senhas, certificados ou credenciais em nenhuma aba — isso é feito depois, na tela de cada cliente.'],
+    ['6. Salve e suba pela tela Clientes → Importar. O sistema mostra uma prévia com o que vai ser criado e o que tem erro antes de gravar qualquer coisa.'],
     [''],
     ['Valores aceitos'],
     ['Tipo Pessoa: pf ou pj'],
     ['Status: ativo, inativo ou suspenso (padrão: ativo)'],
     ['Regime: simples_nacional, lucro_presumido, lucro_real, mei ou isento'],
+    ['Datas: dd/mm/aaaa · Valores: só números, com vírgula ou ponto para centavos (ex: 450 ou 450,50)'],
   ]
   const wsInstrucoes = XLSX.utils.aoa_to_sheet(instrucoes)
-  wsInstrucoes['!cols'] = [{ wch: 100 }]
+  wsInstrucoes['!cols'] = [{ wch: 110 }]
   XLSX.utils.book_append_sheet(wb, wsInstrucoes, SHEET_INSTRUCOES)
 
-  const clienteHeader = CLIENTE_COLUMNS.map((c) => c.label)
-  const clienteExemplo = CLIENTE_COLUMNS.map((c) => c.exemplo ?? '')
-  const wsClientes = XLSX.utils.aoa_to_sheet([clienteHeader, clienteExemplo])
-  wsClientes['!cols'] = CLIENTE_COLUMNS.map((c) => ({ wch: Math.max(18, c.label.length) }))
-  XLSX.utils.book_append_sheet(wb, wsClientes, SHEET_CLIENTES)
-
-  const servicoHeader = SERVICO_COLUMNS.map((c) => c.label)
-  const servicoExemplo = SERVICO_COLUMNS.map((c) => c.exemplo ?? '')
-  const wsServicos = XLSX.utils.aoa_to_sheet([servicoHeader, servicoExemplo])
-  wsServicos['!cols'] = SERVICO_COLUMNS.map((c) => ({ wch: Math.max(18, c.label.length) }))
-  XLSX.utils.book_append_sheet(wb, wsServicos, SHEET_SERVICOS)
+  const larguraCliente = CLIENTE_COLUMNS.map((c) => ({ wch: Math.max(18, c.label.length) }))
+  const larguraServico = SERVICO_COLUMNS.map((c) => ({ wch: Math.max(18, c.label.length) }))
+  const aba = (linhas: string[][], cols: { wch: number }[], nome: string) => {
+    const ws = XLSX.utils.aoa_to_sheet(linhas)
+    ws['!cols'] = cols
+    XLSX.utils.book_append_sheet(wb, ws, nome)
+  }
+  aba(modelo.clientes, larguraCliente, SHEET_CLIENTES)
+  aba(modelo.servicos, larguraServico, SHEET_SERVICOS)
+  aba(modelo.exemplosClientes, larguraCliente, 'Exemplo – Clientes')
+  aba(modelo.exemplosServicos, larguraServico, 'Exemplo – Serviços')
+  aba(modelo.tiposServico, [{ wch: 12 }, { wch: 40 }, { wch: 18 }, { wch: 14 }], 'Tipos de Serviço')
 
   XLSX.writeFile(wb, 'modelo-importacao-clientes.xlsx')
 }

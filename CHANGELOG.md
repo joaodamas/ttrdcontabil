@@ -13,6 +13,9 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Alterado — modelo de importação de clientes com exemplos reais (2026-11-05)
+- "Baixar modelo com exemplos (Excel)" em Clientes → Importar gera a planilha com os dados do próprio escritório: abas **Clientes** e **Serviços** vazias (prontas para importar), **Exemplo – Clientes** e **Exemplo – Serviços** com os 3 clientes de cadastro mais completo (no formato aceito pela importação; CPF/RG/nascimento do responsável mascarados) e **Tipos de Serviço** com os códigos válidos. As abas de exemplo não são importadas. Antes, o modelo trazia um exemplo inventado na própria aba Clientes. Se a leitura falhar, baixa o modelo em branco.
+
 ### Corrigido — DPS recusada na produção com E1235 (2026-11-05)
 - A primeira emissão real falhou: a DPS ia com `finNFSe` direto em `infDPS`, campo do leiaute da NT 009 que só vigora na **produção restrita**. O XSD oficial de **produção** (`v1.01-20260209`) não o tem ali. Agora `finNFSe` só sai com tpAmb=2. A DPS e o pedido de cancelamento de produção foram validados offline contra os schemas oficiais de produção (guardados em `scripts/poc-nfse-nacional/schemas-producao/`). Nenhuma nota foi gerada na tentativa recusada.
 

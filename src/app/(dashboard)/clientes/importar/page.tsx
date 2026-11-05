@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { limit, where } from 'firebase/firestore'
 import { FileDown, Upload, Loader2, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
 
 import { PageHeader } from '@/components/layout/page-header'
@@ -15,6 +16,7 @@ import { Progress } from '@/components/ui/progress'
 import { createDocument, getNextClienteCodigo, getServicos, listDocuments } from '@/lib/firestore-client'
 import { clientesKeys } from '@/features/clientes/queries'
 import {
+  escolherClientesExemplo,
   gerarTemplateClientesXlsx,
   parseClientesWorkbook,
   validarClienteRow,
@@ -40,6 +42,31 @@ export default function ImportarClientesPage() {
   const [carregando, setCarregando] = useState(false)
   const [clientes, setClientes] = useState<ClienteValidado[]>([])
   const [servicos, setServicos] = useState<ServicoValidado[]>([])
+  const [gerandoModelo, setGerandoModelo] = useState(false)
+
+  // Modelo com exemplos reais (clientes de cadastro mais completo) e os códigos
+  // de serviço do escritório. Se a leitura falhar, baixa o modelo sem exemplos.
+  async function baixarModelo() {
+    setGerandoModelo(true)
+    try {
+      const [todos, tiposServico] = await Promise.all([
+        listDocuments<Record<string, unknown>>('clientes', [limit(300)]),
+        getServicos(),
+      ])
+      const exemplos = escolherClientesExemplo(todos, 3)
+      const ids = exemplos.map((c) => String(c.id))
+      const servicosDosClientes = ids.length
+        ? await listDocuments<Record<string, unknown>>('clientes_servicos', [where('clienteId', 'in', ids), limit(30)])
+        : []
+      gerarTemplateClientesXlsx({ clientes: exemplos, servicosDosClientes, tiposServico: tiposServico as Record<string, unknown>[] })
+    } catch (err) {
+      console.error('[clientes/importar] modelo com exemplos falhou', err)
+      toast.warning('Não foi possível carregar os exemplos — baixando o modelo em branco.')
+      gerarTemplateClientesXlsx()
+    } finally {
+      setGerandoModelo(false)
+    }
+  }
   const [progresso, setProgresso] = useState(0)
   const [resultado, setResultado] = useState<Resultado | null>(null)
 
@@ -187,9 +214,9 @@ export default function ImportarClientesPage() {
               description="Credenciais fiscais (prefeitura, certificado digital, Meu Gov, e-CAC) continuam sendo preenchidas individualmente, pela tela de cada cliente — não existe campo pra isso no modelo."
             />
             <div className="flex flex-wrap gap-3">
-              <Button variant="outline" onClick={() => gerarTemplateClientesXlsx()}>
-                <FileDown className="w-4 h-4" />
-                Baixar modelo (Excel)
+              <Button variant="outline" onClick={() => void baixarModelo()} disabled={gerandoModelo}>
+                {gerandoModelo ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+                Baixar modelo com exemplos (Excel)
               </Button>
               <Button onClick={() => fileInputRef.current?.click()} disabled={carregando}>
                 {carregando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
