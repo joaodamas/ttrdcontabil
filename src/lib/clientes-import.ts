@@ -12,9 +12,9 @@ export interface ClienteImportColumn {
 }
 
 // Os campos da ficha de cadastro do cliente (cliente-form.tsx), na mesma ordem
-// das seções. Só dados cadastrais: senhas e credenciais (prefeitura, posto
-// fiscal, PIN do certificado, Meu Gov, e-CAC) ficam FORA de propósito — planilha
-// circula por e-mail; credencial só pela tela do cliente, que grava cifrado.
+// das seções, inclusive logins e senhas (pedido do dono, 2026-11-05: o cliente
+// preenche tudo numa planilha só). Nos EXEMPLOS, credencial nunca sai com valor —
+// só "✔ preenchida na plataforma" (ver CAMPOS_CREDENCIAL).
 export const CLIENTE_COLUMNS: ClienteImportColumn[] = [
   { key: 'cpfCnpj', label: 'CPF/CNPJ', obrigatorio: true, exemplo: '12.345.678/0001-90' },
   { key: 'tipoPessoa', label: 'Tipo Pessoa (pf/pj)', exemplo: 'pj' },
@@ -44,6 +44,11 @@ export const CLIENTE_COLUMNS: ClienteImportColumn[] = [
   { key: 'cnaePrincipal', label: 'CNAE Principal' },
   { key: 'cnaeSecundario', label: 'CNAE Secundário' },
   { key: 'codSimplesNacional', label: 'Código do Simples Nacional' },
+  { key: 'loginPrefeitura', label: 'Credencial — Login Prefeitura' },
+  { key: 'senhaWebPrefeitura', label: 'Credencial — Senha WEB Prefeitura' },
+  { key: 'senhaPinCertificadoDigitalECnpj', label: 'Credencial — Senha PIN do Certificado Digital e-CNPJ' },
+  { key: 'loginPostoFiscal', label: 'Credencial — Login do posto fiscal' },
+  { key: 'senhaPostoFiscal', label: 'Credencial — Senha posto fiscal' },
   { key: 'mensalidade', label: 'Mensalidade (R$)', exemplo: '250' },
   { key: 'vencimento', label: 'Dia de Vencimento', exemplo: '10' },
   { key: 'diaEmissaoNFSe', label: 'Dia de Emissão NFS-e (1-31)', exemplo: '5' },
@@ -73,6 +78,10 @@ export const CLIENTE_COLUMNS: ClienteImportColumn[] = [
   { key: 'responsavelBairro', label: 'Responsável — Bairro' },
   { key: 'responsavelCidade', label: 'Responsável — Cidade' },
   { key: 'responsavelUf', label: 'Responsável — UF' },
+  { key: 'responsavelSenhaMeuGov', label: 'Responsável — Senha MEU GOV' },
+  { key: 'responsavelSenhaEcacPf', label: 'Responsável — Senha e-CAC PF' },
+  { key: 'responsavelSenhaWebPrefeitura', label: 'Responsável — Senha WEB Prefeitura' },
+  { key: 'responsavelSenhaPinCertificadoDigitalCpf', label: 'Responsável — Senha PIN do Certificado Digital CPF' },
   { key: 'responsavelFinanceiroNome', label: 'Financeiro — Nome' },
   { key: 'responsavelFinanceiroCargo', label: 'Financeiro — Cargo' },
   { key: 'responsavelFinanceiroEmail', label: 'Financeiro — E-mail' },
@@ -115,6 +124,14 @@ export interface DadosModeloClientes {
   servicosDosClientes: Registro[]
   tiposServico: Registro[]
 }
+
+// Credenciais nunca saem com valor no exemplo — só se estão preenchidas. Senha do
+// Meu Gov/e-CAC vazada dá acesso aos dados fiscais da empresa na Receita.
+export const CAMPOS_CREDENCIAL = new Set([
+  'loginPrefeitura', 'senhaWebPrefeitura', 'senhaPinCertificadoDigitalECnpj', 'loginPostoFiscal', 'senhaPostoFiscal',
+  'responsavelSenhaMeuGov', 'responsavelSenhaEcacPf', 'responsavelSenhaWebPrefeitura', 'responsavelSenhaPinCertificadoDigitalCpf',
+])
+const CREDENCIAL_PREENCHIDA = '✔ preenchida na plataforma'
 
 // Dados pessoais do responsável não vão no exemplo: a planilha circula fora da
 // plataforma. Mostra só o formato esperado.
@@ -169,6 +186,7 @@ export function montarModeloClientes(dados: DadosModeloClientes) {
 
   const exemplosClientes = [cabCliente, ...dados.clientes.map((c) =>
     CLIENTE_COLUMNS.map((col) => {
+      if (CAMPOS_CREDENCIAL.has(col.key)) return texto(c[col.key]) ? CREDENCIAL_PREENCHIDA : ''
       if (col.key in CAMPOS_MASCARADOS && texto(c[col.key])) return CAMPOS_MASCARADOS[col.key]
       if (col.key === 'cpfCnpj') return documentoFormatado(c.cpfCnpj)
       if (typeof c[col.key] === 'boolean') return c[col.key] ? 'sim' : 'não'
@@ -213,7 +231,7 @@ export function gerarTemplateClientesXlsx(dados?: DadosModeloClientes) {
     ['2. Preencha a aba "Serviços" — uma linha por serviço contratado (um cliente pode ter várias linhas). O CPF/CNPJ precisa bater com uma linha da aba Clientes.'],
     ['3. Use as abas "Exemplo – Clientes" e "Exemplo – Serviços" como referência: são clientes já cadastrados na plataforma, preenchidos do jeito que a importação aceita. Elas NÃO são importadas.'],
     ['4. "Código do Serviço" precisa ser um dos códigos da aba "Tipos de Serviço" (ex: COB04) — não o nome.'],
-    ['5. Não inclua senhas, certificados ou credenciais em nenhuma aba — isso é feito depois, na tela de cada cliente.'],
+    ['5. O arquivo do certificado digital (.pfx) não vai na planilha — é enviado depois, na configuração fiscal do cliente.'],
     ['6. Salve e suba pela tela Clientes → Importar. O sistema mostra uma prévia com o que vai ser criado e o que tem erro antes de gravar qualquer coisa.'],
     [''],
     ['Valores aceitos'],
@@ -223,7 +241,10 @@ export function gerarTemplateClientesXlsx(dados?: DadosModeloClientes) {
     ['Aceite de cobrança por WhatsApp e Contato preferencial: sim ou não'],
     ['Datas: dd/mm/aaaa · Valores: só números, com vírgula ou ponto para centavos (ex: 450 ou 450,50)'],
     [''],
-    ['Os campos são os mesmos da ficha de cadastro do cliente na plataforma, exceto senhas e credenciais (prefeitura, posto fiscal, PIN do certificado, Meu Gov, e-CAC): essas são cadastradas depois, na tela do cliente.'],
+    ['Os campos são os mesmos da ficha de cadastro do cliente na plataforma, inclusive logins e senhas (prefeitura, posto fiscal, PIN do certificado, Meu Gov, e-CAC).'],
+    ['Nos exemplos, as senhas aparecem só como "✔ preenchida na plataforma" — o valor nunca sai da plataforma.'],
+    [''],
+    ['ATENÇÃO — esta planilha, preenchida, contém senhas: envie e receba por canal protegido (arquivo com senha, link com acesso restrito) e apague as cópias depois de importar.'],
   ]
   const wsInstrucoes = XLSX.utils.aoa_to_sheet(instrucoes)
   wsInstrucoes['!cols'] = [{ wch: 110 }]
@@ -359,6 +380,8 @@ export function validarClienteRow(row: RawRow, linha: number, cnpjsExistentes: S
     cnaePrincipal: row.cnaePrincipal || undefined,
     cnaeSecundario: row.cnaeSecundario || undefined,
     codSimplesNacional: row.codSimplesNacional || undefined,
+    // Mesmos campos que a ficha grava. O texto do exemplo nunca é importado como senha.
+    ...Object.fromEntries([...CAMPOS_CREDENCIAL].map((k) => [k, row[k] && row[k] !== CREDENCIAL_PREENCHIDA ? row[k] : undefined])),
     mensalidade: row.mensalidade || undefined,
     vencimento: row.vencimento || undefined,
     diaEmissaoNFSe,

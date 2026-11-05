@@ -67,8 +67,25 @@ describe('planilha = ficha de cadastro do cliente', () => {
     ]) expect(keys).toContain(k)
   })
 
-  it('nunca tem senha nem credencial', () => {
-    expect(keys.some((k) => /senha|login|pin/i.test(k))).toBe(false)
+  it('tem as credenciais da ficha para preencher', () => {
+    for (const k of ['loginPrefeitura', 'senhaWebPrefeitura', 'senhaPinCertificadoDigitalECnpj', 'loginPostoFiscal',
+      'senhaPostoFiscal', 'responsavelSenhaMeuGov', 'responsavelSenhaEcacPf', 'responsavelSenhaWebPrefeitura',
+      'responsavelSenhaPinCertificadoDigitalCpf']) expect(keys).toContain(k)
+  })
+
+  it('nos exemplos, senha nunca sai com valor — só se está preenchida', () => {
+    const m = montarModeloClientes({ clientes: [{ id: 'c', cpfCnpj: '33854681000104', razaoSocial: 'X', responsavelSenhaMeuGov: 'SenhaReal#123', loginPrefeitura: 'login.real' }], servicosDosClientes: [], tiposServico: [] })
+    const linha = m.exemplosClientes[1]
+    expect(linha.join('|')).not.toContain('SenhaReal#123')
+    expect(linha.join('|')).not.toContain('login.real')
+    expect(linha[keys.indexOf('responsavelSenhaMeuGov')]).toBe('✔ preenchida na plataforma')
+    expect(linha[keys.indexOf('responsavelSenhaEcacPf')]).toBe('')
+  })
+
+  it('importa a senha preenchida, mas nunca o texto do exemplo', () => {
+    const base = { cpfCnpj: '33.854.681/0001-04', razaoSocial: 'ARTE E PRIME PLANEJADOS LTDA' }
+    expect(validarClienteRow({ ...base, senhaWebPrefeitura: 'abc123' }, 1, new Set(), new Map()).payload.senhaWebPrefeitura).toBe('abc123')
+    expect(validarClienteRow({ ...base, senhaWebPrefeitura: '✔ preenchida na plataforma' }, 1, new Set(), new Map()).payload.senhaWebPrefeitura).toBeUndefined()
   })
 
   it('sim/não viram booleanos; aceite registra data e origem da planilha', () => {
