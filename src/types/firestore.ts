@@ -375,7 +375,17 @@ export interface NfseEmitidaDoc {
   issRetido: boolean
   valorIss?: number
   xmlUrl?: string
-  pdfUrl?: string
+  /** XML oficial da NFS-e (no padrão nacional, raiz <NFSe>). */
+  xmlNfse?: string | null
+  /** Chave de acesso de 50 dígitos (padrão nacional). */
+  chaveAcesso?: string | null
+  pdfUrl?: string | null
+  /** Caminho no Storage do DANFSe gerado pela plataforma (nfse/{clienteId}/{chave}.pdf). */
+  pdfPath?: string
+  pdfOrigem?: 'plataforma'
+  /** true quando o PDF salvo já traz a marca d'água "CANCELADA". */
+  pdfCancelada?: boolean
+  pdfGeradoEm?: Timestamp
   linkConsulta?: string
   chaveExterna?: string
   protocolo?: string
