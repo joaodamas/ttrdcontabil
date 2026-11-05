@@ -177,13 +177,16 @@ export async function fetchFiscalReadiness(): Promise<FiscalReadiness> {
         if (!hasText(fiscal.itemListaServico)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.itemListaAusente)
         if (!hasText(fiscal.descricaoServicoPadrao)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.descricaoAusente)
         if (!hasPositiveNumber(fiscal.aliquotaPadrao)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.aliquotaAusente)
+        if (fiscal.provedorNfse === 'spedy') bloqueiosEmissao.push(BLOQUEIO_FISCAL.provedorDescontinuado)
         bloqueiosEmissao.push(...getCredenciaisBloqueios(fiscal))
         if (fiscal.ambienteEmissao === 'producao' && fiscal.producaoLiberada !== true) {
           bloqueiosEmissao.push(BLOQUEIO_FISCAL.producaoNaoLiberada)
         }
       }
 
+      // Provedor descontinuado primeiro: é o que trava tudo e some no "+N" do fim.
       const bloqueios = [...new Set([...bloqueiosRascunho, ...bloqueiosEmissao])]
+        .sort((x, y) => Number(y === BLOQUEIO_FISCAL.provedorDescontinuado) - Number(x === BLOQUEIO_FISCAL.provedorDescontinuado))
 
       return {
         clienteId,

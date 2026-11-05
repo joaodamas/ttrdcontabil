@@ -116,6 +116,9 @@ export function NfseEmissaoForm({
   const [loadingRascunho, setLoadingRascunho] = useState(Boolean(rascunhoIdParam))
   const [rascunhoAtual, setRascunhoAtual] = useState<RascunhoNfse | null>(null)
   const [carteira, setCarteira] = useState<TomadorRecord[]>([])
+  // Configuração fiscal do prestador escolhido: decide se dá para emitir (provedor
+  // descontinuado / sem config) e mostra o ambiente real no resumo.
+  const [configFiscal, setConfigFiscal] = useState<{ clienteId: string; dados: Record<string, unknown> | null } | null>(null)
   const [carteiraClienteId, setCarteiraClienteId] = useState<string | null>(null)
   const [tomadorCarteiraId, setTomadorCarteiraId] = useState<string | null>(null)
   const [saving,             setSaving]             = useState(false)
@@ -246,18 +249,19 @@ export function NfseEmissaoForm({
     // Pré-preenche com os padrões da configuração fiscal do cliente (código de
     // serviço, item LC 116, alíquota, descrição) — sem sobrescrever um rascunho
     // já existente ou algo que o usuário já tenha digitado.
-    if (!rascunhoAtual) {
-      listDocuments<Record<string, unknown>>('clientes_fiscal', [
-        where('clienteId', '==', selectedClienteId),
-        limit(1),
-      ]).then(([fiscal]) => {
-        if (!fiscal) return
-        if (!watch('codigoServico') && fiscal.codigoServicoPadrao) setValue('codigoServico', fiscal.codigoServicoPadrao as string)
-        if (!watch('itemListaServico') && fiscal.itemListaServico) setValue('itemListaServico', fiscal.itemListaServico as string)
-        if (!watch('descricaoServico') && fiscal.descricaoServicoPadrao) setValue('descricaoServico', fiscal.descricaoServicoPadrao as string)
-        if (watch('aliquota') == null && fiscal.aliquotaPadrao != null) setValue('aliquota', Number(fiscal.aliquotaPadrao))
-      }).catch(() => { /* segue sem pré-preencher — usuário digita na mão */ })
-    }
+    listDocuments<Record<string, unknown>>('clientes_fiscal', [
+      where('clienteId', '==', selectedClienteId),
+      limit(1),
+    ]).then(([fiscal]) => {
+      if (!ativo) return
+      setConfigFiscal({ clienteId: selectedClienteId, dados: fiscal ?? null })
+      if (rascunhoAtual) return
+      if (!fiscal) return
+      if (!watch('codigoServico') && fiscal.codigoServicoPadrao) setValue('codigoServico', fiscal.codigoServicoPadrao as string)
+      if (!watch('itemListaServico') && fiscal.itemListaServico) setValue('itemListaServico', fiscal.itemListaServico as string)
+      if (!watch('descricaoServico') && fiscal.descricaoServicoPadrao) setValue('descricaoServico', fiscal.descricaoServicoPadrao as string)
+      if (watch('aliquota') == null && fiscal.aliquotaPadrao != null) setValue('aliquota', Number(fiscal.aliquotaPadrao))
+    }).catch(() => { /* segue sem pré-preencher — usuário digita na mão */ })
 
     setLoadingCompetencias(true)
     getCompetencias({ clienteId: selectedClienteId })
@@ -306,6 +310,10 @@ export function NfseEmissaoForm({
   }
 
   function solicitarEmissao(data: NfseFormData) {
+    if (bloqueioEmissao) {
+      toast.error(bloqueioEmissao.titulo)
+      return
+    }
     setEmissaoPendente(data)
   }
 
@@ -386,6 +394,17 @@ export function NfseEmissaoForm({
   const previewAliquota = watch('aliquota')
   const previewIssRetido = watch('issRetido')
   const previewTomadorNome = watch('tomadorNome')
+  const fiscalDoCliente = configFiscal && configFiscal.clienteId === selectedClienteId ? configFiscal.dados : undefined
+  const ambienteEmissao = fiscalDoCliente?.ambienteEmissao as string | undefined
+  // Barra a emissão ANTES do último clique: antes, um cliente ainda com a Spedy
+  // (descontinuada) só descobria o problema no erro do backend, depois das 5 etapas.
+  const bloqueioEmissao: { titulo: string; detalhe: string } | null =
+    !selectedClienteId || fiscalDoCliente === undefined ? null
+      : fiscalDoCliente === null
+        ? { titulo: 'Cliente sem configuração fiscal.', detalhe: 'Configure município, inscrição municipal e certificado antes de emitir.' }
+        : fiscalDoCliente.provedorNfse === 'spedy'
+          ? { titulo: 'Cliente ainda configurado com a Spedy (descontinuada).', detalhe: 'Abra a configuração fiscal e salve: o cliente passa a usar o conector direto do município.' }
+          : null
   const previewTomadorCpf = watch('tomadorCpfCnpj')
   const previewTomadorEmail = watch('tomadorEmail')
   const previewDescricao = watch('descricaoServico')
@@ -613,7 +632,7 @@ export function NfseEmissaoForm({
                 <DropdownMenuContent align="end" className="max-w-[280px]">
                   {templates.map((t, i) => {
                     const desc = (t.dados?.descricaoServico as string | undefined) ?? `Rascunho ${i + 1}`
-                    const valor = t.dados?.valorServico ? `R$ ${Number(t.dados.valorServico).toFixed(2)}` : ''
+                    const valor = t.dados?.valorServico ? formatCurrency(Number(t.dados.valorServico)) : ''
                     return (
                       <DropdownMenuItem
                         key={t.id}
@@ -691,6 +710,16 @@ export function NfseEmissaoForm({
       </div>
 
       <div className={isModal ? 'space-y-5 lg:sticky lg:top-0 lg:self-start' : 'space-y-5'}>
+        {bloqueioEmissao && (
+          <div className="space-y-1.5 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5">
+            <p className="text-xs font-semibold text-destructive">Emissão bloqueada: {bloqueioEmissao.titulo}</p>
+            <p className="text-xs text-destructive/80">{bloqueioEmissao.detalhe}</p>
+            <a href={`/clientes/${selectedClienteId}/fiscal`} className="text-xs font-medium text-destructive underline underline-offset-2">
+              Abrir configuração fiscal do cliente
+            </a>
+          </div>
+        )}
+
         {/* Alertas de validação — avisos não-bloqueantes */}
         {(() => {
           const avisos: string[] = []
@@ -720,11 +749,18 @@ export function NfseEmissaoForm({
             <CardTitle className="text-sm">{isModal ? 'Resumo da emissão' : 'Checklist antes da emissão'}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-1">
-            <div><span className="text-muted-foreground">Ambiente:</span> Validado na configuração fiscal do cliente</div>
+            <div>
+              <span className="text-muted-foreground">Ambiente:</span>{' '}
+              {ambienteEmissao === 'producao'
+                ? <span className="font-medium text-destructive">Produção — a nota sai de verdade na prefeitura</span>
+                : ambienteEmissao === 'homologacao'
+                  ? 'Homologação (teste, sem valor fiscal)'
+                  : 'Definido na configuração fiscal do cliente'}
+            </div>
             <div><span className="text-muted-foreground">Prestador:</span> {previewCliente?.razaoSocial ?? 'Selecione o cliente'}</div>
             <div><span className="text-muted-foreground">Competência:</span> {previewCompetencia ? `${String(previewCompetencia.mes).padStart(2, '0')}/${previewCompetencia.ano}` : 'Não vinculada'}</div>
             <div><span className="text-muted-foreground">Serviço:</span> {previewCodigo || 'Informe o código'}</div>
-            <div><span className="text-muted-foreground">Valor:</span> {Number.isFinite(previewValor) ? `R$ ${Number(previewValor).toFixed(2)}` : 'Informe o valor'}</div>
+            <div><span className="text-muted-foreground">Valor:</span> {Number.isFinite(previewValor) ? formatCurrency(Number(previewValor)) : 'Informe o valor'}</div>
             <div><span className="text-muted-foreground">Alíquota:</span> {Number.isFinite(previewAliquota) ? `${Number(previewAliquota)}%` : 'Padrão da configuração'}</div>
             <div><span className="text-muted-foreground">ISS retido:</span> {previewIssRetido ? 'Sim' : 'Não'}</div>
             <div><span className="text-muted-foreground">Credencial/certificado:</span> Validado pela Cloud Function fiscal</div>
@@ -743,7 +779,7 @@ export function NfseEmissaoForm({
               </Button>
             )}
             {showResume && (
-              <Button type="button" className="w-full justify-center" disabled={isLoading} onClick={handleSubmit(solicitarEmissao, onEmissaoInvalida)}>
+              <Button type="button" className="w-full justify-center" disabled={isLoading || Boolean(bloqueioEmissao)} onClick={handleSubmit(solicitarEmissao, onEmissaoInvalida)}>
                 {emitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
                 Emitir NFS-e
               </Button>
@@ -791,7 +827,7 @@ export function NfseEmissaoForm({
                     <div>
                       <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Valor</p>
                       <p className="mt-1 text-sm font-semibold tabular-nums">
-                        R$ {Number(emissaoPendente.valorServico).toFixed(2)}
+                        {formatCurrency(Number(emissaoPendente.valorServico))}
                       </p>
                     </div>
                     <div>

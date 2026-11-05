@@ -13,6 +13,11 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Corrigido — aviso da Spedy só no último clique (2026-11-05)
+- Cliente ainda configurado com a Spedy (descontinuada) só descobria o problema no erro do backend, depois das 5 etapas da emissão. Agora a emissão mostra o bloqueio assim que o cliente é escolhido (com link para a configuração fiscal) e o botão "Emitir" fica desabilitado; o mesmo vale para cliente sem configuração fiscal. A prontidão em /fiscal lista "Configurado com a Spedy" em primeiro lugar.
+- O resumo da emissão mostra o **ambiente real** (Homologação ou Produção — esta em vermelho, "a nota sai de verdade") em vez de um texto genérico.
+- Valores no resumo e no diálogo de confirmação saíam como "R$ 20.00"; agora no padrão brasileiro (R$ 20,00).
+
 ### Alterado — seletor de cliente e tomador da NFS-e (2026-11-05)
 - **Seletor de cliente com busca** (`ClientePicker`): a lista ficava presa na largura do botão, cortando os nomes, e não tinha filtro com 100+ clientes. Agora busca por razão social, nome fantasia ou CNPJ (com ou sem pontuação, sem diferenciar acento), mostra o nome inteiro com CNPJ e fantasia abaixo. Aplicado em Emitir NFS-e, Tarefa, Lançamento, Competência, IR e nos filtros de Histórico de NFS-e e Produtos.
 - **Tomador deixa de ser preenchido com o próprio cliente.** Desde a primeira versão do módulo, escolher o cliente copiava os dados DELE para o tomador — a nota saía para o próprio CNPJ se ninguém corrigisse. Agora o tomador vem vazio e pode ser escolhido da carteira de tomadores do cliente (preenche nome, CPF/CNPJ e e-mail). **Exige atenção na homologação.**
