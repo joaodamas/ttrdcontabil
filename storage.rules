@@ -37,7 +37,18 @@ service firebase.storage {
         && userDoc().tenantId == clienteDoc(clienteId).tenantId;
     }
 
-    // Documentos de clientes — leitura restrita ao cliente/tenant, escrita via Admin SDK
+    // Espelha canReadNfse() de firestore.rules: perfil fiscal/financeiro/admin
+    // ou a tela 'fiscal' concedida ao usuário.
+    function canReadNfse() {
+      return isAtivo()
+        && (userDoc().perfil in ['admin', 'fiscal', 'financeiro']
+          || (('telas' in userDoc()) && (userDoc().telas is list) && ('fiscal' in userDoc().telas)));
+    }
+
+    // Documentos de clientes — leitura para quem lê o cliente (mesmo critério de
+    // `documentos` em firestore.rules: canRead + tenant), escrita via Admin SDK.
+    // Nenhuma tela grava ou lê este caminho hoje; se um dia guardar documento
+    // fiscal/pessoal sensível aqui, restringir por perfil como o nfse/ abaixo.
     match /documentos/{clienteId}/{allPaths=**} {
       allow read: if canReadCliente(clienteId);
       allow write: if false;
@@ -49,8 +60,10 @@ service firebase.storage {
     }
 
     // NFS-e (XML/PDF) — exige path com clienteId: nfse/{clienteId}/...
+    // Antes bastava ler o cliente: o perfil "leitura" baixava o DANFSe de notas
+    // que firestore.rules não o deixa ver.
     match /nfse/{clienteId}/{allPaths=**} {
-      allow read: if canReadCliente(clienteId);
+      allow read: if canReadCliente(clienteId) && canReadNfse();
       allow write: if false;
     }
 

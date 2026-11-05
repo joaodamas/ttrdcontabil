@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
-import { requireEnvironmentTenant } from './tenant'
+import { assertPerfil } from './authz'
 import { writeAuditLog } from './audit'
 
 const db = () => admin.firestore()
@@ -12,21 +12,8 @@ type GerarFechamentoInput = {
   regime?: string
 }
 
-async function assertOperacional(uid: string) {
-  const snap = await db().collection('usuarios').doc(uid).get()
-  if (!snap.exists) throw new HttpsError('permission-denied', 'Usuário sem perfil cadastrado.')
-  const usuario = snap.data() ?? {}
-  if (usuario.ativo === false) throw new HttpsError('permission-denied', 'Usuário inativo.')
-  const perfil = usuario.perfil as string | undefined
-  if (!['admin', 'operacional'].includes(perfil ?? '')) {
-    throw new HttpsError('permission-denied', 'Perfil sem permissão para gerar fechamento.')
-  }
-  return {
-    id: uid,
-    nome: (usuario.nome as string | undefined) ?? uid,
-    tenantId: requireEnvironmentTenant(usuario.tenantId, 'Usuário'),
-  }
-}
+const assertOperacional = (uid: string) =>
+  assertPerfil(uid, ['admin', 'operacional'], 'Perfil sem permissão para gerar fechamento.')
 
 function validateInput(data: unknown): GerarFechamentoInput {
   const input = data as Partial<GerarFechamentoInput>
