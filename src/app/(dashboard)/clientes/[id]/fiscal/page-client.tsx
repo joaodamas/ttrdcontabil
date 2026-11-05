@@ -2,14 +2,14 @@
 
 import { useCallback, useState, useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
 
 import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { Badge } from '@/components/ui/badge'
+import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, Loader2, Pencil, Plus, ShieldCheck, ShieldAlert, ShieldOff, AlertTriangle, Package, Truck } from 'lucide-react'
+import { Loader2, Pencil, Plus, ShieldCheck, ShieldAlert, ShieldOff, AlertTriangle, Package, Truck } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
@@ -111,31 +111,27 @@ export default function ClienteFiscalPage() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href={`/clientes/${id}`}>
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="w-4 h-4 mr-1" />
-              Voltar
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Clientes', href: '/clientes' },
+          { label: cliente.razaoSocial as string, href: `/clientes/${id}` },
+          { label: 'Fiscal' },
+        ]}
+        title={`Fiscal — ${cliente.razaoSocial as string}`}
+        description={
+          categoriaFiscal === 'produto' ? 'NF-e — emitida fora da plataforma'
+            : categoriaFiscal === 'transporte' ? 'CT-e — autoemitido fora da plataforma'
+            : 'Configurações fiscais e NFS-e emitidas'
+        }
+        action={
+          categoriaFiscal === 'produto' || categoriaFiscal === 'transporte' ? null : (
+            <Button size="cta" onClick={() => setEmitirOpen(true)}>
+              <Plus />
+              Emitir NFS-e
             </Button>
-          </Link>
-          <div>
-            <h2 className="text-lg font-semibold">Fiscal — {cliente.razaoSocial as string}</h2>
-            <p className="text-sm text-muted-foreground">
-              {categoriaFiscal === 'produto' ? 'NF-e — emitida fora da plataforma'
-                : categoriaFiscal === 'transporte' ? 'CT-e — autoemitido fora da plataforma'
-                : 'Configurações fiscais e NFS-e emitidas'}
-            </p>
-          </div>
-        </div>
-        {categoriaFiscal === 'produto' || categoriaFiscal === 'transporte' ? null : (
-          <Button size="sm" onClick={() => setEmitirOpen(true)}>
-            <Plus className="w-4 h-4 mr-1" />
-            Emitir NFS-e
-          </Button>
-        )}
-      </div>
+          )
+        }
+      />
 
       {categoriaFiscal === 'produto' ? (
         <Card>

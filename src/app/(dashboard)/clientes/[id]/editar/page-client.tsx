@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
+import { PageHeader } from '@/components/layout/page-header'
 import { getDocument } from '@/lib/firestore-client'
 import { ClienteForm } from '@/components/clientes/cliente-form'
 import { buttonVariants } from '@/components/ui/button'
@@ -73,5 +74,18 @@ export default function Page() {
     )
   }
 
-  return <ClienteForm initialData={data} />
+  return (
+    <>
+      <PageHeader
+        title="Editar cliente"
+        description={typeof data.razaoSocial === 'string' ? data.razaoSocial : undefined}
+        breadcrumbs={[
+          { label: 'Clientes', href: '/clientes' },
+          { label: typeof data.razaoSocial === 'string' ? data.razaoSocial : 'Cliente', href: `/clientes/${id}` },
+          { label: 'Editar' },
+        ]}
+      />
+      <ClienteForm initialData={data} />
+    </>
+  )
 }

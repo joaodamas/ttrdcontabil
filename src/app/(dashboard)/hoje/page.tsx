@@ -23,7 +23,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -138,15 +138,9 @@ function EmptyCockpit() {
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2">
-          <Link href="/clientes">
-            <Button variant="outline">Ver clientes</Button>
-          </Link>
-          <Link href="/competencias/nova">
-            <Button variant="outline">Criar competencia</Button>
-          </Link>
-          <Link href="/tarefas/nova">
-            <Button>Nova tarefa</Button>
-          </Link>
+          <Link href="/clientes" className={buttonVariants({ variant: 'outline' })}>Ver clientes</Link>
+          <Link href="/competencias/nova" className={buttonVariants({ variant: 'outline' })}>Criar competencia</Link>
+          <Link href="/tarefas/nova" className={buttonVariants()}>Nova tarefa</Link>
         </div>
       </CardContent>
     </Card>
@@ -475,8 +469,8 @@ export default function HojePage() {
         title="Hoje"
         description="Fila operacional priorizada por prazo, prioridade e responsável."
         action={
-          <div className="flex flex-wrap gap-2">
-          <div className="flex rounded-lg border border-border overflow-hidden">
+          <>
+          <div className="flex h-9 rounded-lg border border-border overflow-hidden">
             <button
               type="button"
               onClick={() => setModoView('lista')}
@@ -502,7 +496,7 @@ export default function HojePage() {
           {modoView === 'kanban' && (
             <Button
               variant={swimlanes ? 'default' : 'outline'}
-              size="sm"
+              size="cta"
               onClick={() => setSwimlanes(v => !v as boolean)}
             >
               <Users className="h-3.5 w-3.5" />
@@ -511,14 +505,14 @@ export default function HojePage() {
           )}
           <Button
             variant={modoFoco ? 'default' : 'outline'}
-            size="sm"
+            size="cta"
             onClick={() => setModoFoco(v => !v)}
           >
             <Zap className="h-3.5 w-3.5" />
             {modoFoco ? 'Modo foco ativo' : 'Modo foco'}
           </Button>
           <Select value={responsavelId} onValueChange={(value) => setResponsavelId(value ?? 'todos')}>
-            <SelectTrigger className="w-52">
+            <SelectTrigger className="w-52 max-w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -528,11 +522,11 @@ export default function HojePage() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={isLoading}>
+          <Button variant="outline" size="cta" onClick={() => void refresh()} disabled={isLoading}>
             <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
             Atualizar
           </Button>
-        </div>
+          </>
         }
       />
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { PageHeader } from '@/components/layout/page-header'
 import { formatDate , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -56,15 +57,12 @@ export default function AdminUsuariosPage() {
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
-        <div>
-          <h2 className="text-lg font-semibold">Usuários</h2>
-          <p className="text-sm text-muted-foreground">
-            {usuarios.length} usuário{usuarios.length !== 1 ? 's' : ''} cadastrado{usuarios.length !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <UsuarioForm onSaved={load} />
-      </div>
+      <PageHeader
+        title="Usuários"
+        description={`${usuarios.length} usuário${usuarios.length !== 1 ? 's' : ''} cadastrado${usuarios.length !== 1 ? 's' : ''}`}
+        breadcrumbs={[{ label: 'Administração', href: '/admin' }, { label: 'Usuários' }]}
+        action={<UsuarioForm onSaved={load} />}
+      />
 
       <Card className="border-border/65 bg-card/95 card-shadow">
         <div className="overflow-x-auto">

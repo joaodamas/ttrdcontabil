@@ -263,30 +263,29 @@ function ClientesContent() {
         title="Clientes"
         description={isLoading ? undefined : `${clientesFiltrados.length} cliente${clientesFiltrados.length !== 1 ? 's' : ''} encontrado${clientesFiltrados.length !== 1 ? 's' : ''}`}
         action={
-          <div className="flex items-center gap-2">
+          <>
             <FilterSheetTrigger
               onClick={() => setFilterSheetOpen(true)}
               activeCount={(status ? 1 : 0) + (regime ? 1 : 0)}
             />
             <Button
               variant="outline"
-              size="sm"
-              className="h-10 rounded-xl"
+              size="cta"
               disabled={isLoading || clientesFiltrados.length === 0}
               onClick={() => exportClientesListaPdf(clientesFiltrados)}
             >
-              <FileDown className="w-4 h-4" />
+              <FileDown />
               Exportar PDF
             </Button>
-            <Link href="/clientes/importar" className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-10 rounded-xl' })}>
-              <Upload className="w-4 h-4" />
+            <Link href="/clientes/importar" className={buttonVariants({ variant: 'outline', size: 'cta' })}>
+              <Upload />
               Importar
             </Link>
-            <Link href="/clientes/novo" className={buttonVariants({ size: 'sm', className: 'h-10 rounded-xl' })}>
-              <Plus className="w-4 h-4" />
-              Novo Cliente
+            <Link href="/clientes/novo" className={buttonVariants({ size: 'cta' })}>
+              <Plus />
+              Novo cliente
             </Link>
-          </div>
+          </>
         }
       />
 

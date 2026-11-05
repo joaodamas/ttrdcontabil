@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/contexts/auth-context'
 import { FechamentoTable } from '@/components/fechamento/fechamento-table'
 import { FechamentoPendenciasCards } from '@/components/fechamento/fechamento-pendencias-cards'
+import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
@@ -221,54 +222,53 @@ function FechamentoContent() {
 
   return (
     <div className="stack-6">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="text-title">Fechamento Mensal</h2>
-          <p className="text-subtle">{mesLabel} / {ano}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <PageHeader
+        title="Fechamento mensal"
+        description={`${mesLabel} / ${ano}`}
+        action={
+          <>
           <Button
             variant="outline"
-            size="sm"
+            size="cta"
             onClick={() => { startTransition(() => load()) }}
             disabled={isPending || loading}
           >
-            <RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={loading ? 'animate-spin' : undefined} />
             Atualizar
           </Button>
           {travado ? (
             isAdmin ? (
               <Button
                 variant="outline"
-                size="sm"
+                size="cta"
                 onClick={() => setConfirmReabrirOpen(true)}
                 disabled={loading || revisaoLoading || reabrindo}
               >
-                <LockOpen className="w-4 h-4 mr-1" />
+                <LockOpen />
                 {reabrindo ? 'Reabrindo...' : 'Reabrir mês'}
               </Button>
             ) : null
           ) : (
             <Button
               variant="outline"
-              size="sm"
+              size="cta"
               onClick={() => setRevisaoDialogOpen(true)}
               // A revisão trava o mês INTEIRO (id ano_mes), mas o snapshot sai da
               // lista na tela — com regime filtrado ele registraria só parte.
               disabled={loading || revisaoLoading || Boolean(regime)}
               title={regime ? 'Remova o filtro de regime para encerrar a revisão do mês inteiro.' : undefined}
             >
-              <ClipboardList className="w-4 h-4 mr-1" />
+              <ClipboardList />
               Encerrar revisão do mês
             </Button>
           )}
-          <Button size="sm" onClick={() => setConfirmGeracaoOpen(true)} disabled={gerando || loading}>
-            <Plus className="w-4 h-4 mr-1" />
-            {gerando ? 'Gerando...' : 'Gerar Fechamento'}
+          <Button size="cta" onClick={() => setConfirmGeracaoOpen(true)} disabled={gerando || loading}>
+            <Plus />
+            {gerando ? 'Gerando...' : 'Gerar fechamento'}
           </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <Dialog open={revisaoDialogOpen} onOpenChange={setRevisaoDialogOpen}>
         <DialogContent className="max-w-md" showCloseButton>

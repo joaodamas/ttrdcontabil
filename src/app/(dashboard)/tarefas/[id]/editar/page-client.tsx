@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
+import { PageHeader } from '@/components/layout/page-header'
 import { getDocument } from '@/lib/firestore-client'
 import { TarefaForm } from '@/components/tarefas/tarefa-form'
 import { Loader2 } from 'lucide-react'
@@ -26,5 +27,18 @@ export default function Page() {
       </div>
     )
   }
-  return <TarefaForm initialData={data} />
+  return (
+    <>
+      <PageHeader
+        title="Editar tarefa"
+        description={typeof data.titulo === 'string' ? data.titulo : undefined}
+        breadcrumbs={[
+          { label: 'Tarefas', href: '/tarefas' },
+          { label: 'Detalhe', href: `/tarefas/${id}` },
+          { label: 'Editar' },
+        ]}
+      />
+      <TarefaForm initialData={data} />
+    </>
+  )
 }

@@ -6,6 +6,7 @@ import {
   PieChart, TrendingUp, Users, Wallet,
 } from 'lucide-react'
 import { useCarteira } from '@/features/carteira/hooks'
+import { PageHeader } from '@/components/layout/page-header'
 import { KpiCard } from '@/components/ui/kpi-card'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -51,14 +52,10 @@ export default function CarteiraPage() {
 
   return (
     <div className="space-y-5">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Carteira e receita recorrente</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Quanto entra por mês, de quem, e o que está prestes a sair.
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        title="Carteira"
+        description="Receita recorrente: quanto entra por mês, de quem, e o que está prestes a sair."
+      />
 
       {isError && (
         <InlineAlert

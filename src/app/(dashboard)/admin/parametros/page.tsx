@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -104,12 +105,11 @@ export default function AdminParametrosPage() {
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle border px-4 py-4 sm:px-5">
-        <h2 className="text-lg font-semibold">Parâmetros do Escritório</h2>
-        <p className="text-sm text-muted-foreground">
-          Configurações usadas por alertas, vencimentos e ambiente fiscal padrão.
-        </p>
-      </div>
+      <PageHeader
+        title="Parâmetros"
+        description="Configurações do escritório usadas por alertas, vencimentos e ambiente fiscal padrão."
+        breadcrumbs={[{ label: 'Administração', href: '/admin' }, { label: 'Parâmetros' }]}
+      />
 
       <Card className="max-w-3xl border-border/65 bg-card/95 card-shadow">
         <CardHeader>

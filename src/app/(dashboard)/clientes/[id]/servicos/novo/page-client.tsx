@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
+import { PageHeader } from '@/components/layout/page-header'
 import { ClienteServicoForm } from '@/components/clientes/cliente-servico-form'
 import { getCliente, getServicos } from '@/lib/firestore-client'
 import { Loader2 } from 'lucide-react'
@@ -61,5 +62,18 @@ export default function Page() {
     )
   }
 
-  return <ClienteServicoForm clienteId={id} clienteNome={clienteNome} servicos={servicos} />
+  return (
+    <>
+      <PageHeader
+        title="Novo serviço do cliente"
+        description={clienteNome}
+        breadcrumbs={[
+          { label: 'Clientes', href: '/clientes' },
+          { label: clienteNome ?? 'Cliente', href: `/clientes/${id}` },
+          { label: 'Novo serviço' },
+        ]}
+      />
+      <ClienteServicoForm clienteId={id} clienteNome={clienteNome} servicos={servicos} />
+    </>
+  )
 }

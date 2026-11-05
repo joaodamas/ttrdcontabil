@@ -33,10 +33,10 @@ function TopBar() {
       {usuario && (
         <Link
           href="/fiscal?emitir=1"
-          className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-foreground text-background text-sm font-semibold hover:bg-foreground/90 transition-colors"
+          className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
         >
           <Plus size={13} strokeWidth={2.5} />
-          <span className="hidden sm:inline">Novo</span>
+          <span className="sr-only sm:not-sr-only">Nova NFS-e</span>
         </Link>
       )}
     </header>

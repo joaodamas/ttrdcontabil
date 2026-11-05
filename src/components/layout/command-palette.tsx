@@ -17,6 +17,7 @@ import {
   BarChart3, Users, ClipboardList, Layers,
   FolderOpen, Receipt, FileText, Wallet, Settings,
   Plus, CheckSquare, DollarSign, Clock3, Star, Package2,
+  History, UserCog, Plug, SlidersHorizontal, LineChart,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { canAccessTela, type TelaKey } from '@/lib/permissions'
@@ -40,18 +41,23 @@ type CommandPaletteItem = {
 
 const NAV_ITEMS: CommandPaletteItem[] = [
   { label: 'Hoje', href: '/hoje', icon: Clock3, telaKey: 'hoje' },
-  { label: 'Dashboard', href: '/dashboard', icon: BarChart3, telaKey: 'dashboard' },
+  { label: 'Painel', href: '/dashboard', icon: BarChart3, telaKey: 'dashboard' },
   { label: 'Clientes', href: '/clientes', icon: Users, telaKey: 'clientes' },
   { label: 'Tarefas', href: '/tarefas', icon: ClipboardList, telaKey: 'tarefas' },
   { label: 'Competências', href: '/competencias', icon: Layers, telaKey: 'competencias' },
-  { label: 'Fechamento Mensal', href: '/fechamento', icon: FolderOpen, telaKey: 'fechamento' },
+  { label: 'Fechamento mensal', href: '/fechamento', icon: FolderOpen, telaKey: 'fechamento' },
   { label: 'Emitir NFS-e', href: '/fiscal', icon: Receipt, telaKey: 'fiscal' },
   { label: 'Produtos', href: '/fiscal/produtos', icon: Package2, telaKey: 'fiscal' },
-  { label: 'Histórico de Emissões', href: '/fiscal/historico', icon: Receipt, telaKey: 'fiscal' },
+  { label: 'Histórico de NFS-e', href: '/fiscal/historico', icon: History, telaKey: 'fiscal' },
   { label: 'Imposto de Renda', href: '/ir', icon: FileText, telaKey: 'ir' },
   { label: 'Financeiro', href: '/financeiro', icon: Wallet, telaKey: 'financeiro' },
-  { label: 'Admin', href: '/admin', icon: Settings, telaKey: 'admin' },
-  { label: 'Usuários', href: '/admin/usuarios', icon: Users, telaKey: 'admin' },
+  { label: 'Carteira', href: '/relatorios/carteira', icon: Wallet, telaKey: 'financeiro' },
+  { label: 'Produtividade', href: '/relatorios/produtividade', icon: LineChart, telaKey: 'admin' },
+  { label: 'Administração', href: '/admin', icon: Settings, telaKey: 'admin' },
+  { label: 'Usuários', href: '/admin/usuarios', icon: UserCog, telaKey: 'admin' },
+  { label: 'Tipos de serviço', href: '/admin/servicos', icon: Package2, telaKey: 'servicos' },
+  { label: 'Conectores', href: '/admin/conectores', icon: Plug, telaKey: 'admin' },
+  { label: 'Parâmetros', href: '/admin/parametros', icon: SlidersHorizontal, telaKey: 'admin' },
 ]
 
 const QUICK_ACTIONS: CommandPaletteItem[] = [

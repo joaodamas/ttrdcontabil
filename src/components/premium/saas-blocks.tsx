@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { EmptyState as BaseEmptyState } from '@/components/ui/empty-state'
@@ -178,10 +178,8 @@ export function RiskBanner({
         </div>
 
         {ctaLabel && ctaHref && (
-          <Link href={ctaHref} className="shrink-0">
-            <Button size="sm" variant={s.btn}>
-              {ctaLabel}
-            </Button>
+          <Link href={ctaHref} className={buttonVariants({ size: 'sm', variant: s.btn, className: 'shrink-0' })}>
+            {ctaLabel}
           </Link>
         )}
       </div>
@@ -226,11 +224,13 @@ export function ActionBar({
             </Button>
           )
           return action.href ? (
-            <Link key={action.label} href={action.href}>
-              <Button size="sm" variant={action.variant ?? 'default'} className="h-8 gap-1.5">
-                {Icon && <Icon size={13} />}
-                {action.label}
-              </Button>
+            <Link
+              key={action.label}
+              href={action.href}
+              className={buttonVariants({ size: 'sm', variant: action.variant ?? 'default', className: 'h-8 gap-1.5' })}
+            >
+              {Icon && <Icon size={13} />}
+              {action.label}
             </Link>
           ) : btn
         })}

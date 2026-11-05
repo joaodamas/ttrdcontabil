@@ -8,10 +8,11 @@ import { where, orderBy, Timestamp } from 'firebase/firestore'
 import { getDocument, listDocuments, updateDocument } from '@/lib/firestore-client'
 import { formatDate , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
+import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { ArrowLeft, Pencil, Loader2 } from 'lucide-react'
+import { Pencil, Loader2 } from 'lucide-react'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   pendente: { label: 'Pendente', variant: 'outline' },
@@ -85,33 +86,27 @@ export default function IrDetalhePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Link href="/ir">
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-lg font-semibold">
-                {(declaracao.clienteNome as string) ?? '—'} — IR {declaracao.anoBase as number}
-              </h2>
+      <PageHeader
+        breadcrumbs={[{ label: 'Imposto de Renda', href: '/ir' }, { label: `IR ${declaracao.anoBase as number}` }]}
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            {(declaracao.clienteNome as string) ?? '—'} — IR {declaracao.anoBase as number}
               <Badge variant={s.variant}>{s.label}</Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
+          </span>
+        }
+        description={
+          <>
               Responsável: {(declaracao.responsavelNome as string) ?? '—'}
               {dataEntrega && ` · Entrega: ${formatDate(tsToDate(dataEntrega))}`}
-            </p>
-          </div>
-        </div>
-        <Link href={`/ir/${id}/editar`}>
-          <Button variant="outline" size="sm">
-            <Pencil className="h-4 w-4 mr-1" />
+          </>
+        }
+        action={
+          <Link href={`/ir/${id}/editar`} className={buttonVariants({ variant: 'outline', size: 'cta' })}>
+            <Pencil />
             Editar
-          </Button>
-        </Link>
-      </div>
+          </Link>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
