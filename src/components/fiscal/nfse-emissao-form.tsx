@@ -775,7 +775,11 @@ export function NfseEmissaoForm({
   const previewCTribNac = watch('codigoTributacaoNacional')
   const previewInfoCompl = watch('informacoesComplementares')
   const previewEndereco = enderecoDoFormulario(watchedValues)
-  const cTribNacDerivado = codigoNacionalDoItem(previewItemListaServico)
+  // Mesma precedência do backend: nota > configuração fiscal > item LC 116.
+  const cTribNacConfig = typeof fiscalDoCliente?.codigoTributacaoNacional === 'string' && /^\d{6}$/.test(fiscalDoCliente.codigoTributacaoNacional)
+    ? fiscalDoCliente.codigoTributacaoNacional
+    : undefined
+  const cTribNacDerivado = cTribNacConfig ?? codigoNacionalDoItem(previewItemListaServico)
   const regraCompetencia = normalizarRegraCompetencia(fiscalDoCliente?.competenciaPadrao)
   const regraCompetenciaRotulo = regraCompetencia === 'mes_anterior'
     ? 'mês anterior à emissão'
@@ -1230,7 +1234,7 @@ export function NfseEmissaoForm({
               />
               {errors.codigoTributacaoNacional
                 ? <p className="text-xs text-destructive">{errors.codigoTributacaoNacional.message}</p>
-                : <p className="text-xs text-muted-foreground">6 dígitos. Vazio = derivado do item LC 116 (desdobro 01).</p>}
+                : <p className="text-xs text-muted-foreground">6 dígitos. Vazio = o da configuração fiscal ou o derivado do item LC 116.</p>}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="codigoNbs">Código NBS</Label>
