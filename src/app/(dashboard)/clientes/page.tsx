@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense, Fragment } from 'react'
+import { useState, useMemo, Suspense, Fragment } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
@@ -25,6 +25,7 @@ import {
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useClientesList, useClientesRisco } from '@/features/clientes/hooks'
+import { useCarteira } from '@/features/carteira/hooks'
 import { clientesFiltroSchema } from '@/features/clientes/schemas'
 import type { ClienteRecord } from '@/features/clientes/types'
 
@@ -93,17 +94,17 @@ function motivosRiscoDoCliente(c: ClienteRecord, riscoMap: Map<string, string[]>
 
 function SaudeBadge({ nivel, motivo }: { nivel: SaudeNivel; motivo: string }) {
   if (nivel === 'critica') return (
-    <span title={motivo} className="inline-flex items-center gap-1 rounded-full border border-destructive/25 bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">
-      <AlertTriangle className="h-2.5 w-2.5" />{motivo}
+    <span title={motivo} className="inline-flex max-w-[160px] items-center gap-1 whitespace-nowrap rounded-full border border-destructive/25 bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">
+      <AlertTriangle className="h-2.5 w-2.5 shrink-0" /><span className="truncate">{motivo}</span>
     </span>
   )
   if (nivel === 'atencao') return (
-    <span title={motivo} className="inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[11px] font-semibold text-warning">
-      <ShieldAlert className="h-2.5 w-2.5" />{motivo}
+    <span title={motivo} className="inline-flex max-w-[160px] items-center gap-1 whitespace-nowrap rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[11px] font-semibold text-warning">
+      <ShieldAlert className="h-2.5 w-2.5 shrink-0" /><span className="truncate">{motivo}</span>
     </span>
   )
   return (
-    <span title={motivo} className="inline-flex items-center gap-1 rounded-full border border-success/25 bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
+    <span title={motivo} className="inline-flex max-w-[160px] items-center gap-1 whitespace-nowrap rounded-full border border-success/25 bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
       <ShieldCheck className="h-2.5 w-2.5" />Estável
     </span>
   )
@@ -124,7 +125,27 @@ function escapeHtmlPdf(value: string) {
     .replaceAll("'", '&#039;')
 }
 
-function exportClientesListaPdf(clientes: ClienteRecord[]) {
+// Mensalidade exibida = MRR dos contratos vigentes (clientes_servicos), a mesma
+// conta da /relatorios/carteira. O campo `mensalidade` do cadastro é só o
+// fallback de quem ainda não tem contrato — sem isso a lista mostrava "—" para
+// cliente que paga honorário todo mês.
+type MensalidadeResolver = (c: ClienteRecord) => number | undefined
+
+function useMensalidadeResolver(): MensalidadeResolver {
+  const carteira = useCarteira()
+  const mrrPorCliente = useMemo(
+    () => new Map((carteira.data?.ranking ?? []).map((r) => [r.clienteId, r.mrr])),
+    [carteira.data],
+  )
+  return (c) => {
+    const mrr = mrrPorCliente.get(c.id as string)
+    if (mrr != null && mrr > 0) return mrr
+    const cadastro = c.mensalidade as number | undefined
+    return cadastro != null && cadastro > 0 ? cadastro : undefined
+  }
+}
+
+function exportClientesListaPdf(clientes: ClienteRecord[], mensalidadeDe: MensalidadeResolver) {
   const now = new Date()
   const printWindow = window.open('', '_blank', 'width=1100,height=1400')
 
@@ -140,7 +161,8 @@ function exportClientesListaPdf(clientes: ClienteRecord[]) {
     const fantasia = c.nomeFantasia ? escapeHtmlPdf(c.nomeFantasia as string) : ''
     const documento = c.cpfCnpj ? escapeHtmlPdf(formatCpfCnpj(c.cpfCnpj as string)) : '—'
     const regimeLabel = c.regimeTributario ? (REGIME_LABELS[c.regimeTributario as string] ?? String(c.regimeTributario)) : '—'
-    const mensalidade = c.mensalidade != null ? formatCurrency(c.mensalidade as number) : '—'
+    const valorMensal = mensalidadeDe(c)
+    const mensalidade = valorMensal != null ? formatCurrency(valorMensal) : '—'
     const statusLabel = STATUS_LABELS_PDF[(c.status as string) ?? ''] ?? String(c.status ?? '—')
     return `
       <tr>
@@ -249,6 +271,7 @@ function ClientesContent() {
   const regime = searchParams.get('regime') ?? ''
   const { filteredClientes, isLoading, isError } = useClientesList({ busca, status })
   const riscoMap = useClientesRisco()
+  const mensalidadeDe = useMensalidadeResolver()
   const [modalClienteId,   setModalClienteId]   = useState<string | null>(null)
   const [modalClienteNome, setModalClienteNome] = useState('')
   const [filterSheetOpen,  setFilterSheetOpen]  = useState(false)
@@ -272,7 +295,7 @@ function ClientesContent() {
               variant="outline"
               size="cta"
               disabled={isLoading || clientesFiltrados.length === 0}
-              onClick={() => exportClientesListaPdf(clientesFiltrados)}
+              onClick={() => exportClientesListaPdf(clientesFiltrados, mensalidadeDe)}
             >
               <FileDown />
               Exportar PDF
@@ -349,14 +372,14 @@ function ClientesContent() {
       </div>
 
       <DataTableShell className="mt-4" density="compact">
-        <table className="min-w-[900px] w-full text-sm">
-          <thead className="border-b bg-muted/50">
+        <table className="w-full table-fixed text-sm sm:table-auto sm:min-w-[900px]">
+          <thead className="hidden border-b bg-muted/50 sm:table-header-group">
             <tr>
               <th className="text-left px-3 py-2.5 section-label">Nome / Razão Social</th>
-              <th className="text-left px-3 py-2.5 section-label hidden sm:table-cell">CPF / CNPJ</th>
+              <th className="text-left px-3 py-2.5 section-label hidden sm:table-cell whitespace-nowrap">CPF / CNPJ</th>
               <th className="text-left px-3 py-2.5 section-label hidden lg:table-cell">Cidade</th>
               <th className="text-left px-3 py-2.5 section-label hidden md:table-cell">Regime</th>
-              <th className="text-left px-3 py-2.5 section-label hidden xl:table-cell">Documento</th>
+              <th className="text-left px-3 py-2.5 section-label hidden 2xl:table-cell">Documento</th>
               <th className="text-right px-3 py-2.5 section-label hidden lg:table-cell">Mensalidade</th>
               <th className="text-left px-3 py-2.5 section-label">Status</th>
               <th className="text-left px-3 py-2.5 section-label">Saúde</th>
@@ -387,7 +410,7 @@ function ClientesContent() {
               clientesFiltrados.map((c) => {
                 const saude = saudeCliente(motivosRiscoDoCliente(c, riscoMap))
                 const temWhatsApp = !!(c.whatsapp ?? c.whatsappFinanceiro ?? c.aceiteWhatsAppCobranca)
-                const mensalidade = c.mensalidade as number | undefined
+                const mensalidade = mensalidadeDe(c)
                 const vencimento = c.vencimento as string | undefined
                 return (
                 <Fragment key={c.id as string}>
@@ -418,20 +441,20 @@ function ClientesContent() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-muted-foreground font-mono text-xs hidden sm:table-cell">
+                  <td className="px-3 py-2 text-muted-foreground font-mono text-xs whitespace-nowrap hidden sm:table-cell">
                     {formatCpfCnpj(c.cpfCnpj as string)}
                   </td>
-                  <td className="px-3 py-2 text-muted-foreground text-xs hidden lg:table-cell">
+                  <td className="px-3 py-2 text-muted-foreground text-xs whitespace-nowrap hidden lg:table-cell">
                     {c.cidade && c.uf ? `${c.cidade as string} · ${c.uf as string}` : c.cidade ? (c.cidade as string) : '—'}
                   </td>
                   <td className="px-3 py-2 hidden md:table-cell">
                     {c.regimeTributario ? (
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${REGIME_BADGE[c.regimeTributario as string] ?? REGIME_BADGE.isento}`}>
+                      <span className={`inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[11px] font-semibold border ${REGIME_BADGE[c.regimeTributario as string] ?? REGIME_BADGE.isento}`}>
                         {REGIME_LABELS[c.regimeTributario as string] ?? (c.regimeTributario as string)}
                       </span>
                     ) : <span className="text-muted-foreground">—</span>}
                   </td>
-                  <td className="px-3 py-2 hidden xl:table-cell">
+                  <td className="px-3 py-2 hidden 2xl:table-cell">
                     {c.categoriaFiscal && DOC_FISCAL_LABEL[c.categoriaFiscal as string] ? (
                       <span title="Derivado do CNAE" className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${DOC_FISCAL_BADGE[c.categoriaFiscal as string]}`}>
                         {DOC_FISCAL_LABEL[c.categoriaFiscal as string]}
@@ -479,7 +502,7 @@ function ClientesContent() {
                   </td>
                 </tr>
                 <tr className="sm:hidden">
-                  <td colSpan={7} className="px-3 py-2 sm:hidden">
+                  <td colSpan={9} className="px-3 py-2 sm:hidden">
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/10">
                         <span className="text-xs font-bold text-primary">

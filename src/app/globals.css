@@ -253,6 +253,12 @@
     letter-spacing: -0.03em;
     font-variant-numeric: tabular-nums;
   }
+  /* Celular: KPIs em 2 colunas — o valor precisa caber em ~150px. */
+  @media (max-width: 639px) {
+    .kpi-value {
+      font-size: 1.3rem;
+    }
+  }
   .section-label {
     @apply text-xs font-semibold uppercase tracking-wider text-muted-foreground;
   }

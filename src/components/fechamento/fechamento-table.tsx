@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { ExternalLink, ClipboardList, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { STATUS_CYCLE, STATUS_LABEL, STATUS_NOME, STATUS_STYLE } from './status-obrigacao'
@@ -119,8 +119,8 @@ export function FechamentoTable({ fechamentos, onUpdate, travado = false }: Fech
       }
       description={travado ? 'Status não podem ser alterados. Reabra o mês para editar.' : undefined}
     >
-      <table className="w-full min-w-[860px] text-sm">
-        <thead className="bg-muted/50 border-b">
+      <table className="w-full table-fixed text-sm md:table-auto md:min-w-[860px]">
+        <thead className="hidden bg-muted/50 border-b md:table-header-group">
           <tr>
             <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground w-12">COD</th>
             <th className="text-left px-3 py-2 font-medium text-xs text-muted-foreground">CLIENTE</th>
@@ -135,12 +135,14 @@ export function FechamentoTable({ fechamentos, onUpdate, travado = false }: Fech
           </tr>
         </thead>
         <tbody className="divide-y">
-          {fechamentos.map((f) => (
-            <tr key={f.id} className={cn(
-              'hover:bg-muted/30 transition-colors',
-              temPendencia(f)
-                ? 'bg-destructive/[0.03] hover:bg-destructive/[0.06] dark:bg-destructive/[0.08] dark:hover:bg-destructive/[0.14]'
-                : ''
+          {fechamentos.map((f) => {
+            const comPendencia = temPendencia(f)
+            const linhaPendente = 'bg-destructive/[0.03] hover:bg-destructive/[0.06] dark:bg-destructive/[0.08] dark:hover:bg-destructive/[0.14]'
+            return (
+            <Fragment key={f.id}>
+            <tr className={cn(
+              'hidden hover:bg-muted/30 transition-colors md:table-row',
+              comPendencia ? linhaPendente : ''
             )}>
               <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{f.clienteCodigo}</td>
               <td className="px-3 py-2 font-medium">{f.clienteNome}</td>
@@ -197,7 +199,53 @@ export function FechamentoTable({ fechamentos, onUpdate, travado = false }: Fech
                 )}
               </td>
             </tr>
-          ))}
+            <tr className={cn('md:hidden', comPendencia ? linhaPendente : '')}>
+              <td colSpan={10} className="px-3 py-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">
+                      <span className="mr-1.5 font-mono text-xs text-muted-foreground">{f.clienteCodigo}</span>
+                      {f.clienteNome}
+                    </p>
+                    <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span className={cn('rounded px-1.5 py-0.5 text-[11px] font-semibold', REGIME_COLOR[f.regime] ?? 'bg-muted text-muted-foreground')}>
+                        {REGIME_LABEL[f.regime] ?? f.regime}
+                      </span>
+                      <span className="truncate">{f.responsavel || '—'}</span>
+                    </p>
+                  </div>
+                  {f.portalUrl && f.portalUrl !== 'PROGRAMA' && f.portalUrl !== 'EMAIL' ? (
+                    <a
+                      href={f.portalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex shrink-0 items-center gap-1 text-xs text-primary hover:underline"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Portal
+                    </a>
+                  ) : (
+                    <span className="shrink-0 text-xs text-muted-foreground">{f.formaEntrega ?? f.portalUrl ?? '—'}</span>
+                  )}
+                </div>
+                <div className="mt-2 grid grid-cols-4 gap-1.5 text-center text-[10px] font-medium text-muted-foreground">
+                  {([
+                    ['DAS/SN', f.dasStatus, 'das'],
+                    ['eSOCIAL', f.esocialStatus, 'esocial'],
+                    ['REINF', f.reinfStatus, 'reinf'],
+                    ['FGTS', f.fgtsStatus, 'fgts'],
+                  ] as const).map(([rotulo, st, campo]) => (
+                    <div key={campo} className="flex flex-col items-center gap-1">
+                      {rotulo}
+                      <StatusCell status={st} campo={campo} id={f.id} onUpdate={onUpdate} travado={travado} />
+                    </div>
+                  ))}
+                </div>
+              </td>
+            </tr>
+            </Fragment>
+            )
+          })}
         </tbody>
       </table>
     </DataTableShell>

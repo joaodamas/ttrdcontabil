@@ -70,11 +70,11 @@ export default function ProdutosPage() {
         title="Produtos"
         description="Ficha fiscal por produto, para NF-e e NFC-e. A plataforma ainda não emite NF-e — o catálogo fica pronto para quando emitir."
         action={
-        <div className="flex max-w-full flex-wrap items-end gap-2">
-          <div className="min-w-0 space-y-1.5">
+        <div className="flex w-full flex-wrap items-end gap-2 sm:w-auto">
+          <div className="min-w-0 flex-1 space-y-1.5 sm:flex-none">
             <p className="section-label">Empresa emissora</p>
             <Select value={clienteId} onValueChange={(v) => setClienteId(v ?? '')}>
-              <SelectTrigger className="w-[260px] max-w-full">
+              <SelectTrigger className="w-full sm:w-[260px]">
                 <SelectValue placeholder={loadingClientes ? 'Carregando...' : 'Selecione o cliente'} />
               </SelectTrigger>
               <SelectContent>
