@@ -3,7 +3,7 @@
 import { formatCurrency, formatDateTime, tsToDate } from '@/lib/utils'
 import { DollarSign, MessageCircle, CheckCircle2, XCircle, Clock, RotateCcw, Pause } from 'lucide-react'
 import { AppModal } from '@/components/ui/app-modal'
-import { Badge } from '@/components/ui/badge'
+import { PagamentoStatusBadge } from '@/components/ui/status-badge'
 
 type Lancamento = Record<string, unknown>
 
@@ -137,7 +137,7 @@ export function TimelineFinanceiraModal({ lancamento, open, onOpenChange }: Time
       title={`Timeline — ${descricao}`}
       description={cliente ? `Cliente: ${cliente} · ${formatCurrency(Number(lancamento.valor) || 0)}` : formatCurrency(Number(lancamento.valor) || 0)}
       icon={<DollarSign className="size-4" />}
-      badge={<Badge variant={(lancamento.status as string) === 'pago' ? 'success' : (lancamento.status as string) === 'pendente' ? 'outline' : 'destructive'}>{lancamento.status as string}</Badge>}
+      badge={<PagamentoStatusBadge status={lancamento.status as string} />}
       size="md"
     >
       {eventos.length === 0 ? (

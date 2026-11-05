@@ -11,6 +11,8 @@ import { getDocument, listDocuments, updateDocument, createDocument, softDeleteD
 import { formatCpfCnpj, formatDate, formatCurrency, formatMesAno, tsToDate, cn } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error-message'
 import { Badge } from '@/components/ui/badge'
+import { AmbienteBadge, ClienteStatusBadge, CompetenciaStatusBadge } from '@/components/ui/status-badge'
+import { getStatusLabel } from '@/lib/status-semantics'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -33,12 +35,6 @@ import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
 import { useAuth } from '@/contexts/auth-context'
 import { canAccessTela } from '@/lib/permissions'
 import { getPathSegmentAfter } from '@/lib/route-params'
-
-const STATUS_LABELS: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  ativo:     { label: 'Ativo',     variant: 'default' },
-  inativo:   { label: 'Inativo',   variant: 'secondary' },
-  suspenso:  { label: 'Suspenso',  variant: 'destructive' },
-}
 
 const REGIME_LABELS: Record<string, string> = {
   simples_nacional: 'Simples Nacional',
@@ -158,7 +154,7 @@ function printableValue(data: Record<string, unknown>, key: string) {
   if (value == null || value === '') return '—'
   if (key === 'cpfCnpj' || key === 'responsavelCpf') return formatCpfCnpj(String(value))
   if (key === 'regimeTributario') return REGIME_LABELS[String(value)] ?? String(value)
-  if (key === 'status') return STATUS_LABELS[String(value)]?.label ?? String(value)
+  if (key === 'status') return getStatusLabel('cliente', String(value))
   return String(value)
 }
 
@@ -735,7 +731,6 @@ export default function ClienteDetailPage() {
     </div>
   ) : null
 
-  const statusInfo = STATUS_LABELS[cliente.status as string] ?? { label: String(cliente.status), variant: 'outline' as const }
   // Tipo de documento fiscal que o cliente emite, derivado do CNAE (categoriaFiscal —
   // ver scripts/classificar-clientes-fiscal.mjs). A aba Fiscal era fixada em NFS-e
   // pra todo mundo; clientes 'produto' (ex.: distribuidoras) emitem NF-e, não NFS-e.
@@ -759,7 +754,7 @@ export default function ClienteDetailPage() {
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-lg font-semibold truncate">{cliente.razaoSocial as string}</h1>
-            <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+            <ClienteStatusBadge status={cliente.status as string} />
           </div>
           {(cliente.nomeFantasia as string | undefined) && <p className="text-sm text-muted-foreground truncate">{cliente.nomeFantasia as string}</p>}
           <div className="flex flex-wrap items-center gap-3 mt-1.5">
@@ -935,9 +930,7 @@ export default function ClienteDetailPage() {
                             <p className="text-sm font-medium">{formatMesAno(c.mes as number, c.ano as number)}</p>
                             {(c.servicoNome as string | undefined) && <p className="text-xs text-muted-foreground">{c.servicoNome as string}</p>}
                           </div>
-                          <Badge variant={(c.status as string) === 'concluida' ? 'success' : (c.status as string) === 'aberta' ? 'warning' : 'neutral'}>
-                            {c.status as string}
-                          </Badge>
+                          <CompetenciaStatusBadge status={c.status as string} />
                         </Link>
                       ))}
                     </div>
@@ -972,7 +965,7 @@ export default function ClienteDetailPage() {
                               {formatCurrency(s.valor as number)} • {s.dataInicio ? formatDate(tsToDate(s.dataInicio)) : '—'}
                             </p>
                           </div>
-                          <Badge variant={s.status === 'ativo' ? 'default' : 'secondary'}>{s.status as string}</Badge>
+                          <ClienteStatusBadge status={s.status as string} />
                         </div>
                       ))}
                     </div>
@@ -1043,7 +1036,7 @@ export default function ClienteDetailPage() {
                         </div>
                       : <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
                           <div><dt className="text-xs text-muted-foreground">Município</dt><dd className="font-medium">{municipioNome}</dd></div>
-                          <div><dt className="text-xs text-muted-foreground">Ambiente</dt><dd><Badge variant={fiscal.ambienteEmissao === 'producao' ? 'default' : 'secondary'}>{fiscal.ambienteEmissao === 'producao' ? 'Produção' : 'Homologação'}</Badge></dd></div>
+                          <div><dt className="text-xs text-muted-foreground">Ambiente</dt><dd><AmbienteBadge ambiente={fiscal.ambienteEmissao === 'producao' ? 'producao' : 'homologacao'} /></dd></div>
                           <div><dt className="text-xs text-muted-foreground">Insc. Municipal</dt><dd className="font-medium">{(fiscal.inscricaoMunicipal as string) ?? '—'}</dd></div>
                           <div><dt className="text-xs text-muted-foreground">Regime</dt><dd className="font-medium">{REGIME_MAP[fiscal.regimeTributario as string] ?? '—'}</dd></div>
                           <div><dt className="text-xs text-muted-foreground">Optante Simples</dt><dd className="font-medium">{fiscal.optanteSimples ? 'Sim' : 'Não'}</dd></div>

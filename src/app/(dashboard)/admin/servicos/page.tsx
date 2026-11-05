@@ -28,6 +28,7 @@ const FREQUENCIA_LABELS: Record<string, string> = {
 export default function AdminServicosPage() {
   const [servicos, setServicos] = useState<ServicoAdmin[]>([])
   const [loading, setLoading] = useState(true)
+  const [erroCarga, setErroCarga] = useState<string | null>(null)
   const [gerando, setGerando] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('codigo')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
@@ -35,9 +36,13 @@ export default function AdminServicosPage() {
 
   const load = useCallback(() => {
     setLoading(true)
+    setErroCarga(null)
     fetchServicosAdmin()
       .then(setServicos)
-      .catch((err) => toast.error(getErrorMessage(err, 'Nao foi possivel carregar os servicos cadastrados. Verifique sua permissao de acesso.')))
+      .catch((err) => {
+        console.error('[admin/servicos] falha ao carregar', err)
+        setErroCarga(getErrorMessage(err, 'Verifique sua conexão e sua permissão de acesso, e tente novamente.'))
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -158,7 +163,15 @@ export default function AdminServicosPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {sorted.length === 0 ? (
+              {erroCarga ? (
+                <TableEmptyState
+                  colSpan={6}
+                  icon={BriefcaseBusiness}
+                  title="Não foi possível carregar os serviços"
+                  description={erroCarga}
+                  action={{ label: 'Tentar novamente', onClick: load }}
+                />
+              ) : sorted.length === 0 ? (
                 <TableEmptyState
                   colSpan={6}
                   icon={BriefcaseBusiness}

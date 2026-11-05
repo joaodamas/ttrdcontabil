@@ -1,38 +1,34 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { where, orderBy, Timestamp } from 'firebase/firestore'
 
 import { getDocument, listDocuments, updateDocument } from '@/lib/firestore-client'
 import { formatDate , tsToDate } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
+import { IrStatusBadge } from '@/components/ui/status-badge'
+import { RecordUnavailable, type RecordLoadFailure } from '@/components/ui/record-unavailable'
+import { getErrorMessage } from '@/lib/error-message'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ArrowLeft, Pencil, Loader2 } from 'lucide-react'
 
-const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  pendente: { label: 'Pendente', variant: 'outline' },
-  em_andamento: { label: 'Em andamento', variant: 'secondary' },
-  entregue: { label: 'Entregue', variant: 'default' },
-  retificado: { label: 'Retificado', variant: 'secondary' },
-  cancelado: { label: 'Cancelado', variant: 'destructive' },
-}
-
 export default function IrDetalhePage() {
   const { id } = useParams<{ id: string }>()
-  const router = useRouter()
 
   const [declaracao, setDeclaracao] = useState<Record<string, unknown> | null>(null)
   const [checklist, setChecklist] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(true)
+  const [falha, setFalha] = useState<{ reason: RecordLoadFailure; message?: string } | null>(null)
+  const [tentativa, setTentativa] = useState(0)
 
   useEffect(() => {
     if (!id) return
     queueMicrotask(() => {
       setLoading(true)
+      setFalha(null)
       Promise.all([
         getDocument('ir_declaracoes', id),
         listDocuments('ir_checklist', [
@@ -41,14 +37,19 @@ export default function IrDetalhePage() {
         ]),
       ]).then(([declaracaoData, checklistData]) => {
         if (!declaracaoData) {
-          router.push('/ir')
+          setDeclaracao(null)
+          setFalha({ reason: 'nao_encontrado' })
           return
         }
         setDeclaracao(declaracaoData as Record<string, unknown>)
         setChecklist(checklistData as Array<Record<string, unknown>>)
+      }).catch((err: unknown) => {
+        console.error('[ir/detalhe] falha ao carregar', err)
+        setDeclaracao(null)
+        setFalha({ reason: 'erro', message: getErrorMessage(err, 'Verifique sua conexão e tente novamente.') })
       }).finally(() => setLoading(false))
     })
-  }, [id, router])
+  }, [id, tentativa])
 
   if (loading) {
     return (
@@ -58,11 +59,18 @@ export default function IrDetalhePage() {
     )
   }
 
-  if (!declaracao) return null
-
-  const s = STATUS_MAP[declaracao.status as string] ?? {
-    label: declaracao.status as string,
-    variant: 'outline' as const,
+  if (!declaracao) {
+    return (
+      <RecordUnavailable
+        reason={falha?.reason ?? 'nao_encontrado'}
+        notFoundTitle="Declaração não encontrada"
+        errorTitle="Não foi possível carregar a declaração"
+        errorDescription={falha?.message}
+        backHref="/ir"
+        backLabel="Voltar para IR"
+        onRetry={() => setTentativa((n) => n + 1)}
+      />
+    )
   }
 
   const dataEntrega = declaracao.dataEntrega as Timestamp | undefined
@@ -97,7 +105,7 @@ export default function IrDetalhePage() {
               <h2 className="text-lg font-semibold">
                 {(declaracao.clienteNome as string) ?? '—'} — IR {declaracao.anoBase as number}
               </h2>
-              <Badge variant={s.variant}>{s.label}</Badge>
+              <IrStatusBadge status={declaracao.status as string} />
             </div>
             <p className="text-sm text-muted-foreground">
               Responsável: {(declaracao.responsavelNome as string) ?? '—'}
@@ -191,7 +199,7 @@ export default function IrDetalhePage() {
 
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Status</p>
-                <Badge variant={s.variant}>{s.label}</Badge>
+                <IrStatusBadge status={declaracao.status as string} />
               </div>
 
               <div>

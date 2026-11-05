@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { getErrorMessage } from '@/lib/error-message'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -22,15 +23,18 @@ function boolBadge(value?: boolean, positiveLabel = 'Sim', negativeLabel = 'Não
 export default function AdminConectoresPage() {
   const [conectores, setConectores] = useState<ConectorFiscalAdmin[]>([])
   const [loading, setLoading] = useState(true)
+  const [erroCarga, setErroCarga] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
+    setErroCarga(null)
     try {
       const data = await fetchConectoresFiscaisAdmin()
       setConectores(data)
-    } catch {
-      toast.error('Não foi possível carregar os conectores fiscais.')
+    } catch (err) {
+      console.error('[admin/conectores] falha ao carregar', err)
+      setErroCarga(getErrorMessage(err, 'Verifique sua conexão e tente novamente.'))
     } finally {
       setLoading(false)
     }
@@ -86,6 +90,14 @@ export default function AdminConectoresPage() {
                     Carregando conectores fiscais...
                   </td>
                 </tr>
+              ) : erroCarga ? (
+                <TableEmptyState
+                  colSpan={6}
+                  icon={Plug}
+                  title="Não foi possível carregar os conectores fiscais"
+                  description={erroCarga}
+                  action={{ label: 'Tentar novamente', onClick: () => { void load() } }}
+                />
               ) : conectores.length === 0 ? (
                 <TableEmptyState
                   colSpan={6}

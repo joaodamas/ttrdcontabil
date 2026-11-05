@@ -8,7 +8,9 @@ import { getFunctions, httpsCallable } from 'firebase/functions'
 import { toast } from 'sonner'
 import { ArrowLeft, Download, Loader2, RefreshCw, XCircle } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
+import { NfseStatusBadge } from '@/components/ui/status-badge'
+import { RecordUnavailable } from '@/components/ui/record-unavailable'
+import { getErrorMessage } from '@/lib/error-message'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -17,27 +19,20 @@ import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { getFirebaseApp } from '@/lib/firebase'
 import { formatCurrency, formatDate, tsToDate } from '@/lib/utils'
 
-const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  emitida: { label: 'Emitida', variant: 'default' },
-  pendente_processamento: { label: 'Pendente', variant: 'outline' },
-  cancelamento_pendente: { label: 'Cancelamento pendente', variant: 'outline' },
-  rejeitada: { label: 'Rejeitada', variant: 'destructive' },
-  cancelada: { label: 'Cancelada', variant: 'secondary' },
-  erro_integracao: { label: 'Erro', variant: 'destructive' },
-}
-
 export default function NfseDetalhePage() {
   const params = useParams<{ id: string }>()
   const id = params.id
   const [nota, setNota] = useState<Record<string, unknown> | null>(null)
   const [eventos, setEventos] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(true)
+  const [erroCarga, setErroCarga] = useState<string | null>(null)
   const [cancelamentoOpen, setCancelamentoOpen] = useState(false)
   const [motivoCancelamento, setMotivoCancelamento] = useState('')
   const [cancelando, setCancelando] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
+    setErroCarga(null)
     try {
       const [notaData, eventosData] = await Promise.all([
         getDocument<Record<string, unknown>>('nfse_emitidas', id),
@@ -48,6 +43,10 @@ export default function NfseDetalhePage() {
       ])
       setNota(notaData)
       setEventos(eventosData)
+    } catch (err) {
+      console.error('[fiscal/detalhe] falha ao carregar', err)
+      setNota(null)
+      setErroCarga(getErrorMessage(err, 'Verifique sua conexão e tente novamente.'))
     } finally {
       setLoading(false)
     }
@@ -105,14 +104,18 @@ export default function NfseDetalhePage() {
 
   if (!nota) {
     return (
-      <div className="space-y-4">
-        <Link href="/fiscal/historico"><Button variant="outline">Voltar</Button></Link>
-        <p className="text-sm text-muted-foreground">NFS-e não encontrada.</p>
-      </div>
+      <RecordUnavailable
+        reason={erroCarga ? 'erro' : 'nao_encontrado'}
+        notFoundTitle="NFS-e não encontrada"
+        errorTitle="Não foi possível carregar a NFS-e"
+        errorDescription={erroCarga ?? undefined}
+        backHref="/fiscal/historico"
+        backLabel="Voltar para o histórico"
+        onRetry={() => { void load() }}
+      />
     )
   }
 
-  const st = STATUS_MAP[nota.status as string] ?? { label: String(nota.status ?? '—'), variant: 'outline' as const }
   const dataEmissao = nota.dataEmissao as Timestamp | undefined
 
   return (
@@ -153,7 +156,7 @@ export default function NfseDetalhePage() {
         <Card>
           <CardHeader><CardTitle className="text-sm">Status</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <Badge variant={st.variant}>{st.label}</Badge>
+            <NfseStatusBadge status={nota.status as string} />
             <p className="text-muted-foreground">Emissão: {dataEmissao ? formatDate(tsToDate(dataEmissao)) : '—'}</p>
             <p className="text-muted-foreground">Código: {(nota.codigoVerificacao as string) ?? '—'}</p>
           </CardContent>

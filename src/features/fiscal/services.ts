@@ -1,4 +1,5 @@
 import { limit, orderBy, Timestamp, where } from 'firebase/firestore'
+import { BLOQUEIO_FISCAL } from '@/lib/fiscal-bloqueios'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { deleteDocument, listDocuments } from '@/lib/firestore-client'
 import { getFirebaseApp } from '@/lib/firebase'
@@ -37,21 +38,21 @@ function getCredenciaisBloqueios(fiscal: Record<string, unknown>) {
 
   if (tipo === 'abrasf_a1' || tipo === 'geisweb_a1') {
     if (!hasText(credenciais.certificadoStoragePath) || credenciais.certValido !== true) {
-      return ['certificado A1 ausente ou vencido']
+      return [BLOQUEIO_FISCAL.certificadoA1]
     }
   }
 
-  if (tipo === 'simpliss' && !hasText(credenciais.simplissToken)) return ['token Simpliss ausente']
+  if (tipo === 'simpliss' && !hasText(credenciais.simplissToken)) return [BLOQUEIO_FISCAL.tokenSimpliss]
   if (tipo === 'conam') {
     const missing = []
-    if (!hasText(credenciais.conamCodigoUsuario)) missing.push('usuario Conam ausente')
-    if (!hasText(credenciais.conamCodigoContribuinte)) missing.push('contribuinte Conam ausente')
+    if (!hasText(credenciais.conamCodigoUsuario)) missing.push(BLOQUEIO_FISCAL.usuarioConam)
+    if (!hasText(credenciais.conamCodigoContribuinte)) missing.push(BLOQUEIO_FISCAL.contribuinteConam)
     return missing
   }
   if (tipo === 'giap') {
     const missing = []
-    if (!hasText(credenciais.giaplogin)) missing.push('login GIAP ausente')
-    if (!hasText(credenciais.giapSenha)) missing.push('senha GIAP ausente')
+    if (!hasText(credenciais.giaplogin)) missing.push(BLOQUEIO_FISCAL.loginGiap)
+    if (!hasText(credenciais.giapSenha)) missing.push(BLOQUEIO_FISCAL.senhaGiap)
     return missing
   }
 
@@ -160,24 +161,24 @@ export async function fetchFiscalReadiness(): Promise<FiscalReadiness> {
       const bloqueiosEmissao: string[] = []
       const diaEmissao = cliente.diaEmissaoNFSe
 
-      if (servicosAtivos === 0) bloqueiosRascunho.push('sem servico ativo')
-      if (!hasPositiveNumber(diaEmissao)) bloqueiosRascunho.push('dia de emissao NFS-e ausente')
+      if (servicosAtivos === 0) bloqueiosRascunho.push(BLOQUEIO_FISCAL.semServicoAtivo)
+      if (!hasPositiveNumber(diaEmissao)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.diaEmissaoAusente)
 
       if (!fiscal) {
-        bloqueiosRascunho.push('sem configuracao fiscal')
-        bloqueiosEmissao.push('sem configuracao fiscal')
+        bloqueiosRascunho.push(BLOQUEIO_FISCAL.semConfiguracaoFiscal)
+        bloqueiosEmissao.push(BLOQUEIO_FISCAL.semConfiguracaoFiscal)
       } else {
         const municipioIbge = fiscal.municipioIbge ?? fiscal.codigoMunicipioIbge
-        if (!hasText(municipioIbge)) bloqueiosRascunho.push('municipio emissor ausente')
-        if (!hasText(fiscal.inscricaoMunicipal)) bloqueiosRascunho.push('inscricao municipal ausente')
-        if (!hasText(fiscal.regimeTributario)) bloqueiosRascunho.push('regime tributario ausente')
-        if (!hasText(fiscal.codigoServicoPadrao)) bloqueiosRascunho.push('codigo de servico padrao ausente')
-        if (!hasText(fiscal.itemListaServico)) bloqueiosRascunho.push('item da lista de servico ausente')
-        if (!hasText(fiscal.descricaoServicoPadrao)) bloqueiosRascunho.push('descricao padrao da NFS-e ausente')
-        if (!hasPositiveNumber(fiscal.aliquotaPadrao)) bloqueiosRascunho.push('aliquota padrao ausente')
+        if (!hasText(municipioIbge)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.municipioAusente)
+        if (!hasText(fiscal.inscricaoMunicipal)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.inscricaoMunicipalAusente)
+        if (!hasText(fiscal.regimeTributario)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.regimeAusente)
+        if (!hasText(fiscal.codigoServicoPadrao)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.codigoServicoAusente)
+        if (!hasText(fiscal.itemListaServico)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.itemListaAusente)
+        if (!hasText(fiscal.descricaoServicoPadrao)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.descricaoAusente)
+        if (!hasPositiveNumber(fiscal.aliquotaPadrao)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.aliquotaAusente)
         bloqueiosEmissao.push(...getCredenciaisBloqueios(fiscal))
         if (fiscal.ambienteEmissao === 'producao' && fiscal.producaoLiberada !== true) {
-          bloqueiosEmissao.push('municipio nao liberado para producao')
+          bloqueiosEmissao.push(BLOQUEIO_FISCAL.producaoNaoLiberada)
         }
       }
 

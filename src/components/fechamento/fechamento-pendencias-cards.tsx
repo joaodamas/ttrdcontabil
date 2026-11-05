@@ -17,8 +17,10 @@ import {
   Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { STATUS_CYCLE, STATUS_LABEL, STATUS_NOME, STATUS_STYLE } from './status-obrigacao'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { obrigacoesEmAberto, temPendencia } from '@/lib/fechamento-resumo'
 
 type StatusObrigacao = 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
 
@@ -36,14 +38,9 @@ export type FechamentoCardRow = {
   fgtsStatus: StatusObrigacao
 }
 
-function isCritico(f: FechamentoCardRow): boolean {
-  const bad = (s: StatusObrigacao) => s === 'pendente' || s === 'parcial'
-  return bad(f.dasStatus) || bad(f.esocialStatus) || bad(f.reinfStatus) || bad(f.fgtsStatus)
-}
-
+// Mesma regra de pendência do banner e dos KPIs (lib/fechamento-resumo).
 function slotsLiberados(f: FechamentoCardRow): number {
-  const ok = (s: StatusObrigacao) => !['pendente', 'parcial'].includes(s)
-  return [f.dasStatus, f.esocialStatus, f.reinfStatus, f.fgtsStatus].filter(ok).length
+  return 4 - obrigacoesEmAberto(f)
 }
 
 const REGIME_LABEL: Record<string, string> = {
@@ -60,34 +57,6 @@ const REGIME_COLOR: Record<string, string> = {
   lucro_real:       'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400',
   mei:              'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-400',
   isento:           'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
-}
-
-// Ciclo de status ao clicar
-const STATUS_CYCLE: Record<string, StatusObrigacao[]> = {
-  das:     ['pendente', 'guia', 'sm', 'enviado', 'parcial', 'na'],
-  esocial: ['na', 'pendente', 'ok', 'sm', 'guia'],
-  reinf:   ['na', 'pendente', 'ok', 'sm', 'guia'],
-  fgts:    ['na', 'pendente', 'ok', 'sm', 'guia'],
-}
-
-const STATUS_STYLE: Record<StatusObrigacao, string> = {
-  pendente: 'bg-warning/10 text-warning border-warning/30 hover:bg-warning/20',
-  enviado:  'bg-success/10 text-success border-success/30 hover:bg-success/20',
-  parcial:  'bg-info/10 text-info border-info/30 hover:bg-info/20',
-  ok:       'bg-success/15 text-success border-success/35 hover:bg-success/25',
-  sm:       'bg-success/10 text-success border-success/30 hover:bg-success/20',
-  guia:     'bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20',
-  na:       'bg-muted text-muted-foreground border-border hover:bg-muted/80',
-}
-
-const STATUS_LABEL: Record<StatusObrigacao, string> = {
-  pendente: 'PEND',
-  enviado:  'ENV',
-  parcial:  'PAR/',
-  ok:       'OK',
-  sm:       'SM',
-  guia:     'GUIA',
-  na:       '—',
 }
 
 // Semantic icons per status
@@ -151,7 +120,8 @@ function StatusCell({
         loading && 'opacity-50 cursor-wait',
         travado && 'opacity-60 cursor-not-allowed hover:bg-transparent'
       )}
-      title={travado ? 'Mês revisado e travado — reabra para editar' : 'Clique para alterar status'}
+      title={travado ? `${STATUS_NOME[status]} — mês revisado e travado; reabra para editar` : `${STATUS_NOME[status]} — clique para alterar`}
+      aria-label={STATUS_NOME[status]}
     >
       {loading ? (
         '...'
@@ -187,7 +157,7 @@ type Props = {
 }
 
 export function FechamentoPendenciasCards({ fechamentos, onUpdate, onIrParaTabela, travado = false }: Props) {
-  const criticos = useMemo(() => fechamentos.filter(isCritico), [fechamentos])
+  const criticos = useMemo(() => fechamentos.filter(temPendencia), [fechamentos])
   const [openId, setOpenId] = useState<string | null>(null)
 
   if (criticos.length === 0) {
@@ -198,9 +168,9 @@ export function FechamentoPendenciasCards({ fechamentos, onUpdate, onIrParaTabel
     <div className="stack-4">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h3 className="text-sm font-semibold">Pendências críticas ({criticos.length})</h3>
+          <h3 className="text-sm font-semibold">Clientes com pendência ({criticos.length})</h3>
           <p className="text-xs text-muted-foreground">
-            Obrigações em pendente ou parcial — expanda o cliente para atualizar DAS, eSocial, Reinf e FGTS.
+            Clientes com ao menos uma obrigação pendente, parcial ou com guia — expanda para atualizar DAS, eSocial, Reinf e FGTS.
           </p>
           {travado ? (
             <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-warning">
@@ -220,14 +190,13 @@ export function FechamentoPendenciasCards({ fechamentos, onUpdate, onIrParaTabel
           const expanded = openId === f.id
           const done = slotsLiberados(f)
           const slotStatuses = [f.dasStatus, f.esocialStatus, f.reinfStatus, f.fgtsStatus] as StatusObrigacao[]
-          const critico = isCritico(f)
           return (
             <Card
               key={f.id}
               className={cn(
                 'overflow-hidden transition-shadow',
                 expanded && 'ring-1 ring-primary/25',
-                critico && 'border-l-2 border-l-warning'
+                'border-l-2 border-l-warning'
               )}
             >
               <button

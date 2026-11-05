@@ -5,7 +5,9 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { formatMesAno } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { CompetenciaStatusBadge } from '@/components/ui/status-badge'
+import { getStatusLabel } from '@/lib/status-semantics'
+import { getErrorMessage } from '@/lib/error-message'
 import { Plus, ChevronLeft, ChevronRight, Layers, LayoutList, Group } from 'lucide-react'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
@@ -16,13 +18,6 @@ import { useCompetenciasList } from '@/features/competencias/hooks'
 import type { CompetenciaRecord, CompetenciasFilters } from '@/features/competencias/types'
 import { FilterSheet, FilterSheetTrigger } from '@/components/ui/filter-sheet'
 import { useRouter } from 'next/navigation'
-
-const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  aberta: { label: 'Aberta', variant: 'outline' },
-  em_andamento: { label: 'Em andamento', variant: 'secondary' },
-  concluida: { label: 'Concluída', variant: 'default' },
-  cancelada: { label: 'Cancelada', variant: 'destructive' },
-}
 
 function CompetenciasContent() {
   const searchParams = useSearchParams()
@@ -39,7 +34,7 @@ function CompetenciasContent() {
     page: parseInt(searchParams.get('page') ?? '1'),
   })
   const { mes, ano, status, clienteId, page } = parsed
-  const { competencias, total, totalPages, isLoading } = useCompetenciasList(parsed)
+  const { competencias, total, totalPages, isLoading, isError, error, refetch } = useCompetenciasList(parsed)
   const router = useRouter()
   const [groupBy, setGroupBy] = useState<'none' | 'status' | 'responsavel'>('none')
   const [filterSheetOpen, setFilterSheetOpen] = useState(false)
@@ -65,7 +60,7 @@ function CompetenciasContent() {
       })
       .map(([key, rows]) => ({
         groupKey: key,
-        groupLabel: groupBy === 'status' ? (STATUS_MAP[key]?.label ?? key) : key,
+        groupLabel: groupBy === 'status' ? getStatusLabel('competencia', key) : key,
         rows,
       }))
   }, [competencias, groupBy])
@@ -116,7 +111,7 @@ function CompetenciasContent() {
           <div className="flex flex-wrap gap-2">
             {(['', 'aberta', 'em_andamento', 'concluida', 'cancelada'] as const).map(s => (
               <FilterBtn key={s} href={buildUrl({ status: s, page: 1 })} active={status === s}>
-                {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+                {s === '' ? 'Todos' : getStatusLabel('competencia', s)}
               </FilterBtn>
             ))}
           </div>
@@ -149,7 +144,7 @@ function CompetenciasContent() {
         <div className="flex items-center gap-1">
           {(['', 'aberta', 'em_andamento', 'concluida', 'cancelada'] as const).map((s) => (
             <FilterBtn key={s} href={buildUrl({ status: s, page: 1 })} active={status === s}>
-              {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+              {s === '' ? 'Todos' : getStatusLabel('competencia', s)}
             </FilterBtn>
           ))}
         </div>
@@ -187,6 +182,14 @@ function CompetenciasContent() {
           <tbody className="divide-y">
             {isLoading ? (
               <TableRowSkeleton cols={5} rows={8} />
+            ) : isError ? (
+              <TableEmptyState
+                colSpan={5}
+                icon={Layers}
+                title="Não foi possível carregar as competências"
+                description={getErrorMessage(error, 'Verifique sua conexão e tente novamente.')}
+                action={{ label: 'Tentar novamente', onClick: () => { void refetch() } }}
+              />
             ) : competencias.length === 0 ? (
               <TableEmptyState
                 colSpan={5}
@@ -205,10 +208,6 @@ function CompetenciasContent() {
                   </tr>
                 ),
                 ...rows.map((c: CompetenciaRecord) => {
-                  const s = STATUS_MAP[c.status as string] ?? {
-                    label: c.status as string,
-                    variant: 'outline' as const,
-                  }
                   return (
                     <tr key={c.id as string} className="transition-colors hover:bg-muted/35">
                       <td className="px-4 py-3">
@@ -218,7 +217,7 @@ function CompetenciasContent() {
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">{(c.servicoNome as string) ?? '—'}</td>
                       <td className="px-4 py-3">{formatMesAno(c.mes as number, c.ano as number)}</td>
-                      <td className="px-4 py-3"><Badge variant={s.variant}>{s.label}</Badge></td>
+                      <td className="px-4 py-3"><CompetenciaStatusBadge status={c.status as string} /></td>
                       <td className="px-4 py-3 text-muted-foreground">{(c.responsavelNome as string) ?? '—'}</td>
                     </tr>
                   )

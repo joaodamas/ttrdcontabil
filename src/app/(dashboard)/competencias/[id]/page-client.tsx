@@ -1,45 +1,35 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { where, orderBy, limit } from 'firebase/firestore'
 
 import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { formatDate, formatMesAno, formatCurrency , tsToDate } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
+import { CompetenciaStatusBadge, PagamentoStatusBadge, TarefaPrioridadeBadge, TarefaStatusBadge } from '@/components/ui/status-badge'
+import { RecordUnavailable, type RecordLoadFailure } from '@/components/ui/record-unavailable'
+import { getErrorMessage } from '@/lib/error-message'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 
-const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  aberta: { label: 'Aberta', variant: 'outline' },
-  em_andamento: { label: 'Em andamento', variant: 'secondary' },
-  concluida: { label: 'Concluída', variant: 'default' },
-  cancelada: { label: 'Cancelada', variant: 'destructive' },
-}
-
-const PRIORIDADE_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  baixa: { label: 'Baixa', variant: 'outline' },
-  normal: { label: 'Normal', variant: 'secondary' },
-  alta: { label: 'Alta', variant: 'destructive' },
-  urgente: { label: 'Urgente', variant: 'destructive' },
-}
-
 export default function CompetenciaDetalhePage() {
   const { id } = useParams<{ id: string }>()
-  const router = useRouter()
 
   const [competencia, setCompetencia] = useState<Record<string, unknown> | null>(null)
   const [tarefas, setTarefas] = useState<Array<Record<string, unknown>>>([])
   const [lancamentos, setLancamentos] = useState<Array<Record<string, unknown>>>([])
   const [nfse, setNfse] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(true)
+  const [falha, setFalha] = useState<{ reason: RecordLoadFailure; message?: string } | null>(null)
+  const [tentativa, setTentativa] = useState(0)
 
   useEffect(() => {
     if (!id) return
     queueMicrotask(() => {
       setLoading(true)
+      setFalha(null)
       Promise.all([
         getDocument('competencias', id),
         listDocuments('tarefas', [where('competenciaId', '==', id), orderBy('criadoEm', 'asc'), limit(5)]),
@@ -47,16 +37,21 @@ export default function CompetenciaDetalhePage() {
         listDocuments('nfse_emitidas', [where('competenciaId', '==', id), orderBy('criadoEm', 'desc'), limit(3)]),
       ]).then(([compData, tarefasData, lancamentosData, nfseData]) => {
         if (!compData) {
-          router.push('/competencias')
+          setCompetencia(null)
+          setFalha({ reason: 'nao_encontrado' })
           return
         }
         setCompetencia(compData as Record<string, unknown>)
         setTarefas(tarefasData as Array<Record<string, unknown>>)
         setLancamentos(lancamentosData as Array<Record<string, unknown>>)
         setNfse(nfseData as Array<Record<string, unknown>>)
+      }).catch((err: unknown) => {
+        console.error('[competencias/detalhe] falha ao carregar', err)
+        setCompetencia(null)
+        setFalha({ reason: 'erro', message: getErrorMessage(err, 'Verifique sua conexão e tente novamente.') })
       }).finally(() => setLoading(false))
     })
-  }, [id, router])
+  }, [id, tentativa])
 
   if (loading) {
     return (
@@ -66,11 +61,18 @@ export default function CompetenciaDetalhePage() {
     )
   }
 
-  if (!competencia) return null
-
-  const s = STATUS_MAP[competencia.status as string] ?? {
-    label: competencia.status as string,
-    variant: 'outline' as const,
+  if (!competencia) {
+    return (
+      <RecordUnavailable
+        reason={falha?.reason ?? 'nao_encontrado'}
+        notFoundTitle="Competência não encontrada"
+        errorTitle="Não foi possível carregar a competência"
+        errorDescription={falha?.message}
+        backHref="/competencias"
+        backLabel="Voltar para competências"
+        onRetry={() => setTentativa((n) => n + 1)}
+      />
+    )
   }
 
   return (
@@ -88,7 +90,7 @@ export default function CompetenciaDetalhePage() {
                 {(competencia.clienteNome as string) ?? '—'} —{' '}
                 {formatMesAno(competencia.mes as number, competencia.ano as number)}
               </h2>
-              <Badge variant={s.variant}>{s.label}</Badge>
+              <CompetenciaStatusBadge status={competencia.status as string} />
             </div>
             <p className="text-sm text-muted-foreground">
               {(competencia.servicoNome as string) ?? '—'} · Responsável:{' '}
@@ -136,14 +138,6 @@ export default function CompetenciaDetalhePage() {
             ) : (
               <ul className="divide-y">
                 {tarefas.map((t) => {
-                  const ts = STATUS_MAP[t.status as string] ?? {
-                    label: t.status as string,
-                    variant: 'outline' as const,
-                  }
-                  const pr = PRIORIDADE_MAP[t.prioridade as string] ?? {
-                    label: t.prioridade as string,
-                    variant: 'outline' as const,
-                  }
                   return (
                     <li key={t.id as string}>
                       <Link
@@ -152,13 +146,9 @@ export default function CompetenciaDetalhePage() {
                       >
                         <span className="text-sm font-medium">{t.titulo as string}</span>
                         <div className="flex items-center gap-2">
-                          <Badge variant={ts.variant} className="text-xs">
-                            {ts.label}
-                          </Badge>
+                          <TarefaStatusBadge status={t.status as string} />
                           {t.prioridade ? (
-                            <Badge variant={pr.variant} className="text-xs">
-                              {pr.label}
-                            </Badge>
+                            <TarefaPrioridadeBadge prioridade={t.prioridade as string} />
                           ) : null}
                         </div>
                         {t.dataPrazo ? (
@@ -224,10 +214,6 @@ export default function CompetenciaDetalhePage() {
             ) : (
               <ul className="divide-y">
                 {lancamentos.map((l) => {
-                  const ls = STATUS_MAP[l.status as string] ?? {
-                    label: l.status as string,
-                    variant: 'outline' as const,
-                  }
                   return (
                     <li key={l.id as string} className="px-4 py-3 flex flex-col gap-0.5">
                       <span className="text-sm font-medium truncate">
@@ -243,9 +229,7 @@ export default function CompetenciaDetalhePage() {
                           {formatCurrency(l.valor as number)}
                         </span>
                       </div>
-                      <Badge variant={ls.variant} className="w-fit text-xs">
-                        {ls.label}
-                      </Badge>
+                      <PagamentoStatusBadge status={l.status as string} />
                     </li>
                   )
                 })}

@@ -9,6 +9,7 @@ import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { getFirebaseApp } from '@/lib/firebase'
 import { appConfig } from '@/lib/app-config'
 import { getErrorMessage } from '@/lib/error-message'
+import { getStatusInfo, type StatusTone } from '@/lib/status-semantics'
 import { useAuth } from '@/contexts/auth-context'
 import { useFeatureFlags } from '@/contexts/feature-flags-context'
 import { formatCurrency, formatDate, formatMesAno, tsToDate, cn } from '@/lib/utils'
@@ -60,10 +61,11 @@ function SkeletonList() {
 }
 
 /* ─── Competências status ───────────────────────────────────────────────── */
-const COMP_STATUS: Record<string, { label: string; variant: 'neutral' | 'warning' | 'success' }> = {
-  aberta:       { label: 'Abertas',      variant: 'neutral' },
-  em_andamento: { label: 'Em andamento', variant: 'warning' },
-  concluida:    { label: 'Concluídas',   variant: 'success' },
+// Rótulos no plural; a cor vem do vocabulário único de status.
+const COMP_STATUS: Record<string, { label: string; variant: StatusTone }> = {
+  aberta:       { label: 'Abertas',      variant: getStatusInfo('competencia', 'aberta').tone },
+  em_andamento: { label: 'Em andamento', variant: getStatusInfo('competencia', 'em_andamento').tone },
+  concluida:    { label: 'Concluídas',   variant: getStatusInfo('competencia', 'concluida').tone },
 }
 
 type DashboardKpis = {
@@ -684,7 +686,10 @@ export default function DashboardPage() {
       const falhaCritica = kpiErro
         ?? (clientesResult.status === 'rejected' ? clientesResult.reason : null)
         ?? (tarefasResult.status === 'rejected' ? tarefasResult.reason : null)
-      if (falhaCritica) setErro(falhaCritica)
+      if (falhaCritica) {
+        console.error('[dashboard] falha crítica ao carregar o painel', falhaCritica)
+        setErro(falhaCritica)
+      }
 
       // Falha em competências, lançamentos ou fechamentos não derruba o painel,
       // mas também não pode passar batida: Promise.allSettled devolve [] para a
@@ -692,7 +697,10 @@ export default function DashboardPage() {
       // check verde. Cada seção afetada passa a admitir que não sabe.
       const falhaSecundaria = [compResult, lancResult, fechResult]
         .find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined
-      if (!falhaCritica && falhaSecundaria) setErroParcial(falhaSecundaria.reason)
+      if (!falhaCritica && falhaSecundaria) {
+        console.error('[dashboard] falha parcial ao carregar o painel', falhaSecundaria.reason)
+        setErroParcial(falhaSecundaria.reason)
+      }
       setSecoesComFalha({
         competencias: compResult.status === 'rejected',
         lancamentos:  lancResult.status === 'rejected',
@@ -778,7 +786,10 @@ export default function DashboardPage() {
       }
       const risco = Array.from(riscoMap.values()).sort((a, b) => b.score - a.score).slice(0, 5)
       setClientesEmRisco(risco)
-    }).catch((err) => setErro(err)).finally(() => setLoading(false))
+    }).catch((err) => {
+      console.error('[dashboard] falha ao carregar o painel', err)
+      setErro(err)
+    }).finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usuario?.tenantId, reloadToken])
 

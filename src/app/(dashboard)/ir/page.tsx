@@ -7,7 +7,8 @@ import { Timestamp } from 'firebase/firestore'
 
 import { formatDate , tsToDate } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error-message'
-import { Badge } from '@/components/ui/badge'
+import { IrStatusBadge } from '@/components/ui/status-badge'
+import { getStatusLabel } from '@/lib/status-semantics'
 import { Button } from '@/components/ui/button'
 import { Plus, FileText } from 'lucide-react'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
@@ -16,14 +17,6 @@ import { FilterBtn } from '@/components/ui/filter-btn'
 import { irFiltroSchema } from '@/features/ir/schemas'
 import type { IrDeclaracaoRecord, IrFilters } from '@/features/ir/types'
 import { useIrList } from '@/features/ir/hooks'
-
-const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  pendente: { label: 'Pendente', variant: 'outline' },
-  em_andamento: { label: 'Em andamento', variant: 'secondary' },
-  entregue: { label: 'Entregue', variant: 'default' },
-  retificado: { label: 'Retificado', variant: 'secondary' },
-  cancelado: { label: 'Cancelado', variant: 'destructive' },
-}
 
 function IrContent() {
   const searchParams = useSearchParams()
@@ -76,7 +69,7 @@ function IrContent() {
         <div className="flex items-center gap-1">
           {(['', 'pendente', 'em_andamento', 'entregue', 'retificado', 'cancelado'] as const).map((s) => (
             <FilterBtn key={s} href={buildUrl({ status: s, page: 1 })} active={status === s}>
-              {s === '' ? 'Todos' : STATUS_MAP[s]?.label ?? s}
+              {s === '' ? 'Todos' : getStatusLabel('ir', s)}
             </FilterBtn>
           ))}
         </div>
@@ -114,10 +107,6 @@ function IrContent() {
               />
             ) : (
               declaracoes.map((d: IrDeclaracaoRecord) => {
-                const s = STATUS_MAP[d.status as string] ?? {
-                  label: d.status as string,
-                  variant: 'outline' as const,
-                }
                 const dataEntrega = d.dataEntrega as Timestamp | undefined
                 return (
                   <tr key={d.id as string} className="transition-colors hover:bg-muted/35">
@@ -131,7 +120,7 @@ function IrContent() {
                     </td>
                     <td className="px-4 py-3">{d.anoBase as number}</td>
                     <td className="px-4 py-3">
-                      <Badge variant={s.variant}>{s.label}</Badge>
+                      <IrStatusBadge status={d.status as string} />
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {(d.responsavelNome as string) ?? '—'}
