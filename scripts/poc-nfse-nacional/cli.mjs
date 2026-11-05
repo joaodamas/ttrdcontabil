@@ -6,7 +6,7 @@
 //
 // Segurança:
 //   - hosts permitidos: sefin.producaorestrita.nfse.gov.br e adn.producaorestrita.nfse.gov.br
-//     (lib/ambiente.ts recusa produção antes de abrir conexão);
+//     (functions/src/nfse/nacional/ambiente.ts recusa produção antes de abrir conexão);
 //   - .pfx lido de --pfx ou NFSE_PFX; senha só por NFSE_PFX_SENHA ou digitada no terminal
 //     (sem eco). A senha nunca é impressa nem gravada;
 //   - requisições/respostas ficam em .poc-nfse/ (ignorado pelo git) — contêm dados reais.
@@ -25,7 +25,7 @@ import {
   extrairMensagens,
   formatarMensagem,
   montarUrl,
-} from './lib/ambiente.ts'
+} from '../../functions/src/nfse/nacional/ambiente.ts'
 import {
   formatarDhEmi,
   instanteSeguroParaEmissao,
@@ -34,7 +34,7 @@ import {
   normalizarCnpj,
   somenteDigitos,
   validarDadosNota,
-} from './lib/dps.ts'
+} from '../../functions/src/nfse/nacional/dps.ts'
 import { assinarXml, extrairChaveDoPfx, validarCertificado } from '../../functions/src/nfse/xml/signer.ts'
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url))

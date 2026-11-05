@@ -4,22 +4,34 @@
  *
  * Fonte do leiaute: esquemas XSD da PRODUÇÃO RESTRITA publicados em
  * https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/producao-restrita
- * (esquemas_prod_restrita_20261020.zip, versão 1.01 — cópia em ../schemas/).
- * A ordem dos elementos segue o XSD ao pé da letra: fora de ordem = E1235.
+ * (esquemas_prod_restrita_20261020.zip, versão 1.01 — cópia em
+ * scripts/poc-nfse-nacional/schemas/). A ordem dos elementos segue o XSD ao pé
+ * da letra: fora de ordem = E1235.
  *
- * TRAVA: este módulo só sabe gerar tpAmb = 2 (homologação / produção restrita).
- * Não existe parâmetro para trocar o ambiente — de propósito.
+ * AMBIENTE: `opcoes.ambiente` decide o tpAmb ('homologacao' → 2, 'producao' → 1).
+ * O padrão é 'homologacao' — quem não passa nada (o PoC) nunca gera tpAmb = 1.
  *
  * Sem imports relativos: o arquivo roda direto no Node (type stripping) a partir
- * do cli.mjs e também é importado pelos testes do vitest.
+ * do cli.mjs, é compilado nas Functions e importado pelos testes do vitest.
  */
 
 export const NS_NFSE = 'http://www.sped.fazenda.gov.br/nfse'
 export const VERSAO_LEIAUTE = '1.01'
-/** 2 = Homologação (produção restrita). Único valor que este PoC emite. */
+/** 2 = Homologação (produção restrita). Padrão quando o ambiente não é informado. */
 export const TP_AMB_PRODUCAO_RESTRITA = '2'
+/** 1 = Produção. Só sai quando o chamador pede explicitamente ambiente 'producao'. */
+export const TP_AMB_PRODUCAO = '1'
 /** TSVerAplic: 1 a 20 caracteres. */
-export const VER_APLIC_PADRAO = 'TTRD-PoC-0.1'
+export const VER_APLIC_PADRAO = 'TTRD-JPFiscal-1.0'
+
+export type AmbienteDps = 'homologacao' | 'producao'
+
+/** tpAmb do ambiente. Valor desconhecido = erro (falha fechado, nunca vira produção). */
+export function tpAmbDoAmbiente(ambiente: AmbienteDps | undefined): '1' | '2' {
+  if (ambiente === undefined || ambiente === 'homologacao') return TP_AMB_PRODUCAO_RESTRITA
+  if (ambiente === 'producao') return TP_AMB_PRODUCAO
+  throw new Error(`Ambiente desconhecido para a DPS: ${String(ambiente)}`)
+}
 
 export const CODIGO_EVENTO_CANCELAMENTO = '101101'
 export const XDESC_CANCELAMENTO = 'Cancelamento de NFS-e'
@@ -143,6 +155,8 @@ export interface OpcoesMontagem {
   /** dhEmi já formatado (AAAA-MM-DDThh:mm:ss±hh:mm). Use formatarDhEmi(). */
   dhEmi: string
   verAplic?: string
+  /** Padrão 'homologacao' (tpAmb = 2). */
+  ambiente?: AmbienteDps
 }
 
 // ─── Utilidades ─────────────────────────────────────────────────────────────
@@ -484,7 +498,7 @@ export function montarDpsXml(d: DadosNota, opcoes: OpcoesMontagem): { xml: strin
 
   const infDps =
     `<infDPS Id="${id}">` +
-    el('tpAmb', TP_AMB_PRODUCAO_RESTRITA) +
+    el('tpAmb', tpAmbDoAmbiente(opcoes.ambiente)) +
     el('dhEmi', opcoes.dhEmi) +
     el('verAplic', verAplic) +
     el('serie', String(d.dps.serie)) +
@@ -519,7 +533,7 @@ export interface DadosCancelamento {
 /** Pedido de registro do evento e101101 (cancelamento), sem assinatura. */
 export function montarPedidoCancelamentoXml(
   d: DadosCancelamento,
-  opcoes: { dhEvento: string; verAplic?: string },
+  opcoes: { dhEvento: string; verAplic?: string; ambiente?: AmbienteDps },
 ): { xml: string; id: string } {
   const motivo = String(d.motivo ?? '').trim()
   if (motivo.length < 15 || motivo.length > 255) {
@@ -537,7 +551,7 @@ export function montarPedidoCancelamentoXml(
   const id = montarIdPedidoEvento(chave, CODIGO_EVENTO_CANCELAMENTO)
   const inf =
     `<infPedReg Id="${id}">` +
-    el('tpAmb', TP_AMB_PRODUCAO_RESTRITA) +
+    el('tpAmb', tpAmbDoAmbiente(opcoes.ambiente)) +
     el('verAplic', (opcoes.verAplic ?? VER_APLIC_PADRAO).slice(0, 20)) +
     el('dhEvento', opcoes.dhEvento) +
     el(autor.length === 14 ? 'CNPJAutor' : 'CPFAutor', autor) +

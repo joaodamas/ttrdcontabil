@@ -1,0 +1,26 @@
+{
+  "municipioEmissor": "Barueri",
+  "regimeTributario": "simples_nacional",
+  "optanteSimples": true,
+  "itemListaServico": "17.19",
+  "aliquotaPadrao": 2,
+  "aliquotaSimplesNacional": 6,
+  "prestador": {
+    "cnpj": "11222333000181",
+    "inscricaoMunicipal": "123456",
+    "razaoSocial": "PRESTADOR FICTICIO LTDA",
+    "municipioIbge": "3505708"
+  },
+  "tomador": {
+    "cpfCnpj": "11444777000161",
+    "razaoSocial": "TOMADOR FICTICIO DE TESTE LTDA",
+    "email": "teste@example.com"
+  },
+  "servico": {
+    "discriminacao": "Servicos de contabilidade - TESTE PRODUCAO RESTRITA, sem validade juridica",
+    "codigoServico": "1719",
+    "valorServico": 10.0,
+    "issRetido": false
+  },
+  "serie": "900"
+}

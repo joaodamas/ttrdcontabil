@@ -32,15 +32,31 @@ function getFiscalDocForCliente(
   return fiscais.find((f) => f.clienteId === clienteId && f.ativo !== false) ?? null
 }
 
-function getCredenciaisBloqueios(fiscal: Record<string, unknown>) {
+/**
+ * Provedor efetivo — mesma regra do backend (functions/src/nfse/provedor.ts):
+ * só 'prefeitura' (escolha explícita) usa o conector municipal; 'municipio'
+ * gravado pelo formulário antigo e config sem o campo vão pelo Ambiente Nacional.
+ */
+export function provedorNfseEfetivo(fiscal: Record<string, unknown> | null | undefined): 'nacional' | 'municipio' | 'spedy' {
+  const p = fiscal?.provedorNfse
+  if (p === 'prefeitura') return 'municipio'
+  return p === 'spedy' ? 'spedy' : 'nacional'
+}
+
+function temCertificadoA1Valido(credenciais: Record<string, unknown>) {
+  return hasText(credenciais.certificadoStoragePath) && credenciais.certValido === true
+}
+
+export function getCredenciaisBloqueios(fiscal: Record<string, unknown>) {
   const credenciais = (fiscal.credenciais ?? {}) as Record<string, unknown>
+  const provedor = provedorNfseEfetivo(fiscal)
+  // Ambiente Nacional: a única credencial é o A1 do próprio cliente (mTLS + assinatura).
+  if (provedor === 'nacional') return temCertificadoA1Valido(credenciais) ? [] : [BLOQUEIO_FISCAL.certificadoA1]
   const municipioIbge = (fiscal.municipioIbge ?? fiscal.codigoMunicipioIbge) as string | undefined
   const tipo = municipioIbge ? MUNICIPIO_TIPO[normalizarIbge(municipioIbge)] : undefined
 
   if (tipo === 'abrasf_a1' || tipo === 'geisweb_a1') {
-    if (!hasText(credenciais.certificadoStoragePath) || credenciais.certValido !== true) {
-      return [BLOQUEIO_FISCAL.certificadoA1]
-    }
+    if (!temCertificadoA1Valido(credenciais)) return [BLOQUEIO_FISCAL.certificadoA1]
   }
 
   if (tipo === 'simpliss' && !hasText(credenciais.simplissToken)) return [BLOQUEIO_FISCAL.tokenSimpliss]
@@ -177,7 +193,7 @@ export async function fetchFiscalReadiness(): Promise<FiscalReadiness> {
         if (!hasText(fiscal.itemListaServico)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.itemListaAusente)
         if (!hasText(fiscal.descricaoServicoPadrao)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.descricaoAusente)
         if (!hasPositiveNumber(fiscal.aliquotaPadrao)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.aliquotaAusente)
-        if (fiscal.provedorNfse === 'spedy') bloqueiosEmissao.push(BLOQUEIO_FISCAL.provedorDescontinuado)
+        if (provedorNfseEfetivo(fiscal) === 'spedy') bloqueiosEmissao.push(BLOQUEIO_FISCAL.provedorDescontinuado)
         bloqueiosEmissao.push(...getCredenciaisBloqueios(fiscal))
         if (fiscal.ambienteEmissao === 'producao' && fiscal.producaoLiberada !== true) {
           bloqueiosEmissao.push(BLOQUEIO_FISCAL.producaoNaoLiberada)

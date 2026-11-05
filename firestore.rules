@@ -542,6 +542,14 @@ service cloud.firestore {
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
+    // Contador da numeração da DPS (Ambiente Nacional) por prestador +
+    // ambiente + série — só a Cloud Function (Admin SDK) lê e grava, dentro da
+    // transação da emissão. Se o navegador pudesse mexer, voltar o contador
+    // repetiria nDPS (DPS duplicada) e adiantá-lo queimaria a numeração.
+    match /dps_sequencias/{id} {
+      allow read, write: if false;
+    }
+
     match /clientes_fiscal_integracao/{id} {
       // [P1] Mesma gate de leitura de clientes_fiscal (mesma tela 'fiscal').
       allow read: if canReadFiscalConfig() && sameTenantExisting();

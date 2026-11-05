@@ -34,6 +34,7 @@ import { Lc116Picker } from '@/components/fiscal/lc116-picker'
 import { ClientePicker } from '@/components/ui/cliente-picker'
 import { fetchTomadores } from '@/features/tomadores/services'
 import type { TomadorRecord } from '@/features/tomadores/types'
+import { provedorNfseEfetivo } from '@/features/fiscal/services'
 
 function isValidCpfCnpj(raw: string): boolean {
   const digits = raw.replace(/\D/g, '')
@@ -396,6 +397,11 @@ export function NfseEmissaoForm({
   const previewTomadorNome = watch('tomadorNome')
   const fiscalDoCliente = configFiscal && configFiscal.clienteId === selectedClienteId ? configFiscal.dados : undefined
   const ambienteEmissao = fiscalDoCliente?.ambienteEmissao as string | undefined
+  // Sem o campo = Ambiente Nacional (mesma regra do backend).
+  const provedorEmissao = fiscalDoCliente ? provedorNfseEfetivo(fiscalDoCliente) : undefined
+  const credenciaisDoCliente = (fiscalDoCliente?.credenciais ?? {}) as Record<string, unknown>
+  const semA1Nacional = provedorEmissao === 'nacional'
+    && !(typeof credenciaisDoCliente.certificadoStoragePath === 'string' && credenciaisDoCliente.certificadoStoragePath && credenciaisDoCliente.certValido === true)
   // Barra a emissão ANTES do último clique: antes, um cliente ainda com a Spedy
   // (descontinuada) só descobria o problema no erro do backend, depois das 5 etapas.
   const bloqueioEmissao: { titulo: string; detalhe: string } | null =
@@ -403,8 +409,10 @@ export function NfseEmissaoForm({
       : fiscalDoCliente === null
         ? { titulo: 'Cliente sem configuração fiscal.', detalhe: 'Configure município, inscrição municipal e certificado antes de emitir.' }
         : fiscalDoCliente.provedorNfse === 'spedy'
-          ? { titulo: 'Cliente ainda configurado com a Spedy (descontinuada).', detalhe: 'Abra a configuração fiscal e salve: o cliente passa a usar o conector direto do município.' }
-          : null
+          ? { titulo: 'Cliente ainda configurado com a Spedy (descontinuada).', detalhe: 'Abra a configuração fiscal e salve: o cliente passa a emitir pelo Ambiente Nacional.' }
+          : semA1Nacional
+            ? { titulo: 'Cliente sem certificado A1 válido.', detalhe: 'A emissão pelo Ambiente Nacional é assinada com o A1 do próprio cliente. Envie o certificado na configuração fiscal.' }
+            : null
   const previewTomadorCpf = watch('tomadorCpfCnpj')
   const previewTomadorEmail = watch('tomadorEmail')
   const previewDescricao = watch('descricaoServico')
@@ -752,10 +760,20 @@ export function NfseEmissaoForm({
             <div>
               <span className="text-muted-foreground">Ambiente:</span>{' '}
               {ambienteEmissao === 'producao'
-                ? <span className="font-medium text-destructive">Produção — a nota sai de verdade na prefeitura</span>
+                ? <span className="font-medium text-destructive">Produção — a nota sai de verdade, com valor fiscal</span>
                 : ambienteEmissao === 'homologacao'
                   ? 'Homologação (teste, sem valor fiscal)'
                   : 'Definido na configuração fiscal do cliente'}
+            </div>
+            <div>
+              <span className="text-muted-foreground">Emissão por:</span>{' '}
+              {provedorEmissao === 'nacional'
+                ? 'Ambiente Nacional (Sefin Nacional)'
+                : provedorEmissao === 'municipio'
+                  ? 'Prefeitura (conector legado)'
+                  : provedorEmissao === 'spedy'
+                    ? 'Spedy (descontinuada)'
+                    : 'Definido na configuração fiscal do cliente'}
             </div>
             <div><span className="text-muted-foreground">Prestador:</span> {previewCliente?.razaoSocial ?? 'Selecione o cliente'}</div>
             <div><span className="text-muted-foreground">Competência:</span> {previewCompetencia ? `${String(previewCompetencia.mes).padStart(2, '0')}/${previewCompetencia.ano}` : 'Não vinculada'}</div>

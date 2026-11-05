@@ -71,8 +71,14 @@ const schema = z.object({
   conamCodigoContribuinte: z.string().optional().nullable(),
   giaplogin:           z.string().optional().nullable(),
   giapSenha:           z.string().optional().nullable(),
-  // Só 'municipio' é gravado; 'spedy' pode vir de config antiga (ver aviso abaixo).
-  provedorNfse:        z.enum(['municipio', 'spedy']).optional(),
+  // 'nacional' (padrão) ou 'prefeitura' (legado). 'municipio' e 'spedy' só vêm de config antiga
+  // e é migrado para 'nacional' ao salvar (ver aviso abaixo).
+  provedorNfse:        z.enum(['nacional', 'prefeitura', 'municipio', 'spedy']).optional(),
+  // Ambiente Nacional
+  codigoTributacaoNacional:  z.string().regex(/^\d{6}$/, 'Use 6 dígitos (ex.: 171901)').optional().nullable().or(z.literal('')),
+  codigoTributacaoMunicipal: z.string().regex(/^\d{3}$/, 'Use 3 dígitos (ex.: 001)').optional().nullable().or(z.literal('')),
+  serieDps:                  z.string().regex(/^([0-9]{1,4}|[0-8][0-9]{4})$/, 'Série de 1 a 5 dígitos (até 89999)').optional().nullable().or(z.literal('')),
+  aliquotaSimplesNacional:   z.number().min(0).max(100).optional().nullable(),
   // Emissão automática (sem revisão humana) no dia configurado abaixo
   emissaoAutomatica:   z.boolean().optional(),
 })
@@ -98,7 +104,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       ambienteEmissao:  'homologacao',
       optanteSimples:   true,
       naturezaOperacao: '1',
-      provedorNfse:     'municipio',
+      provedorNfse:     'nacional',
       emissaoAutomatica:false,
     },
   })
@@ -109,8 +115,13 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       ambienteEmissao:  'homologacao',
       optanteSimples:   true,
       naturezaOperacao: '1',
-      provedorNfse:     'municipio',
       ...defaultValues,
+      // Config sem provedor (antiga ou nova) emite pelo Ambiente Nacional.
+      // Só 'prefeitura' (escolha explícita) fica no conector municipal; o resto — inclusive o
+      // 'municipio' que o formulário antigo gravava à força — abre como Ambiente Nacional.
+      provedorNfse:     defaultValues?.provedorNfse === 'prefeitura' || defaultValues?.provedorNfse === 'spedy'
+        ? (defaultValues.provedorNfse as FormData['provedorNfse'])
+        : 'nacional',
       // Config antiga pode ter o código IBGE errado de Cajamar/Taboão (ver src/lib/ibge.ts).
       municipioIbge:    normalizarIbge(defaultValues?.municipioIbge as string | undefined) || undefined,
       // Credenciais NUNCA são pré-preenchidas: o que vem de defaultValues.credenciais
@@ -130,8 +141,11 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
   }, [open, defaultValues, reset])
 
   const municipioIbge = watch('municipioIbge')
-  const provedorNfse = watch('provedorNfse') ?? 'municipio'
-  const tipo = MUNICIPIO_TIPO[municipioIbge]
+  const provedorNfse = watch('provedorNfse') ?? 'nacional'
+  const nacional = provedorNfse !== 'prefeitura'
+  // Credenciais de portal municipal (token/login) só valem no conector legado;
+  // no Ambiente Nacional a única credencial é o certificado A1.
+  const tipo = nacional ? undefined : MUNICIPIO_TIPO[municipioIbge]
   const municipioNome = MUNICIPIOS.find(m => m.ibge === municipioIbge)?.nome ?? ''
   const credenciais = (defaultValues?.credenciais ?? {}) as Record<string, unknown>
   const certInfo: CertInfo | null = credenciais.certTitular
@@ -164,8 +178,12 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
         cnae:                 data.cnae              || null,
         aliquotaPadrao:       data.aliquotaPadrao    ?? null,
         issRetidoPadrao:      data.issRetidoPadrao   ?? false,
-        // Spedy foi descontinuada (sem integrador): salvar migra a config antiga.
-        provedorNfse:         'municipio',
+        // Spedy foi descontinuada (sem integrador): salvar migra para o Ambiente Nacional.
+        provedorNfse:         data.provedorNfse === 'prefeitura' ? 'prefeitura' : 'nacional',
+        codigoTributacaoNacional:  data.codigoTributacaoNacional  || null,
+        codigoTributacaoMunicipal: data.codigoTributacaoMunicipal || null,
+        serieDps:                  data.serieDps                  || null,
+        aliquotaSimplesNacional:   Number.isFinite(data.aliquotaSimplesNacional) ? data.aliquotaSimplesNacional : null,
         emissaoAutomatica:    data.emissaoAutomatica ?? false,
       }
 
@@ -219,7 +237,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       const avisos: string[] = []
       if (!dados.regimeTributario) avisos.push('regime tributário (Lucro Presumido/Real) precisa ser confirmado manualmente')
       if (dados.municipioIbge && !municipioConhecido) {
-        avisos.push(`município (${dados.municipio ?? dados.municipioIbge}/${dados.uf ?? '?'}) não tem conector direto — a plataforma ainda não emite NFS-e para este município`)
+        avisos.push(`município (${dados.municipio ?? dados.municipioIbge}/${dados.uf ?? '?'}) não está na lista de municípios atendidos pela plataforma`)
       }
       toast.success(
         avisos.length > 0
@@ -253,9 +271,31 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
           {provedorNfse === 'spedy' && (
             <div className="rounded-md border border-warning/30 bg-warning/8 p-3 text-xs text-muted-foreground">
               Este cliente estava configurado para emitir pela Spedy, que foi descontinuada. Ao salvar, ele passa
-              a usar o conector direto do município selecionado abaixo.
+              a emitir pelo Ambiente Nacional (Sefin Nacional), com o certificado A1 do próprio cliente.
             </div>
           )}
+
+          {/* Provedor de emissão */}
+          <div className="space-y-1.5">
+            <Label required>Emitir por</Label>
+            <Controller name="provedorNfse" control={control} render={({ field }) => (
+              <Select
+                value={field.value === 'prefeitura' ? 'prefeitura' : 'nacional'}
+                onValueChange={field.onChange}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="nacional">Ambiente Nacional (padrão)</SelectItem>
+                  <SelectItem value="prefeitura">Conector da prefeitura (legado)</SelectItem>
+                </SelectContent>
+              </Select>
+            )} />
+            <p className="text-xs text-muted-foreground">
+              {nacional
+                ? 'A nota sai pela API pública da Sefin Nacional, assinada com o certificado A1 do próprio cliente. O município precisa ter aderido ao Emissor Nacional — se não tiver, a emissão é recusada com aviso.'
+                : 'A nota sai pelo webservice da prefeitura. Use só para municípios que ainda não aderiram ao Emissor Nacional.'}
+            </p>
+          </div>
 
           {/* Emissão automática — reverte a trava de revisão humana, por cliente */}
           <div className="space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
@@ -399,6 +439,41 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
             </div>
           </div>
 
+          {/* Ambiente Nacional: códigos e numeração da DPS */}
+          {nacional && (
+            <div className="space-y-3 rounded-md border p-3 bg-muted/30">
+              <p className="text-xs font-semibold uppercase text-muted-foreground">Ambiente Nacional</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Código de tributação nacional</Label>
+                  <Input {...register('codigoTributacaoNacional')} placeholder="Automático pelo item LC 116 (ex.: 171901)" />
+                  {errors.codigoTributacaoNacional && <p className="text-xs text-destructive">{errors.codigoTributacaoNacional.message}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Desdobro municipal (cTribMun)</Label>
+                  <Input {...register('codigoTributacaoMunicipal')} placeholder="Só se a prefeitura exigir (ex.: 001)" />
+                  {errors.codigoTributacaoMunicipal && <p className="text-xs text-destructive">{errors.codigoTributacaoMunicipal.message}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Série da DPS</Label>
+                  <Input {...register('serieDps')} placeholder="Padrão: 1" />
+                  {errors.serieDps && <p className="text-xs text-destructive">{errors.serieDps.message}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Alíquota efetiva do Simples (%)</Label>
+                  <Input
+                    type="number" step="0.01" min="0" max="100"
+                    placeholder="Só ME/EPP — padrão: alíquota ISS"
+                    {...register('aliquotaSimplesNacional', { setValueAs: (v) => (v === '' || v == null ? null : Number(v)) })}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                A numeração da DPS é sequencial por CNPJ, ambiente e série, controlada pela plataforma.
+              </p>
+            </div>
+          )}
+
           {/* Natureza da operação */}
           <div className="space-y-1.5">
             <Label>Natureza da Operação</Label>
@@ -462,8 +537,8 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
             </div>
           )}
 
-          {/* Aviso certificado A1 */}
-          {(tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
+          {/* Aviso certificado A1 — obrigatório no Ambiente Nacional para qualquer município */}
+          {(nacional || tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
             <div className="space-y-3 rounded-md border border-warning/25 bg-warning/8 p-3">
               <p className="text-xs text-warning">
                 <strong>Certificado A1 necessário.</strong> O upload pode ser feito aqui mesmo na configuração fiscal do cliente.
