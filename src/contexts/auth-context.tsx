@@ -8,7 +8,10 @@ import { invalidateUsuariosCache } from '@/lib/firestore-client'
 interface AuthContextValue {
   usuario: UserSession | null
   loading: boolean
+  /** Login derrubado por falta de acesso (sem perfil, inativo, excluído). */
+  semAcesso: { motivo: string; email: string | null } | null
   logout: () => Promise<void>
+  limparSemAcesso: () => void
 }
 
 export const LOGOUT_EXPLICITO_KEY = 'auth:logout-explicito'
@@ -16,16 +19,31 @@ export const LOGOUT_EXPLICITO_KEY = 'auth:logout-explicito'
 const AuthContext = createContext<AuthContextValue>({
   usuario: null,
   loading: true,
+  semAcesso: null,
   logout:  async () => {},
+  limparSemAcesso: () => {},
 })
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [usuario, setUsuario] = useState<UserSession | null>(null)
   const [loading, setLoading] = useState(true)
+  const [semAcesso, setSemAcesso] = useState<AuthContextValue['semAcesso']>(null)
 
   useEffect(() => {
-    const unsub = onSession((session) => {
-      setUsuario(session)
+    const unsub = onSession((estado) => {
+      if (estado.tipo === 'ativo') {
+        setSemAcesso(null)
+        setUsuario(estado.usuario)
+      } else {
+        // Desativado/excluído no meio da sessão: some com tudo que estava em
+        // cache antes de mostrar a tela de sem acesso.
+        if (estado.tipo === 'sem_acesso') {
+          queryClient.clear()
+          invalidateUsuariosCache()
+          setSemAcesso({ motivo: estado.motivo, email: estado.email })
+        }
+        setUsuario(null)
+      }
       setLoading(false)
     })
     return unsub
@@ -44,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ usuario, loading, logout }}>
+    <AuthContext.Provider value={{ usuario, loading, semAcesso, logout, limparSemAcesso: () => setSemAcesso(null) }}>
       {children}
     </AuthContext.Provider>
   )

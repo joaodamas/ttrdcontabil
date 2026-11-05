@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { UsuarioForm, TELAS_LIST } from '@/components/admin/usuario-form'
+import { UsuarioAcoes } from '@/components/admin/usuario-acoes'
+import { useAuth } from '@/contexts/auth-context'
 import { Loader2, Shield, UsersRound } from 'lucide-react'
 import {
   Tooltip,
@@ -37,6 +39,7 @@ export default function AdminUsuariosPage() {
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([])
   const [loading, setLoading]   = useState(true)
   const [erroCarga, setErroCarga] = useState<string | null>(null)
+  const { usuario: logado } = useAuth()
 
   const load = useCallback(() => {
     setLoading(true)
@@ -104,7 +107,7 @@ export default function AdminUsuariosPage() {
               ) : (
                 usuarios.map((u) => {
                   const perfilKey = u.perfil ?? 'leitura'
-                  const telaCount = u.telas?.length ?? null
+                  const telaCount = u.telas && u.telas.length > 0 ? u.telas.length : null
                   const totalTelas = TELAS_LIST.length
 
                   return (
@@ -137,15 +140,19 @@ export default function AdminUsuariosPage() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <Badge variant={u.ativo ? 'default' : 'secondary'}>
-                          {u.ativo ? 'Ativo' : 'Inativo'}
+                        {/* `ativo` ausente = ativo (perfis antigos), como nas regras. */}
+                        <Badge variant={u.ativo !== false ? 'default' : 'secondary'}>
+                          {u.ativo !== false ? 'Ativo' : 'Inativo'}
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground text-xs">
                         {u.ultimoAcesso ? formatDate(tsToDate(u.ultimoAcesso)) : '—'}
                       </td>
                       <td className="px-4 py-3">
-                        <UsuarioForm usuario={u} onSaved={load} />
+                        <div className="flex items-center justify-end gap-1">
+                          <UsuarioForm usuario={u} onSaved={load} />
+                          <UsuarioAcoes usuario={u} ehProprio={logado?.uid === u.id} onChanged={load} />
+                        </div>
                       </td>
                     </tr>
                   )

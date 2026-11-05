@@ -1,17 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { initializeApp, deleteApp } from 'firebase/app'
-import {
-  getAuth,
-  createUserWithEmailAndPassword,
-  signOut as fbSignOut,
-} from 'firebase/auth'
-import { firebaseConfig } from '@/lib/firebase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -34,26 +27,14 @@ import {
 import { Loader2, Plus, Pencil, X, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error-message'
-import { appConfig } from '@/lib/app-config'
-import { createUsuarioProfileAdmin, updateUsuarioAdmin } from '@/features/admin/services'
+import { atualizarUsuarioAdmin, criarUsuarioAdmin, enviarConviteSenha } from '@/features/admin/services'
 import { useAuth } from '@/contexts/auth-context'
-
-const DEFAULT_TENANT_ID = appConfig.tenantId
-
-/* ─── Perfis ──────────────────────────────────────────────── */
-const PERFIS = ['admin', 'operacional', 'fiscal', 'financeiro', 'leitura'] as const
-type Perfil = typeof PERFIS[number]
-
-const PERFIL_LABELS: Record<Perfil, string> = {
-  admin:       'Administrador',
-  operacional: 'Operacional',
-  fiscal:      'Fiscal',
-  financeiro:  'Financeiro',
-  leitura:     'Somente Leitura',
-}
+import { PERFIS, PERFIL_LABELS, PERFIL_DEFAULT_TELAS, TELAS, type Perfil, type TelaKey } from '@/lib/permissions'
 
 /* ─── Telas disponíveis ───────────────────────────────────── */
-export const TELAS_LIST = [
+// Rótulos da tela de usuários; as chaves e os padrões por perfil vêm da fonte
+// única (functions/src/usuarios/perfis.ts, reexportada por permissions.ts).
+export const TELAS_LIST: { key: TelaKey; label: string; desc: string }[] = [
   { key: 'hoje',         label: 'Hoje',                 desc: 'Prioridades do dia com ação rápida' },
   { key: 'dashboard',    label: 'Início / Dashboard',   desc: 'Visão geral do sistema' },
   { key: 'clientes',     label: 'Clientes',              desc: 'Cadastro e gestão de clientes' },
@@ -65,21 +46,16 @@ export const TELAS_LIST = [
   { key: 'ir',           label: 'Imposto de Renda',      desc: 'Gestão de declarações de IR' },
   { key: 'financeiro',   label: 'Financeiro',            desc: 'Lançamentos e fluxo de caixa' },
   { key: 'admin',        label: 'Administração',         desc: 'Usuários, serviços e configurações' },
-]
+].filter((t): t is { key: TelaKey; label: string; desc: string } => (TELAS as readonly string[]).includes(t.key))
 
-const DEFAULT_TELAS: Record<Perfil, string[]> = {
-  admin:       TELAS_LIST.map((t) => t.key),
-  operacional: ['hoje', 'dashboard', 'clientes', 'competencias', 'tarefas', 'fechamento'],
-  fiscal:      ['hoje', 'dashboard', 'clientes', 'competencias', 'tarefas', 'fechamento', 'fiscal', 'ir'],
-  financeiro:  ['hoje', 'dashboard', 'clientes', 'financeiro', 'fiscal'],
-  leitura:     ['hoje', 'dashboard', 'clientes', 'competencias', 'tarefas'],
-}
+const defaultTelas = (perfil: Perfil): string[] => [...PERFIL_DEFAULT_TELAS[perfil]]
 
 /* ─── Schemas ─────────────────────────────────────────────── */
+// Sem campo de senha: o usuário novo recebe o e-mail de convite e define a
+// própria senha — o admin nunca a conhece.
 const createSchema = z.object({
   nome:   z.string().min(2, 'Nome é obrigatório').max(100),
   email:  z.string().email('E-mail inválido'),
-  senha:  z.string().min(6, 'Senha deve ter no mínimo 6 caracteres'),
   perfil: z.enum(PERFIS).default('leitura'),
   telas:  z.array(z.string()).default([]),
 })
@@ -120,9 +96,11 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
     ? ((PERFIS.includes(usuario?.perfil as Perfil) ? usuario?.perfil : 'leitura') as Perfil)
     : ('leitura' as Perfil)
 
-  const defaultTelas = isEditing
-    ? (usuario?.telas ?? DEFAULT_TELAS[defaultPerfil])
-    : DEFAULT_TELAS['leitura']
+  // Telas personalizadas do usuário são preservadas ao abrir a edição. Lista
+  // vazia/ausente = padrão do perfil (canAccessTela), então mostra o padrão.
+  const telasIniciais = isEditing && usuario?.telas && usuario.telas.length > 0
+    ? usuario.telas
+    : defaultTelas(defaultPerfil)
 
   const schema = isEditing ? editSchema : createSchema
 
@@ -138,19 +116,19 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(schema) as any,
     defaultValues: isEditing
-      ? { nome: usuario.nome ?? '', email: usuario.email ?? '', perfil: defaultPerfil, ativo: usuario.ativo ?? true, telas: defaultTelas }
-      : { perfil: 'leitura' as Perfil, telas: DEFAULT_TELAS['leitura'] },
+      ? { nome: usuario.nome ?? '', email: usuario.email ?? '', perfil: defaultPerfil, ativo: usuario.ativo !== false, telas: telasIniciais }
+      : { perfil: 'leitura' as Perfil, telas: defaultTelas('leitura') },
   })
 
-  const selectedPerfil = watch('perfil') as Perfil
   const selectedTelas  = watch('telas') as string[]
 
-  // When profile changes, auto-update telas to defaults (only on create, or if user hasn't customized)
-  useEffect(() => {
-    if (selectedPerfil && DEFAULT_TELAS[selectedPerfil]) {
-      setValue('telas', DEFAULT_TELAS[selectedPerfil])
-    }
-  }, [selectedPerfil, setValue])
+  // Padrões do perfil só quando o admin TROCA o perfil nesta edição. Antes era um
+  // useEffect em `perfil`, que rodava ao abrir o formulário e sobrescrevia as
+  // telas personalizadas do usuário com as do perfil — salvar apagava o ajuste.
+  function trocarPerfil(perfil: Perfil, onChange: (v: Perfil) => void) {
+    onChange(perfil)
+    setValue('telas', defaultTelas(perfil))
+  }
 
   function toggleTela(key: string) {
     const current = selectedTelas ?? []
@@ -160,18 +138,20 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
     )
   }
 
-  function selectAll()   { setValue('telas', TELAS_LIST.map((t) => t.key)) }
+  function selectAll()   { setValue('telas', [...TELAS]) }
   function selectNone()  { setValue('telas', []) }
 
   async function onSubmit(data: EditData) {
     try {
       if (isEditing) {
+        // O servidor também barra (último admin, autodesativação); aqui é só
+        // para o admin não perder o clique.
         if (isSelf && (data.perfil !== 'admin' || data.ativo === false)) {
           toast.error('Você não pode rebaixar o perfil nem inativar o seu próprio usuário.')
           return
         }
 
-        await updateUsuarioAdmin(usuario!.id, {
+        await atualizarUsuarioAdmin(usuario!.id, {
           nome:   data.nome,
           perfil: data.perfil,
           ativo:  data.ativo,
@@ -179,31 +159,21 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
         })
         toast.success('Usuário atualizado!')
       } else {
-        // Create Firebase Auth user via secondary app (doesn't sign out admin)
-        const appName = `user-creation-${Date.now()}`
-        const secondaryApp = initializeApp(firebaseConfig, appName)
+        const criado = await criarUsuarioAdmin({
+          nome:   data.nome,
+          email:  (data as CreateData).email,
+          perfil: data.perfil ?? 'leitura',
+          telas:  data.telas ?? [],
+        })
         try {
-          const secondaryAuth = getAuth(secondaryApp)
-          const cred = await createUserWithEmailAndPassword(
-            secondaryAuth,
-            (data as CreateData).email,
-            (data as CreateData).senha
-          )
-          await fbSignOut(secondaryAuth)
-
-          await createUsuarioProfileAdmin(cred.user.uid, {
-            nome:           data.nome,
-            email:          (data as CreateData).email,
-            perfil:         data.perfil,
-            telas:          data.telas,
-            ativo:          true,
-            tenantId:       DEFAULT_TENANT_ID,
-          })
-
-          toast.success(`Usuário ${data.nome} criado com sucesso!`)
-        } finally {
-          // Clean up secondary app (ignore errors if already cleaned)
-          try { await deleteApp(secondaryApp) } catch {}
+          await enviarConviteSenha(criado.email)
+          toast.success(`Usuário ${data.nome} criado. Convite enviado para ${criado.email} — o link serve para definir a senha.`)
+        } catch (err) {
+          console.error('[usuarios] convite', err)
+          toast.warning(`Usuário ${data.nome} criado, mas o e-mail de convite não saiu. Use "Reenviar convite" na lista.`)
+        }
+        if (criado.contaReaproveitada) {
+          toast.info('Este e-mail já tinha uma conta de login sem perfil: ela foi reaproveitada, com a senha antiga anulada.')
         }
       }
 
@@ -211,15 +181,8 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
       reset()
       onSaved?.()
     } catch (err) {
-      const msg = (err as { message?: string }).message ?? ''
-      if (msg.includes('email-already-in-use')) {
-        toast.error('Este e-mail já está cadastrado.')
-      } else if (msg.includes('weak-password')) {
-        toast.error('Senha muito fraca. Use ao menos 6 caracteres.')
-      } else {
-        toast.error(getErrorMessage(err, 'Não foi possível salvar o usuário. Verifique seu perfil de acesso e os dados obrigatórios.'))
-        console.error(err)
-      }
+      toast.error(getErrorMessage(err, 'Não foi possível salvar o usuário. Verifique seu perfil de acesso e os dados obrigatórios.'))
+      console.error(err)
     }
   }
 
@@ -281,13 +244,9 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
               </div>
 
               {!isEditing && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="senha" required>Senha</Label>
-                  <Input id="senha" type="password" {...register('senha' as keyof EditData)} placeholder="••••••••" autoComplete="new-password" />
-                  {(errors as Record<string, { message?: string }>).senha && (
-                    <p className="text-xs text-destructive">{(errors as Record<string, { message?: string }>).senha?.message}</p>
-                  )}
-                </div>
+                <p className="text-xs text-muted-foreground">
+                  O usuário recebe por e-mail um link para definir a própria senha. Ninguém mais a conhece.
+                </p>
               )}
 
               <div className="grid grid-cols-2 gap-4">
@@ -297,7 +256,7 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
                     name="perfil"
                     control={control}
                     render={({ field }) => (
-                      <Select value={field.value} onValueChange={field.onChange} disabled={isSelf}>
+                      <Select value={field.value} onValueChange={(v) => trocarPerfil(v as Perfil, field.onChange)} disabled={isSelf}>
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -411,7 +370,7 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
               </DialogClose>
               <Button type="submit" size="sm" disabled={isSubmitting} className="cursor-pointer">
                 {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                {isEditing ? 'Salvar Alterações' : 'Criar Usuário'}
+                {isEditing ? 'Salvar Alterações' : 'Criar e enviar convite'}
               </Button>
             </div>
           </form>

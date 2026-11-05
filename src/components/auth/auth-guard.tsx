@@ -3,7 +3,8 @@
 import { useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { LOGOUT_EXPLICITO_KEY, useAuth } from '@/contexts/auth-context'
-import { Loader2 } from 'lucide-react'
+import { Loader2, ShieldOff } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { canAccessTela, type TelaKey } from '@/lib/permissions'
 
 function getTelaFromPath(pathname: string): TelaKey | null {
@@ -45,11 +46,14 @@ function getFirstAllowedRoute(usuario: NonNullable<ReturnType<typeof useAuth>['u
 }
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { usuario, loading } = useAuth()
+  const { usuario, loading, semAcesso, limparSemAcesso } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
 
   useEffect(() => {
+    // Sem acesso: fica na tela explicando o motivo (abaixo) até o clique.
+    if (!loading && !usuario && semAcesso) return
+
     if (!loading && !usuario) {
       // Devolve o usuário à tela que ele tentou abrir (o login sanitiza o from),
       // exceto quando ele mesmo saiu.
@@ -70,12 +74,36 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         if (pathname !== fallback) router.replace(fallback)
       }
     }
-  }, [usuario, loading, router, pathname])
+  }, [usuario, loading, semAcesso, router, pathname])
 
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (!usuario && semAcesso) {
+    return (
+      <div className="flex h-screen items-center justify-center px-4">
+        <div className="max-w-md space-y-4 rounded-xl border border-border bg-card p-6 text-center">
+          <ShieldOff className="mx-auto h-8 w-8 text-muted-foreground" />
+          <div className="space-y-1">
+            <h1 className="text-base font-semibold">Sem acesso</h1>
+            <p className="text-sm text-muted-foreground">{semAcesso.motivo}</p>
+            {semAcesso.email && <p className="text-xs text-muted-foreground">Conta: {semAcesso.email}</p>}
+          </div>
+          <Button
+            size="sm"
+            onClick={() => {
+              limparSemAcesso()
+              router.replace('/login')
+            }}
+          >
+            Voltar ao login
+          </Button>
+        </div>
       </div>
     )
   }
