@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 import { AlertTriangle, CheckCircle2, FileDown, Loader2, Upload, XCircle } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Progress } from '@/components/ui/progress'
@@ -321,9 +321,7 @@ export function TomadoresImportacao({ clienteId, podeEditar }: TomadoresImportac
             >
               Importar outra planilha
             </Button>
-            <Link href={`/clientes/${clienteId}/tomadores`}>
-              <Button>Ver a carteira</Button>
-            </Link>
+            <Link href={`/clientes/${clienteId}/tomadores`} className={buttonVariants()}>Ver a carteira</Link>
           </div>
         </div>
       )}

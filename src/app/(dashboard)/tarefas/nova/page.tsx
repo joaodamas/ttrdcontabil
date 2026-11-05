@@ -1,6 +1,7 @@
 'use client'
 import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { PageHeader } from '@/components/layout/page-header'
 import { TarefaForm } from '@/components/tarefas/tarefa-form'
 import { InlineAlert } from '@/components/ui/inline-alert'
 
@@ -14,10 +15,11 @@ function TarefaFormComCliente() {
 export default function Page() {
   return (
     <div className="stack-6">
-      <div>
-        <h1 className="text-title">Nova Tarefa</h1>
-        <p className="text-subtle">Crie tarefas com prioridade e responsável para melhorar o fluxo diário.</p>
-      </div>
+      <PageHeader
+        title="Nova tarefa"
+        breadcrumbs={[{ label: 'Tarefas', href: '/tarefas' }, { label: 'Nova tarefa' }]}
+        description="Crie tarefas com prioridade e responsável para melhorar o fluxo diário."
+      />
       <InlineAlert
         tone="info"
         title="Boa prática"

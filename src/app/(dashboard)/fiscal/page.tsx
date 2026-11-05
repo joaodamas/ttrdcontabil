@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { formatDate, formatCurrency, tsToDate, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
 import { AppModal } from '@/components/ui/app-modal'
 import { KpiCard } from '@/components/ui/kpi-card'
 import { DataTableShell } from '@/components/ui/data-table-shell'
@@ -152,52 +153,46 @@ export default function FiscalPage() {
   return (
     <div className="space-y-5">
 
-      {/* Page header */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">NFS-e — Emissão de Notas</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {notasIsError
-              ? 'Não foi possível carregar o resumo de notas.'
-              : <>{emitidaMesCount} nota{emitidaMesCount !== 1 ? 's' : ''} emitida{emitidaMesCount !== 1 ? 's' : ''} este mês · {formatCurrency(somaEmitidaMes)}</>}
-          </p>
-        </div>
-
-        {/* Action toolbar — estilo QIVE */}
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href="/fiscal/historico"
-            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')}
-          >
-            <History size={13} />
-            Histórico
-          </Link>
-          <button
-            type="button"
-            onClick={() => setLoteOpen(true)}
-            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')}
-          >
-            <Layers size={13} />
-            Emitir em Lote
-          </button>
-          <button
-            type="button"
-            onClick={() => setGerarRascunhosOpen(true)}
-            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'gap-1.5')}
-          >
-            <FileText size={13} />
-            Preparar mês
-          </button>
-          <button
-            type="button"
-            onClick={() => openEmissaoModal()}
-            className={cn(buttonVariants({ size: 'sm' }), 'gap-1.5')}
-          >
-            <Plus size={13} />
-            Nova NFS-e
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Emitir NFS-e"
+        description={
+          notasIsError
+            ? 'Não foi possível carregar o resumo de notas.'
+            : <>{emitidaMesCount} nota{emitidaMesCount !== 1 ? 's' : ''} emitida{emitidaMesCount !== 1 ? 's' : ''} este mês · {formatCurrency(somaEmitidaMes)}</>
+        }
+        action={
+          <>
+            <Link href="/fiscal/historico" className={buttonVariants({ variant: 'outline', size: 'cta' })}>
+              <History />
+              Histórico de NFS-e
+            </Link>
+            <button
+              type="button"
+              onClick={() => setLoteOpen(true)}
+              className={buttonVariants({ variant: 'outline', size: 'cta' })}
+            >
+              <Layers />
+              Emitir em lote
+            </button>
+            <button
+              type="button"
+              onClick={() => setGerarRascunhosOpen(true)}
+              className={buttonVariants({ variant: 'outline', size: 'cta' })}
+            >
+              <FileText />
+              Preparar mês
+            </button>
+            <button
+              type="button"
+              onClick={() => openEmissaoModal()}
+              className={buttonVariants({ size: 'cta' })}
+            >
+              <Plus />
+              Nova NFS-e
+            </button>
+          </>
+        }
+      />
 
       {/* KPI strip — horizontal, compacto */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

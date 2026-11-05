@@ -6,10 +6,11 @@ import { useParams } from 'next/navigation'
 import { orderBy, Timestamp, where } from 'firebase/firestore'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { toast } from 'sonner'
-import { ArrowLeft, Download, Loader2, RefreshCw, XCircle } from 'lucide-react'
+import { Download, Loader2, RefreshCw, XCircle } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
@@ -106,7 +107,7 @@ export default function NfseDetalhePage() {
   if (!nota) {
     return (
       <div className="space-y-4">
-        <Link href="/fiscal/historico"><Button variant="outline">Voltar</Button></Link>
+        <Link href="/fiscal/historico" className={buttonVariants({ variant: 'outline' })}>Voltar</Link>
         <p className="text-sm text-muted-foreground">NFS-e não encontrada.</p>
       </div>
     )
@@ -117,37 +118,39 @@ export default function NfseDetalhePage() {
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle flex flex-wrap items-center gap-3 border px-4 py-4 sm:px-5">
-        <Link href="/fiscal/historico">
-          <Button variant="outline" size="sm" className="h-10 w-10 rounded-xl p-0">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div>
-          <h2 className="text-lg font-semibold">NFS-e {(nota.numeroNfse as string) ?? 'sem número'}</h2>
-          <p className="text-sm text-muted-foreground">{(nota.clienteNome as string) ?? 'Cliente não informado'}</p>
-        </div>
-        <div className="ml-auto flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={consultarStatus}>
-            <RefreshCw className="h-4 w-4" />
-            Consultar
-          </Button>
-          {nota.pdfUrl ? (
-            <a href={nota.pdfUrl as string} target="_blank" rel="noreferrer">
-              <Button variant="outline" size="sm">
-                <Download className="h-4 w-4" />
-                PDF
-              </Button>
-            </a>
-          ) : null}
-          {nota.status === 'emitida' ? (
-            <Button variant="outline" size="sm" className="text-destructive" onClick={() => setCancelamentoOpen(true)}>
-              <XCircle className="h-4 w-4" />
-              Cancelar
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Histórico de NFS-e', href: '/fiscal/historico' },
+          { label: `NFS-e ${(nota.numeroNfse as string) ?? 'sem número'}` },
+        ]}
+        title={`NFS-e ${(nota.numeroNfse as string) ?? 'sem número'}`}
+        description={(nota.clienteNome as string) ?? 'Cliente não informado'}
+        action={
+          <>
+            <Button variant="outline" size="cta" onClick={consultarStatus}>
+              <RefreshCw />
+              Consultar
             </Button>
-          ) : null}
-        </div>
-      </div>
+            {nota.pdfUrl ? (
+              <a
+                href={nota.pdfUrl as string}
+                target="_blank"
+                rel="noreferrer"
+                className={buttonVariants({ variant: 'outline', size: 'cta' })}
+              >
+                <Download />
+                PDF
+              </a>
+            ) : null}
+            {nota.status === 'emitida' ? (
+              <Button variant="outline" size="cta" className="text-destructive" onClick={() => setCancelamentoOpen(true)}>
+                <XCircle />
+                Cancelar
+              </Button>
+            ) : null}
+          </>
+        }
+      />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>

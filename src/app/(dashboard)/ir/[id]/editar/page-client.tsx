@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
+import { PageHeader } from '@/components/layout/page-header'
 import { getDocument } from '@/lib/firestore-client'
 import { IrForm } from '@/components/ir/ir-form'
 import { Loader2 } from 'lucide-react'
@@ -26,5 +27,17 @@ export default function Page() {
       </div>
     )
   }
-  return <IrForm initialData={data} />
+  return (
+    <>
+      <PageHeader
+        title="Editar declaração"
+        breadcrumbs={[
+          { label: 'Imposto de Renda', href: '/ir' },
+          { label: 'Detalhe', href: `/ir/${id}` },
+          { label: 'Editar' },
+        ]}
+      />
+      <IrForm initialData={data} />
+    </>
+  )
 }

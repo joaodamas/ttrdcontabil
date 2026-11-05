@@ -79,7 +79,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: '/tarefas',      label: 'Tarefas',           icon: CheckSquare, telaKey: 'tarefas', badgeKey: 'hoje' },
       { href: '/competencias', label: 'Competências',      icon: Layers,      telaKey: 'competencias' },
-      { href: '/fechamento',   label: 'Fechamento Mensal', icon: FolderOpen,  telaKey: 'fechamento' },
+      { href: '/fechamento',   label: 'Fechamento mensal', icon: FolderOpen,  telaKey: 'fechamento' },
     ],
   },
   {
@@ -89,7 +89,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: '/fiscal',            label: 'Emitir NFS-e',     icon: Receipt,   telaKey: 'fiscal' },
       { href: '/fiscal/produtos',   label: 'Produtos',  icon: Package2,  telaKey: 'fiscal' },
-      { href: '/fiscal/historico',  label: 'Histórico',        icon: History,   telaKey: 'fiscal' },
+      { href: '/fiscal/historico',  label: 'Histórico de NFS-e', icon: History,   telaKey: 'fiscal' },
       { href: '/ir',                label: 'Imposto de Renda', icon: FileText,  telaKey: 'ir' },
     ],
   },
@@ -118,9 +118,9 @@ const ADMIN_SECTIONS: NavSection[] = [
     label: 'Configurações',
     icon: Settings,
     items: [
-      { href: '/admin',            label: 'Painel Admin',     icon: Settings,          telaKey: 'admin' },
+      { href: '/admin',            label: 'Administração',    icon: Settings,          telaKey: 'admin' },
       { href: '/admin/usuarios',   label: 'Usuários',         icon: UserCog,           telaKey: 'admin' },
-      { href: '/admin/servicos',   label: 'Tipos de Serviço', icon: Package2,          telaKey: 'servicos' },
+      { href: '/admin/servicos',   label: 'Tipos de serviço', icon: Package2,          telaKey: 'servicos' },
       { href: '/admin/conectores', label: 'Conectores',       icon: Plug,              telaKey: 'admin' },
       { href: '/admin/parametros', label: 'Parâmetros',       icon: SlidersHorizontal, telaKey: 'admin' },
     ],

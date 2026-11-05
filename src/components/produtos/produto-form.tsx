@@ -127,9 +127,9 @@ export function ProdutoForm({ clienteId, produto, onSaved }: ProdutoFormProps) {
           Editar
         </Button>
       ) : (
-        <Button size="sm" onClick={() => setOpen(true)}>
-          <Plus className="w-4 h-4 mr-1" />
-          Novo Produto
+        <Button size="cta" onClick={() => setOpen(true)}>
+          <Plus />
+          Novo produto
         </Button>
       )}
 

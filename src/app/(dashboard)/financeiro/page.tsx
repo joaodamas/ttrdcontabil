@@ -12,7 +12,8 @@ import { exportToExcel } from '@/lib/export-excel'
 import { deleteDocument } from '@/lib/firestore-client'
 import { getErrorMessage } from '@/lib/error-message'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { KpiCard } from '@/components/ui/kpi-card'
 import { LancamentoBaixar } from '@/components/financeiro/lancamento-baixar'
 import { FilaCobrancaItem } from '@/components/financeiro/fila-cobranca'
@@ -236,38 +237,36 @@ function FinanceiroContent() {
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
-        <div>
-          <h2 className="text-lg font-semibold">Financeiro</h2>
-          {/* Antes mostrava o tamanho da página (sempre "20 lançamentos").
-              Agora é a contagem do filtro inteiro; "+" quando bateu o teto. */}
-          <p className="text-sm text-muted-foreground">
-            {!agregadosProntos
-              ? '—'
-              : `${agregados.data!.total.toLocaleString('pt-BR')}${truncado ? '+' : ''} lançamento${agregados.data!.total !== 1 ? 's' : ''}`}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <FilterSheetTrigger
-            onClick={() => setFilterSheetOpen(true)}
-            activeCount={(tipo ? 1 : 0) + (status ? 1 : 0)}
-          />
-          <Button variant="outline" size="sm" className="h-10 rounded-xl" disabled={exportDisabled} onClick={exportarLancamentos}>
-            <Download className="w-4 h-4 mr-1" />
-            Exportar lista
-          </Button>
-          <Button variant="outline" size="sm" className="h-10 rounded-xl" disabled={exportDisabled} onClick={exportarInadimplencia}>
-            <Download className="w-4 h-4 mr-1" />
-            Inadimplência
-          </Button>
-          <Link href="/financeiro/novo">
-            <Button size="sm" className="h-10 rounded-xl">
-              <Plus className="w-4 h-4 mr-1" />
-              Novo Lançamento
+      {/* Descrição: antes mostrava o tamanho da página (sempre "20 lançamentos").
+          Agora é a contagem do filtro inteiro; "+" quando bateu o teto. */}
+      <PageHeader
+        title="Financeiro"
+        description={
+          !agregadosProntos
+            ? '—'
+            : `${agregados.data!.total.toLocaleString('pt-BR')}${truncado ? '+' : ''} lançamento${agregados.data!.total !== 1 ? 's' : ''}`
+        }
+        action={
+          <>
+            <FilterSheetTrigger
+              onClick={() => setFilterSheetOpen(true)}
+              activeCount={(tipo ? 1 : 0) + (status ? 1 : 0)}
+            />
+            <Button variant="outline" size="cta" disabled={exportDisabled} onClick={exportarLancamentos}>
+              <Download />
+              Exportar lista
             </Button>
-          </Link>
-        </div>
-      </div>
+            <Button variant="outline" size="cta" disabled={exportDisabled} onClick={exportarInadimplencia}>
+              <Download />
+              Inadimplência
+            </Button>
+            <Link href="/financeiro/novo" className={buttonVariants({ size: 'cta' })}>
+              <Plus />
+              Novo lançamento
+            </Link>
+          </>
+        }
+      />
 
       {isError ? (
         <InlineAlert

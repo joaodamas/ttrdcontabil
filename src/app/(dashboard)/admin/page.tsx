@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Users, Briefcase, Plug, SlidersHorizontal } from 'lucide-react'
 
@@ -15,13 +16,13 @@ export default function AdminPage() {
     {
       href: '/admin/servicos',
       icon: Briefcase,
-      title: 'Tipos de Serviço',
+      title: 'Tipos de serviço',
       desc: 'Gerenciar tipos de serviços contábeis',
     },
     {
       href: '/admin/conectores',
       icon: Plug,
-      title: 'Conectores Fiscais',
+      title: 'Conectores',
       desc: 'Homologação, capacidades e liberação de produção',
     },
     {
@@ -34,10 +35,7 @@ export default function AdminPage() {
 
   return (
     <div className="stack-6">
-      <div className="surface-subtle border px-4 py-4 sm:px-5">
-        <h2 className="text-title">Administração</h2>
-        <p className="text-subtle">Configurações e gerenciamento do sistema.</p>
-      </div>
+      <PageHeader title="Administração" description="Configurações e gerenciamento do sistema." />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {links.map(({ href, icon: Icon, title, desc }) => (

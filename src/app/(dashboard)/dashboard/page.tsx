@@ -14,6 +14,7 @@ import { useFeatureFlags } from '@/contexts/feature-flags-context'
 import { formatCurrency, formatDate, formatMesAno, tsToDate, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -286,29 +287,27 @@ function DashboardV2(props: DashboardV2Props) {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Visão executiva</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {props.hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/hoje" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-            <CalendarClock className="size-3.5" /> Fila de execução
-          </Link>
-          <DropdownMenu>
-            <DropdownMenuTrigger className={cn(buttonVariants({ size: 'sm' }), 'gap-1.5')}>
-              <Receipt className="size-3.5" /> Emitir <ChevronDown className="size-3.5" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => router.push('/fiscal?emitir=1')}>
-                <Receipt className="size-3.5" /> NFS-e
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
+      <PageHeader
+        title="Painel"
+        description={`Visão executiva · ${props.hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}`}
+        action={
+          <>
+            <Link href="/hoje" className={buttonVariants({ variant: 'outline', size: 'cta' })}>
+              <CalendarClock /> Fila de execução
+            </Link>
+            <DropdownMenu>
+              <DropdownMenuTrigger className={buttonVariants({ size: 'cta' })}>
+                <Receipt /> Emitir <ChevronDown />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => router.push('/fiscal?emitir=1')}>
+                  <Receipt className="size-3.5" /> NFS-e
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        }
+      />
 
       {props.erro ? (
         <InlineAlert
@@ -840,13 +839,10 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
 
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          {hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-        </p>
-      </div>
+      <PageHeader
+        title="Painel"
+        description={hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+      />
 
       {erro ? (
         <InlineAlert

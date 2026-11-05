@@ -4,7 +4,8 @@ import { Suspense, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { formatMesAno } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Plus, ChevronLeft, ChevronRight, Layers, LayoutList, Group } from 'lucide-react'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
@@ -84,26 +85,22 @@ function CompetenciasContent() {
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
-        <div>
-          <h2 className="text-lg font-semibold">Competências</h2>
-          <p className="text-sm text-muted-foreground">
-            {total} competência{total !== 1 ? 's' : ''} — {formatMesAno(mes, ano)}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <FilterSheetTrigger
-            onClick={() => setFilterSheetOpen(true)}
-            activeCount={status ? 1 : 0}
-          />
-          <Link href="/competencias/nova">
-            <Button size="sm" className="h-10 rounded-xl">
-              <Plus className="w-4 h-4 mr-1" />
-              Nova Competência
-            </Button>
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title="Competências"
+        description={`${total} competência${total !== 1 ? 's' : ''} — ${formatMesAno(mes, ano)}`}
+        action={
+          <>
+            <FilterSheetTrigger
+              onClick={() => setFilterSheetOpen(true)}
+              activeCount={status ? 1 : 0}
+            />
+            <Link href="/competencias/nova" className={buttonVariants({ size: 'cta' })}>
+              <Plus />
+              Nova competência
+            </Link>
+          </>
+        }
+      />
 
       <FilterSheet
         open={filterSheetOpen}
@@ -236,17 +233,13 @@ function CompetenciasContent() {
           </p>
           <div className="flex gap-2">
             {page > 1 ? (
-              <Link href={buildUrl({ page: page - 1 })}>
-                <Button variant="outline" size="sm" className="h-9 rounded-xl">
-                  Anterior
-                </Button>
+              <Link href={buildUrl({ page: page - 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
+                Anterior
               </Link>
             ) : null}
             {page < totalPages ? (
-              <Link href={buildUrl({ page: page + 1 })}>
-                <Button variant="outline" size="sm" className="h-9 rounded-xl">
-                  Próxima
-                </Button>
+              <Link href={buildUrl({ page: page + 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
+                Próxima
               </Link>
             ) : null}
           </div>

@@ -231,8 +231,8 @@ export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
             <Pencil className="w-4 h-4 mr-1" /> Editar
           </Button>
         ) : (
-          <Button size="sm" className="cursor-pointer">
-            <Plus className="w-4 h-4 mr-1" /> Novo Usuário
+          <Button size="cta" className="cursor-pointer">
+            <Plus /> Novo usuário
           </Button>
         )}
       </DialogTrigger>

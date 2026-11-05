@@ -11,6 +11,7 @@ import { getDocument, listDocuments, updateDocument, createDocument, softDeleteD
 import { formatCpfCnpj, formatDate, formatCurrency, formatMesAno, tsToDate, cn } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error-message'
 import { Badge } from '@/components/ui/badge'
+import { PageHeader } from '@/components/layout/page-header'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -21,7 +22,7 @@ import { Timeline, type TimelineEvent, type TimelineEventType } from '@/componen
 import { ClienteServicoDialog } from '@/components/clientes/cliente-servico-dialog'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import {
-  ArrowLeft, Mail, MapPin, Pencil, ShieldCheck, ShieldAlert, ShieldOff,
+  Mail, MapPin, Pencil, ShieldCheck, ShieldAlert, ShieldOff,
   AlertTriangle, Plus, Receipt, Wallet, AlertCircle, Bell, FileDown,
   CheckSquare, DollarSign, BookOpen, Loader2, Save, Send, MessageSquarePlus, Trash2,
   Package, Truck,
@@ -720,12 +721,7 @@ export default function ClienteDetailPage() {
   // (ou um redirect) mesmo quando a causa foi erro de carga, não cliente inexistente.
   if (!cliente) return erroCarga ? (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Link href="/clientes">
-          <Button variant="ghost" size="icon" className="h-9 w-9"><ArrowLeft className="h-4 w-4" /></Button>
-        </Link>
-        <h1 className="text-lg font-semibold">Cliente</h1>
-      </div>
+      <PageHeader title="Cliente" breadcrumbs={[{ label: 'Clientes', href: '/clientes' }, { label: 'Cliente' }]} />
       <InlineAlert
         tone="danger"
         title="Não foi possível carregar o cliente."
@@ -752,38 +748,45 @@ export default function ClienteDetailPage() {
     <div className="space-y-5">
 
       {/* ── Header ──────────────────────────────────────────── */}
-      <div className="flex items-start gap-3">
-        <Link href="/clientes">
-          <Button variant="ghost" size="icon" className="h-9 w-9 mt-0.5"><ArrowLeft className="h-4 w-4" /></Button>
-        </Link>
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-lg font-semibold truncate">{cliente.razaoSocial as string}</h1>
+      <PageHeader
+        breadcrumbs={[{ label: 'Clientes', href: '/clientes' }, { label: cliente.razaoSocial as string }]}
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            {cliente.razaoSocial as string}
             <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
-          </div>
-          {(cliente.nomeFantasia as string | undefined) && <p className="text-sm text-muted-foreground truncate">{cliente.nomeFantasia as string}</p>}
+          </span>
+        }
+        description={
+          <>
+          {(cliente.nomeFantasia as string | undefined) && <p className="truncate">{cliente.nomeFantasia as string}</p>}
           <div className="flex flex-wrap items-center gap-3 mt-1.5">
             <span className="font-mono text-xs text-muted-foreground">{formatCpfCnpj(cliente.cpfCnpj as string)}</span>
             {(cliente.regimeTributario as string | undefined) && <span className="text-xs text-muted-foreground">{REGIME_LABELS[cliente.regimeTributario as string] ?? String(cliente.regimeTributario)}</span>}
             {(cliente.email as string | undefined) && <span className="flex items-center gap-1 text-xs text-muted-foreground"><Mail className="h-3 w-3" />{cliente.email as string}</span>}
             {((cliente.cidade as string | undefined) || (cliente.uf as string | undefined)) && <span className="flex items-center gap-1 text-xs text-muted-foreground"><MapPin className="h-3 w-3" />{[cliente.cidade, cliente.uf].filter(Boolean).join(' / ')}</span>}
           </div>
-        </div>
-        <Link href={`/clientes/${id}/editar`} className={buttonVariants({ size: 'sm', variant: 'outline' })}>
+          </>
+        }
+        action={
+          <>
+        <Link href={`/clientes/${id}/editar`} className={buttonVariants({ size: 'cta', variant: 'outline' })}>
+          <Pencil />
           Editar
         </Link>
         {isAdmin && (
           <Button
-            size="sm"
+            size="cta"
             variant="outline"
             className="text-destructive hover:text-destructive"
             onClick={() => setDeleteOpen(true)}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Trash2 />
             Excluir cliente
           </Button>
         )}
-      </div>
+          </>
+        }
+      />
 
       {erroCarga ? (
         <InlineAlert

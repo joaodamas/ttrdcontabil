@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { PageHeader } from '@/components/layout/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -53,18 +54,17 @@ export default function AdminConectoresPage() {
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle flex flex-wrap items-center justify-between gap-3 border px-4 py-4 sm:px-5">
-        <div>
-          <h2 className="text-lg font-semibold">Conectores Fiscais</h2>
-          <p className="text-sm text-muted-foreground">
-            Matriz operacional por município, homologação e liberação de produção.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={load} loading={loading}>
-          <RefreshCw className="h-4 w-4" />
-          Atualizar
-        </Button>
-      </div>
+      <PageHeader
+        title="Conectores"
+        description="Conectores fiscais por município: homologação e liberação de produção."
+        breadcrumbs={[{ label: 'Administração', href: '/admin' }, { label: 'Conectores' }]}
+        action={
+          <Button variant="outline" size="cta" onClick={load} loading={loading}>
+            <RefreshCw />
+            Atualizar
+          </Button>
+        }
+      />
 
       <Card className="border-border/65 bg-card/95 card-shadow">
         <div className="overflow-x-auto">

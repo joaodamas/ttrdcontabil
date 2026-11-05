@@ -8,7 +8,8 @@ import { useQueryClient } from '@tanstack/react-query'
 
 import { formatDate , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
 import { toast } from 'sonner'
 import { Plus, Loader2, ClipboardList, CheckCheck, UserX, ClockAlert, MoreHorizontal, Eye, UserCog, CalendarClock, Search } from 'lucide-react'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
@@ -141,26 +142,22 @@ function TarefasContent() {
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
-        <div>
-          <h2 className="text-lg font-semibold">Tarefas</h2>
-          <p className="text-sm text-muted-foreground">
-            {total} tarefa{total !== 1 ? 's' : ''} encontrada{total !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <FilterSheetTrigger
-            onClick={() => setFilterSheetOpen(true)}
-            activeCount={(status ? 1 : 0) + (prioridade ? 1 : 0)}
-          />
-          <Link href="/tarefas/nova">
-            <Button size="sm" className="h-10 rounded-xl">
-              <Plus className="w-4 h-4 mr-1" />
-              Nova Tarefa
-            </Button>
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title="Tarefas"
+        description={`${total} tarefa${total !== 1 ? 's' : ''} encontrada${total !== 1 ? 's' : ''}`}
+        action={
+          <>
+            <FilterSheetTrigger
+              onClick={() => setFilterSheetOpen(true)}
+              activeCount={(status ? 1 : 0) + (prioridade ? 1 : 0)}
+            />
+            <Link href="/tarefas/nova" className={buttonVariants({ size: 'cta' })}>
+              <Plus />
+              Nova tarefa
+            </Link>
+          </>
+        }
+      />
 
       <FilterSheet
         open={filterSheetOpen}
@@ -404,17 +401,13 @@ function TarefasContent() {
           </p>
           <div className="flex gap-2">
             {page > 1 ? (
-              <Link href={buildUrl({ page: page - 1 })}>
-                <Button variant="outline" size="sm" className="h-9 rounded-xl">
-                  Anterior
-                </Button>
+              <Link href={buildUrl({ page: page - 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
+                Anterior
               </Link>
             ) : null}
             {page < totalPages ? (
-              <Link href={buildUrl({ page: page + 1 })}>
-                <Button variant="outline" size="sm" className="h-9 rounded-xl">
-                  Próxima
-                </Button>
+              <Link href={buildUrl({ page: page + 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
+                Próxima
               </Link>
             ) : null}
           </div>

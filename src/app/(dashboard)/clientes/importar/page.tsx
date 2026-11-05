@@ -170,7 +170,7 @@ export default function ImportarClientesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Importar Clientes"
+        title="Importar clientes"
         description="Cadastre vários clientes e serviços de uma vez a partir de uma planilha Excel."
         breadcrumbs={[{ label: 'Clientes', href: '/clientes' }, { label: 'Importar' }]}
       />

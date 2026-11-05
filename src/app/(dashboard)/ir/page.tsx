@@ -8,7 +8,8 @@ import { Timestamp } from 'firebase/firestore'
 import { formatDate , tsToDate } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error-message'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
+import { buttonVariants } from '@/components/ui/button'
 import { Plus, FileText } from 'lucide-react'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
@@ -50,20 +51,16 @@ function IrContent() {
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle flex items-center justify-between border px-4 py-4 sm:px-5">
-        <div>
-          <h2 className="text-lg font-semibold">Declarações de IR</h2>
-          <p className="text-sm text-muted-foreground">
-            {isError ? `Ano-base ${anoBase}` : <>{total} declaraç{total !== 1 ? 'ões' : 'ão'} — Ano-base {anoBase}</>}
-          </p>
-        </div>
-        <Link href="/ir/nova">
-          <Button size="sm" className="h-10 rounded-xl">
-            <Plus className="w-4 h-4 mr-1" />
-            Nova Declaração
-          </Button>
-        </Link>
-      </div>
+      <PageHeader
+        title="Imposto de Renda"
+        description={isError ? `Ano-base ${anoBase}` : <>{total} declaraç{total !== 1 ? 'ões' : 'ão'} — Ano-base {anoBase}</>}
+        action={
+          <Link href="/ir/nova" className={buttonVariants({ size: 'cta' })}>
+            <Plus />
+            Nova declaração
+          </Link>
+        }
+      />
 
       <div className="surface-subtle flex flex-wrap items-center gap-3 border px-3 py-2.5">
         <div className="flex items-center gap-1">
@@ -154,17 +151,13 @@ function IrContent() {
           </p>
           <div className="flex gap-2">
             {page > 1 ? (
-              <Link href={buildUrl({ page: page - 1 })}>
-                <Button variant="outline" size="sm" className="h-9 rounded-xl">
-                  Anterior
-                </Button>
+              <Link href={buildUrl({ page: page - 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
+                Anterior
               </Link>
             ) : null}
             {page < totalPages ? (
-              <Link href={buildUrl({ page: page + 1 })}>
-                <Button variant="outline" size="sm" className="h-9 rounded-xl">
-                  Próxima
-                </Button>
+              <Link href={buildUrl({ page: page + 1 })} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-9 rounded-xl' })}>
+                Próxima
               </Link>
             ) : null}
           </div>

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -60,16 +61,15 @@ export default function ProdutosPage() {
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle flex flex-wrap items-end justify-between gap-3 border px-4 py-4 sm:px-5">
-        <div className="space-y-1.5">
-          <h2 className="text-lg font-semibold">Catálogo de Produtos</h2>
-          <p className="text-sm text-muted-foreground">Ficha fiscal por produto, para NF-e e NFC-e. A plataforma ainda não emite NF-e — o catálogo fica pronto para quando emitir.</p>
-        </div>
-        <div className="flex items-end gap-2">
-          <div className="space-y-1.5">
+      <PageHeader
+        title="Produtos"
+        description="Ficha fiscal por produto, para NF-e e NFC-e. A plataforma ainda não emite NF-e — o catálogo fica pronto para quando emitir."
+        action={
+        <div className="flex max-w-full flex-wrap items-end gap-2">
+          <div className="min-w-0 space-y-1.5">
             <p className="section-label">Empresa emissora</p>
             <Select value={clienteId} onValueChange={(v) => setClienteId(v ?? '')}>
-              <SelectTrigger className="w-[260px]">
+              <SelectTrigger className="w-[260px] max-w-full">
                 <SelectValue placeholder={loadingClientes ? 'Carregando...' : 'Selecione o cliente'} />
               </SelectTrigger>
               <SelectContent>
@@ -81,7 +81,8 @@ export default function ProdutosPage() {
           </div>
           {clienteId && <ProdutoForm clienteId={clienteId} onSaved={load} />}
         </div>
-      </div>
+        }
+      />
 
       {!clienteId ? (
         <Card className="border-border/65 bg-card/95 card-shadow">

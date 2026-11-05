@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
+import { PageHeader } from '@/components/layout/page-header'
 import { getDocument } from '@/lib/firestore-client'
 import { CompetenciaForm } from '@/components/competencias/competencia-form'
 import { Loader2 } from 'lucide-react'
@@ -26,5 +27,17 @@ export default function Page() {
       </div>
     )
   }
-  return <CompetenciaForm initialData={data} />
+  return (
+    <>
+      <PageHeader
+        title="Editar competência"
+        breadcrumbs={[
+          { label: 'Competências', href: '/competencias' },
+          { label: 'Detalhe', href: `/competencias/${id}` },
+          { label: 'Editar' },
+        ]}
+      />
+      <CompetenciaForm initialData={data} />
+    </>
+  )
 }

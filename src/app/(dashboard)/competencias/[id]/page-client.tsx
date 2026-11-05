@@ -8,9 +8,10 @@ import { where, orderBy, limit } from 'firebase/firestore'
 import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { formatDate, formatMesAno, formatCurrency , tsToDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
+import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { Loader2, Pencil } from 'lucide-react'
 
 const STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   aberta: { label: 'Aberta', variant: 'outline' },
@@ -75,33 +76,31 @@ export default function CompetenciaDetalhePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Link href="/competencias">
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold">
-                {(competencia.clienteNome as string) ?? '—'} —{' '}
-                {formatMesAno(competencia.mes as number, competencia.ano as number)}
-              </h2>
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Competências', href: '/competencias' },
+          { label: formatMesAno(competencia.mes as number, competencia.ano as number) },
+        ]}
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            {(competencia.clienteNome as string) ?? '—'} —{' '}
+            {formatMesAno(competencia.mes as number, competencia.ano as number)}
               <Badge variant={s.variant}>{s.label}</Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
+          </span>
+        }
+        description={
+          <>
               {(competencia.servicoNome as string) ?? '—'} · Responsável:{' '}
               {(competencia.responsavelNome as string) ?? '—'}
-            </p>
-          </div>
-        </div>
-        <Link href={`/competencias/${id}/editar`}>
-          <Button variant="outline" size="sm">
+          </>
+        }
+        action={
+          <Link href={`/competencias/${id}/editar`} className={buttonVariants({ variant: 'outline', size: 'cta' })}>
+            <Pencil />
             Editar
-          </Button>
-        </Link>
-      </div>
+          </Link>
+        }
+      />
 
       {competencia.observacoes ? (
         <Card>

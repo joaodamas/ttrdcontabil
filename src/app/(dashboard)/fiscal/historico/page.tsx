@@ -16,7 +16,8 @@ import { getErrorMessage } from '@/lib/error-message'
 import { fetchClientes } from '@/features/clientes/services'
 import type { ClienteRecord } from '@/features/clientes/types'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { TableEmptyState } from '@/components/ui/empty-state'
@@ -24,7 +25,7 @@ import { AppModal } from '@/components/ui/app-modal'
 import { FilterBtn } from '@/components/ui/filter-btn'
 import { DataTableShell } from '@/components/ui/data-table-shell'
 import { Textarea } from '@/components/ui/textarea'
-import { ArrowLeft, ChevronDown, Download, Eye, FileText, Loader2, RefreshCw, Search, XCircle, History } from 'lucide-react'
+import { ChevronDown, Download, Eye, FileText, Loader2, RefreshCw, Search, XCircle, History } from 'lucide-react'
 import { LogsNfseModal } from '@/components/fiscal/logs-nfse-modal'
 import { HeatmapFiscal } from '@/components/fiscal/heatmap-fiscal'
 
@@ -297,27 +298,23 @@ function FiscalHistoricoContent() {
 
   return (
     <div className="space-y-5">
-      <div className="surface-subtle flex flex-wrap items-center gap-3 border px-4 py-4 sm:px-5">
-        <Link href="/fiscal">
-          <Button variant="outline" size="sm" className="h-10 w-10 rounded-xl p-0">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div>
-          <h2 className="text-lg font-semibold">Histórico de Emissões</h2>
-          <p className="text-sm text-muted-foreground">
-            {total} documento{total !== 1 ? 's' : ''} encontrado{total !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <Button variant="outline" size="sm" className="ml-auto h-9 rounded-xl" onClick={exportarExcel}>
-          <Download className="h-4 w-4" />
-          Excel
-        </Button>
-        <Button variant="outline" size="sm" className="h-9 rounded-xl" onClick={exportarCsv}>
-          <Download className="h-4 w-4" />
-          CSV
-        </Button>
-      </div>
+      <PageHeader
+        title="Histórico de NFS-e"
+        description={`${total} documento${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`}
+        breadcrumbs={[{ label: 'Emitir NFS-e', href: '/fiscal' }, { label: 'Histórico de NFS-e' }]}
+        action={
+          <>
+            <Button variant="outline" size="cta" onClick={exportarExcel}>
+              <Download />
+              Excel
+            </Button>
+            <Button variant="outline" size="cta" onClick={exportarCsv}>
+              <Download />
+              CSV
+            </Button>
+          </>
+        }
+      />
 
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-xl border border-border/70 bg-card/95 px-4 py-3 card-shadow">
@@ -486,19 +483,27 @@ function FiscalHistoricoContent() {
                             <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Ver logs de emissão" onClick={() => setLogNota(n)}>
                               <History className="h-3.5 w-3.5" />
                             </Button>
-                            <Link href={`/fiscal/${n.id as string}`}>
-                              <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Ver detalhe">
-                                <Eye className="h-3.5 w-3.5" />
-                              </Button>
+                            <Link
+                              href={`/fiscal/${n.id as string}`}
+                              title="Ver detalhe"
+                              aria-label="Ver detalhe"
+                              className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-8 w-8 p-0' })}
+                            >
+                              <Eye className="h-3.5 w-3.5" />
                             </Link>
                             <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Consultar status" onClick={() => consultarStatus(n.id as string)}>
                               <RefreshCw className="h-3.5 w-3.5" />
                             </Button>
                             {n.pdfUrl ? (
-                              <a href={n.pdfUrl as string} target="_blank" rel="noreferrer">
-                                <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Baixar PDF">
-                                  <Download className="h-3.5 w-3.5" />
-                                </Button>
+                              <a
+                                href={n.pdfUrl as string}
+                                target="_blank"
+                                rel="noreferrer"
+                                title="Baixar PDF"
+                                aria-label="Baixar PDF"
+                                className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-8 w-8 p-0' })}
+                              >
+                                <Download className="h-3.5 w-3.5" />
                               </a>
                             ) : null}
                             {n.status === 'emitida' ? (
