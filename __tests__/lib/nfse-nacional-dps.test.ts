@@ -79,6 +79,13 @@ describe('montarDpsXml', () => {
     expect(xml).toContain('<tpEmit>1</tpEmit><finNFSe>0</finNFSe><cLocEmi>3525904</cLocEmi>')
   })
 
+  it('finNFSe só no leiaute da produção restrita (NT 009); a produção o recusa com E1235', () => {
+    const prod = montarDpsXml(nota(), { dhEmi: DH, ambiente: 'producao' }).xml
+    expect(prod).not.toContain('finNFSe')
+    expect(prod).toContain('<tpEmit>1</tpEmit><cLocEmi>3525904</cLocEmi>')
+    expect(montarDpsXml(nota(), { dhEmi: DH, ambiente: 'homologacao' }).xml).toContain('<finNFSe>0</finNFSe>')
+  })
+
   it('tpAmb segue o ambiente: produção = 1, homologação/omitido = 2, desconhecido = erro', () => {
     expect(montarDpsXml(nota(), { dhEmi: DH, ambiente: 'producao' }).xml).toContain('<tpAmb>1</tpAmb>')
     expect(montarDpsXml(nota(), { dhEmi: DH, ambiente: 'homologacao' }).xml).toContain('<tpAmb>2</tpAmb>')
