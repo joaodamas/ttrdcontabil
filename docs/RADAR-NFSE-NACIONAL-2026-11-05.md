@@ -108,6 +108,20 @@ Certificado A1 da **JP PROJECT MANAGER LTDA** (59.360.092/0001-63, Cajamar/SP, S
 - **Próximo passo:** repetir o `emitir` com o A1 de um cliente de **Barueri, São Paulo ou Campinas** — aí deve sair a NFS-e de teste (chave de acesso), seguida de `consultar` e `cancelar`.
 - **Bug achado no caminho (corrigido):** a plataforma gravava Cajamar como 3508900 (Caiabu) e Taboão da Serra como 3552502 (Suzano). Corretos: 3509205 e 3552809. Configs antigas são normalizadas (`IBGE_LEGADO`).
 
+## 🗺 Mapa completo — todos os 5.571 municípios na PRODUÇÃO (2026-11-05)
+
+Consulta de convênio município a município em `adn.nfse.gov.br` (sem erros):
+
+| Situação | Municípios |
+|---|---|
+| **Emite pelo Emissor Nacional** | **3.469** (62%) |
+| Só Ambiente Nacional — emissão no sistema da prefeitura | 2.076 |
+| Sem convênio | 26 |
+
+- SP: 488 emitem pelo Nacional, 157 não. Da carteira: **emitem** São Paulo, Barueri, Cajamar, Cotia, Osasco, Santo André, Taboão da Serra; **não emitem** Campinas, Jundiaí, Guarulhos, Sorocaba, Santana de Parnaíba.
+- Lista completa: `docs/nfse-nacional-convenios-2026-11-05.csv`. Na plataforma: `src/lib/nfse-nacional-convenios.json` (`situacaoNacional(ibge)`), usado na emissão e na prontidão para avisar cedo. Atualizar: `NFSE_PEM=... node scripts/atualizar-convenios-nfse.cjs`.
+- O `NacionalConector` continua conferindo ao vivo antes de cada emissão (o mapa é retrato).
+
 ## ⚠ Correção: convênio na PRODUÇÃO ≠ produção restrita (2026-11-05)
 
 As conclusões de convênio acima foram tiradas da **produção restrita**, que está desatualizada. Consulta à **produção** (`adn.nfse.gov.br/parametrizacao/{ibge}/convenio`, só leitura):
