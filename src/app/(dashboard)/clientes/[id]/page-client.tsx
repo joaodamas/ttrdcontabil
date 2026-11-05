@@ -35,7 +35,9 @@ import { exigeCertificadoA1, nomeMunicipio } from '@/lib/nfse-dominios'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
 import { useAuth } from '@/contexts/auth-context'
-import { canAccessTela } from '@/lib/permissions'
+import { canAccessTela, podeVerCredenciais } from '@/lib/permissions'
+import { CAMPOS_CREDENCIAL_LISTA, credenciaisPreenchidasDe } from '@/lib/clientes-credenciais'
+import { carregarCredenciaisCliente } from '@/features/clientes/credenciais'
 import { getPathSegmentAfter } from '@/lib/route-params'
 import { ClienteFichaCompleta } from '@/components/clientes/cliente-ficha-completa'
 
@@ -182,17 +184,46 @@ function fichaSection(title: string, rows: string) {
   `
 }
 
-function exportFichaCadastralPdf(cliente: Record<string, unknown>) {
-  const nome = printableValue(cliente, 'razaoSocial')
-  const now = new Date()
+/**
+ * Ficha para impressão. Senhas de portal só entram com valor para quem pode
+ * vê-las (admin/fiscal), lidas na hora de clientes_credenciais; para os
+ * demais, cada uma sai como "preenchida" ou "—".
+ */
+async function exportFichaCadastralPdf(cliente: Record<string, unknown>, podeCredenciais: boolean, clienteId: string) {
+  // Abre a janela antes do await: depois dele o bloqueador de pop-up a barraria.
   const printWindow = window.open('', '_blank', 'width=960,height=1200')
-
   if (!printWindow) {
     toast.error('Não foi possível abrir a janela de impressão. Verifique o bloqueador de pop-ups.')
     return
   }
-
   printWindow.opener = null
+  printWindow.document.write('<p style="font-family:sans-serif">Gerando ficha…</p>')
+
+  const semSenhas = Object.fromEntries(Object.entries(cliente).filter(([k]) => !CAMPOS_CREDENCIAL_LISTA.includes(k as never)))
+  let dados: Record<string, unknown>
+  if (podeCredenciais) {
+    try {
+      dados = { ...semSenhas, ...(await carregarCredenciaisCliente(clienteId, cliente)) }
+    } catch (err) {
+      console.error('[ficha-pdf] credenciais', err)
+      printWindow.close()
+      toast.error('Não foi possível carregar as senhas do cliente para a ficha.')
+      return
+    }
+  } else {
+    const preenchidas = credenciaisPreenchidasDe(cliente) as string[]
+    dados = {
+      ...semSenhas,
+      ...Object.fromEntries(CAMPOS_CREDENCIAL_LISTA.map((k) => [k, preenchidas.includes(k) ? 'preenchida' : ''])),
+    }
+  }
+  escreverFichaCadastral(printWindow, dados, podeCredenciais)
+}
+
+function escreverFichaCadastral(printWindow: Window, cliente: Record<string, unknown>, comSenhas: boolean) {
+  const nome = printableValue(cliente, 'razaoSocial')
+  const now = new Date()
+  printWindow.document.open()
   printWindow.document.write(`
     <!doctype html>
     <html lang="pt-BR">
@@ -301,7 +332,9 @@ function exportFichaCadastralPdf(cliente: Record<string, unknown>) {
           `)}
           <div class="full">
             ${fichaSection('Credenciais do representante', fichaRows(cliente, REPRESENTANTE_CREDENCIAIS_FIELDS))}
-            <p class="notice">As credenciais são incluídas porque fazem parte da ficha cadastral exportada. Trate este PDF como documento confidencial.</p>
+            <p class="notice">${comSenhas
+              ? 'As credenciais são incluídas porque fazem parte da ficha cadastral exportada. Trate este PDF como documento confidencial.'
+              : 'Senhas de portal só aparecem para administrador e fiscal; aqui consta apenas se estão preenchidas.'}</p>
           </div>
         </main>
         <script>
@@ -846,7 +879,7 @@ export default function ClienteDetailPage() {
           {/* Cadastro */}
           <TabsContent value="cadastro" className="space-y-4">
             <div className="flex justify-end">
-              <Button size="sm" variant="outline" onClick={() => exportFichaCadastralPdf(cliente)}>
+              <Button size="sm" variant="outline" onClick={() => void exportFichaCadastralPdf(cliente, podeVerCredenciais(usuario), id)}>
                 <FileDown className="h-3.5 w-3.5" />
                 Exportar PDF
               </Button>

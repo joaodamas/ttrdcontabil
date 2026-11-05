@@ -2,12 +2,15 @@ import * as XLSX from 'xlsx'
 import { CAMPOS_CREDENCIAL, CLIENTE_COLUMNS } from '@/lib/clientes-import'
 import { situacaoNacional } from '@/lib/nfse-nacional-convenio'
 import { normalizarIbge } from '@/lib/ibge'
+import { credenciaisPreenchidasDe, juntarCredenciais } from '@/lib/clientes-credenciais'
 
 /**
  * Relatório da ficha completa de TODOS os clientes ativos: cada campo da ficha
  * (mesmas colunas da planilha de importação), o que está preenchido e o que está
- * em branco. Senha/credencial sai como "✔ preenchida", exceto quando um
- * administrador pede o relatório com senhas (incluirSenhas).
+ * em branco. Senha/credencial sai como "✔ preenchida" (de
+ * clientes.credenciaisPreenchidas — o relatório comum nem lê as senhas), exceto
+ * quando um administrador pede o relatório com senhas: aí a tela lê
+ * clientes_credenciais e passa em `credenciais`.
  */
 
 type Registro = Record<string, unknown>
@@ -17,6 +20,8 @@ export interface DadosRelatorioClientes {
   fiscais: Registro[]
   /** Só para administrador, com confirmação e log de auditoria (ver a tela de Clientes). */
   incluirSenhas?: boolean
+  /** Docs de clientes_credenciais por clienteId — só com incluirSenhas. */
+  credenciais?: Map<string, Registro>
 }
 
 const SENHA_PREENCHIDA = '✔ preenchida'
@@ -38,10 +43,16 @@ function documento(v: unknown): string {
   return texto(v)
 }
 
-function valorCampo(c: Registro, key: string, incluirSenhas = false): string {
+function valorCampo(c: Registro, key: string, dados?: Pick<DadosRelatorioClientes, 'incluirSenhas' | 'credenciais'>): string {
+  if (CAMPOS_CREDENCIAL.has(key)) {
+    if (dados?.incluirSenhas) {
+      const cred = juntarCredenciais(c, dados.credenciais?.get(String(c.id)))
+      return texto(cred[key as keyof typeof cred])
+    }
+    return (credenciaisPreenchidasDe(c) as string[]).includes(key) ? SENHA_PREENCHIDA : ''
+  }
   const v = texto(c[key])
   if (!v) return ''
-  if (CAMPOS_CREDENCIAL.has(key) && !incluirSenhas) return SENHA_PREENCHIDA
   if (key === 'cpfCnpj') return documento(c[key])
   return v
 }
@@ -56,7 +67,7 @@ export function montarRelatorioClientes(dados: DadosRelatorioClientes) {
 
   const cab = ['Código', ...CLIENTE_COLUMNS.map((c) => c.label), 'Preenchidos', '% completo', 'Campos em branco']
   const linhas = clientes.map((c) => {
-    const valores = CLIENTE_COLUMNS.map((col) => valorCampo(c, col.key, dados.incluirSenhas))
+    const valores = CLIENTE_COLUMNS.map((col) => valorCampo(c, col.key, dados))
     const emBranco = CLIENTE_COLUMNS.filter((_, i) => !valores[i]).map((col) => col.label)
     const preenchidos = total - emBranco.length
     return [

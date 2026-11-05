@@ -4,7 +4,7 @@
  */
 import {
   collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, limit, serverTimestamp, Timestamp, documentId, setDoc,
+  query, where, orderBy, limit, serverTimestamp, Timestamp, documentId, setDoc, deleteField,
   startAfter, getAggregateFromServer, sum,
   type DocumentData,
   type QueryDocumentSnapshot,
@@ -34,6 +34,9 @@ const AUDITED_COLLECTIONS = new Set([
   'ir_declaracoes',
   'ir_checklist',
   'usuarios',
+  // Só os nomes de campo vão para o log: os valores saem [REDACTED]
+  // (SENSITIVE_KEY_PARTS cobre 'senha' e 'login').
+  'clientes_credenciais',
   'configuracoes',
   'whatsapp_templates',
   'whatsapp_campaign_rules',
@@ -76,6 +79,8 @@ const TENANT_SCOPED_COLLECTIONS = new Set([
   'ir_declaracoes',
   'ir_checklist',
   'usuarios',
+  'usuarios_diretorio',
+  'clientes_credenciais',
   'whatsapp_templates',
   'whatsapp_campaign_rules',
   'whatsapp_jobs',
@@ -112,6 +117,7 @@ const SENSITIVE_KEY_PARTS = [
   'chave',
   'private',
   'secret',
+  'login',
 ]
 
 let _actorCache: { uid: string; nome: string; email: string; tenantId?: string } | null = null
@@ -365,6 +371,37 @@ export async function setDocument(col: string, id: string, data: Record<string, 
   return id
 }
 
+/**
+ * Cria ou mescla (setDoc merge) — para docs de id fixo que podem ou não
+ * existir, como clientes_credenciais/{clienteId}. `null` num campo = apagar o
+ * campo. Auditado como create/update conforme o doc existia.
+ */
+export async function upsertDocument(col: string, id: string, data: Record<string, unknown>) {
+  const ref = doc(getClientDb(), col, id)
+  const beforeSnap = AUDITED_COLLECTIONS.has(col) ? await getDoc(ref).catch(() => null) : null
+  const before = beforeSnap?.exists() ? beforeSnap.data() : null
+  const actor = await getAuditActor()
+  const limpo = stripUndefined(data)
+  const payload = withActorMetadata(limpo, before ? 'update' : 'create', actor)
+  const escrita = Object.fromEntries(
+    Object.entries(payload).map(([k, v]) => [k, v === null ? deleteField() : v])
+  )
+  await setDoc(
+    ref,
+    before
+      ? { ...escrita, atualizadoEm: serverTimestamp() }
+      : { ...escrita, criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp() },
+    { merge: true }
+  )
+  await auditSafely({
+    entidade: col,
+    entidadeId: id,
+    acao: before ? 'update' : 'create',
+    dadosAntes: before,
+    dadosDepois: { ...(before ?? {}), ...payload },
+  })
+}
+
 export async function updateDocument(col: string, id: string, data: Record<string, unknown>) {
   const ref = doc(getClientDb(), col, id)
   const beforeSnap = AUDITED_COLLECTIONS.has(col) ? await getDoc(ref).catch(() => null) : null
@@ -565,7 +602,8 @@ export async function getFechamentos(mes: number, ano: number, regime?: string) 
 let _usuariosCache: Array<Record<string, unknown>> | null = null
 let _usuariosCacheTs = 0
 const USUARIOS_CACHE_TTL = 5 * 60 * 1000 // 5 min
-const USUARIOS_CACHE_SESSION_KEY = 'ttrd:usuarios-cache-v1'
+// v2: o cache passou a guardar só a projeção do diretório (id/nome/ativo).
+const USUARIOS_CACHE_SESSION_KEY = 'ttrd:usuarios-cache-v2'
 
 function readUsuariosSessionCache(now: number): Array<Record<string, unknown>> | null {
   if (typeof window === 'undefined') return null
@@ -595,6 +633,11 @@ function writeUsuariosSessionCache(now: number, data: Array<Record<string, unkno
   }
 }
 
+/**
+ * Lista de usuários para seletores de responsável (id, nome, ativo). Lê
+ * usuarios_diretorio, a projeção mantida pelo trigger sincronizarDiretorioUsuario:
+ * `usuarios` (com e-mail, perfil e telas) só o admin lista.
+ */
 export async function getUsuarios() {
   const now = Date.now()
   if (_usuariosCache && now - _usuariosCacheTs < USUARIOS_CACHE_TTL) {
@@ -602,7 +645,9 @@ export async function getUsuarios() {
   }
   const fromSession = readUsuariosSessionCache(now)
   if (fromSession) return fromSession
-  const data = await listDocuments('usuarios', [orderBy('nome'), limit(100)])
+  // Ordena aqui, não na query: orderBy + where(tenantId) exigiria índice composto.
+  const data = (await listDocuments<{ nome?: string | null }>('usuarios_diretorio', [limit(500)]))
+    .sort((a, b) => String(a.nome ?? '').localeCompare(String(b.nome ?? ''), 'pt-BR'))
   _usuariosCache = data as Array<Record<string, unknown>>
   _usuariosCacheTs = now
   writeUsuariosSessionCache(now, _usuariosCache)

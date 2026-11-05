@@ -1,4 +1,5 @@
 import { CAMPOS_CREDENCIAL, CLIENTE_COLUMNS } from '@/lib/clientes-import'
+import { credenciaisPreenchidasDe, type CredenciaisCliente } from '@/lib/clientes-credenciais'
 
 /**
  * Ficha completa do cliente agrupada nas mesmas seções do formulário de
@@ -9,7 +10,9 @@ import { CAMPOS_CREDENCIAL, CLIENTE_COLUMNS } from '@/lib/clientes-import'
 export interface CampoFicha {
   key: string
   label: string
+  /** Credencial: vazio a menos que as senhas tenham sido passadas (admin/fiscal revelou). */
   valor: string
+  preenchido: boolean
   credencial: boolean
 }
 
@@ -51,19 +54,32 @@ function rotulo(label: string) {
   return label.replace(/^(Responsável|Credencial|Financeiro) — /, '')
 }
 
-export function montarFichaCliente(cliente: Record<string, unknown>) {
+/**
+ * `credenciais` só para quem pode vê-las (admin/fiscal), lidas de
+ * clientes_credenciais. Sem elas, credencial sai com valor vazio e o
+ * "preenchida/em branco" vem de `credenciaisPreenchidas` — nunca da senha.
+ */
+export function montarFichaCliente(cliente: Record<string, unknown>, credenciais?: CredenciaisCliente | null) {
   const grupos = new Map<string, CampoFicha[]>()
+  const preenchidas = new Set<string>(credenciaisPreenchidasDe(cliente))
   for (const col of CLIENTE_COLUMNS) {
     const secao = SECOES.find((s) => s.pertence(col.key))?.titulo ?? 'Outros'
     const lista = grupos.get(secao) ?? []
-    lista.push({ key: col.key, label: rotulo(col.label), valor: texto(cliente[col.key]), credencial: CAMPOS_CREDENCIAL.has(col.key) })
+    const credencial = CAMPOS_CREDENCIAL.has(col.key)
+    if (credencial) {
+      const valor = credenciais ? texto(credenciais[col.key as keyof CredenciaisCliente]) : ''
+      lista.push({ key: col.key, label: rotulo(col.label), valor, preenchido: credenciais ? !!valor : preenchidas.has(col.key), credencial })
+    } else {
+      const valor = texto(cliente[col.key])
+      lista.push({ key: col.key, label: rotulo(col.label), valor, preenchido: !!valor, credencial })
+    }
     grupos.set(secao, lista)
   }
   const secoes: SecaoFicha[] = [...ORDEM, 'Outros']
     .filter((t) => grupos.has(t))
     .map((titulo) => {
       const campos = grupos.get(titulo)!
-      return { titulo, campos, preenchidos: campos.filter((c) => c.valor).length }
+      return { titulo, campos, preenchidos: campos.filter((c) => c.preenchido).length }
     })
   const total = secoes.reduce((n, s) => n + s.campos.length, 0)
   const preenchidos = secoes.reduce((n, s) => n + s.preenchidos, 0)

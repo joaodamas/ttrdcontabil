@@ -40,6 +40,7 @@ export { enviarAlertasDiarios, alertasPrazoCritico, detectarInadimplencia } from
 
 // ── Triggers ──────────────────────────────────────────────────────────────────
 export { propagarRazaoSocial } from './triggers/cliente-update'
+export { sincronizarCredenciaisPreenchidas } from './clientes/credenciais-trigger'
 export { onTarefaConcluida } from './triggers/tarefa-concluida'
 export {
   eventoTarefaCriada,

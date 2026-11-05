@@ -2,26 +2,46 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Eye, EyeOff, Pencil } from 'lucide-react'
+import { Eye, EyeOff, Loader2, Pencil } from 'lucide-react'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
 import { montarFichaCliente } from '@/lib/cliente-ficha'
+import type { CredenciaisCliente } from '@/lib/clientes-credenciais'
+import { podeVerCredenciais } from '@/lib/permissions'
+import { carregarCredenciaisCliente } from '@/features/clientes/credenciais'
 import { cn, formatCpfCnpj } from '@/lib/utils'
 
 /**
  * Ficha de cadastro completa do cliente — todos os campos do formulário,
  * agrupados nas mesmas seções, com o que está preenchido e o que está em
- * branco. Senhas ficam ocultas; administrador pode revelar uma a uma.
+ * branco. Senhas ficam ocultas; administrador e fiscal podem revelar uma a uma
+ * — só então elas são lidas de clientes_credenciais. Os demais perfis veem só
+ * se cada senha está preenchida (clientes.credenciaisPreenchidas).
  */
 export function ClienteFichaCompleta({ cliente, clienteId }: { cliente: Record<string, unknown>; clienteId: string }) {
   const { usuario } = useAuth()
-  const ehAdmin = usuario?.perfil === 'admin'
+  const podeRevelar = podeVerCredenciais(usuario)
   const [reveladas, setReveladas] = useState<Set<string>>(new Set())
-  const ficha = montarFichaCliente(cliente)
+  const [credenciais, setCredenciais] = useState<CredenciaisCliente | null>(null)
+  const [carregando, setCarregando] = useState(false)
+  const ficha = montarFichaCliente(cliente, credenciais)
   const pct = Math.round((ficha.preenchidos / ficha.total) * 100)
 
-  function alternar(key: string) {
+  async function alternar(key: string) {
+    if (!credenciais) {
+      setCarregando(true)
+      try {
+        setCredenciais(await carregarCredenciaisCliente(clienteId, cliente))
+      } catch (err) {
+        console.error('[ficha] credenciais', err)
+        toast.error('Não foi possível carregar as senhas deste cliente.')
+        return
+      } finally {
+        setCarregando(false)
+      }
+    }
     setReveladas((prev) => {
       const prox = new Set(prev)
       if (prox.has(key)) prox.delete(key)
@@ -52,7 +72,7 @@ export function ClienteFichaCompleta({ cliente, clienteId }: { cliente: Record<s
           </header>
           <dl className="grid grid-cols-1 gap-x-6 gap-y-3 px-4 py-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
             {secao.campos.map((campo) => {
-              const vazio = !campo.valor
+              const vazio = !campo.preenchido
               const oculto = campo.credencial && !reveladas.has(campo.key)
               const valor = campo.key === 'cpfCnpj' || campo.key === 'responsavelCpf' ? formatCpfCnpj(campo.valor) : campo.valor
               return (
@@ -60,14 +80,15 @@ export function ClienteFichaCompleta({ cliente, clienteId }: { cliente: Record<s
                   <dt className="text-xs text-muted-foreground">{campo.label}</dt>
                   <dd className={cn('mt-0.5 flex items-center gap-1.5 break-words font-medium', vazio && 'font-normal italic text-muted-foreground/70')}>
                     {vazio ? 'em branco' : oculto ? '••••••••' : valor}
-                    {campo.credencial && !vazio && ehAdmin && (
+                    {campo.credencial && !vazio && podeRevelar && (
                       <button
                         type="button"
-                        onClick={() => alternar(campo.key)}
+                        disabled={carregando}
+                        onClick={() => void alternar(campo.key)}
                         aria-label={oculto ? `Mostrar ${campo.label}` : `Ocultar ${campo.label}`}
                         className="rounded p-0.5 text-muted-foreground hover:text-foreground"
                       >
-                        {oculto ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                        {carregando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : oculto ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
                       </button>
                     )}
                   </dd>
