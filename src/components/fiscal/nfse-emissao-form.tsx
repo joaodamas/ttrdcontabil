@@ -422,7 +422,7 @@ export function NfseEmissaoForm({
         : provedorEmissao === 'nacional' && ambienteEmissao === 'producao' && producaoNacionalLiberada === false
           ? { titulo: 'Emissão em produção pelo Ambiente Nacional ainda não liberada.', detalhe: 'Um administrador libera em Administração → Conectores (chave "Ambiente Nacional"). Para testar, deixe o cliente em Homologação.' }
           : provedorEmissao === 'nacional' && ambienteEmissao === 'producao' && municipioForaDoNacional
-            ? { titulo: `${(fiscalDoCliente.municipioEmissor as string | undefined) ?? 'O município do cliente'} não emite pelo Ambiente Nacional.`, detalhe: 'Pelo Sistema Nacional, a emissão neste município é feita no sistema da própria prefeitura. Não é possível emitir pelo Nacional para este cliente.' }
+            ? { titulo: `${(fiscalDoCliente.municipioEmissor as string | undefined) ?? 'O município do cliente'} não emite pelo Ambiente Nacional.`, detalhe: 'Este município não aderiu ao Emissor Nacional — a NFS-e deste cliente é emitida no portal da prefeitura, fora da plataforma.' }
             : semA1Nacional
             ? { titulo: 'Cliente sem certificado A1 válido.', detalhe: 'A emissão pelo Ambiente Nacional é assinada com o A1 do próprio cliente. Envie o certificado na configuração fiscal.' }
             : null

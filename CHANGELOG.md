@@ -13,8 +13,12 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Alterado — emissão só pelo Ambiente Nacional (2026-11-05, decisão do dono)
+- O escritório não opera conectores de prefeitura: a configuração fiscal não oferece mais "Conector da prefeitura (legado)" e sempre grava `provedorNfse: 'nacional'`. Cliente de município que não aderiu ao Emissor Nacional recebe aviso para emitir no portal da prefeitura, fora da plataforma.
+- `scripts/atualizar-convenios-nfse` convertido para ESM (`.mjs`) — o `.cjs` quebrava o lint (`no-require-imports`).
+
 ### Adicionado — mapa de convênios NFS-e de todos os municípios (2026-11-05)
-- Consulta na **produção** do Sistema Nacional dos 5.571 municípios: 3.469 emitem pelo Emissor Nacional, 2.076 só compartilham dados (emissão no sistema da prefeitura), 26 sem convênio. Lista em `docs/nfse-nacional-convenios-2026-11-05.csv`; mapa em `src/lib/nfse-nacional-convenios.json` com `situacaoNacional()`; script `scripts/atualizar-convenios-nfse.cjs` para atualizar.
+- Consulta na **produção** do Sistema Nacional dos 5.571 municípios: 3.469 emitem pelo Emissor Nacional, 2.076 só compartilham dados (emissão no sistema da prefeitura), 26 sem convênio. Lista em `docs/nfse-nacional-convenios-2026-11-05.csv`; mapa em `src/lib/nfse-nacional-convenios.json` com `situacaoNacional()`; script `scripts/atualizar-convenios-nfse.mjs` para atualizar.
 - Emissão avisa ao escolher o cliente (em Produção) quando o município não emite pelo Nacional; prontidão mostra "Município não emite pelo Ambiente Nacional".
 - Prontidão deixava de fora a chave única: marcava "Município não liberado para produção" para todo cliente nacional em produção. Agora essa regra vale só para o conector da prefeitura.
 - Correção de diagnóstico: Cajamar **emite** pelo Nacional em produção (o "sem convênio" anterior era só do ambiente de testes).
