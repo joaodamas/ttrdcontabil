@@ -26,7 +26,9 @@ import { AppModal } from '@/components/ui/app-modal'
 import { FilterBtn } from '@/components/ui/filter-btn'
 import { DataTableShell } from '@/components/ui/data-table-shell'
 import { Textarea } from '@/components/ui/textarea'
-import { ChevronDown, Download, Eye, FileText, Loader2, RefreshCw, Search, XCircle, History } from 'lucide-react'
+import { ChevronDown, Download, Eye, FileCode, FileText, Loader2, RefreshCw, Search, XCircle, History } from 'lucide-react'
+import { useNfseArquivos } from '@/components/fiscal/use-nfse-arquivos'
+import { podeObterDanfse, temXmlNfse } from '@/features/fiscal/nfse-arquivos'
 import { LogsNfseModal } from '@/components/fiscal/logs-nfse-modal'
 import { HeatmapFiscal } from '@/components/fiscal/heatmap-fiscal'
 import { ClientePicker } from '@/components/ui/cliente-picker'
@@ -114,6 +116,8 @@ function FiscalHistoricoContent() {
   const [motivoCancelamento, setMotivoCancelamento] = useState('')
   const [cancelando, setCancelando] = useState(false)
   const [logNota, setLogNota] = useState<Record<string, unknown> | null>(null)
+  // Sem recarregar a lista ao gerar o PDF: o callable reaproveita o arquivo já salvo.
+  const { baixarXml, abrirDanfse, gerandoPdfId } = useNfseArquivos()
 
   const loadNotas = useCallback(() => {
     setLoading(true)
@@ -462,17 +466,26 @@ function FiscalHistoricoContent() {
                       <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Consultar status" onClick={() => consultarStatus(n.id as string)}>
                         <RefreshCw className="h-3.5 w-3.5" />
                       </Button>
-                      {n.pdfUrl ? (
-                        <a
-                          href={n.pdfUrl as string}
-                          target="_blank"
-                          rel="noreferrer"
-                          title="Baixar PDF"
-                          aria-label="Baixar PDF"
-                          className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-8 w-8 p-0' })}
+                      {temXmlNfse(n) ? (
+                        <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Baixar XML" aria-label="Baixar XML" onClick={() => baixarXml(n)}>
+                          <FileCode className="h-3.5 w-3.5" />
+                        </Button>
+                      ) : null}
+                      {podeObterDanfse(n) ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          title={gerandoPdfId === n.id ? 'Gerando PDF (DANFSe)…' : 'Baixar PDF (DANFSe)'}
+                          aria-label="Baixar PDF (DANFSe)"
+                          aria-busy={gerandoPdfId === n.id}
+                          disabled={gerandoPdfId === n.id}
+                          onClick={() => { void abrirDanfse(n) }}
                         >
-                          <Download className="h-3.5 w-3.5" />
-                        </a>
+                          {gerandoPdfId === n.id
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            : <Download className="h-3.5 w-3.5" />}
+                        </Button>
                       ) : null}
                       {n.status === 'emitida' ? (
                         <Button variant="outline" size="sm" className="h-8 w-8 p-0 text-destructive" title="Solicitar cancelamento" onClick={() => abrirCancelamento(n.id as string)}>

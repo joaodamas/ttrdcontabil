@@ -9,6 +9,7 @@ import { credentialSecrets } from './secrets'
 import { isProducaoLiberadaPorConfigOuConector } from './conectores'
 import { assertCaminhoCertificado, pfxBase64FromStorageBuffer } from './certificado'
 import { assertCanAccessCliente } from '../authz'
+import { gerarESalvarDanfse } from './danfse/servico'
 import { requireEnvironmentTenant } from '../tenant'
 import { redactAuditData, writeAuditLog } from '../audit'
 import type { CertificadoA1, ConfigFiscalCliente, EmitirNfseInput, Prestador } from './types'
@@ -433,6 +434,14 @@ export const cancelarNfse = onCall(
 
     if (resultado.status === 'processando') {
       return processing(resultado.mensagem ?? 'Cancelamento enviado para processamento fiscal.', { id: nfseId })
+    }
+
+    // DANFSe com a marca d'água "CANCELADA" (NT 008/2026, item 2.5.1).
+    // Best-effort: o cancelamento já valeu; o PDF também sai pelo gerarDanfse.
+    if (nota.xmlNfse) {
+      await gerarESalvarDanfse(nfseId).catch((err) => {
+        console.warn('[cancelarNfse] DANFSe cancelado não gerado:', err instanceof Error ? err.message : err)
+      })
     }
 
     return ok(resultado.mensagem ?? 'NFS-e cancelada com sucesso.', { id: nfseId })
