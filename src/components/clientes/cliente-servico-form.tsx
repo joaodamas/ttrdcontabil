@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -24,7 +25,7 @@ import { formatServiceLabel } from '@/lib/service-label'
 
 const schema = z.object({
   servicoId: z.string().min(1, 'Selecione um serviço'),
-  valor: z.number().positive('Valor deve ser positivo'),
+  valor: z.number({ error: 'Informe o valor' }).positive('Valor deve ser positivo'),
   diaVencimento: z.number().int().min(1).max(31).optional().nullable(),
   dataInicio: z.string().min(1, 'Data de início é obrigatória'),
   dataFim: z.string().optional().nullable(),
@@ -120,8 +121,8 @@ export function ClienteServicoForm({
         <CardContent className="space-y-4">
           {/* Serviço */}
           <div className="space-y-1.5">
-            <Label>
-              Tipo de Serviço <span className="text-destructive">*</span>
+            <Label required>
+              Tipo de Serviço
             </Label>
             <Controller
               name="servicoId"
@@ -166,16 +167,21 @@ export function ClienteServicoForm({
           {/* Valor + Dia Vencimento */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="valor">
-                Valor Mensal (R$) <span className="text-destructive">*</span>
+              <Label htmlFor="valor" required>
+                Valor Mensal (R$)
               </Label>
-              <Input
-                id="valor"
-                type="number"
-                step="0.01"
-                min="0.01"
-                placeholder="0,00"
-                {...register('valor', { valueAsNumber: true })}
+              <Controller
+                name="valor"
+                control={control}
+                render={({ field }) => (
+                  <CurrencyInput
+                    id="valor"
+                    ref={field.ref}
+                    value={field.value}
+                    onChange={(v) => field.onChange(v ?? NaN)}
+                    onBlur={field.onBlur}
+                  />
+                )}
               />
               {errors.valor && (
                 <p className="text-xs text-destructive">{errors.valor.message}</p>
@@ -198,8 +204,8 @@ export function ClienteServicoForm({
           {/* Início + Fim */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="dataInicio">
-                Data de Início <span className="text-destructive">*</span>
+              <Label htmlFor="dataInicio" required>
+                Data de Início
               </Label>
               <Input id="dataInicio" type="date" {...register('dataInicio')} />
               {errors.dataInicio && (

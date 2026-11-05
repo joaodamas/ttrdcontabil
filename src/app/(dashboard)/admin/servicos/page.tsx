@@ -37,7 +37,7 @@ export default function AdminServicosPage() {
     setLoading(true)
     fetchServicosAdmin()
       .then(setServicos)
-      .catch((err) => toast.error(getErrorMessage(err, 'Nao foi possivel carregar os servicos cadastrados. Verifique sua permissao de acesso.')))
+      .catch((err) => toast.error(getErrorMessage(err, 'Não foi possível carregar os serviços cadastrados. Verifique sua permissão de acesso.')))
       .finally(() => setLoading(false))
   }, [])
 
@@ -72,7 +72,7 @@ export default function AdminServicosPage() {
       toast.success('Serviço inativado.')
       load()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Nao foi possivel inativar o servico.'))
+      toast.error(getErrorMessage(err, 'Não foi possível inativar o serviço.'))
     } finally {
       setServicoParaInativar(null)
     }
@@ -85,7 +85,7 @@ export default function AdminServicosPage() {
       toast.success('Tabela COB01–COB20 criada com sucesso!')
       load()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Nao foi possivel gerar a tabela COB. Verifique se ja existem servicos cadastrados e tente novamente.'))
+      toast.error(getErrorMessage(err, 'Não foi possível gerar a tabela COB. Verifique se já existem serviços cadastrados e tente novamente.'))
     } finally {
       setGerando(false)
     }

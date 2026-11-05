@@ -1,9 +1,9 @@
 import { z } from 'zod'
 
 export const bulkReassignSchema = z.object({
-  responsavelId: z.string().min(1, 'Responsavel obrigatorio'),
+  responsavelId: z.string().min(1, 'Responsável obrigatório'),
 })
 
 export const bulkDateSchema = z.object({
-  date: z.string().min(1, 'Data obrigatoria'),
+  date: z.string().min(1, 'Data obrigatória'),
 })

@@ -131,10 +131,10 @@ function EmptyCockpit() {
       <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
         <CheckCircle2 className="h-10 w-10 text-success/70" />
         <div className="space-y-1">
-          <h2 className="text-base font-semibold">Nenhuma tarefa acionavel para hoje</h2>
+          <h2 className="text-base font-semibold">Nenhuma tarefa acionável para hoje</h2>
           <p className="max-w-xl text-sm text-muted-foreground">
-            Se este ambiente ainda esta sendo preparado, comece vinculando servicos aos clientes,
-            gerando competencias do mes e criando tarefas com responsavel e prazo.
+            Se este ambiente ainda está sendo preparado, comece vinculando serviços aos clientes,
+            gerando competências do mês e criando tarefas com responsável e prazo.
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2">
@@ -142,7 +142,7 @@ function EmptyCockpit() {
             <Button variant="outline">Ver clientes</Button>
           </Link>
           <Link href="/competencias/nova">
-            <Button variant="outline">Criar competencia</Button>
+            <Button variant="outline">Criar competência</Button>
           </Link>
           <Link href="/tarefas/nova">
             <Button>Nova tarefa</Button>
@@ -197,7 +197,7 @@ function TaskRow({
       <div className="min-w-0 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <Link href={`/tarefas/${item.id}`} className="font-medium hover:underline">
-            {item.titulo ?? 'Tarefa sem titulo'}
+            {item.titulo ?? 'Tarefa sem título'}
           </Link>
           <Badge variant={badge}>{PRIORIDADE_LABEL[item.prioridade ?? 'normal'] ?? item.prioridade ?? 'Normal'}</Badge>
           {impactoPeso(item) >= 3 && (
@@ -443,7 +443,7 @@ export default function HojePage() {
       if (action === 'reatribuir') {
         const usuario = usuariosData.find((u) => u.id === bulkResponsavelId)
         if (!usuario?.id) {
-          toast.error('Selecione o responsavel.')
+          toast.error('Selecione o responsável.')
           return
         }
         await bulkReatribuirTarefas(selectedIds, usuario.id, usuario.nome ?? 'Responsavel')
@@ -461,7 +461,7 @@ export default function HojePage() {
       await refresh()
     } catch (err) {
       console.error(err)
-      toast.error('Nao foi possivel executar a acao em lote.')
+      toast.error('Não foi possível executar a ação em lote.')
     } finally {
       setSaving(false)
     }
@@ -595,7 +595,7 @@ export default function HojePage() {
         <Card size="sm">
           <CardContent className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground">Proximos 7 dias</p>
+              <p className="text-xs text-muted-foreground">Próximos 7 dias</p>
               <p className="text-2xl font-bold">{semDados ? '—' : cockpit.data?.proximos7Dias.length ?? 0}</p>
             </div>
             <ClipboardList className="h-5 w-5 text-muted-foreground" />
@@ -679,7 +679,7 @@ export default function HojePage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2">
               <ClipboardList className="h-4 w-4" />
-              Fila de execucao
+              Fila de execução
             </CardTitle>
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <Checkbox
@@ -697,7 +697,7 @@ export default function HojePage() {
               </Button>
               <Select value={bulkResponsavelId} onValueChange={(value) => setBulkResponsavelId(value ?? '')}>
                 <SelectTrigger className="w-56">
-                  <SelectValue placeholder="Novo responsavel" />
+                  <SelectValue placeholder="Novo responsável" />
                 </SelectTrigger>
                 <SelectContent>
                   {usuariosData.map((u) => (

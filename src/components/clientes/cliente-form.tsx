@@ -370,8 +370,8 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
           {/* CNPJ — with auto-fill */}
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="cpfCnpj">
-                {tipoPessoa === 'pj' ? 'CNPJ' : 'CPF'} *
+              <Label htmlFor="cpfCnpj" required>
+                {tipoPessoa === 'pj' ? 'CNPJ' : 'CPF'}
                 {tipoPessoa === 'pj' && (
                   <span className="ml-2 text-xs text-muted-foreground font-normal">
                     (preenche dados automaticamente)
@@ -430,8 +430,8 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="razaoSocial">
-              {tipoPessoa === 'pj' ? 'Razão Social' : 'Nome Completo'} *
+            <Label htmlFor="razaoSocial" required>
+              {tipoPessoa === 'pj' ? 'Razão Social' : 'Nome Completo'}
             </Label>
             <Input id="razaoSocial" {...register('razaoSocial')} />
             {errors.razaoSocial && <p className="text-xs text-destructive">{errors.razaoSocial.message}</p>}

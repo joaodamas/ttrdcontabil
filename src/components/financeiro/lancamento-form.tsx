@@ -9,6 +9,7 @@ import { Timestamp } from 'firebase/firestore'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -34,7 +35,7 @@ const lancamentoSchema = z.object({
   servicoId:        z.string().optional().nullable(),
   tipo:             z.enum(['receita', 'despesa']),
   descricao:        z.string().min(1, 'Descrição é obrigatória').max(200),
-  valor:            z.number().positive('Valor deve ser positivo'),
+  valor:            z.number({ error: 'Informe o valor' }).positive('Valor deve ser positivo'),
   dataVencimento:   z.string().min(1, 'Data de vencimento é obrigatória'),
   dataPagamento:    z.string().optional().nullable(),
   // 'atrasado' e 'estornado' NÃO são graváveis: 'atrasado' é sempre derivado
@@ -215,7 +216,7 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Tipo <span className="text-destructive">*</span></Label>
+            <Label required>Tipo</Label>
             <Controller
               name="tipo"
               control={control}
@@ -232,27 +233,32 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="descricao">Descrição <span className="text-destructive">*</span></Label>
+            <Label htmlFor="descricao" required>Descrição</Label>
             <Input id="descricao" {...register('descricao')} placeholder="Ex: Honorários contábeis — Janeiro/2025" />
             {errors.descricao && <p className="text-xs text-destructive">{errors.descricao.message}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="valor">Valor (R$) <span className="text-destructive">*</span></Label>
-              <Input
-                id="valor"
-                type="number"
-                step="0.01"
-                min="0.01"
-                placeholder="0,00"
-                {...register('valor', { valueAsNumber: true })}
+              <Label htmlFor="valor" required>Valor (R$)</Label>
+              <Controller
+                name="valor"
+                control={control}
+                render={({ field }) => (
+                  <CurrencyInput
+                    id="valor"
+                    ref={field.ref}
+                    value={field.value}
+                    onChange={(v) => field.onChange(v ?? NaN)}
+                    onBlur={field.onBlur}
+                  />
+                )}
               />
               {errors.valor && <p className="text-xs text-destructive">{errors.valor.message}</p>}
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="dataVencimento">Vencimento <span className="text-destructive">*</span></Label>
+              <Label htmlFor="dataVencimento" required>Vencimento</Label>
               <Input id="dataVencimento" type="date" {...register('dataVencimento')} />
               {errors.dataVencimento && <p className="text-xs text-destructive">{errors.dataVencimento.message}</p>}
             </div>
@@ -284,15 +290,15 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="dataPagamento">
-              Data de Pagamento {status === 'pago' ? <span className="text-destructive">*</span> : null}
+            <Label htmlFor="dataPagamento" required={status === 'pago'}>
+              Data de Pagamento
             </Label>
             <Input id="dataPagamento" type="date" {...register('dataPagamento')} className="max-w-48" />
             {errors.dataPagamento && <p className="text-xs text-destructive">{errors.dataPagamento.message}</p>}
           </div>
 
           <div className="space-y-1.5">
-            <Label>Cliente {tipo === 'receita' ? <span className="text-destructive">*</span> : null}</Label>
+            <Label required={tipo === 'receita'}>Cliente</Label>
             <Controller
               name="clienteId"
               control={control}

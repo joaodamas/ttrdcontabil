@@ -177,7 +177,7 @@ export function IrForm({ initialData }: IrFormProps) {
       }
       await invalidarListas()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Nao foi possivel salvar a declaracao de IR. Verifique cliente, responsavel e permissao de acesso.'))
+      toast.error(getErrorMessage(err, 'Não foi possível salvar a declaração de IR. Verifique cliente, responsável e permissão de acesso.'))
     }
   }
 
@@ -190,8 +190,8 @@ export function IrForm({ initialData }: IrFormProps) {
         <CardContent className="space-y-4">
           {/* Cliente */}
           <div className="space-y-1.5">
-            <Label>
-              Cliente <span className="text-destructive">*</span>
+            <Label required>
+              Cliente
             </Label>
             <Controller
               name="clienteId"
@@ -228,8 +228,8 @@ export function IrForm({ initialData }: IrFormProps) {
           {/* Ano Base + Status */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="anoBase">
-                Ano-Calendário <span className="text-destructive">*</span>
+              <Label htmlFor="anoBase" required>
+                Ano-Calendário
               </Label>
               <Input
                 id="anoBase"

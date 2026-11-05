@@ -172,7 +172,7 @@ function FiscalHistoricoContent() {
         setLastCursor(filtered.length > PAGE_SIZE ? (data.cursors[PAGE_SIZE - 1] ?? null) : null)
       }
     }).catch((err) => {
-      toast.error(getErrorMessage(err, 'Nao foi possivel carregar o historico de emissoes. Verifique os filtros e tente novamente.'))
+      toast.error(getErrorMessage(err, 'Não foi possível carregar o histórico de emissões. Verifique os filtros e tente novamente.'))
       setNotas([])
       setHasMore(false)
       setLastCursor(null)
@@ -195,9 +195,9 @@ function FiscalHistoricoContent() {
   const exportColumns = [
     { key: 'cliente', label: 'Cliente' },
     { key: 'tipo', label: 'Tipo' },
-    { key: 'numero', label: 'Numero' },
+    { key: 'numero', label: 'Número' },
     { key: 'tomador', label: 'Tomador' },
-    { key: 'emissao', label: 'Emissao' },
+    { key: 'emissao', label: 'Emissão' },
     { key: 'valor', label: 'Valor' },
     { key: 'status', label: 'Status' },
     { key: 'origem', label: 'Origem' },
@@ -234,7 +234,7 @@ function FiscalHistoricoContent() {
       toast.success(data.message)
       loadNotas()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Nao foi possivel consultar a NFS-e. Verifique a configuracao fiscal do cliente.'))
+      toast.error(getErrorMessage(err, 'Não foi possível consultar a NFS-e. Verifique a configuração fiscal do cliente.'))
     }
   }
 
@@ -262,7 +262,7 @@ function FiscalHistoricoContent() {
       setMotivoCancelamento('')
       loadNotas()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Nao foi possivel solicitar o cancelamento. Verifique o status da nota e a configuracao fiscal.'))
+      toast.error(getErrorMessage(err, 'Não foi possível solicitar o cancelamento. Verifique o status da nota e a configuração fiscal.'))
     } finally {
       setCancelando(false)
     }
