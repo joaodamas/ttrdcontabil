@@ -11,7 +11,10 @@ export interface ClienteImportColumn {
   exemplo?: string
 }
 
-// Só dados cadastrais — nenhum campo de credencial/senha entra aqui de propósito.
+// Os campos da ficha de cadastro do cliente (cliente-form.tsx), na mesma ordem
+// das seções, inclusive logins e senhas (pedido do dono, 2026-11-05: o cliente
+// preenche tudo numa planilha só). Nos EXEMPLOS, credencial nunca sai com valor —
+// só "✔ preenchida na plataforma" (ver CAMPOS_CREDENCIAL).
 export const CLIENTE_COLUMNS: ClienteImportColumn[] = [
   { key: 'cpfCnpj', label: 'CPF/CNPJ', obrigatorio: true, exemplo: '12.345.678/0001-90' },
   { key: 'tipoPessoa', label: 'Tipo Pessoa (pf/pj)', exemplo: 'pj' },
@@ -24,6 +27,7 @@ export const CLIENTE_COLUMNS: ClienteImportColumn[] = [
   { key: 'celular', label: 'Celular', exemplo: '(11) 98888-7777' },
   { key: 'whatsapp', label: 'WhatsApp principal', exemplo: '(11) 98888-7777' },
   { key: 'whatsappFinanceiro', label: 'WhatsApp financeiro', exemplo: '(11) 97777-6666' },
+  { key: 'aceiteWhatsAppCobranca', label: 'Aceite de cobrança por WhatsApp (sim/não)', exemplo: 'sim' },
   { key: 'cep', label: 'CEP', exemplo: '01310-100' },
   { key: 'logradouro', label: 'Logradouro', exemplo: 'Av. Paulista' },
   { key: 'numero', label: 'Número', exemplo: '1000' },
@@ -40,6 +44,11 @@ export const CLIENTE_COLUMNS: ClienteImportColumn[] = [
   { key: 'cnaePrincipal', label: 'CNAE Principal' },
   { key: 'cnaeSecundario', label: 'CNAE Secundário' },
   { key: 'codSimplesNacional', label: 'Código do Simples Nacional' },
+  { key: 'loginPrefeitura', label: 'Credencial — Login Prefeitura' },
+  { key: 'senhaWebPrefeitura', label: 'Credencial — Senha WEB Prefeitura' },
+  { key: 'senhaPinCertificadoDigitalECnpj', label: 'Credencial — Senha PIN do Certificado Digital e-CNPJ' },
+  { key: 'loginPostoFiscal', label: 'Credencial — Login do posto fiscal' },
+  { key: 'senhaPostoFiscal', label: 'Credencial — Senha posto fiscal' },
   { key: 'mensalidade', label: 'Mensalidade (R$)', exemplo: '250' },
   { key: 'vencimento', label: 'Dia de Vencimento', exemplo: '10' },
   { key: 'diaEmissaoNFSe', label: 'Dia de Emissão NFS-e (1-31)', exemplo: '5' },
@@ -51,10 +60,34 @@ export const CLIENTE_COLUMNS: ClienteImportColumn[] = [
   { key: 'responsavelRg', label: 'Responsável — RG' },
   { key: 'responsavelDataNascimento', label: 'Responsável — Data Nascimento' },
   { key: 'responsavelEstadoCivil', label: 'Responsável — Estado Civil' },
+  { key: 'responsavelComunhaoBens', label: 'Responsável — Comunhão de bens' },
+  { key: 'responsavelCnh', label: 'Responsável — CNH' },
+  { key: 'responsavelDataEmissao', label: 'Responsável — Data de emissão do documento (dd/mm/aaaa)' },
+  { key: 'responsavelOrgaoEmissor', label: 'Responsável — Órgão emissor' },
+  { key: 'responsavelLocalNascimento', label: 'Responsável — Local de nascimento' },
+  { key: 'responsavelNomePai', label: 'Responsável — Nome do pai' },
+  { key: 'responsavelNomeMae', label: 'Responsável — Nome da mãe' },
+  { key: 'responsavelPis', label: 'Responsável — PIS' },
+  { key: 'responsavelTituloEleitor', label: 'Responsável — Título de eleitor' },
+  { key: 'responsavelEscolaridade', label: 'Responsável — Escolaridade' },
+  { key: 'responsavelFormacaoSuperior', label: 'Responsável — Formação superior' },
+  { key: 'responsavelCep', label: 'Responsável — CEP' },
+  { key: 'responsavelEndereco', label: 'Responsável — Logradouro' },
+  { key: 'responsavelNumero', label: 'Responsável — Número' },
+  { key: 'responsavelComplemento', label: 'Responsável — Complemento' },
+  { key: 'responsavelBairro', label: 'Responsável — Bairro' },
+  { key: 'responsavelCidade', label: 'Responsável — Cidade' },
+  { key: 'responsavelUf', label: 'Responsável — UF' },
+  { key: 'responsavelSenhaMeuGov', label: 'Responsável — Senha MEU GOV' },
+  { key: 'responsavelSenhaEcacPf', label: 'Responsável — Senha e-CAC PF' },
+  { key: 'responsavelSenhaWebPrefeitura', label: 'Responsável — Senha WEB Prefeitura' },
+  { key: 'responsavelSenhaPinCertificadoDigitalCpf', label: 'Responsável — Senha PIN do Certificado Digital CPF' },
   { key: 'responsavelFinanceiroNome', label: 'Financeiro — Nome' },
   { key: 'responsavelFinanceiroCargo', label: 'Financeiro — Cargo' },
   { key: 'responsavelFinanceiroEmail', label: 'Financeiro — E-mail' },
   { key: 'responsavelFinanceiroTelefone', label: 'Financeiro — Telefone' },
+  { key: 'responsavelFinanceiroWhatsapp', label: 'Financeiro — WhatsApp' },
+  { key: 'responsavelFinanceiroPreferencial', label: 'Financeiro — Contato preferencial da cobrança (sim/não)' },
   { key: 'observacoes', label: 'Observações' },
 ]
 
@@ -92,12 +125,31 @@ export interface DadosModeloClientes {
   tiposServico: Registro[]
 }
 
+// Credenciais nunca saem com valor no exemplo — só se estão preenchidas. Senha do
+// Meu Gov/e-CAC vazada dá acesso aos dados fiscais da empresa na Receita.
+export const CAMPOS_CREDENCIAL = new Set([
+  'loginPrefeitura', 'senhaWebPrefeitura', 'senhaPinCertificadoDigitalECnpj', 'loginPostoFiscal', 'senhaPostoFiscal',
+  'responsavelSenhaMeuGov', 'responsavelSenhaEcacPf', 'responsavelSenhaWebPrefeitura', 'responsavelSenhaPinCertificadoDigitalCpf',
+])
+const CREDENCIAL_PREENCHIDA = '✔ preenchida na plataforma'
+
 // Dados pessoais do responsável não vão no exemplo: a planilha circula fora da
 // plataforma. Mostra só o formato esperado.
 const CAMPOS_MASCARADOS: Record<string, string> = {
   responsavelCpf: '000.000.000-00',
   responsavelRg: '00.000.000-0',
   responsavelDataNascimento: 'dd/mm/aaaa',
+  responsavelDataEmissao: 'dd/mm/aaaa',
+  responsavelCnh: '00000000000',
+  responsavelPis: '000.00000.00-0',
+  responsavelTituloEleitor: '0000 0000 0000',
+  responsavelNomePai: 'Nome completo do pai',
+  responsavelNomeMae: 'Nome completo da mãe',
+  responsavelLocalNascimento: 'Cidade/UF',
+  responsavelEndereco: 'Rua/Avenida',
+  responsavelNumero: '000',
+  responsavelComplemento: 'Apto/Sala',
+  responsavelCep: '00000-000',
 }
 
 function texto(v: unknown): string {
@@ -134,8 +186,10 @@ export function montarModeloClientes(dados: DadosModeloClientes) {
 
   const exemplosClientes = [cabCliente, ...dados.clientes.map((c) =>
     CLIENTE_COLUMNS.map((col) => {
+      if (CAMPOS_CREDENCIAL.has(col.key)) return texto(c[col.key]) ? CREDENCIAL_PREENCHIDA : ''
       if (col.key in CAMPOS_MASCARADOS && texto(c[col.key])) return CAMPOS_MASCARADOS[col.key]
       if (col.key === 'cpfCnpj') return documentoFormatado(c.cpfCnpj)
+      if (typeof c[col.key] === 'boolean') return c[col.key] ? 'sim' : 'não'
       return texto(c[col.key])
     }),
   )]
@@ -177,14 +231,20 @@ export function gerarTemplateClientesXlsx(dados?: DadosModeloClientes) {
     ['2. Preencha a aba "Serviços" — uma linha por serviço contratado (um cliente pode ter várias linhas). O CPF/CNPJ precisa bater com uma linha da aba Clientes.'],
     ['3. Use as abas "Exemplo – Clientes" e "Exemplo – Serviços" como referência: são clientes já cadastrados na plataforma, preenchidos do jeito que a importação aceita. Elas NÃO são importadas.'],
     ['4. "Código do Serviço" precisa ser um dos códigos da aba "Tipos de Serviço" (ex: COB04) — não o nome.'],
-    ['5. Não inclua senhas, certificados ou credenciais em nenhuma aba — isso é feito depois, na tela de cada cliente.'],
+    ['5. O arquivo do certificado digital (.pfx) não vai na planilha — é enviado depois, na configuração fiscal do cliente.'],
     ['6. Salve e suba pela tela Clientes → Importar. O sistema mostra uma prévia com o que vai ser criado e o que tem erro antes de gravar qualquer coisa.'],
     [''],
     ['Valores aceitos'],
     ['Tipo Pessoa: pf ou pj'],
     ['Status: ativo, inativo ou suspenso (padrão: ativo)'],
     ['Regime: simples_nacional, lucro_presumido, lucro_real, mei ou isento'],
+    ['Aceite de cobrança por WhatsApp e Contato preferencial: sim ou não'],
     ['Datas: dd/mm/aaaa · Valores: só números, com vírgula ou ponto para centavos (ex: 450 ou 450,50)'],
+    [''],
+    ['Os campos são os mesmos da ficha de cadastro do cliente na plataforma, inclusive logins e senhas (prefeitura, posto fiscal, PIN do certificado, Meu Gov, e-CAC).'],
+    ['Nos exemplos, as senhas aparecem só como "✔ preenchida na plataforma" — o valor nunca sai da plataforma.'],
+    [''],
+    ['ATENÇÃO — esta planilha, preenchida, contém senhas: envie e receba por canal protegido (arquivo com senha, link com acesso restrito) e apague as cópias depois de importar.'],
   ]
   const wsInstrucoes = XLSX.utils.aoa_to_sheet(instrucoes)
   wsInstrucoes['!cols'] = [{ wch: 110 }]
@@ -281,6 +341,17 @@ export function validarClienteRow(row: RawRow, linha: number, cnpjsExistentes: S
     else diaEmissaoNFSe = n
   }
 
+  const simNao = (campo: string, rotulo: string): boolean | undefined => {
+    const v = (row[campo] ?? '').trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+    if (!v) return undefined
+    if (['sim', 's', 'x', 'yes', 'true', '1'].includes(v)) return true
+    if (['nao', 'n', 'no', 'false', '0'].includes(v)) return false
+    erros.push(`${rotulo}: use sim ou não`)
+    return undefined
+  }
+  const aceiteWhatsAppCobranca = simNao('aceiteWhatsAppCobranca', 'Aceite de cobrança por WhatsApp')
+  const responsavelFinanceiroPreferencial = simNao('responsavelFinanceiroPreferencial', 'Contato preferencial da cobrança')
+
   const payload: Record<string, unknown> = {
     tipoPessoa,
     razaoSocial: row.razaoSocial,
@@ -309,6 +380,8 @@ export function validarClienteRow(row: RawRow, linha: number, cnpjsExistentes: S
     cnaePrincipal: row.cnaePrincipal || undefined,
     cnaeSecundario: row.cnaeSecundario || undefined,
     codSimplesNacional: row.codSimplesNacional || undefined,
+    // Mesmos campos que a ficha grava. O texto do exemplo nunca é importado como senha.
+    ...Object.fromEntries([...CAMPOS_CREDENCIAL].map((k) => [k, row[k] && row[k] !== CREDENCIAL_PREENCHIDA ? row[k] : undefined])),
     mensalidade: row.mensalidade || undefined,
     vencimento: row.vencimento || undefined,
     diaEmissaoNFSe,
@@ -320,10 +393,34 @@ export function validarClienteRow(row: RawRow, linha: number, cnpjsExistentes: S
     responsavelRg: row.responsavelRg || undefined,
     responsavelDataNascimento: row.responsavelDataNascimento || undefined,
     responsavelEstadoCivil: row.responsavelEstadoCivil || undefined,
+    responsavelComunhaoBens: row.responsavelComunhaoBens || undefined,
+    responsavelCnh: row.responsavelCnh || undefined,
+    responsavelDataEmissao: row.responsavelDataEmissao || undefined,
+    responsavelOrgaoEmissor: row.responsavelOrgaoEmissor || undefined,
+    responsavelLocalNascimento: row.responsavelLocalNascimento || undefined,
+    responsavelNomePai: row.responsavelNomePai || undefined,
+    responsavelNomeMae: row.responsavelNomeMae || undefined,
+    responsavelPis: row.responsavelPis || undefined,
+    responsavelTituloEleitor: row.responsavelTituloEleitor || undefined,
+    responsavelEscolaridade: row.responsavelEscolaridade || undefined,
+    responsavelFormacaoSuperior: row.responsavelFormacaoSuperior || undefined,
+    responsavelCep: row.responsavelCep || undefined,
+    responsavelEndereco: row.responsavelEndereco || undefined,
+    responsavelNumero: row.responsavelNumero || undefined,
+    responsavelComplemento: row.responsavelComplemento || undefined,
+    responsavelBairro: row.responsavelBairro || undefined,
+    responsavelCidade: row.responsavelCidade || undefined,
+    responsavelUf: row.responsavelUf || undefined,
     responsavelFinanceiroNome: row.responsavelFinanceiroNome || undefined,
     responsavelFinanceiroCargo: row.responsavelFinanceiroCargo || undefined,
     responsavelFinanceiroEmail: row.responsavelFinanceiroEmail || undefined,
     responsavelFinanceiroTelefone: row.responsavelFinanceiroTelefone || undefined,
+    responsavelFinanceiroWhatsapp: row.responsavelFinanceiroWhatsapp || undefined,
+    responsavelFinanceiroPreferencial,
+    aceiteWhatsAppCobranca,
+    // Mesmo registro que a ficha faz ao marcar o aceite: data e origem.
+    aceiteWhatsAppCobrancaEm: aceiteWhatsAppCobranca ? new Date().toISOString() : undefined,
+    aceiteWhatsAppCobrancaOrigem: aceiteWhatsAppCobranca ? 'Planilha de cadastro' : undefined,
     observacoes: row.observacoes || undefined,
   }
 

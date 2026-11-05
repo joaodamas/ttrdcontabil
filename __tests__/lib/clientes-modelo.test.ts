@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CLIENTE_COLUMNS, SERVICO_COLUMNS, montarModeloClientes, escolherClientesExemplo } from '@/lib/clientes-import'
+import { CLIENTE_COLUMNS, SERVICO_COLUMNS, montarModeloClientes, escolherClientesExemplo, validarClienteRow } from '@/lib/clientes-import'
 
 const completo = {
   id: 'c1', cpfCnpj: '33854681000104', tipoPessoa: 'pj', razaoSocial: 'ARTE E PRIME PLANEJADOS LTDA', nomeFantasia: 'Arte & Prime',
@@ -50,5 +50,64 @@ describe('modelo de importação de clientes com exemplos reais', () => {
       tiposServico: [{ id: 's1', codigo: 'COB04', nome: 'Contabilidade' }],
     })
     expect(m.exemplosServicos[1].slice(0, 4)).toEqual(['33.854.681/0001-04', 'COB04', '450', '10'])
+  })
+})
+
+describe('planilha = ficha de cadastro do cliente', () => {
+  const keys = CLIENTE_COLUMNS.map((c) => c.key)
+
+  it('tem os campos do representante, do financeiro e o aceite de cobrança da ficha', () => {
+    for (const k of [
+      'responsavelCnh', 'responsavelDataEmissao', 'responsavelOrgaoEmissor', 'responsavelLocalNascimento',
+      'responsavelNomePai', 'responsavelNomeMae', 'responsavelPis', 'responsavelComunhaoBens',
+      'responsavelEscolaridade', 'responsavelFormacaoSuperior', 'responsavelTituloEleitor',
+      'responsavelCep', 'responsavelEndereco', 'responsavelNumero', 'responsavelComplemento',
+      'responsavelBairro', 'responsavelCidade', 'responsavelUf',
+      'responsavelFinanceiroWhatsapp', 'responsavelFinanceiroPreferencial', 'aceiteWhatsAppCobranca',
+    ]) expect(keys).toContain(k)
+  })
+
+  it('tem as credenciais da ficha para preencher', () => {
+    for (const k of ['loginPrefeitura', 'senhaWebPrefeitura', 'senhaPinCertificadoDigitalECnpj', 'loginPostoFiscal',
+      'senhaPostoFiscal', 'responsavelSenhaMeuGov', 'responsavelSenhaEcacPf', 'responsavelSenhaWebPrefeitura',
+      'responsavelSenhaPinCertificadoDigitalCpf']) expect(keys).toContain(k)
+  })
+
+  it('nos exemplos, senha nunca sai com valor — só se está preenchida', () => {
+    const m = montarModeloClientes({ clientes: [{ id: 'c', cpfCnpj: '33854681000104', razaoSocial: 'X', responsavelSenhaMeuGov: 'SenhaReal#123', loginPrefeitura: 'login.real' }], servicosDosClientes: [], tiposServico: [] })
+    const linha = m.exemplosClientes[1]
+    expect(linha.join('|')).not.toContain('SenhaReal#123')
+    expect(linha.join('|')).not.toContain('login.real')
+    expect(linha[keys.indexOf('responsavelSenhaMeuGov')]).toBe('✔ preenchida na plataforma')
+    expect(linha[keys.indexOf('responsavelSenhaEcacPf')]).toBe('')
+  })
+
+  it('importa a senha preenchida, mas nunca o texto do exemplo', () => {
+    const base = { cpfCnpj: '33.854.681/0001-04', razaoSocial: 'ARTE E PRIME PLANEJADOS LTDA' }
+    expect(validarClienteRow({ ...base, senhaWebPrefeitura: 'abc123' }, 1, new Set(), new Map()).payload.senhaWebPrefeitura).toBe('abc123')
+    expect(validarClienteRow({ ...base, senhaWebPrefeitura: '✔ preenchida na plataforma' }, 1, new Set(), new Map()).payload.senhaWebPrefeitura).toBeUndefined()
+  })
+
+  it('sim/não viram booleanos; aceite registra data e origem da planilha', () => {
+    const base = { cpfCnpj: '33.854.681/0001-04', razaoSocial: 'ARTE E PRIME PLANEJADOS LTDA' }
+    const sim = validarClienteRow({ ...base, aceiteWhatsAppCobranca: 'Sim', responsavelFinanceiroPreferencial: 'sim', responsavelPis: '123' }, 1, new Set(), new Map())
+    expect(sim.erros).toEqual([])
+    expect(sim.payload.aceiteWhatsAppCobranca).toBe(true)
+    expect(sim.payload.aceiteWhatsAppCobrancaOrigem).toBe('Planilha de cadastro')
+    expect(typeof sim.payload.aceiteWhatsAppCobrancaEm).toBe('string')
+    expect(sim.payload.responsavelFinanceiroPreferencial).toBe(true)
+    expect(sim.payload.responsavelPis).toBe('123')
+    const nao = validarClienteRow({ ...base, aceiteWhatsAppCobranca: 'não' }, 2, new Set(), new Map())
+    expect(nao.payload.aceiteWhatsAppCobranca).toBe(false)
+    const ruim = validarClienteRow({ ...base, aceiteWhatsAppCobranca: 'talvez' }, 3, new Set(), new Map())
+    expect(ruim.erros.join(' ')).toMatch(/sim ou não/)
+  })
+
+  it('documentos pessoais do representante saem mascarados nos exemplos', () => {
+    const m = montarModeloClientes({ clientes: [{ id: 'c', cpfCnpj: '33854681000104', razaoSocial: 'X', responsavelPis: '12345678901', responsavelCnh: '99887766', responsavelNomeMae: 'Maria Real' }], servicosDosClientes: [], tiposServico: [] })
+    const linha = m.exemplosClientes[1].join('|')
+    expect(linha).not.toContain('12345678901')
+    expect(linha).not.toContain('99887766')
+    expect(linha).not.toContain('Maria Real')
   })
 })
