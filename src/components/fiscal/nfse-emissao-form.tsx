@@ -35,6 +35,7 @@ import { ClientePicker } from '@/components/ui/cliente-picker'
 import { fetchTomadores } from '@/features/tomadores/services'
 import type { TomadorRecord } from '@/features/tomadores/types'
 import { provedorNfseEfetivo } from '@/features/fiscal/services'
+import { fetchChaveNfseNacional } from '@/features/admin/services'
 
 function isValidCpfCnpj(raw: string): boolean {
   const digits = raw.replace(/\D/g, '')
@@ -117,6 +118,13 @@ export function NfseEmissaoForm({
   const [loadingRascunho, setLoadingRascunho] = useState(Boolean(rascunhoIdParam))
   const [rascunhoAtual, setRascunhoAtual] = useState<RascunhoNfse | null>(null)
   const [carteira, setCarteira] = useState<TomadorRecord[]>([])
+  // Chave única do Ambiente Nacional (Admin → Conectores). undefined = ainda não lida.
+  const [producaoNacionalLiberada, setProducaoNacionalLiberada] = useState<boolean | undefined>(undefined)
+  useEffect(() => {
+    fetchChaveNfseNacional()
+      .then((c) => setProducaoNacionalLiberada(c?.producaoLiberada === true))
+      .catch(() => setProducaoNacionalLiberada(undefined))
+  }, [])
   // Configuração fiscal do prestador escolhido: decide se dá para emitir (provedor
   // descontinuado / sem config) e mostra o ambiente real no resumo.
   const [configFiscal, setConfigFiscal] = useState<{ clienteId: string; dados: Record<string, unknown> | null } | null>(null)
@@ -408,7 +416,9 @@ export function NfseEmissaoForm({
     !selectedClienteId || fiscalDoCliente === undefined ? null
       : fiscalDoCliente === null
         ? { titulo: 'Cliente sem configuração fiscal.', detalhe: 'Configure município, inscrição municipal e certificado antes de emitir.' }
-        : semA1Nacional
+        : provedorEmissao === 'nacional' && ambienteEmissao === 'producao' && producaoNacionalLiberada === false
+          ? { titulo: 'Emissão em produção pelo Ambiente Nacional ainda não liberada.', detalhe: 'Um administrador libera em Administração → Conectores (chave "Ambiente Nacional"). Para testar, deixe o cliente em Homologação.' }
+          : semA1Nacional
             ? { titulo: 'Cliente sem certificado A1 válido.', detalhe: 'A emissão pelo Ambiente Nacional é assinada com o A1 do próprio cliente. Envie o certificado na configuração fiscal.' }
             : null
   const previewTomadorCpf = watch('tomadorCpfCnpj')

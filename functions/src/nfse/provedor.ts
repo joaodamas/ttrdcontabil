@@ -40,3 +40,17 @@ export function conectorLiberaProducao(
     && conector.producaoLiberada === true
     && conector[operacao] === true
 }
+
+/** Documento `configuracoes/nfse_nacional`: chave única do Ambiente Nacional. */
+export const DOC_NFSE_NACIONAL = 'nfse_nacional'
+
+/**
+ * Emissão em PRODUÇÃO pelo Ambiente Nacional liberada? Uma chave única do
+ * escritório (opção A do dono, 2026-11-05) no lugar da liberação município a
+ * município: a API é uma só e foi homologada de ponta a ponta; quem diz se o
+ * município aceita é o convênio, consultado pelo NacionalConector. A chave
+ * continua sendo um interruptor geral — desligada, nada sai em produção.
+ */
+export function nacionalLiberadoParaProducao(doc: { producaoLiberada?: unknown } | null | undefined): boolean {
+  return doc?.producaoLiberada === true
+}

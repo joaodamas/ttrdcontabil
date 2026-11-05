@@ -10,9 +10,15 @@ import { Card } from '@/components/ui/card'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { Switch } from '@/components/ui/switch'
 import { Plug, RefreshCw } from 'lucide-react'
-import { criarConectorNacionalAdmin, fetchConectoresFiscaisAdmin, updateConectorFiscalAdmin } from '@/features/admin/services'
-import { MUNICIPIOS } from '@/components/fiscal/config-fiscal-form'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  fetchChaveNfseNacional,
+  fetchConectoresFiscaisAdmin,
+  salvarChaveNfseNacional,
+  updateConectorFiscalAdmin,
+  type ChaveNfseNacional,
+} from '@/features/admin/services'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { useAuth } from '@/contexts/auth-context'
 import type { ConectorFiscalAdmin } from '@/features/admin/types'
 
 function caminhoBadge(conector: ConectorFiscalAdmin) {
@@ -34,15 +40,18 @@ export default function AdminConectoresPage() {
   const [loading, setLoading] = useState(true)
   const [erroCarga, setErroCarga] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
-  const [ibgeNacional, setIbgeNacional] = useState('')
-  const [criandoNacional, setCriandoNacional] = useState(false)
+  const { usuario } = useAuth()
+  const [chaveNacional, setChaveNacional] = useState<ChaveNfseNacional | null | undefined>(undefined)
+  const [salvandoChave, setSalvandoChave] = useState(false)
+  const [confirmarLiberacao, setConfirmarLiberacao] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     setErroCarga(null)
     try {
-      const data = await fetchConectoresFiscaisAdmin()
+      const [data, chave] = await Promise.all([fetchConectoresFiscaisAdmin(), fetchChaveNfseNacional()])
       setConectores(data)
+      setChaveNacional(chave)
     } catch (err) {
       console.error('[admin/conectores] falha ao carregar', err)
       setErroCarga(getErrorMessage(err, 'Verifique sua conexão e tente novamente.'))
@@ -53,23 +62,19 @@ export default function AdminConectoresPage() {
 
   useEffect(() => { load() }, [load])
 
-  const municipiosSemNacional = MUNICIPIOS.filter(
-    (m) => !conectores.some((c) => c.provedor === 'nacional' && c.municipioIbge === m.ibge),
-  )
-
-  async function adicionarNacional() {
-    const municipio = MUNICIPIOS.find((m) => m.ibge === ibgeNacional)
-    if (!municipio) return
-    setCriandoNacional(true)
+  async function alterarChaveNacional(liberar: boolean) {
+    setSalvandoChave(true)
     try {
-      await criarConectorNacionalAdmin({ ibge: municipio.ibge, nome: municipio.nome })
-      toast.success(`${municipio.nome} adicionado ao Ambiente Nacional. Marque "homologado" depois de validar e só então libere a produção.`)
-      setIbgeNacional('')
-      await load()
+      await salvarChaveNfseNacional(liberar, Boolean(chaveNacional), usuario?.nome ?? usuario?.email ?? 'Administrador')
+      setChaveNacional({ ...(chaveNacional ?? {}), producaoLiberada: liberar })
+      toast.success(liberar
+        ? 'Emissão em produção pelo Ambiente Nacional liberada.'
+        : 'Emissão em produção pelo Ambiente Nacional bloqueada.')
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Não foi possível adicionar o município ao Ambiente Nacional.'))
+      toast.error(getErrorMessage(err, 'Não foi possível alterar a liberação do Ambiente Nacional.'))
     } finally {
-      setCriandoNacional(false)
+      setSalvandoChave(false)
+      setConfirmarLiberacao(false)
     }
   }
 
@@ -93,26 +98,48 @@ export default function AdminConectoresPage() {
         description="Conectores fiscais por município: homologação e liberação de produção."
         breadcrumbs={[{ label: 'Administração', href: '/admin' }, { label: 'Conectores' }]}
         action={
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={ibgeNacional} onValueChange={(v) => setIbgeNacional(v ?? '')}>
-              <SelectTrigger className="h-9 w-56">
-                <SelectValue placeholder="Município p/ Ambiente Nacional" />
-              </SelectTrigger>
-              <SelectContent>
-                {municipiosSemNacional.map((m) => (
-                  <SelectItem key={m.ibge} value={m.ibge}>{m.nome}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button size="cta" onClick={adicionarNacional} disabled={!ibgeNacional} loading={criandoNacional}>
-              Adicionar ao Ambiente Nacional
-            </Button>
-            <Button variant="outline" size="cta" onClick={load} loading={loading}>
-              <RefreshCw />
-              Atualizar
-            </Button>
-          </div>
+          <Button variant="outline" size="cta" onClick={load} loading={loading}>
+            <RefreshCw />
+            Atualizar
+          </Button>
         }
+      />
+
+      <Card className="border-border/65 bg-card/95 p-4 card-shadow">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1">
+            <p className="flex items-center gap-2 font-medium">
+              Ambiente Nacional (Sefin Nacional)
+              {chaveNacional?.producaoLiberada
+                ? <Badge variant="success">Produção liberada</Badge>
+                : <Badge variant="secondary">Produção bloqueada</Badge>}
+            </p>
+            <p className="max-w-2xl text-sm text-muted-foreground">
+              Uma chave só para o escritório inteiro. Ligada, clientes com configuração fiscal em <strong>Produção</strong> emitem
+              notas reais pelo Ambiente Nacional em qualquer município que tenha aderido ao convênio (a plataforma confere a adesão
+              a cada emissão). Clientes em Homologação continuam emitindo só no ambiente de testes.
+            </p>
+            {chaveNacional?.alteradoPorNome && (
+              <p className="text-xs text-muted-foreground">Última alteração por {chaveNacional.alteradoPorNome}.</p>
+            )}
+          </div>
+          <Switch
+            checked={Boolean(chaveNacional?.producaoLiberada)}
+            disabled={chaveNacional === undefined || salvandoChave}
+            aria-label="Liberar emissão em produção pelo Ambiente Nacional"
+            onCheckedChange={(ligar) => (ligar ? setConfirmarLiberacao(true) : void alterarChaveNacional(false))}
+          />
+        </div>
+      </Card>
+
+      <ConfirmDialog
+        open={confirmarLiberacao}
+        onOpenChange={setConfirmarLiberacao}
+        title="Liberar emissão real pelo Ambiente Nacional?"
+        description="A partir de agora, emitir NFS-e para clientes em Produção gera notas fiscais reais, com validade jurídica, em nome desses clientes. Cancelar exige evento de cancelamento."
+        confirmLabel="Liberar produção"
+        destructive
+        onConfirm={() => alterarChaveNacional(true)}
       />
 
       <Card className="border-border/65 bg-card/95 card-shadow">

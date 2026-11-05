@@ -13,6 +13,13 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Alterado — emissão pelo Ambiente Nacional sem passos manuais (2026-11-05)
+- **Chave única "Ambiente Nacional — produção liberada"** em Administração → Conectores (`configuracoes/nfse_nacional`, só admin grava; confirmação ao ligar). Substitui a liberação município a município para o Nacional: ligada, clientes em Produção emitem em qualquer município aderente (o convênio continua conferido a cada emissão); desligada, nada sai em produção. O botão "Adicionar ao Ambiente Nacional" por município saiu.
+- **Clientes da Spedy emitem pelo Nacional automaticamente** (sem reabrir e salvar a configuração); sai o bloqueio "Spedy descontinuada".
+- **"Emitir por"** recolhido em "opções avançadas" na configuração fiscal — Nacional é sempre o padrão.
+- Emissão avisa logo na escolha do cliente quando ele está em Produção e a chave do Nacional está desligada.
+- Doc da chave ausente (antes da primeira liberação) não derruba a tela: conta como desligado.
+
 ### Adicionado — competência da nota e homologação do Ambiente Nacional (2026-11-05)
 - **Competência vinculada vira a competência da NFS-e nacional** (`dCompet`): honorário de outubro emitido em novembro sai com competência de outubro (1º dia do mês). Sem vínculo, usa a data de emissão; nunca passa dela (regra da Sefin). `functions/src/nfse/nacional/competencia.ts`, testado.
 - **Admin → Conectores:** botão "Adicionar ao Ambiente Nacional" cria o conector nacional do município (separado do da prefeitura, nasce bloqueado) e cada linha mostra o caminho (Ambiente Nacional / Prefeitura). É por ele que o admin marca "homologado" e libera a produção do Nacional.

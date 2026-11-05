@@ -12,7 +12,7 @@ import {
   nomeMunicipio,
 } from '../../functions/src/nfse/nacional/mapeamento'
 import { montarDpsXml, validarDadosNota } from '../../functions/src/nfse/nacional/dps'
-import { conectorLiberaProducao, resolverProvedorNfse } from '../../functions/src/nfse/provedor'
+import { conectorLiberaProducao, nacionalLiberadoParaProducao, resolverProvedorNfse } from '../../functions/src/nfse/provedor'
 import type { ConfigFiscalCliente, EmitirNfseInput, Prestador } from '../../functions/src/nfse/types'
 
 function config(over: Partial<ConfigFiscalCliente> = {}): ConfigFiscalCliente {
@@ -188,5 +188,15 @@ describe('provedor', () => {
     expect(conectorLiberaProducao({ ...liberado, provedor: 'nacional' }, 'emissao', 'nacional')).toBe(true)
     expect(conectorLiberaProducao({ ...liberado, provedor: 'nacional' }, 'cancelamento', 'nacional')).toBe(false)
     expect(conectorLiberaProducao({ ...liberado, provedor: 'nacional', homologado: false }, 'emissao', 'nacional')).toBe(false)
+  })
+})
+
+describe('nacionalLiberadoParaProducao — chave única do Ambiente Nacional', () => {
+  it('liberado só com a chave explicitamente ligada', () => {
+    expect(nacionalLiberadoParaProducao({ producaoLiberada: true })).toBe(true)
+    expect(nacionalLiberadoParaProducao({ producaoLiberada: false })).toBe(false)
+    expect(nacionalLiberadoParaProducao({})).toBe(false)
+    expect(nacionalLiberadoParaProducao(undefined)).toBe(false)
+    expect(nacionalLiberadoParaProducao({ producaoLiberada: 'true' as unknown as boolean })).toBe(false)
   })
 })
