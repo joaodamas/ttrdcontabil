@@ -21,13 +21,16 @@ import {
 } from '@/components/ui/dropdown-menu'
 import {
   Plus, Users, MoreHorizontal, CheckSquare, Layers, Receipt, Pencil,
-  ShieldCheck, ShieldAlert, AlertTriangle, MessageCircle, FileDown, Upload,
+  ShieldCheck, ShieldAlert, AlertTriangle, MessageCircle, FileDown, Upload, FileSpreadsheet, Loader2,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useClientesList, useClientesRisco } from '@/features/clientes/hooks'
 import { useCarteira } from '@/features/carteira/hooks'
 import { clientesFiltroSchema } from '@/features/clientes/schemas'
 import type { ClienteRecord } from '@/features/clientes/types'
+import { limit } from 'firebase/firestore'
+import { listDocuments } from '@/lib/firestore-client'
+import { baixarRelatorioClientesXlsx } from '@/lib/clientes-relatorio'
 
 const REGIME_LABELS: Record<string, string> = {
   simples_nacional: 'Simples',
@@ -280,6 +283,26 @@ function ClientesContent() {
     ? filteredClientes.filter(c => (c.regimeTributario as string | undefined) === regime)
     : filteredClientes
 
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
+
+  // Relatório de TODOS os clientes ativos (não só a página/filtro da tela), com
+  // cada campo da ficha e o que está em branco, mais a situação fiscal.
+  async function exportarFichaCompleta() {
+    setGerandoRelatorio(true)
+    try {
+      const [todos, fiscais] = await Promise.all([
+        listDocuments<Record<string, unknown>>('clientes', [limit(2000)]),
+        listDocuments<Record<string, unknown>>('clientes_fiscal', [limit(2000)]).catch(() => []),
+      ])
+      baixarRelatorioClientesXlsx({ clientes: todos, fiscais })
+    } catch (err) {
+      console.error('[clientes] relatório da ficha completa falhou', err)
+      toast.error('Não foi possível gerar o relatório. Tente novamente.')
+    } finally {
+      setGerandoRelatorio(false)
+    }
+  }
+
   return (
     <div>
       <PageHeader
@@ -299,6 +322,10 @@ function ClientesContent() {
             >
               <FileDown />
               Exportar PDF
+            </Button>
+            <Button variant="outline" size="cta" disabled={gerandoRelatorio} onClick={() => void exportarFichaCompleta()}>
+              {gerandoRelatorio ? <Loader2 className="animate-spin" /> : <FileSpreadsheet />}
+              Ficha completa (Excel)
             </Button>
             <Link href="/clientes/importar" className={buttonVariants({ variant: 'outline', size: 'cta' })}>
               <Upload />
