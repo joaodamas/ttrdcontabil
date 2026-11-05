@@ -13,6 +13,10 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Corrigido — acentos nas respostas das prefeituras (2026-11-05)
+- `soapCall` lia toda resposta como UTF-8; prefeituras que respondem em ISO-8859-1 (ex.: Cajamar) apareciam como "Usu\uFFFDrio n\uFFFDo liberado". Agora o charset vem do Content-Type ou da declaração XML, com fallback para latin1 (`decodificarResposta`, testado). Vale para todos os conectores SOAP.
+- Registrado: em Cajamar a emissão pela plataforma usa o webservice da prefeitura (o convênio nacional de Cajamar não está ativo — E0037 na PoC) e exige a empresa **liberada para uso do Web Service** na prefeitura (erro código 8).
+
 ### Corrigido — aviso da Spedy só no último clique (2026-11-05)
 - Cliente ainda configurado com a Spedy (descontinuada) só descobria o problema no erro do backend, depois das 5 etapas da emissão. Agora a emissão mostra o bloqueio assim que o cliente é escolhido (com link para a configuração fiscal) e o botão "Emitir" fica desabilitado; o mesmo vale para cliente sem configuração fiscal. A prontidão em /fiscal lista "Configurado com a Spedy" em primeiro lugar.
 - O resumo da emissão mostra o **ambiente real** (Homologação ou Produção — esta em vermelho, "a nota sai de verdade") em vez de um texto genérico.
