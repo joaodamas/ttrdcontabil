@@ -34,6 +34,7 @@ import { Lc116Picker } from '@/components/fiscal/lc116-picker'
 import { ClientePicker } from '@/components/ui/cliente-picker'
 import { fetchTomadores } from '@/features/tomadores/services'
 import type { TomadorRecord } from '@/features/tomadores/types'
+import { provedorNfseEfetivo } from '@/features/fiscal/services'
 
 function isValidCpfCnpj(raw: string): boolean {
   const digits = raw.replace(/\D/g, '')
@@ -397,9 +398,7 @@ export function NfseEmissaoForm({
   const fiscalDoCliente = configFiscal && configFiscal.clienteId === selectedClienteId ? configFiscal.dados : undefined
   const ambienteEmissao = fiscalDoCliente?.ambienteEmissao as string | undefined
   // Sem o campo = Ambiente Nacional (mesma regra do backend).
-  const provedorEmissao = fiscalDoCliente
-    ? (fiscalDoCliente.provedorNfse === 'municipio' ? 'municipio' : fiscalDoCliente.provedorNfse === 'spedy' ? 'spedy' : 'nacional')
-    : undefined
+  const provedorEmissao = fiscalDoCliente ? provedorNfseEfetivo(fiscalDoCliente) : undefined
   const credenciaisDoCliente = (fiscalDoCliente?.credenciais ?? {}) as Record<string, unknown>
   const semA1Nacional = provedorEmissao === 'nacional'
     && !(typeof credenciaisDoCliente.certificadoStoragePath === 'string' && credenciaisDoCliente.certificadoStoragePath && credenciaisDoCliente.certValido === true)

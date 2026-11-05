@@ -13,6 +13,10 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Alterado — emissão pelo Ambiente Nacional como padrão de todos (2026-11-05)
+- Só `provedorNfse: 'prefeitura'` (escolha explícita, opção "Conector da prefeitura (legado)") usa o webservice municipal. O valor `'municipio'` que o formulário antigo gravava à força em todo cliente passa a ir pelo **Ambiente Nacional**, como o dono decidiu — sem precisar reabrir cliente por cliente. Município sem convênio nacional (ex.: Cajamar) é recusado com mensagem clara, sem cair para a prefeitura.
+- Teste real do conector na produção restrita registrado no radar: bloqueio de Cajamar ✔; em São Paulo passou convênio, código e alíquota e parou em E0084 (prestador sem estabelecimento em SP), o esperado para o certificado de teste. Traduções de E0312 (serviço não vigente na competência) e E0084 corrigidas. **Exige homologação** com cliente estabelecido em município aderente.
+
 ### Adicionado — emissão de NFS-e pelo Ambiente Nacional (Sefin Nacional/ADN) (2026-11-05) — **Exige homologação**
 - **Novo provedor padrão `nacional`** (`functions/src/nfse/provedores/nacional.ts`): emite, consulta e cancela direto na API pública do governo, **sem integrador**, com mTLS e assinatura pelo certificado A1 do próprio prestador. `ambienteEmissao: 'homologacao'` só alcança a produção restrita (tpAmb=2); `'producao'` só alcança `sefin.nfse.gov.br`/`adn.nfse.gov.br` (tpAmb=1) e continua exigindo a liberação de produção (`producaoLiberada`).
 - **Município sem convênio falha com mensagem clara**, sem cair na prefeitura: consulta `ADN /parametrizacao/{ibge}/convenio` antes de enviar (ex.: "Cajamar ainda não aderiu ao Emissor Nacional — não é possível emitir pelo Ambiente Nacional para este município."); E0037 da Sefin tem a mesma tradução. Códigos de rejeição comuns (E0008, E0312, E0315, E0712, E0718, E12xx…) traduzidos para pt-BR, com o código original em `codigoErro`.

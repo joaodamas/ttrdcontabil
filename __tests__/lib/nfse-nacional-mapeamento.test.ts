@@ -172,7 +172,11 @@ describe('provedor', () => {
   it('sem provedor = nacional; municipio e spedy só explícitos', () => {
     expect(resolverProvedorNfse({})).toBe('nacional')
     expect(resolverProvedorNfse(undefined)).toBe('nacional')
-    expect(resolverProvedorNfse({ provedorNfse: 'municipio' })).toBe('municipio')
+    // 'municipio' era gravado à força pelo formulário antigo — não foi escolha: vai pelo Nacional.
+    expect(resolverProvedorNfse({ provedorNfse: 'municipio' })).toBe('nacional')
+    expect(resolverProvedorNfse({ provedorNfse: 'nacional' })).toBe('nacional')
+    // Só a escolha explícita do legado usa o conector da prefeitura.
+    expect(resolverProvedorNfse({ provedorNfse: 'prefeitura' })).toBe('municipio')
     expect(resolverProvedorNfse({ provedorNfse: 'spedy' })).toBe('spedy')
   })
 

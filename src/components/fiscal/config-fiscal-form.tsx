@@ -71,9 +71,9 @@ const schema = z.object({
   conamCodigoContribuinte: z.string().optional().nullable(),
   giaplogin:           z.string().optional().nullable(),
   giapSenha:           z.string().optional().nullable(),
-  // 'nacional' (padrão) ou 'municipio' (legado). 'spedy' só vem de config antiga
+  // 'nacional' (padrão) ou 'prefeitura' (legado). 'municipio' e 'spedy' só vêm de config antiga
   // e é migrado para 'nacional' ao salvar (ver aviso abaixo).
-  provedorNfse:        z.enum(['nacional', 'municipio', 'spedy']).optional(),
+  provedorNfse:        z.enum(['nacional', 'prefeitura', 'municipio', 'spedy']).optional(),
   // Ambiente Nacional
   codigoTributacaoNacional:  z.string().regex(/^\d{6}$/, 'Use 6 dígitos (ex.: 171901)').optional().nullable().or(z.literal('')),
   codigoTributacaoMunicipal: z.string().regex(/^\d{3}$/, 'Use 3 dígitos (ex.: 001)').optional().nullable().or(z.literal('')),
@@ -117,7 +117,11 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       naturezaOperacao: '1',
       ...defaultValues,
       // Config sem provedor (antiga ou nova) emite pelo Ambiente Nacional.
-      provedorNfse:     (defaultValues?.provedorNfse as FormData['provedorNfse']) ?? 'nacional',
+      // Só 'prefeitura' (escolha explícita) fica no conector municipal; o resto — inclusive o
+      // 'municipio' que o formulário antigo gravava à força — abre como Ambiente Nacional.
+      provedorNfse:     defaultValues?.provedorNfse === 'prefeitura' || defaultValues?.provedorNfse === 'spedy'
+        ? (defaultValues.provedorNfse as FormData['provedorNfse'])
+        : 'nacional',
       // Config antiga pode ter o código IBGE errado de Cajamar/Taboão (ver src/lib/ibge.ts).
       municipioIbge:    normalizarIbge(defaultValues?.municipioIbge as string | undefined) || undefined,
       // Credenciais NUNCA são pré-preenchidas: o que vem de defaultValues.credenciais
@@ -138,7 +142,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
 
   const municipioIbge = watch('municipioIbge')
   const provedorNfse = watch('provedorNfse') ?? 'nacional'
-  const nacional = provedorNfse !== 'municipio'
+  const nacional = provedorNfse !== 'prefeitura'
   // Credenciais de portal municipal (token/login) só valem no conector legado;
   // no Ambiente Nacional a única credencial é o certificado A1.
   const tipo = nacional ? undefined : MUNICIPIO_TIPO[municipioIbge]
@@ -175,7 +179,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
         aliquotaPadrao:       data.aliquotaPadrao    ?? null,
         issRetidoPadrao:      data.issRetidoPadrao   ?? false,
         // Spedy foi descontinuada (sem integrador): salvar migra para o Ambiente Nacional.
-        provedorNfse:         data.provedorNfse === 'municipio' ? 'municipio' : 'nacional',
+        provedorNfse:         data.provedorNfse === 'prefeitura' ? 'prefeitura' : 'nacional',
         codigoTributacaoNacional:  data.codigoTributacaoNacional  || null,
         codigoTributacaoMunicipal: data.codigoTributacaoMunicipal || null,
         serieDps:                  data.serieDps                  || null,
@@ -276,13 +280,13 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
             <Label required>Emitir por</Label>
             <Controller name="provedorNfse" control={control} render={({ field }) => (
               <Select
-                value={field.value === 'municipio' ? 'municipio' : 'nacional'}
+                value={field.value === 'prefeitura' ? 'prefeitura' : 'nacional'}
                 onValueChange={field.onChange}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="nacional">Ambiente Nacional (padrão)</SelectItem>
-                  <SelectItem value="municipio">Conector da prefeitura (legado)</SelectItem>
+                  <SelectItem value="prefeitura">Conector da prefeitura (legado)</SelectItem>
                 </SelectContent>
               </Select>
             )} />

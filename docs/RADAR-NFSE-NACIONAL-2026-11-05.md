@@ -108,6 +108,22 @@ Certificado A1 da **JP PROJECT MANAGER LTDA** (59.360.092/0001-63, Cajamar/SP, S
 - **Próximo passo:** repetir o `emitir` com o A1 de um cliente de **Barueri, São Paulo ou Campinas** — aí deve sair a NFS-e de teste (chave de acesso), seguida de `consultar` e `cancelar`.
 - **Bug achado no caminho (corrigido):** a plataforma gravava Cajamar como 3508900 (Caiabu) e Taboão da Serra como 3552502 (Suzano). Corretos: 3509205 e 3552809. Configs antigas são normalizadas (`IBGE_LEGADO`).
 
+## Teste do conector da plataforma (2026-11-05, tarde)
+
+Mesmo `NacionalConector` das Functions, rodado local contra a produção restrita com o A1 da JP PROJECT MANAGER (Cajamar):
+
+| Cenário | Resultado |
+|---|---|
+| Cajamar (sede real) | Bloqueio claro antes de enviar: "Cajamar ainda não aderiu ao Emissor Nacional" ✔ |
+| Barueri / Campinas | Produção restrita sem nenhuma alíquota parametrizada → E0312 |
+| São Paulo, 01.06.01, competência 11/2026 | E0312 — alíquota de teste só vigente em 17/03/2025 |
+| São Paulo, 01.01.01, competência 15/08/2025 | **Passou** convênio, código e alíquota; parou em **E0084** (prestador sem estabelecimento em SP) — esperado |
+
+- **Rota de parâmetros confirmada no Swagger oficial** (abre com A1: `adn.producaorestrita.nfse.gov.br/parametrizacao/swagger/v1/swagger.json`): `/{ibge}/{codigoServico}/{competencia}/aliquota`, `.../historicoaliquotas`, `/{ibge}/convenio`, regimes especiais, retenções, benefícios. Código de serviço no formato `01.01.01.000`.
+- **O ambiente de testes do governo tem parametrização desatualizada** (alíquotas com vigência em 2025). Testar com competência atual pode dar E0312 por isso, não por erro da plataforma.
+- **Falta** um prestador estabelecido em município aderente (São Paulo é o que tem serviços parametrizados no teste) para fechar emissão → consulta → cancelamento.
+- **Pendente na plataforma:** a competência da DPS hoje é a data de emissão; notas de mês anterior deveriam usar a competência vinculada.
+
 ## Por que agora
 
 - A conta na Spedy foi encerrada (10/09/2026) e o conector saiu do código

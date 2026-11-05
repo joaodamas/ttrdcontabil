@@ -6,14 +6,16 @@ import type { ConfigFiscalCliente, ProvedorNfse } from './types'
 export const PROVEDOR_PADRAO: ProvedorNfse = 'nacional'
 
 /**
- * Provedor efetivo da config. Sem o campo (configs antigas ou novas) = Ambiente
- * Nacional, por decisão do dono (2026-11-05). 'municipio' só quando gravado
- * explicitamente; 'spedy' continua sendo reconhecido para devolver a mensagem
- * de provedor descontinuado.
+ * Provedor efetivo da config — decisão do dono (2026-11-05): emitir pelo
+ * Ambiente Nacional, não pelas prefeituras. Só 'prefeitura' (escolha explícita
+ * do conector legado) vai para o webservice municipal. 'municipio' gravado vem
+ * do formulário antigo, que o punha em TODO cliente sem perguntar — conta como
+ * Nacional. 'spedy' continua reconhecido para a mensagem de descontinuado.
  */
 export function resolverProvedorNfse(config: Pick<ConfigFiscalCliente, 'provedorNfse'> | null | undefined): ProvedorNfse {
   const p = config?.provedorNfse
-  if (p === 'municipio' || p === 'spedy' || p === 'nacional') return p
+  if (p === 'prefeitura') return 'municipio'
+  if (p === 'spedy') return 'spedy'
   return PROVEDOR_PADRAO
 }
 

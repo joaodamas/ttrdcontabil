@@ -73,7 +73,7 @@ export interface ConfigFiscalCliente {
   // - 'municipio' (legado): conector direto do webservice da prefeitura por IBGE;
   // - 'spedy': só em configs antigas — conta encerrada, o roteador devolve
   //   PROVEDOR_DESCONTINUADO (municipios/router.ts).
-  provedorNfse?: ProvedorNfse
+  provedorNfse?: ProvedorNfseGravado
   // ── Só para o Ambiente Nacional ──
   // cTribNac (6 dígitos) explícito. Sem ele, deriva do itemListaServico
   // (LC 116 "17.19" → "171901") — ver nacional/mapeamento.ts.
@@ -96,6 +96,13 @@ export interface ConfigFiscalCliente {
 }
 
 export type ProvedorNfse = 'municipio' | 'nacional' | 'spedy'
+/**
+ * Valor GRAVADO em clientes_fiscal.provedorNfse. 'prefeitura' é a escolha
+ * explícita do conector municipal (legado). 'municipio' gravado é o valor que
+ * o formulário antigo punha à força em todo cliente — não foi escolha, então
+ * resolverProvedorNfse() o trata como Ambiente Nacional.
+ */
+export type ProvedorNfseGravado = ProvedorNfse | 'prefeitura'
 
 // ─── Credenciais (varia por provedor) ────────────────────────────────────────
 export interface CredenciaisConector {

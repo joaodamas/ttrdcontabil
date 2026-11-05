@@ -24,7 +24,12 @@ const TRADUCOES: Record<string, (ctx: ContextoErroNacional) => string> = {
   E0037: (ctx) => mensagemMunicipioSemConvenio(ctx.municipio),
   E0008: () => 'Data de emissão posterior ao horário da Sefin. Aguarde alguns segundos e tente de novo.',
   E0162: () => 'Regime de apuração do Simples (regApTribSN) só vale para ME/EPP optante. Revise o regime tributário do cliente.',
-  E0312: (ctx) => `${ctx.municipio} exige o código de tributação municipal (cTribMun). Preencha o "Desdobro municipal" na configuração fiscal.`,
+  // Texto oficial: "código de tributação nacional não administrado pelo município
+  // de incidência na data de competência" — confirmado na produção restrita
+  // (2026-11-05): o código existe, mas a alíquota municipal não está vigente
+  // naquela competência. Não é falta de cTribMun.
+  E0312: (ctx) => `${ctx.municipio} não tem o código de serviço informado vigente nesta competência. Confira o item da lista de serviço (e o desdobro) e a data de competência.`,
+  E0084: (ctx) => `O CNPJ do prestador não tem estabelecimento em ${ctx.municipio} na competência informada (cadastro CNPJ/CNC). A nota precisa sair pelo município onde o cliente está estabelecido.`,
   E0315: (ctx) => `${ctx.municipio} não usa código de tributação municipal. Apague o "Desdobro municipal" da configuração fiscal.`,
   E0676: () => 'MEI não informa tributos federais (PIS/COFINS, retenções) na NFS-e.',
   E0712: () => 'Para ME/EPP do Simples, o total aproximado de tributos deve ir em percentual do Simples. Revise o regime e a alíquota do Simples na configuração fiscal.',

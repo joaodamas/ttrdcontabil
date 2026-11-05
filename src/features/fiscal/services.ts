@@ -32,10 +32,15 @@ function getFiscalDocForCliente(
   return fiscais.find((f) => f.clienteId === clienteId && f.ativo !== false) ?? null
 }
 
-/** Provedor efetivo: sem o campo = Ambiente Nacional (mesma regra do backend, functions/src/nfse/provedor.ts). */
+/**
+ * Provedor efetivo — mesma regra do backend (functions/src/nfse/provedor.ts):
+ * só 'prefeitura' (escolha explícita) usa o conector municipal; 'municipio'
+ * gravado pelo formulário antigo e config sem o campo vão pelo Ambiente Nacional.
+ */
 export function provedorNfseEfetivo(fiscal: Record<string, unknown> | null | undefined): 'nacional' | 'municipio' | 'spedy' {
   const p = fiscal?.provedorNfse
-  return p === 'municipio' || p === 'spedy' ? p : 'nacional'
+  if (p === 'prefeitura') return 'municipio'
+  return p === 'spedy' ? 'spedy' : 'nacional'
 }
 
 function temCertificadoA1Valido(credenciais: Record<string, unknown>) {
