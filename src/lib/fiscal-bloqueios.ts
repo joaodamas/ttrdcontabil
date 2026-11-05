@@ -20,7 +20,7 @@ export const BLOQUEIO_FISCAL = {
   loginGiap: 'Falta login GIAP',
   senhaGiap: 'Falta senha GIAP',
   producaoNaoLiberada: 'Município não liberado para produção',
-  provedorDescontinuado: 'Configurado com a Spedy (descontinuada) — salve a configuração fiscal',
+  provedorDescontinuado: 'Configurado com a Spedy (descontinuada) — salve a configuração fiscal para migrar ao Ambiente Nacional',
 } as const
 
 /**

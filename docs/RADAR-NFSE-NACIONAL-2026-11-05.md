@@ -1,14 +1,78 @@
 # Radar — emitir NFS-e direto pelo Ambiente Nacional (Sefin Nacional)
 
-Levantado em **05/11/2026**. Status: **PoC pronta, aguardando um A1 de cliente** —
-`scripts/poc-nfse-nacional/` (CLI travada na produção restrita). Ver a seção
-"Achados da PoC" abaixo.
+Levantado em **05/11/2026**. Status: **integrado na plataforma, aguardando homologação** —
+`NacionalConector` (`functions/src/nfse/provedores/nacional.ts`) é o provedor padrão;
+PoC em `scripts/poc-nfse-nacional/` (CLI travada na produção restrita). Ver
+"Integração na plataforma" abaixo.
 
 ## Restrição do dono (2026-11-05)
 
 **Sem integrador.** Spedy encerrada e nenhum outro agregador (Focus NFe, Nota
-Gateway, Tecnospeed e afins). A emissão é direta: conector da prefeitura ou a
-API pública da Sefin Nacional, com o certificado A1 do próprio cliente.
+Gateway, Tecnospeed e afins). A emissão é direta pela API pública da Sefin
+Nacional, com o certificado A1 do próprio cliente (mTLS). **O Ambiente Nacional
+é o padrão**; o conector da prefeitura fica como opção legada, escolhida
+explicitamente. Município sem convênio ativo **falha com mensagem clara** — não
+cai na prefeitura em silêncio.
+
+## Integração na plataforma (2026-11-05) — exige homologação
+
+| Peça | Onde |
+|---|---|
+| Leiaute DPS/evento (puro, tpAmb por ambiente) | `functions/src/nfse/nacional/dps.ts` |
+| Trava de hosts por ambiente + gzip/base64 + leitura de erros | `functions/src/nfse/nacional/ambiente.ts` |
+| Mapeamento plataforma → DPS | `functions/src/nfse/nacional/mapeamento.ts` |
+| Tradução de erros (pt-BR) | `functions/src/nfse/nacional/erros.ts` |
+| Numeração da DPS (`dps_sequencias/{cnpj}_{tpAmb}_{serie}`) | `functions/src/nfse/nacional/numeracao.ts` + `emitir.ts` |
+| Conector (emitir/consultar/cancelar) | `functions/src/nfse/provedores/nacional.ts` |
+| Roteamento por provedor (`nacional` padrão) | `functions/src/nfse/municipios/router.ts`, `provedor.ts` |
+| Teste local sem Firebase | `npm run poc:nfse:conector -- --dados <json>` (`scripts/poc-nfse-nacional/emitir-conector.mjs`) |
+
+Ambientes: `homologacao` → `https://sefin.producaorestrita.nfse.gov.br/API/SefinNacional` e
+`https://adn.producaorestrita.nfse.gov.br` (tpAmb 2); `producao` →
+`https://sefin.nfse.gov.br/SefinNacional` e `https://adn.nfse.gov.br` (tpAmb 1). Cada
+requisição e cada XML passam pela trava do ambiente; produção continua exigindo
+`producaoLiberada` (na config ou em `fiscal_conectores` com `provedor: 'nacional'`).
+
+Fluxo de `emitir`: abre o A1 (validade) → monta e assina a DPS (erros de dado não gastam
+chamada) → `GET /parametrizacao/{ibge}/convenio` (404 ou `aderenteAmbienteNacional≠1` →
+"não aderiu"; `aderenteEmissorNacional≠1` → "mantém emissor próprio") → `POST /nfse` →
+chave de acesso (gravada em `codigoVerificacao` e `chaveAcesso`), nNFSe e XML. Retry: o nDPS
+gravado no rascunho é reusado e `consultar` faz `GET /dps/{id}` antes de reenviar. Cancelar:
+evento e101101 assinado em `POST /nfse/{chave}/eventos`.
+
+### Confirmado × premissa
+
+**Confirmado** (PoC com A1 real, 05/11/2026, ou documentação oficial): mTLS com o A1 do
+prestador; `POST /API/SefinNacional/nfse` com `{dpsXmlGZipB64}` processado pelas regras de
+negócio; erros no formato `erros:[{Codigo, Descricao}]` + `idDPS` na resposta; rota de convênio
+do ADN e o JSON `parametrosConvenio`; bases de produção (página oficial "APIs – produção
+restrita e produção": `sefin.nfse.gov.br/SefinNacional`, `adn.nfse.gov.br`); leiaute/XSD 1.01.
+
+**Premissas a confirmar na homologação** (nenhuma nota autorizada ainda — Cajamar parou no E0037):
+
+1. Retorno de sucesso: campos `chaveAcesso` e `nfseXmlGZipB64` (vistos só em libs abertas); nNFSe
+   lido do XML, chave também do `Id="NFS…"` do `infNFSe`.
+2. `GET /dps/{id}` com o prefixo `DPS` no id e devolvendo `chaveAcesso`; 404 = DPS inexistente.
+   Mesmo se errado, o Id da DPS é único na Sefin: reenviar o mesmo nDPS não gera nota duplicada.
+3. Produção usa a mesma rota de parametrização do ADN (`/parametrizacao/{ibge}/convenio`).
+4. Município com `aderenteEmissorNacional = 0` (ex.: Jundiaí) **é recusado** pela plataforma —
+   confirmar se a Sefin aceitaria a DPS via API mesmo assim.
+5. **pAliq** não é enviado (o XSD diz que, para município conveniado, a alíquota é
+   parametrizada e fornecida pela Sefin), exceto ME/EPP do Simples com ISS retido.
+6. **pTotTribSN** (ME/EPP) = "Alíquota efetiva do Simples" da config ou, na falta, a alíquota
+   padrão; MEI e não optante usam `indTotTrib = 0`.
+7. Regime: Simples → `opSimpNac 3` + `regApTribSN 1`; MEI → 2; demais → 1; `regEspTrib 0`
+   para todos. Isenção/exigibilidade suspensa, deduções, PIS/COFINS e "outras retenções" são
+   **recusados** com mensagem (não emitidos errados).
+8. cTribNac derivado do item LC 116 com desdobro `01` (ex.: 17.19 → 171901) — conferir no
+   Anexo B; há campo para informar o código explícito e o cTribMun.
+9. Série da DPS padrão `1` (configurável) e lacunas na numeração são aceitas pela Sefin
+   (número alocado e não enviado fica pulado).
+10. Cancelamento com `cMotivo 9` (Outros) + texto do usuário (15–255 caracteres).
+11. IM do prestador vai na DPS quando configurada; o CNPJ precisa estar no CNC do município.
+12. Consulta pela chave devolve `emitida` mesmo para nota cancelada (status de cancelamento
+    só vem do próprio `cancelar`).
+13. Grupo IBS/CBS não é montado (opcional no XSD 1.01).
 
 ## Respostas rápidas
 
