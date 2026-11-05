@@ -87,6 +87,29 @@ export async function fetchConectoresFiscaisAdmin() {
   return conectores.sort((a, b) => String(a.nome ?? a.id).localeCompare(String(b.nome ?? b.id), 'pt-BR'))
 }
 
+/**
+ * Cria o conector do Ambiente Nacional para um município — documento separado
+ * do conector da prefeitura (o backend só libera produção para o provedor que
+ * foi homologado; ver functions/src/nfse/provedor.ts). Nasce bloqueado: o admin
+ * marca "homologado" e libera produção depois de validar emissão/consulta/cancelamento.
+ */
+export async function criarConectorNacionalAdmin(municipio: { ibge: string; nome: string; uf?: string }) {
+  return setDocument('fiscal_conectores', `nacional-${municipio.ibge}`, {
+    nome: `Ambiente Nacional — ${municipio.nome}`,
+    municipio: municipio.nome,
+    uf: municipio.uf ?? 'SP',
+    municipioIbge: municipio.ibge,
+    provedor: 'nacional',
+    tipoIntegracao: 'nacional',
+    ativo: true,
+    homologado: false,
+    producaoLiberada: false,
+    emissao: true,
+    consulta: true,
+    cancelamento: true,
+  })
+}
+
 export async function updateConectorFiscalAdmin(
   id: string,
   field: keyof ConectorFiscalAdmin,

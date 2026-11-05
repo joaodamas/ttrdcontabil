@@ -28,6 +28,9 @@ export type ConectorFiscalAdmin = {
   municipio?: string | null
   uf?: string | null
   tipoIntegracao?: string
+  /** 'nacional' = Ambiente Nacional; ausente = webservice da prefeitura (docs antigos). */
+  provedor?: string
+  municipioIbge?: string
   urlPortal?: string | null
   ativo?: boolean
   homologado?: boolean

@@ -10,8 +10,16 @@ import { Card } from '@/components/ui/card'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { Switch } from '@/components/ui/switch'
 import { Plug, RefreshCw } from 'lucide-react'
-import { fetchConectoresFiscaisAdmin, updateConectorFiscalAdmin } from '@/features/admin/services'
+import { criarConectorNacionalAdmin, fetchConectoresFiscaisAdmin, updateConectorFiscalAdmin } from '@/features/admin/services'
+import { MUNICIPIOS } from '@/components/fiscal/config-fiscal-form'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { ConectorFiscalAdmin } from '@/features/admin/types'
+
+function caminhoBadge(conector: ConectorFiscalAdmin) {
+  return conector.provedor === 'nacional'
+    ? <Badge variant="info">Ambiente Nacional</Badge>
+    : <Badge variant="secondary">Prefeitura</Badge>
+}
 
 function boolBadge(value?: boolean, positiveLabel = 'Sim', negativeLabel = 'Não') {
   return (
@@ -26,6 +34,8 @@ export default function AdminConectoresPage() {
   const [loading, setLoading] = useState(true)
   const [erroCarga, setErroCarga] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [ibgeNacional, setIbgeNacional] = useState('')
+  const [criandoNacional, setCriandoNacional] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -42,6 +52,26 @@ export default function AdminConectoresPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  const municipiosSemNacional = MUNICIPIOS.filter(
+    (m) => !conectores.some((c) => c.provedor === 'nacional' && c.municipioIbge === m.ibge),
+  )
+
+  async function adicionarNacional() {
+    const municipio = MUNICIPIOS.find((m) => m.ibge === ibgeNacional)
+    if (!municipio) return
+    setCriandoNacional(true)
+    try {
+      await criarConectorNacionalAdmin({ ibge: municipio.ibge, nome: municipio.nome })
+      toast.success(`${municipio.nome} adicionado ao Ambiente Nacional. Marque "homologado" depois de validar e só então libere a produção.`)
+      setIbgeNacional('')
+      await load()
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Não foi possível adicionar o município ao Ambiente Nacional.'))
+    } finally {
+      setCriandoNacional(false)
+    }
+  }
 
   async function toggle(id: string, field: keyof ConectorFiscalAdmin, value: boolean) {
     setSavingId(id)
@@ -63,10 +93,25 @@ export default function AdminConectoresPage() {
         description="Conectores fiscais por município: homologação e liberação de produção."
         breadcrumbs={[{ label: 'Administração', href: '/admin' }, { label: 'Conectores' }]}
         action={
-          <Button variant="outline" size="cta" onClick={load} loading={loading}>
-            <RefreshCw />
-            Atualizar
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={ibgeNacional} onValueChange={(v) => setIbgeNacional(v ?? '')}>
+              <SelectTrigger className="h-9 w-56">
+                <SelectValue placeholder="Município p/ Ambiente Nacional" />
+              </SelectTrigger>
+              <SelectContent>
+                {municipiosSemNacional.map((m) => (
+                  <SelectItem key={m.ibge} value={m.ibge}>{m.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="cta" onClick={adicionarNacional} disabled={!ibgeNacional} loading={criandoNacional}>
+              Adicionar ao Ambiente Nacional
+            </Button>
+            <Button variant="outline" size="cta" onClick={load} loading={loading}>
+              <RefreshCw />
+              Atualizar
+            </Button>
+          </div>
         }
       />
 
@@ -113,9 +158,7 @@ export default function AdminConectoresPage() {
                       <Plug className="mt-0.5 h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="font-medium">{conector.nome ?? conector.id}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {conector.tipoIntegracao ?? 'manual_assistido'}
-                        </p>
+                        <div className="mt-0.5">{caminhoBadge(conector)}</div>
                       </div>
                     </div>
                   </td>
@@ -159,7 +202,7 @@ export default function AdminConectoresPage() {
                       <div className="min-w-0">
                         <p className="font-medium">{conector.nome ?? conector.id}</p>
                         <p className="text-xs text-muted-foreground">
-                          {conector.municipio ?? 'Geral'} · {conector.uf ?? '-'} · {conector.tipoIntegracao ?? 'manual_assistido'}
+                          {conector.municipio ?? 'Geral'} · {conector.uf ?? '-'} · {conector.provedor === 'nacional' ? 'Ambiente Nacional' : 'Prefeitura'}
                         </p>
                       </div>
                     </div>
