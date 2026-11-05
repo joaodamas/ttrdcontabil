@@ -82,3 +82,56 @@ for (const m of xsd.matchAll(/<xs:simpleType name="(\w+)">([\s\S]*?)<\/xs:simple
   if (opcoes.length) enumeracoes[m[1]] = opcoes
 }
 grava('enumeracoes-dps.json', enumeracoes)
+
+// Anexo I: leiaute da DPS (descrição e notas de cada campo), regras de
+// validação com o código de erro e, por código de tributação nacional, onde o
+// ISSQN incide e qual grupo de detalhamento é obrigatório (obra, evento…).
+const I = await baixar(`${BASE}/anexo_i-sefin_adn-dps_nfse-snnfse-v1-01-20260209.xlsx`)
+const caminhoDps = (p, campo) => `${limpa(p).replace(/^.*?DPS\//, '').replace(/\/$/, '')}/${limpa(campo)}`
+grava('leiaute-dps.json', linhas(I, 'LEIAUTE DPS_NFS-e ')
+  .filter((l) => limpa(l[1]).includes('infDPS') && limpa(l[2]))
+  .map((l) => ({
+    caminho: caminhoDps(l[1], l[2]), elemento: limpa(l[3]), tipo: limpa(l[4]), ocorrencia: limpa(l[5]),
+    tamanho: limpa(l[6]), descricao: limpa(l[7]), notas: limpa(l[8]) === '-' ? '' : limpa(l[8]),
+  })))
+grava('regras-dps.json', linhas(I, 'RN DPS_NFS-e')
+  .filter((l) => limpa(l[1]).includes('infDPS') && /^E\d+/.test(limpa(l[7])))
+  .map((l) => ({
+    caminho: caminhoDps(l[1], l[2]), regra: limpa(l[3]), aplicacao: limpa(l[5]), efeito: limpa(l[6]),
+    codigo: limpa(l[7]), mensagem: limpa(l[8]),
+  })))
+const marca = (v) => limpa(v).toUpperCase() === 'X'
+grava('incidencia-servicos.json', linhas(I, 'MUN.INCID_INFO.SERV.')
+  .filter((l) => /^\d{5,6}$/.test(String(l[0])))
+  .map((l) => ({
+    codigo: String(l[0]).padStart(6, '0'),
+    // Local de incidência do ISSQN: estabelecimento do prestador (EP), local da
+    // prestação (LP) ou estabelecimento do tomador (ET).
+    incidencia: [marca(l[2]) && 'EP', marca(l[3]) && 'LP', marca(l[4]) && 'ET'].filter(Boolean),
+    grupoObrigatorio: ['-', ''].includes(limpa(l[6])) ? null : limpa(l[6]),
+  })))
+
+// Classificação tributária do IBS/CBS (CST + cClassTrib): tabela oficial do
+// Comitê Gestor/RFB publicada no portal da Conformidade Fácil (SVRS). Só os
+// códigos marcados para NFS-e.
+const cff = await (await fetch('https://dfe-portal.svrs.rs.gov.br/CFF/ClassificacaoTributaria')).text()
+const ini = cff.indexOf('var dadosOriginais = ')
+if (ini < 0) throw new Error('Tabela cClassTrib não encontrada na página da Conformidade Fácil')
+// O array vem embutido num <script>: corta no colchete que fecha o primeiro.
+let fim = ini + 21
+for (let prof = 0, emTexto = false; fim < cff.length; fim++) {
+  const ch = cff[fim]
+  if (emTexto) { if (ch === '\\') fim++; else if (ch === '"') emTexto = false; continue }
+  if (ch === '"') emTexto = true
+  else if (ch === '[' || ch === '{') prof++
+  else if ((ch === ']' || ch === '}') && --prof === 0) break
+}
+const csts = JSON.parse(cff.slice(ini + 21, fim + 1))
+grava('classificacao-ibscbs.json', csts.flatMap((cst) => cst.ClassificacoesTributarias
+  .filter((c) => c.IndNfse)
+  .map((c) => ({
+    cst: cst.Cst, nomeCst: limpa(cst.NomeCst), cClassTrib: c.CodClassTrib, descricao: limpa(c.NomeClassTrib),
+    reducaoIbs: c.PercRedIbs, reducaoCbs: c.PercRedCbs, tributacaoRegular: c.IndTribRegular,
+    inicioVigencia: c.DthIniVig?.slice(0, 10) ?? null, fimVigencia: c.DthFimVig?.slice(0, 10) ?? null,
+    legislacao: c.TexUrlLegislacao ?? null,
+  }))))

@@ -8,6 +8,10 @@ import municipios from './municipios.json'
 import paises from './paises.json'
 import indicadorOperacao from './indicador-operacao.json'
 import enumeracoes from './enumeracoes-dps.json'
+import leiauteDps from './leiaute-dps.json'
+import regrasDps from './regras-dps.json'
+import incidenciaServicos from './incidencia-servicos.json'
+import classificacaoIbsCbs from './classificacao-ibscbs.json'
 
 export interface OpcaoCatalogo {
   codigo: string
@@ -52,4 +56,68 @@ export function buscarOpcoes(lista: OpcaoCatalogo[], busca: string, limite = 50)
     }
   }
   return resultado
+}
+
+export interface CampoLeiaute {
+  caminho: string
+  elemento: string
+  tipo: string
+  ocorrencia: string
+  tamanho: string
+  descricao: string
+  notas: string
+}
+
+export interface RegraDps {
+  caminho: string
+  regra: string
+  aplicacao: string
+  efeito: string
+  codigo: string
+  mensagem: string
+}
+
+export interface ClassificacaoIbsCbs {
+  cst: string
+  nomeCst: string
+  cClassTrib: string
+  descricao: string
+  reducaoIbs: number
+  reducaoCbs: number
+  tributacaoRegular: boolean
+  inicioVigencia: string | null
+  fimVigencia: string | null
+  legislacao: string | null
+}
+
+export const LEIAUTE_DPS = leiauteDps as CampoLeiaute[]
+export const REGRAS_DPS = regrasDps as RegraDps[]
+export const CLASSIFICACAO_IBSCBS = classificacaoIbsCbs as ClassificacaoIbsCbs[]
+
+/** Descrição oficial do campo (Anexo I). Caminho a partir de infDPS, ex.: 'infDPS/serv/cServ/cNBS'. */
+export const campoLeiaute = (caminho: string) => LEIAUTE_DPS.find((c) => c.caminho === caminho)
+
+/** Regras de rejeição/alerta do campo, com o código de erro da Sefin (Anexo I). */
+export const regrasDoCampo = (caminho: string) => REGRAS_DPS.filter((r) => r.caminho === caminho)
+
+/** Onde o ISSQN incide (EP prestador, LP local da prestação, ET tomador) e grupo obrigatório do serviço. */
+export function incidenciaDoServico(cTribNac: string) {
+  return (incidenciaServicos as { codigo: string; incidencia: string[]; grupoObrigatorio: string | null }[])
+    .find((s) => s.codigo === cTribNac.replace(/\D/g, '').padStart(6, '0'))
+}
+
+/** CST do IBS/CBS que têm ao menos uma classificação válida para NFS-e. */
+export const CST_IBSCBS: OpcaoCatalogo[] = [...new Map(CLASSIFICACAO_IBSCBS.map((c) => [c.cst, c.nomeCst]))]
+  .map(([codigo, nome]) => ({ codigo, rotulo: codigo, descricao: nome }))
+
+/** cClassTrib vigentes na data (AAAA-MM-DD), opcionalmente de um CST. */
+export function classificacoesIbsCbs(data: string, cst?: string): OpcaoCatalogo[] {
+  return CLASSIFICACAO_IBSCBS
+    .filter((c) => (!cst || c.cst === cst)
+      && (!c.inicioVigencia || c.inicioVigencia <= data) && (!c.fimVigencia || c.fimVigencia >= data))
+    .map((c) => ({
+      codigo: c.cClassTrib,
+      rotulo: c.cClassTrib,
+      descricao: `${c.descricao}${c.reducaoIbs || c.reducaoCbs ? ` (redução IBS ${c.reducaoIbs}% / CBS ${c.reducaoCbs}%)` : ''}`,
+    }))
 }

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { MUNICIPIOS, NBS, SERVICOS_NACIONAIS, buscarOpcoes, opcoesDoTipo, INDICADOR_OPERACAO, PAISES } from '@/lib/nfse-dominios'
+import {
+  MUNICIPIOS, NBS, SERVICOS_NACIONAIS, buscarOpcoes, opcoesDoTipo, INDICADOR_OPERACAO, PAISES,
+  campoLeiaute, regrasDoCampo, incidenciaDoServico, CST_IBSCBS, classificacoesIbsCbs,
+} from '@/lib/nfse-dominios'
 
 describe('catálogo oficial da NFS-e Nacional', () => {
   it('traz as listas dos anexos oficiais', () => {
@@ -26,4 +29,22 @@ describe('catálogo oficial da NFS-e Nacional', () => {
     expect(opcoesDoTipo('TSTribISSQN').map((o) => o.descricao)).toEqual(['Operação tributável', 'Imunidade', 'Exportação de serviço', 'Não Incidência'])
     expect(opcoesDoTipo('TSRegEspTrib').find((o) => o.codigo === '6')?.descricao).toBe('Sociedade de Profissionais')
   })
+
+  it('traz descrição e regras de rejeição de cada campo (Anexo I)', () => {
+    expect(campoLeiaute('infDPS/serv/cServ/cNBS')?.ocorrencia).toBe('0-1')
+    expect(regrasDoCampo('infDPS/serv/cServ/cNBS').map((r) => r.codigo)).toContain('E0316')
+    expect(regrasDoCampo('infDPS/serv/cServ/cTribNac').map((r) => r.codigo)).toContain('E0310')
+  })
+
+  it('diz onde o ISS incide e o grupo obrigatório por serviço', () => {
+    expect(incidenciaDoServico('01.02.01')).toMatchObject({ incidencia: ['EP'], grupoObrigatorio: null })
+    expect(incidenciaDoServico('070201')).toMatchObject({ incidencia: ['LP'], grupoObrigatorio: 'obra' })
+  })
+
+  it('lista CST e cClassTrib do IBS/CBS válidos para NFS-e', () => {
+    expect(CST_IBSCBS.map((c) => c.codigo)).toContain('000')
+    const integrais = classificacoesIbsCbs('2026-11-05', '000').map((c) => c.codigo)
+    expect(integrais).toContain('000001')
+  })
 })
+
