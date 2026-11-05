@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest'
 
 import {
   AmbienteProibidoError,
+  BASES_POR_AMBIENTE,
   BASES_SEFIN,
+  TP_AMB,
+  assertUrlDoAmbiente,
+  assertXmlDoAmbiente,
+  montarUrlDoAmbiente,
   BASE_ADN,
   assertUrlProducaoRestrita,
   assertXmlHomologacao,
@@ -12,7 +17,7 @@ import {
   extrairMensagens,
   formatarMensagem,
   montarUrl,
-} from '../../scripts/poc-nfse-nacional/lib/ambiente'
+} from '../../functions/src/nfse/nacional/ambiente'
 
 describe('trava de produção restrita', () => {
   it.each([
@@ -76,5 +81,51 @@ describe('mensagens de erro da Sefin', () => {
     expect(formatarMensagem(um.erros[0])).toBe('[E1235] Falha no esquema — linha 1')
     expect(extrairMensagens({ alertas: [{ mensagem: 'aviso' }] }).alertas[0].descricao).toBe('aviso')
     expect(extrairMensagens(null)).toEqual({ erros: [], alertas: [] })
+  })
+})
+
+describe('trava por ambiente (plataforma)', () => {
+  it('homologação só alcança a produção restrita', () => {
+    expect(assertUrlDoAmbiente(`${BASES_POR_AMBIENTE.homologacao.sefin}/nfse`, 'homologacao').hostname).toBe('sefin.producaorestrita.nfse.gov.br')
+    expect(() => assertUrlDoAmbiente('https://sefin.nfse.gov.br/SefinNacional/nfse', 'homologacao')).toThrow(/PRODUÇÃO/)
+    expect(() => assertUrlDoAmbiente('https://adn.nfse.gov.br/parametrizacao/1/convenio', 'homologacao')).toThrow(AmbienteProibidoError)
+  })
+
+  it('produção só alcança os hosts oficiais de produção', () => {
+    expect(BASES_POR_AMBIENTE.producao.sefin).toBe('https://sefin.nfse.gov.br/SefinNacional')
+    expect(assertUrlDoAmbiente(`${BASES_POR_AMBIENTE.producao.adn}/parametrizacao/3505708/convenio`, 'producao').hostname).toBe('adn.nfse.gov.br')
+    expect(() => assertUrlDoAmbiente(`${BASES_POR_AMBIENTE.homologacao.sefin}/nfse`, 'producao')).toThrow(/PRODUÇÃO RESTRITA/)
+  })
+
+  it.each(['homologacao', 'producao'] as const)('%s recusa host estranho, http, porta e credencial', (amb) => {
+    for (const url of [
+      'https://example.com/nfse',
+      'https://sefin.nfse.gov.br.evil.com/x',
+      'http://sefin.nfse.gov.br/x',
+      'http://sefin.producaorestrita.nfse.gov.br/x',
+      'https://sefin.nfse.gov.br:8443/x',
+      'https://u:p@adn.nfse.gov.br/x',
+    ]) {
+      expect(() => assertUrlDoAmbiente(url, amb)).toThrow(AmbienteProibidoError)
+    }
+  })
+
+  it('ambiente desconhecido falha fechado', () => {
+    expect(() => assertUrlDoAmbiente(`${BASES_POR_AMBIENTE.producao.sefin}/nfse`, 'teste' as 'producao')).toThrow(/desconhecido/)
+    expect(() => assertXmlDoAmbiente('<tpAmb>1</tpAmb>', undefined as unknown as 'producao')).toThrow(/desconhecido/)
+  })
+
+  it('montarUrlDoAmbiente codifica segmentos', () => {
+    expect(montarUrlDoAmbiente('producao', BASES_POR_AMBIENTE.producao.sefin, 'dps', 'DPS1/2').href).toBe(
+      'https://sefin.nfse.gov.br/SefinNacional/dps/DPS1%2F2',
+    )
+  })
+
+  it('tpAmb do XML precisa bater com o ambiente', () => {
+    expect(TP_AMB).toEqual({ producao: '1', homologacao: '2' })
+    expect(() => assertXmlDoAmbiente('<a><tpAmb>1</tpAmb></a>', 'producao')).not.toThrow()
+    expect(() => assertXmlDoAmbiente('<a><tpAmb>2</tpAmb></a>', 'producao')).toThrow(/tpAmb/)
+    expect(() => assertXmlDoAmbiente('<a><tpAmb>1</tpAmb></a>', 'homologacao')).toThrow(/tpAmb/)
+    expect(() => assertXmlDoAmbiente('<a></a>', 'producao')).toThrow(/sem <tpAmb>/)
   })
 })

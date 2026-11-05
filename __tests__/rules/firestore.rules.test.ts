@@ -770,6 +770,32 @@ describeIfEmulator('firestore.rules', () => {
     }))
   })
 
+  it('dps_sequencias: contador da DPS nacional e intocavel pelo navegador (nem admin)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'dps_sequencias/11222333000181_2_1'), {
+        tenantId: 'tenant-a',
+        cnpj: '11222333000181',
+        tpAmb: '2',
+        serie: '1',
+        ultimoNumero: 7,
+      })
+    })
+    for (const uid of ['admin-a', 'fiscal-a', 'operacional-a']) {
+      await assertFails(getDoc(doc(dbAs(uid), 'dps_sequencias/11222333000181_2_1')))
+      await assertFails(updateDoc(doc(dbAs(uid), 'dps_sequencias/11222333000181_2_1'), { ultimoNumero: 1 }))
+      await assertFails(setDoc(doc(dbAs(uid), 'dps_sequencias/novo'), { tenantId: 'tenant-a', ultimoNumero: 0 }))
+      await assertFails(deleteDoc(doc(dbAs(uid), 'dps_sequencias/11222333000181_2_1')))
+    }
+  })
+
+  it('clientes_fiscal: fiscal grava o provedor nacional e os campos declarativos dele', async () => {
+    await assertSucceeds(updateDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed'), {
+      provedorNfse: 'nacional',
+      codigoTributacaoNacional: '171901',
+      serieDps: '1',
+    }))
+  })
+
   // ─── P0-B: as quatro colecoes que rodavam sem regra (negadas por padrao) ────
 
   it('clientes_pop: le quem ve o cliente; escreve operacional/fiscal/financeiro, nunca leitura', async () => {

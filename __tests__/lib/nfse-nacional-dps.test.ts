@@ -16,7 +16,7 @@ import {
   montarPedidoCancelamentoXml,
   validarDadosNota,
   type DadosNota,
-} from '../../scripts/poc-nfse-nacional/lib/dps'
+} from '../../functions/src/nfse/nacional/dps'
 import { assinarXml, extrairChaveDoPfx } from '../../functions/src/nfse/xml/signer'
 
 const SCHEMAS = path.resolve(__dirname, '../../scripts/poc-nfse-nacional/schemas')
@@ -77,6 +77,18 @@ describe('montarDpsXml', () => {
     expect(xml).not.toMatch(/<tpAmb>1<\/tpAmb>/)
     expect(xml).not.toMatch(/<\w+:/) // E1228: prefixo proibido
     expect(xml).toContain('<tpEmit>1</tpEmit><finNFSe>0</finNFSe><cLocEmi>3525904</cLocEmi>')
+  })
+
+  it('tpAmb segue o ambiente: produção = 1, homologação/omitido = 2, desconhecido = erro', () => {
+    expect(montarDpsXml(nota(), { dhEmi: DH, ambiente: 'producao' }).xml).toContain('<tpAmb>1</tpAmb>')
+    expect(montarDpsXml(nota(), { dhEmi: DH, ambiente: 'homologacao' }).xml).toContain('<tpAmb>2</tpAmb>')
+    expect(() => montarDpsXml(nota(), { dhEmi: DH, ambiente: 'teste' as 'producao' })).toThrow(/Ambiente desconhecido/)
+    const chave = '35259042211222333000181000000000000126110000000001'
+    const ev = montarPedidoCancelamentoXml(
+      { chaveAcesso: chave, autorCpfCnpj: '11222333000181', codigoMotivo: 9, motivo: 'Cancelamento em producao' },
+      { dhEvento: DH, ambiente: 'producao' },
+    )
+    expect(ev.xml).toContain('<tpAmb>1</tpAmb>')
   })
 
   it('prestador emitente vai sem nome/endereço; tomador escapado; xDescServ por último', () => {

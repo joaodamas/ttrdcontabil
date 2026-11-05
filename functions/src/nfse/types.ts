@@ -67,10 +67,24 @@ export interface ConfigFiscalCliente {
   naturezaOperacao?: string
   ambienteEmissao: 'producao' | 'homologacao'
   producaoLiberada?: boolean
-  // 'municipio' = conector direto por IBGE (único caminho ativo). 'spedy' só
-  // aparece em configs antigas: a conta foi encerrada e o roteador devolve
-  // PROVEDOR_DESCONTINUADO (municipios/router.ts).
-  provedorNfse?: 'municipio' | 'spedy'
+  // Provedor de emissão (ver provedor.ts → resolverProvedorNfse):
+  // - 'nacional' (PADRÃO, inclusive para config sem o campo): API pública da
+  //   Sefin Nacional/ADN com o A1 do próprio prestador (provedores/nacional.ts);
+  // - 'municipio' (legado): conector direto do webservice da prefeitura por IBGE;
+  // - 'spedy': só em configs antigas — conta encerrada, o roteador devolve
+  //   PROVEDOR_DESCONTINUADO (municipios/router.ts).
+  provedorNfse?: ProvedorNfse
+  // ── Só para o Ambiente Nacional ──
+  // cTribNac (6 dígitos) explícito. Sem ele, deriva do itemListaServico
+  // (LC 116 "17.19" → "171901") — ver nacional/mapeamento.ts.
+  codigoTributacaoNacional?: string
+  // cTribMun (3 dígitos): desdobro municipal, só onde a prefeitura exige (E0312).
+  codigoTributacaoMunicipal?: string
+  // Série da DPS (1 a 5 dígitos, padrão "1"). Numeração em dps_sequencias.
+  serieDps?: string
+  // Percentual aproximado dos tributos do Simples (pTotTribSN) para ME/EPP.
+  // Sem ele, usa aliquotaPadrao (ver mapeamento.ts — premissa a confirmar).
+  aliquotaSimplesNacional?: number
   // Opt-in explícito por cliente: quando true, o cron diário
   // (processarNfseRecorrenteDiaria) emite a NFS-e recorrente sem revisão
   // humana, no dia configurado em clientes.diaEmissaoNFSe. Default false —
@@ -80,6 +94,8 @@ export interface ConfigFiscalCliente {
   // Credenciais por municipio (salvas em Firestore — campo credenciais)
   credenciais?: CredenciaisConector
 }
+
+export type ProvedorNfse = 'municipio' | 'nacional' | 'spedy'
 
 // ─── Credenciais (varia por provedor) ────────────────────────────────────────
 export interface CredenciaisConector {
@@ -206,7 +222,11 @@ export interface EmitirNfseInput {
 export interface ResultadoEmissao {
   sucesso: boolean
   numeroNfse?: string
+  // Ambiente Nacional: recebe a chave de acesso (50 posições) — é ela que
+  // consulta/cancela a nota; também vai em `chaveAcesso`.
   codigoVerificacao?: string
+  chaveAcesso?: string
+  idDps?: string
   xmlNfse?: string
   pdfUrl?: string
   erro?: string
@@ -233,6 +253,7 @@ export interface ResultadoOperacaoNfse {
   mensagem?: string
   numeroNfse?: string
   codigoVerificacao?: string
+  chaveAcesso?: string
   xmlNfse?: string
   pdfUrl?: string
   erro?: string

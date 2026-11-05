@@ -3,12 +3,16 @@
  */
 import * as admin from 'firebase-admin'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
-import { FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp, type Transaction } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { rotearEmissao } from './municipios/router'
 import { encrypt, decrypt, isEncrypted } from './encrypt'
 import { credentialSecrets } from './secrets'
 import { isProducaoLiberadaPorConfigOuConector } from './conectores'
+import { resolverProvedorNfse } from './provedor'
+import {
+  COLECAO_SEQUENCIAS_DPS, idSequenciaDps, normalizarSerieDps, podeReusarDps, proximoNumeroDps,
+} from './nacional/numeracao'
 import { assertCaminhoCertificado, pfxBase64FromStorageBuffer } from './certificado'
 import { assertCanAccessCliente } from '../authz'
 import { validarPayloadFiscal } from './validacao'
@@ -151,17 +155,65 @@ export interface OpcoesEmissao {
   extrasNotaEmitida?: Record<string, unknown>
 }
 
+/**
+ * Contexto da numeração nacional (DPS): só existe quando o provedor efetivo é o
+ * Ambiente Nacional. Lido ANTES da transação do rascunho porque a chave do
+ * contador depende do CNPJ do prestador, do ambiente e da série.
+ */
+async function contextoNumeracaoNacional(clienteId: string) {
+  // Config ausente: segue o caminho de sempre — enviarEmissao falha com
+  // not-found e destrava o rascunho com o erro registrado.
+  const config = await getConfigFiscal(clienteId).catch(() => null)
+  if (!config || resolverProvedorNfse(config) !== 'nacional') return null
+  if (config.ambienteEmissao !== 'producao' && config.ambienteEmissao !== 'homologacao') {
+    throw new HttpsError('failed-precondition', 'Ambiente fiscal inválido na configuração do cliente.')
+  }
+  const cliente = await getCliente(clienteId)
+  const cnpj = String(cliente.cpfCnpj ?? '').replace(/\D/g, '')
+  const tpAmb: '1' | '2' = config.ambienteEmissao === 'producao' ? '1' : '2'
+  let serie: string
+  let idSequencia: string
+  try {
+    serie = normalizarSerieDps(config.serieDps)
+    idSequencia = idSequenciaDps(cnpj, tpAmb, serie)
+  } catch (err) {
+    throw new HttpsError('failed-precondition', err instanceof Error ? err.message : String(err))
+  }
+  return { cnpj, tpAmb, serie, ref: db().collection(COLECAO_SEQUENCIAS_DPS).doc(idSequencia), tenantId: config.tenantId ?? null }
+}
+
+type ContextoNumeracaoNacional = NonNullable<Awaited<ReturnType<typeof contextoNumeracaoNacional>>>
+
+/** Incrementa o contador da DPS dentro da transação recebida (leitura antes de qualquer escrita). */
+async function alocarNumeroDps(tx: Transaction, ctx: ContextoNumeracaoNacional): Promise<string> {
+  const seq = await tx.get(ctx.ref)
+  const numero = proximoNumeroDps(seq.data()?.ultimoNumero)
+  tx.set(ctx.ref, {
+    cnpj: ctx.cnpj,
+    tpAmb: ctx.tpAmb,
+    serie: ctx.serie,
+    tenantId: ctx.tenantId,
+    ultimoNumero: numero,
+    atualizadoEm: Timestamp.now(),
+  }, { merge: true })
+  return String(numero)
+}
+
 export async function processarEmissao(input: EmitirNfseInput, uid: string, opcoes: OpcoesEmissao = {}) {
   const actor: AuditActor = { id: uid, nome: 'Usuário autenticado' }
 
-  // ─── RPS: aloca (ou reusa) e PERSISTE antes de enviar à prefeitura ───────────
+  // ─── RPS/DPS: aloca (ou reusa) e PERSISTE antes de enviar ────────────────────
   // O número/série usados nesta emissão são fixados aqui — não mais deixados para
   // o conector decidir "no meio do caminho". Isso garante que, em caso de timeout
-  // pós-envio, o RPS efetivamente consumido na prefeitura fique registrado local-
-  // mente (rascunho) e possa ser REUSADO pelo retry, em vez de gerar um RPS novo
-  // e arriscar nota duplicada/perdida.
-  let numeroRps = input.numeroRps
-  let serieRps  = input.serieRps
+  // pós-envio, o número efetivamente consumido fique registrado localmente
+  // (rascunho) e possa ser REUSADO pelo retry, em vez de gerar um novo e
+  // arriscar nota duplicada/perdida.
+  // Ambiente Nacional: nDPS sequencial por prestador + ambiente + série
+  // (dps_sequencias, mesma transação do rascunho). Prefeitura (legado): RPS
+  // derivado de Date.now(), como antes.
+  const nacional = await contextoNumeracaoNacional(input.clienteId)
+  let numeroRps = nacional ? undefined : input.numeroRps
+  let serieRps  = nacional ? undefined : input.serieRps
 
   if (input.rascunhoId) {
     const rascunhoRef = db().collection('nfse_rascunhos').doc(input.rascunhoId)
@@ -173,14 +225,38 @@ export async function processarEmissao(input: EmitirNfseInput, uid: string, opco
       if (status === 'emitida') throw new HttpsError('already-exists', 'Este rascunho já foi emitido.')
       if (status === 'processando') throw new HttpsError('already-exists', 'Este rascunho já está em processamento.')
 
-      // Reusa o RPS já persistido no rascunho (retry) ou recebido no input;
-      // só aloca um novo se nenhum dos dois existir ainda. Trunca para os
-      // últimos 8 dígitos do timestamp — mesmo formato que os conectores de
-      // São Paulo/Barueri já usam para o campo NumeroRPS (limite do schema
-      // municipal); os demais conectores aceitam números mais curtos sem problema.
       const dadosExistentes = (rascunhoData.dados ?? {}) as Record<string, unknown>
-      const numero = numeroRps ?? (dadosExistentes.numeroRps as string | undefined) ?? String(Date.now()).slice(-8)
-      const serie  = serieRps  ?? (dadosExistentes.serieRps as string | undefined)  ?? 'RPS'
+      let numero: string
+      let serie: string
+      const extras: Record<string, unknown> = {}
+
+      if (nacional) {
+        // Reusa só DPS nacional do mesmo ambiente (retry); RPS municipal antigo
+        // ou de outro ambiente ganha número novo do contador.
+        const existente = {
+          numero: dadosExistentes.numeroRps,
+          serie: dadosExistentes.serieRps,
+          provedor: dadosExistentes.provedorRps,
+          tpAmb: dadosExistentes.tpAmbRps,
+        }
+        if (podeReusarDps(existente, { tpAmb: nacional.tpAmb })) {
+          numero = existente.numero as string
+          serie = existente.serie as string
+        } else {
+          serie = nacional.serie
+          numero = await alocarNumeroDps(tx, nacional)
+        }
+        extras['dados.provedorRps'] = 'nacional'
+        extras['dados.tpAmbRps'] = nacional.tpAmb
+      } else {
+        // Reusa o RPS já persistido no rascunho (retry) ou recebido no input;
+        // só aloca um novo se nenhum dos dois existir ainda. Trunca para os
+        // últimos 8 dígitos do timestamp — mesmo formato que os conectores de
+        // São Paulo/Barueri já usam para o campo NumeroRPS (limite do schema
+        // municipal); os demais conectores aceitam números mais curtos sem problema.
+        numero = numeroRps ?? (dadosExistentes.numeroRps as string | undefined) ?? String(Date.now()).slice(-8)
+        serie  = serieRps  ?? (dadosExistentes.serieRps as string | undefined)  ?? 'RPS'
+      }
 
       tx.update(rascunhoRef, {
         status: 'processando',
@@ -190,12 +266,17 @@ export async function processarEmissao(input: EmitirNfseInput, uid: string, opco
         atualizadoPorId: uid,
         'dados.numeroRps': numero,
         'dados.serieRps': serie,
+        ...extras,
       })
 
       return { numero, serie }
     })
     numeroRps = rps.numero
     serieRps  = rps.serie
+  } else if (nacional) {
+    // Sem rascunho não há onde reusar: sempre um número novo do contador.
+    numeroRps = await db().runTransaction((tx) => alocarNumeroDps(tx, nacional))
+    serieRps  = nacional.serie
   } else {
     numeroRps = numeroRps ?? String(Date.now()).slice(-8)
     serieRps  = serieRps  ?? 'RPS'
@@ -299,6 +380,9 @@ async function enviarEmissao(
       issRetido:         input.servico.issRetido,
       numeroNfse:        resultado.numeroNfse ?? null,
       codigoVerificacao: resultado.codigoVerificacao ?? null,
+      chaveAcesso:       resultado.chaveAcesso ?? null,
+      idDps:             resultado.idDps ?? null,
+      provedorNfse:      resolverProvedorNfse(config),
       numeroRps:         numeroRps ?? null,
       serieRps:          serieRps ?? null,
       xmlNfse:           resultado.xmlNfse ?? null,
