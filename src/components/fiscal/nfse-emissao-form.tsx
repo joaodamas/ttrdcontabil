@@ -216,6 +216,8 @@ interface NfseEmissaoFormProps {
   onCancel?: () => void
   onFinished?: () => void | Promise<void>
   onStepChange?: (step: number) => void
+  /** Avisa quando o formulário passa a ter dados digitados (para confirmar antes de descartar). */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 const cardClassByLayout: Record<'page' | 'modal', string> = {
@@ -230,6 +232,7 @@ export function NfseEmissaoForm({
   onCancel,
   onFinished,
   onStepChange,
+  onDirtyChange,
 }: NfseEmissaoFormProps = {}) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -277,7 +280,7 @@ export function NfseEmissaoForm({
     watch,
     setValue,
     reset,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<NfseFormData>({
     resolver: zodResolver(nfseSchema),
     defaultValues: { issRetido: false, clienteId: clienteIdParam || undefined },
@@ -821,6 +824,7 @@ export function NfseEmissaoForm({
     && previewValor
   )
   const isModal = layout === 'modal'
+  useEffect(() => { onDirtyChange?.(isDirty) }, [isDirty, onDirtyChange])
 
   function handleShowResume() { setShowResume(true) }
   function handleBackFromResume() { setShowResume(false) }

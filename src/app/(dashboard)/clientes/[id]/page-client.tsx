@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO, defaultsDaConfigFiscal } from '@/components/fiscal/config-fiscal-form'
+import { exigeCertificadoA1, nomeMunicipio } from '@/lib/nfse-dominios'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
 import { useAuth } from '@/contexts/auth-context'
@@ -614,7 +615,7 @@ export default function ClienteDetailPage() {
     if (lancAtrasado) list.push({ id: 'lanc-atrasado', titulo: 'Cobrança em atraso', descricao: `Lançamento vencido: ${(lancAtrasado.descricao as string) ?? 'sem descrição'}.`, severidade: 'danger', href: '/financeiro' })
     if (!semFiscal && !fiscal) list.push({ id: 'fiscal-config', titulo: 'Configuração fiscal pendente', descricao: 'Cliente sem configuração NFS-e.', severidade: 'warning' })
     const certVencimento = fiscalCredenciais.certVencimento as string | undefined
-    if (fiscal && !certVencimento && (fiscalTipo === 'abrasf_a1' || fiscalTipo === 'geisweb_a1')) list.push({ id: 'cert-ausente', titulo: 'Certificado A1 ausente', descricao: 'Envie o certificado para liberar integração fiscal A1.', severidade: 'warning' })
+    if (fiscal && !certVencimento && exigeCertificadoA1(fiscal.provedorNfse, fiscalTipo)) list.push({ id: 'cert-ausente', titulo: 'Certificado A1 ausente', descricao: 'Envie o certificado A1 do cliente: sem ele a NFS-e não é emitida.', severidade: 'warning' })
     if (certVencimento) {
       const venc = new Date(certVencimento)
       const em30Dias = new Date(hoje); em30Dias.setDate(hoje.getDate() + 30)
@@ -711,7 +712,7 @@ export default function ClienteDetailPage() {
   const creds      = fiscalCredenciais
   const ibge       = fiscalIbge
   const tipo       = fiscalTipo
-  const municipioNome = MUNICIPIOS.find(m => m.ibge === ibge)?.nome ?? ibge ?? '—'
+  const municipioNome = MUNICIPIOS.find(m => m.ibge === ibge)?.nome ?? nomeMunicipio(ibge) ?? ibge ?? '—'
   const certInfo: CertInfo | null = creds.certTitular
     ? { titular: creds.certTitular as string, vencimento: creds.certVencimento as string, valido: creds.certValido as boolean, storagePath: creds.certificadoStoragePath as string }
     : null
@@ -968,9 +969,14 @@ export default function ClienteDetailPage() {
                         </Badge>
                       )}
                     </div>
-                    <Button size="sm" variant="outline" onClick={() => setConfigOpen(true)}>
-                      <Pencil className="h-3.5 w-3.5" />{fiscal ? 'Editar' : 'Configurar'}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Link href={`/clientes/${id}/tomadores`} className={buttonVariants({ size: 'sm', variant: 'ghost' })}>
+                        Tomadores
+                      </Link>
+                      <Button size="sm" variant="outline" onClick={() => setConfigOpen(true)}>
+                        <Pencil className="h-3.5 w-3.5" />{fiscal ? 'Editar' : 'Configurar'}
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent className="px-4 pb-4">
                     {semFiscal
@@ -997,7 +1003,7 @@ export default function ClienteDetailPage() {
                   </CardContent>
                 </Card>
 
-                {fiscal && (tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
+                {fiscal && exigeCertificadoA1(fiscal.provedorNfse, tipo) && (
                   <Card>
                     <CardHeader className="flex flex-row items-center gap-2 py-3 px-4">
                       {certInfo ? certInfo.valido ? <ShieldCheck className="h-4 w-4 text-success" /> : <ShieldAlert className="h-4 w-4 text-destructive" /> : <ShieldOff className="h-4 w-4 text-muted-foreground" />}

@@ -28,6 +28,14 @@
     ],
     "rewrites": [
       {
+        "source": "/clientes/*/tomadores/importar",
+        "destination": "/clientes/placeholder/tomadores/importar.html"
+      },
+      {
+        "source": "/clientes/*/tomadores",
+        "destination": "/clientes/placeholder/tomadores.html"
+      },
+      {
         "source": "/clientes/*/servicos/novo",
         "destination": "/clientes/placeholder/servicos/novo.html"
       },

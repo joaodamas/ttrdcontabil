@@ -15,7 +15,7 @@ type FabAction = {
 const FAB_ACTIONS: FabAction[] = [
   { label: 'Nova tarefa',       href: '/tarefas/nova',         icon: <CheckSquare className="h-4 w-4" />, colorClass: 'bg-primary text-primary-foreground' },
   { label: 'Novo cliente',      href: '/clientes/novo',        icon: <Users className="h-4 w-4" />,       colorClass: 'bg-secondary text-secondary-foreground' },
-  { label: 'Novo lançamento',   href: '/financeiro?novo=1',    icon: <DollarSign className="h-4 w-4" />, colorClass: 'bg-success text-success-foreground' },
+  { label: 'Novo lançamento',   href: '/financeiro/novo',    icon: <DollarSign className="h-4 w-4" />, colorClass: 'bg-success text-success-foreground' },
   { label: 'Emitir NFS-e',      href: '/fiscal?emitir=1',      icon: <FileText className="h-4 w-4" />,   colorClass: 'bg-warning text-warning-foreground' },
 ]
 

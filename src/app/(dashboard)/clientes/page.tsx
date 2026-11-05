@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, Suspense, Fragment } from 'react'
+import { useState, useMemo, useRef, Suspense, Fragment } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
@@ -277,8 +277,29 @@ function ClientesContent() {
   const { filteredClientes, isLoading, isError } = useClientesList({ busca, status })
   const riscoMap = useClientesRisco()
   const mensalidadeDe = useMensalidadeResolver()
-  const [modalClienteId,   setModalClienteId]   = useState<string | null>(null)
+  // Ficha do cliente aberta fica na URL (?cliente=<id>): o Voltar do navegador
+  // fecha a ficha em vez de sair da tela, e o link pode ser compartilhado.
+  const modalClienteId = searchParams.get('cliente')
   const [modalClienteNome, setModalClienteNome] = useState('')
+  const abriuFichaAqui = useRef(false)
+  const abrirCliente = (c: Record<string, unknown>) => {
+    setModalClienteNome((c.razaoSocial as string) ?? '')
+    const p = new URLSearchParams(searchParams.toString())
+    p.set('cliente', c.id as string)
+    abriuFichaAqui.current = true
+    router.push(`/clientes?${p.toString()}`, { scroll: false })
+  }
+  const fecharCliente = () => {
+    if (abriuFichaAqui.current) {
+      abriuFichaAqui.current = false
+      router.back()
+      return
+    }
+    const p = new URLSearchParams(searchParams.toString())
+    p.delete('cliente')
+    const q = p.toString()
+    router.replace(q ? `/clientes?${q}` : '/clientes', { scroll: false })
+  }
   const [filterSheetOpen,  setFilterSheetOpen]  = useState(false)
 
   const clientesFiltrados = regime
@@ -478,7 +499,7 @@ function ClientesContent() {
                 <Fragment key={c.id as string}>
                 <tr
                   className="group cursor-pointer transition-colors hover:bg-muted/35 hidden sm:table-row"
-                  onClick={() => { setModalClienteId(c.id as string); setModalClienteNome((c.razaoSocial as string) ?? '') }}
+                  onClick={() => abrirCliente(c)}
                 >
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2.5">
@@ -537,7 +558,7 @@ function ClientesContent() {
                   <td className="px-3 py-2">
                     <DropdownMenu>
                       <DropdownMenuTrigger
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-opacity hover:bg-muted focus-visible:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
                         onClick={e => e.stopPropagation()}
                       >
                         <MoreHorizontal className="h-4 w-4" />
@@ -563,7 +584,7 @@ function ClientesContent() {
                     </DropdownMenu>
                   </td>
                 </tr>
-                <tr className="sm:hidden">
+                <tr className="sm:hidden cursor-pointer active:bg-muted/40" onClick={() => abrirCliente(c)}>
                   <td colSpan={9} className="px-3 py-2 sm:hidden">
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/10">
@@ -595,7 +616,7 @@ function ClientesContent() {
                       )}
                       <button
                         className="text-xs text-primary shrink-0 font-medium"
-                        onClick={() => { setModalClienteId(c.id as string); setModalClienteNome((c.razaoSocial as string) ?? '') }}
+                        onClick={() => abrirCliente(c)}
                       >
                         Abrir
                       </button>
@@ -613,9 +634,9 @@ function ClientesContent() {
       {modalClienteId && (
         <ClienteModal
           clienteId={modalClienteId}
-          clienteNome={modalClienteNome}
+          clienteNome={modalClienteNome || ((filteredClientes.find((x) => x.id === modalClienteId)?.razaoSocial as string | undefined) ?? '')}
           open={!!modalClienteId}
-          onOpenChange={(v) => { if (!v) setModalClienteId(null) }}
+          onOpenChange={(v) => { if (!v) fecharCliente() }}
         />
       )}
     </div>

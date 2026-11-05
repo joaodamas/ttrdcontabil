@@ -30,7 +30,9 @@ export function ClientesFiltros({
       else params.delete(key)
       params.delete('page')
       startTransition(() => {
-        router.push(`/clientes?${params.toString()}`)
+        // Digitar na busca não empilha uma entrada de histórico por termo.
+        if (key === 'busca') router.replace(`/clientes?${params.toString()}`)
+        else router.push(`/clientes?${params.toString()}`)
       })
     },
     [router, searchParams]

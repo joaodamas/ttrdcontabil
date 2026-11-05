@@ -22,6 +22,7 @@ import {
   Briefcase, CalendarDays, Receipt, Settings, AlertTriangle, Users, IdCard,
 } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO, defaultsDaConfigFiscal } from '@/components/fiscal/config-fiscal-form'
+import { exigeCertificadoA1, nomeMunicipio } from '@/lib/nfse-dominios'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
 import { ClienteServicoDialog } from '@/components/clientes/cliente-servico-dialog'
@@ -412,7 +413,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                       const creds      = (fiscal?.credenciais ?? {}) as Record<string, unknown>
                       const ibge       = fiscal?.municipioIbge as string | undefined
                       const tipo       = ibge ? MUNICIPIO_TIPO[ibge] : undefined
-                      const municipioNome = MUNICIPIOS.find(m => m.ibge === ibge)?.nome ?? ibge ?? '—'
+                      const municipioNome = MUNICIPIOS.find(m => m.ibge === ibge)?.nome ?? nomeMunicipio(ibge) ?? ibge ?? '—'
                       const certInfo: CertInfo | null = creds.certTitular
                         ? { titular: creds.certTitular as string, vencimento: creds.certVencimento as string, valido: creds.certValido as boolean, storagePath: creds.certificadoStoragePath as string }
                         : null
@@ -475,7 +476,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                           </Card>
 
                           {/* Certificado A1 */}
-                          {fiscal && (tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
+                          {fiscal && exigeCertificadoA1(fiscal.provedorNfse, tipo) && (
                             <Card className="border-border/70 shadow-none">
                               <CardHeader className="flex flex-row items-center gap-2 px-4 py-3">
                                 {certInfo
