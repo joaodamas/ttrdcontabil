@@ -24,26 +24,27 @@ import { Lc116Picker } from '@/components/fiscal/lc116-picker'
 import { Switch } from '@/components/ui/switch'
 import { AlertTriangle } from 'lucide-react'
 import { buscarDadosCnpj } from '@/lib/cnpj-lookup'
+import { normalizarIbge } from '@/lib/ibge'
 
 export const MUNICIPIOS = [
   { ibge: '3525904', nome: 'Jundiaí' },
   { ibge: '3509502', nome: 'Campinas' },
-  { ibge: '3508900', nome: 'Cajamar' },
+  { ibge: '3509205', nome: 'Cajamar' },
   { ibge: '3550308', nome: 'São Paulo' },
   { ibge: '3505708', nome: 'Barueri' },
   { ibge: '3547304', nome: 'Santana de Parnaíba' },
-  { ibge: '3552502', nome: 'Taboão da Serra' },
+  { ibge: '3552809', nome: 'Taboão da Serra' },
   { ibge: '3513009', nome: 'Cotia' },
 ]
 
 export const MUNICIPIO_TIPO: Record<string, 'abrasf_a1' | 'geisweb_a1' | 'simpliss' | 'conam' | 'giap'> = {
   '3525904': 'abrasf_a1',
   '3509502': 'abrasf_a1',
-  '3508900': 'abrasf_a1',
+  '3509205': 'abrasf_a1',
   '3550308': 'abrasf_a1',
   '3505708': 'abrasf_a1',
   '3547304': 'simpliss',
-  '3552502': 'conam',
+  '3552809': 'conam',
   '3513009': 'giap',
 }
 
@@ -110,6 +111,8 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       naturezaOperacao: '1',
       provedorNfse:     'municipio',
       ...defaultValues,
+      // Config antiga pode ter o código IBGE errado de Cajamar/Taboão (ver src/lib/ibge.ts).
+      municipioIbge:    normalizarIbge(defaultValues?.municipioIbge as string | undefined) || undefined,
       // Credenciais NUNCA são pré-preenchidas: o que vem de defaultValues.credenciais
       // já está criptografado (formato iv:authTag:ciphertext). Preencher o campo com
       // isso e salvar de novo sem alterar reencripta o ciphertext por cima do

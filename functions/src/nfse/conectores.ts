@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin'
-import type { ConfigFiscalCliente } from './types'
+import { IBGE_LEGADO, normalizarIbge, type ConfigFiscalCliente } from './types'
 
 const db = () => admin.firestore()
 
@@ -12,8 +12,11 @@ export async function isProducaoLiberadaPorConfigOuConector(
   if (config.producaoLiberada === true) return true
   if (!config.municipioIbge) return false
 
+  // Conector e config podem estar com o código antigo ou o corrigido (IBGE_LEGADO).
+  const ibge = normalizarIbge(config.municipioIbge)
+  const legados = Object.keys(IBGE_LEGADO).filter((antigo) => IBGE_LEGADO[antigo] === ibge)
   const snap = await db().collection('fiscal_conectores')
-    .where('municipioIbge', '==', config.municipioIbge)
+    .where('municipioIbge', 'in', [ibge, ...legados])
     .limit(1)
     .get()
 

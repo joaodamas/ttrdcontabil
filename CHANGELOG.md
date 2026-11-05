@@ -13,6 +13,9 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Corrigido — códigos IBGE errados (2026-11-05)
+- **Cajamar estava como 3508900 (que é Caiabu) e Taboão da Serra como 3552502 (que é Suzano)** no formulário fiscal, no roteador de conectores, na prontidão e nos scripts de cadastro. Cliente configurado pelo "Buscar dados do CNPJ" (código certo da Receita) caía em "município sem conector"; escolhido na lista, o XML ia à prefeitura com o código de outro município. Corrigido para 3509205 e 3552809; configs e conectores já gravados com o código antigo são normalizados na leitura (`IBGE_LEGADO` em `functions/src/nfse/types.ts` e `src/lib/ibge.ts`), sem migração de dados. **Exige homologação** em Cajamar e Taboão.
+
 ### Alterado — coerência de UI/UX (2026-11-05, revisão visual de 39 telas)
 - **Cabeçalho único:** todas as telas usam `PageHeader`, com um `<h1>` só e breadcrumbs no lugar dos três estilos de "Voltar". No celular, título e descrição ficam acima das ações e nada vaza para o lado (antes, /hoje e /clientes perdiam o título e cortavam botões).
 - **Botões:** um tamanho de CTA (`size: 'cta'`) para a ação principal e as secundárias; "+ Novo" do topo na cor primária; rótulos em sentence case; ~27 `Link` envolvendo `Button` viraram `Link` com `buttonVariants`.

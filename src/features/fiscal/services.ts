@@ -4,15 +4,16 @@ import { getFunctions, httpsCallable } from 'firebase/functions'
 import { deleteDocument, listDocuments } from '@/lib/firestore-client'
 import { getFirebaseApp } from '@/lib/firebase'
 import type { FiscalReadiness, FiscalReadinessCliente, FiscalSnapshot, NotaFiscalRecord } from './types'
+import { normalizarIbge } from '@/lib/ibge'
 
 const MUNICIPIO_TIPO: Record<string, 'abrasf_a1' | 'geisweb_a1' | 'simpliss' | 'conam' | 'giap'> = {
   '3525904': 'abrasf_a1',
   '3509502': 'abrasf_a1',
-  '3508900': 'abrasf_a1',
+  '3509205': 'abrasf_a1',
   '3550308': 'abrasf_a1',
   '3505708': 'abrasf_a1',
   '3547304': 'simpliss',
-  '3552502': 'conam',
+  '3552809': 'conam',
   '3513009': 'giap',
 }
 
@@ -34,7 +35,7 @@ function getFiscalDocForCliente(
 function getCredenciaisBloqueios(fiscal: Record<string, unknown>) {
   const credenciais = (fiscal.credenciais ?? {}) as Record<string, unknown>
   const municipioIbge = (fiscal.municipioIbge ?? fiscal.codigoMunicipioIbge) as string | undefined
-  const tipo = municipioIbge ? MUNICIPIO_TIPO[municipioIbge] : undefined
+  const tipo = municipioIbge ? MUNICIPIO_TIPO[normalizarIbge(municipioIbge)] : undefined
 
   if (tipo === 'abrasf_a1' || tipo === 'geisweb_a1') {
     if (!hasText(credenciais.certificadoStoragePath) || credenciais.certValido !== true) {

@@ -24,6 +24,26 @@ API pública da Sefin Nacional, com o certificado A1 do próprio cliente.
   validados contra os parâmetros do município (`/parametros_municipais/...`) e a
   DPS é rejeitada se não baterem — consultar antes de enviar.
 
+## Teste real na produção restrita (2026-11-05)
+
+Certificado A1 da **JP PROJECT MANAGER LTDA** (59.360.092/0001-63, Cajamar/SP, Simples).
+
+- **Autenticação com o A1 do prestador: funciona** (mTLS aceito pelo ADN e pela Sefin).
+- **Rota de parâmetros:** a do ADN (`adn.producaorestrita.nfse.gov.br/parametrizacao/{ibge}/convenio`) é a certa; a via Sefin (`/API/SefinNacional/parametros_municipais`) responde 404 HTML.
+- **Convênio por município** (produção restrita — produção pode estar à frente):
+
+  | Município | IBGE | Ambiente Nacional | Emissor Nacional |
+  |---|---|---|---|
+  | Barueri | 3505708 | sim | **sim** |
+  | São Paulo | 3550308 | sim | **sim** |
+  | Campinas | 3509502 | sim | **sim** |
+  | Jundiaí | 3525904 | sim | não (só compartilha dados) |
+  | Cajamar | 3509205 | **convênio não ativo** | não |
+
+- **Envio da DPS (`POST /API/SefinNacional/nfse`): o transporte funciona.** A DPS validada no XSD v1.01, assinada e enviada compactada foi lida e processada pelas regras de negócio, e recusada só por **E0037** ("município emissor inexistente no cadastro de convênio") — esperado para Cajamar. Ou seja: formato JSON, compressão, assinatura e endpoint estão corretos.
+- **Próximo passo:** repetir o `emitir` com o A1 de um cliente de **Barueri, São Paulo ou Campinas** — aí deve sair a NFS-e de teste (chave de acesso), seguida de `consultar` e `cancelar`.
+- **Bug achado no caminho (corrigido):** a plataforma gravava Cajamar como 3508900 (Caiabu) e Taboão da Serra como 3552502 (Suzano). Corretos: 3509205 e 3552809. Configs antigas são normalizadas (`IBGE_LEGADO`).
+
 ## Por que agora
 
 - A conta na Spedy foi encerrada (10/09/2026) e o conector saiu do código

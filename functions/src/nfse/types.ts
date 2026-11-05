@@ -246,10 +246,26 @@ export const IBGE_MAP: Record<string, string> = {
   '3509502': 'Campinas',
   '3525904': 'Jundiaí',
   '3505708': 'Barueri',
-  '3508900': 'Cajamar',
+  '3509205': 'Cajamar',
   '3513009': 'Cotia',
   '3547304': 'Santana de Parnaíba',
-  '3552502': 'Taboão da Serra',
+  '3552809': 'Taboão da Serra',
+}
+
+/**
+ * Códigos IBGE que a plataforma gravou ERRADO até 2026-11-05 (confirmado na API
+ * de localidades do IBGE): 3508900 é Caiabu e 3552502 é Suzano. Configurações
+ * fiscais salvas com eles continuam funcionando — normalizarIbge() converte na
+ * borda, antes de rotear e de montar o XML enviado à prefeitura.
+ */
+export const IBGE_LEGADO: Record<string, string> = {
+  '3508900': '3509205', // gravado como Cajamar (era Caiabu)
+  '3552502': '3552809', // gravado como Taboão da Serra (era Suzano)
+}
+
+export function normalizarIbge(ibge: string | undefined | null): string {
+  const codigo = String(ibge ?? '').trim()
+  return IBGE_LEGADO[codigo] ?? codigo
 }
 
 // ─── Regime tributário → código ABRASF ────────────────────────────────────────

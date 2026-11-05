@@ -74,7 +74,7 @@ npm run poc:nfse -- parametros --ibge 3525904 --cnpj 11222333000181            #
   ICP-Brasil) — ver mensagens `E12xx` abaixo.
 
 IBGE da carteira: Jundiaí 3525904, Campinas 3509502, Cotia 3513009, Barueri
-3505708, Cajamar 3508900, Santana de Parnaíba 3547304, Taboão da Serra 3552502,
+3505708, Cajamar 3509205, Santana de Parnaíba 3547304, Taboão da Serra 3552809,
 São Paulo 3550308.
 
 ### Etapa 2 — emitir uma NFS-e de teste
