@@ -505,7 +505,10 @@ export function montarDpsXml(d: DadosNota, opcoes: OpcoesMontagem): { xml: strin
     el('nDPS', String(d.dps.numero)) +
     el('dCompet', d.dps.competencia) +
     el('tpEmit', '1') +
-    el('finNFSe', '0') + // NT 009: obrigatório; 0 = NFS-e regular
+    // finNFSe só existe no leiaute da NT 009, hoje em vigor apenas na produção
+    // restrita. O XSD de PRODUÇÃO (v1.01-20260209) não tem o campo em infDPS e
+    // recusa a DPS com E1235 — confirmado em 2026-11-05 na primeira emissão real.
+    (tpAmbDoAmbiente(opcoes.ambiente) === TP_AMB_PRODUCAO_RESTRITA ? el('finNFSe', '0') : '') +
     el('cLocEmi', somenteDigitos(p.municipioIbge)) +
     prest +
     toma +

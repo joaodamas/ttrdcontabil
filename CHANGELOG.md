@@ -13,6 +13,9 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Corrigido — DPS recusada na produção com E1235 (2026-11-05)
+- A primeira emissão real falhou: a DPS ia com `finNFSe` direto em `infDPS`, campo do leiaute da NT 009 que só vigora na **produção restrita**. O XSD oficial de **produção** (`v1.01-20260209`) não o tem ali. Agora `finNFSe` só sai com tpAmb=2. A DPS e o pedido de cancelamento de produção foram validados offline contra os schemas oficiais de produção (guardados em `scripts/poc-nfse-nacional/schemas-producao/`). Nenhuma nota foi gerada na tentativa recusada.
+
 ### Alterado — emissão só pelo Ambiente Nacional (2026-11-05, decisão do dono)
 - O escritório não opera conectores de prefeitura: a configuração fiscal não oferece mais "Conector da prefeitura (legado)" e sempre grava `provedorNfse: 'nacional'`. Cliente de município que não aderiu ao Emissor Nacional recebe aviso para emitir no portal da prefeitura, fora da plataforma.
 - `scripts/atualizar-convenios-nfse` convertido para ESM (`.mjs`) — o `.cjs` quebrava o lint (`no-require-imports`).
