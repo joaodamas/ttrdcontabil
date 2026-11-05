@@ -18,6 +18,7 @@ import { assertCanAccessCliente } from '../authz'
 import { validarPayloadFiscal } from './validacao'
 import { writeAuditLog, SYSTEM_ACTOR, type AuditActor } from '../audit'
 import { requireEnvironmentTenant } from '../tenant'
+import { gerarESalvarDanfse } from './danfse/servico'
 import type {
   EmitirNfseInput, ConfigFiscalCliente,
   Prestador, CertificadoA1,
@@ -377,7 +378,7 @@ async function enviarEmissao(
 
   const now = Timestamp.now()
   if (resultado.sucesso) {
-    await db().collection('nfse_emitidas').add({
+    const notaRef = await db().collection('nfse_emitidas').add({
       tenantId:          config.tenantId,
       clienteId:         input.clienteId,
       clienteNome:       cliente.razaoSocial as string,
@@ -442,6 +443,15 @@ async function enviarEmissao(
       },
       origem: 'cloud_function',
     })
+
+    // DANFSe da plataforma (a API do ADN foi sobrestada pela NT 008/2026).
+    // Best-effort: falhar aqui não pode fazer a nota emitida parecer falha —
+    // o usuário ainda gera o PDF depois pelo botão (callable gerarDanfse).
+    if (resultado.xmlNfse && !resultado.pdfUrl) {
+      await gerarESalvarDanfse(notaRef.id).catch((err) => {
+        console.warn('[processarEmissao] DANFSe não gerado após a emissão:', err instanceof Error ? err.message : err)
+      })
+    }
   } else {
     const erro = resultado.erro ?? 'Erro não informado pelo conector.'
     const erroRef = await db().collection('nfse_erros').add({
