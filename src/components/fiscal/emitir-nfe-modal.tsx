@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { AppModal } from '@/components/ui/app-modal'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,6 +20,11 @@ import type { ProdutoRecord } from '@/features/produtos/types'
 import { ProdutoForm } from '@/components/produtos/produto-form'
 
 type Linha = { produto: ProdutoRecord; quantidade: number; valorUnitario: number }
+type Destino = 'internal' | 'interstate'
+
+const CODIGOS_ERRO_AMBIGUOS = new Set(['SPEDY_PROCESSANDO', 'SPEDY_CONSULTA_INDISPONIVEL'])
+
+const subtotalCentavos = (l: Linha) => Math.round(l.quantidade * l.valorUnitario * 100)
 
 interface EmitirNfeModalProps {
   open: boolean
@@ -42,6 +48,13 @@ export function EmitirNfeModal({ open, onOpenChange, clienteId: initialClienteId
   const [tomadorNome, setTomadorNome] = useState('')
   const [tomadorEmail, setTomadorEmail] = useState('')
   const [natureza, setNatureza] = useState('Venda de mercadoria')
+  const [destino, setDestino] = useState<Destino>('internal')
+
+  // Chave de idempotência presa ao conteúdo da nota: retry do MESMO conteúdo
+  // (após erro/timeout) reusa a chave e o backend devolve a nota já criada em
+  // vez de emitir outra; mudou o conteúdo ou houve sucesso, chave nova.
+  const chaveRef = useRef<{ chave: string; assinatura: string } | null>(null)
+  const [confirmando, setConfirmando] = useState(false)
 
   const [emitindo, setEmitindo] = useState(false)
   const [resultado, setResultado] = useState<EmitirNfeResult | null>(null)
@@ -58,6 +71,7 @@ export function EmitirNfeModal({ open, onOpenChange, clienteId: initialClienteId
       setClienteId(initialClienteId ?? '')
       setLinhas([]); setProdutoSel(''); setResultado(null)
       setTomadorCnpj(''); setTomadorNome(''); setTomadorEmail(''); setNatureza('Venda de mercadoria')
+      setDestino('internal')
       setApenasProduto(true)
     }
   }, [open, initialClienteId])
@@ -104,31 +118,48 @@ export function EmitirNfeModal({ open, onOpenChange, clienteId: initialClienteId
     setLinhas((prev) => prev.map((l, idx) => (idx === i ? { ...l, valorUnitario: valor } : l)))
   }
 
-  const total = linhas.reduce((s, l) => s + l.quantidade * l.valorUnitario, 0)
+  // Soma em centavos, arredondando por item — evita o total em float divergir
+  // do que a SEFAZ calcula.
+  const total = linhas.reduce((s, l) => s + subtotalCentavos(l), 0) / 100
 
-  async function emitir() {
+  function pedirConfirmacao() {
     if (!clienteId) { toast.error('Selecione a empresa emissora.'); return }
     if (linhas.length === 0) { toast.error('Adicione ao menos um produto.'); return }
+    if (linhas.some((l) => !(l.valorUnitario > 0))) { toast.error('Todo produto precisa de valor unitário maior que zero.'); return }
     if (!tomadorCnpj.replace(/\D/g, '') || !tomadorNome.trim()) { toast.error('Informe o CNPJ/CPF e o nome do destinatário.'); return }
+    setConfirmando(true)
+  }
 
+  async function emitir() {
+    setConfirmando(false)
     setEmitindo(true); setResultado(null)
     try {
-      const res = await emitirNfeProduto({
+      const conteudo = {
         clienteId,
         naturezaOperacao: natureza || 'Venda de mercadoria',
-        destino: 'internal',
+        destino,
         tomador: {
           cpfCnpj: tomadorCnpj.replace(/\D/g, ''),
           razaoSocial: tomadorNome.trim(),
           email: tomadorEmail.trim() || undefined,
         },
         itens: linhas.map((l) => produtoParaItem(l.produto, l.quantidade, l.valorUnitario)),
-      })
+      }
+      const assinatura = JSON.stringify(conteudo)
+      if (chaveRef.current?.assinatura !== assinatura) {
+        chaveRef.current = { chave: crypto.randomUUID(), assinatura }
+      }
+      const res = await emitirNfeProduto({ ...conteudo, chaveIdempotencia: chaveRef.current.chave })
       setResultado(res)
       if (res.sucesso) {
+        chaveRef.current = null
         toast.success(`NF-e emitida${res.numeroNfse ? ` — nº ${res.numeroNfse}` : ''}!`)
         await onFinished?.()
       } else {
+        // Recusa definitiva: a próxima tentativa precisa de nota nova — reusar a
+        // chave faria a Spedy devolver a mesma nota recusada. Só os erros
+        // ambíguos (ainda processando / consulta fora) mantêm a chave.
+        if (!CODIGOS_ERRO_AMBIGUOS.has(res.codigoErro ?? '')) chaveRef.current = null
         toast.error(res.erro ?? 'A emissão falhou.')
       }
     } catch (err) {
@@ -221,7 +252,7 @@ export function EmitirNfeModal({ open, onOpenChange, clienteId: initialClienteId
                             <Input type="number" step="0.01" min="0" value={l.valorUnitario}
                               onChange={(e) => setValorLinha(i, Number(e.target.value))} className="h-7 w-24 ml-auto text-right font-mono" />
                           </td>
-                          <td className="px-3 py-2 text-right tabular-nums font-medium">{formatCurrency(l.quantidade * l.valorUnitario)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums font-medium">{formatCurrency(subtotalCentavos(l) / 100)}</td>
                           <td className="px-3 py-2 text-right">
                             <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive" onClick={() => removerLinha(i)}>
                               <Trash2 className="w-3.5 h-3.5" />
@@ -247,13 +278,25 @@ export function EmitirNfeModal({ open, onOpenChange, clienteId: initialClienteId
                 <Input type="email" placeholder="E-mail (opcional)" value={tomadorEmail} onChange={(e) => setTomadorEmail(e.target.value)} />
                 <Input placeholder="Natureza da operação" value={natureza} onChange={(e) => setNatureza(e.target.value)} />
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Destino da operação</Label>
+                  <Select value={destino} onValueChange={(v) => setDestino((v as Destino) ?? 'internal')}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="internal">Interna (mesma UF)</SelectItem>
+                      <SelectItem value="interstate">Interestadual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
           )}
 
           {clienteId && (
             <div className="flex items-center justify-between border-t pt-4">
               <div className="text-sm text-muted-foreground">Total: <b className="text-foreground tabular-nums">{formatCurrency(total)}</b></div>
-              <Button onClick={emitir} disabled={emitindo || linhas.length === 0}>
+              <Button onClick={pedirConfirmacao} disabled={emitindo || linhas.length === 0}>
                 {emitindo && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 Emitir NF-e
               </Button>
@@ -277,6 +320,22 @@ export function EmitirNfeModal({ open, onOpenChange, clienteId: initialClienteId
           </Card>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmando}
+        onOpenChange={setConfirmando}
+        title="Confirmar emissão de NF-e?"
+        description={
+          <span>
+            Será emitida uma nota fiscal{' '}
+            {destino === 'interstate' ? 'interestadual' : 'interna'} de{' '}
+            <b>{formatCurrency(total)}</b> para <b>{tomadorNome.trim()}</b>, com {linhas.length}{' '}
+            {linhas.length === 1 ? 'item' : 'itens'}. Em produção, a nota só pode ser desfeita por cancelamento na SEFAZ.
+          </span>
+        }
+        confirmLabel="Emitir NF-e"
+        onConfirm={emitir}
+      />
     </AppModal>
   )
 }

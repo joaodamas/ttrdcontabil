@@ -280,6 +280,8 @@ export interface EmitirProdutoInput {
   tomador: Tomador
   itens: ItemProdutoFiscal[]
   pagamentos?: { metodo: string; valor: number }[]
+  /** Gerada pelo navegador por tentativa; vira integrationId na Spedy. Ver idempotencia.ts. */
+  chaveIdempotencia?: string
 }
 
 // NFC-e (modelo 65) — consumidor final. Tomador é opcional (venda anônima);

@@ -473,6 +473,7 @@ function buildItens(itens: ItemProdutoFiscal[]) {
 
 function buildProductInvoicePayload(input: EmitirProdutoInput, prestador: Prestador) {
   return {
+    integrationId: input.chaveIdempotencia,
     operationType: 'outgoing',
     destination: input.destino ?? 'internal',
     operationNature: input.naturezaOperacao,

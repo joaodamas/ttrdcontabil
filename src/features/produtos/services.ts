@@ -55,6 +55,8 @@ export type EmitirNfeInput = {
   destino?: 'internal' | 'interstate'
   tomador: { cpfCnpj: string; razaoSocial: string; email?: string }
   itens: ItemNfeInput[]
+  /** Uma por tentativa de emissão: retry com a mesma chave não duplica a nota. */
+  chaveIdempotencia: string
 }
 export type EmitirNfeResult = {
   sucesso: boolean; id: string; numeroNfse?: string | null; erro?: string; codigoErro?: string | null

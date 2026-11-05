@@ -655,6 +655,23 @@ describeIfEmulator('firestore.rules', () => {
     await assertSucceeds(updateDoc(doc(dbAs('admin-a'), 'tarefas/tarefa-pendente'), { status: 'concluida' }))
   })
 
+  it('tarefas: fiscal (que tem a tela por padrao) cria e conclui tarefa; leitura nao', async () => {
+    await assertSucceeds(updateDoc(doc(dbAs('fiscal-a'), 'tarefas/tarefa-pendente'), { status: 'em_andamento' }))
+    await assertSucceeds(setDoc(doc(dbAs('fiscal-a'), 'tarefas/tarefa-do-fiscal'), {
+      tenantId: 'tenant-a',
+      titulo: 'Apurar ISS',
+      prioridade: 'normal',
+      status: 'pendente',
+    }))
+    await assertFails(updateDoc(doc(dbAs('leitura-a'), 'tarefas/tarefa-pendente'), { status: 'concluida' }))
+    // Excluir segue restrito a operacional/admin.
+    await assertFails(deleteDoc(doc(dbAs('fiscal-a'), 'tarefas/tarefa-pendente')))
+  })
+
+  it('fechamentos: fiscal edita celula do mes aberto', async () => {
+    await assertSucceeds(updateDoc(doc(dbAs('fiscal-a'), 'fechamentos/fechamento-seed'), { observacao: 'conferido' }))
+  })
+
   it('tarefas: reabrir concluida bloqueada para quem nao e admin nem responsavel', async () => {
     // operacional-telas-financeiro é perfil 'operacional' (isOperacional() == true)
     // mas não é admin nem o responsável ('operacional-a') pela tarefa.
@@ -714,6 +731,21 @@ describeIfEmulator('firestore.rules', () => {
     }))
     await assertFails(updateDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed'), {
       spedyCertificadoEnviadoEm: new Date(),
+    }))
+  })
+
+  it('clientes_fiscal: trava de producao (producaoLiberada) nao e liberada pelo navegador', async () => {
+    await assertFails(updateDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed'), {
+      producaoLiberada: true,
+    }))
+    await assertFails(updateDoc(doc(dbAs('admin-a'), 'clientes_fiscal/cf-seed'), {
+      producaoLiberada: true,
+    }))
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-forjado-prod'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      ambienteEmissao: 'producao',
+      producaoLiberada: true,
     }))
   })
 

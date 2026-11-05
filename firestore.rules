@@ -34,6 +34,11 @@ service cloud.firestore {
     function isOperacional() { return isAtivo() && userDoc().perfil in ['admin', 'operacional']; }
     function isFiscal()      { return isAtivo() && userDoc().perfil in ['admin', 'fiscal']; }
     function isFinanceiro()  { return isAtivo() && userDoc().perfil in ['admin', 'financeiro']; }
+    // Quem toca a rotina contábil: o fiscal também cria/conclui tarefas, edita
+    // competências, IR e células do fechamento — PERFIL_DEFAULT_TELAS dá essas
+    // telas a ele, e sem isto ele as via mas tomava permission-denied ao salvar.
+    // Exclusões continuam com isOperacional()/isAdmin().
+    function isEquipeContabil() { return isAtivo() && userDoc().perfil in ['admin', 'operacional', 'fiscal']; }
     function canRead()       { return isAtivo(); }
 
     // [P1] Espelha canAccessTela() (src/lib/permissions.ts): quando o admin concede
@@ -210,8 +215,11 @@ service cloud.firestore {
     // fiscal em nome da empresa da vítima. O formulário
     // (config-fiscal-form.tsx) nunca grava nenhum destes campos: as credenciais
     // sobem cifradas pela callable salvarCredenciaisFiscais.
+    // `producaoLiberada` é a trava que separa homologação de nota real: se o
+    // fiscal pudesse ligá-la, a liberação por município não valeria nada. Nenhuma
+    // tela grava este campo — a liberação é feita pelo console/Admin SDK.
     function camposFiscalDoServidor() {
-      return ['credenciais', 'spedyCompanyId', 'spedyProvisionadoEm', 'spedyCertificadoEnviadoEm'];
+      return ['credenciais', 'spedyCompanyId', 'spedyProvisionadoEm', 'spedyCertificadoEnviadoEm', 'producaoLiberada'];
     }
 
     // Armadilha: no create não existe resource.data para o diff() comparar. Se só
@@ -391,10 +399,10 @@ service cloud.firestore {
 
     match /competencias/{id} {
       allow read: if canRead() && sameTenantExisting();
-      allow create: if isOperacional() && competenciaPayloadValido() && sameTenantWrite();
+      allow create: if isEquipeContabil() && competenciaPayloadValido() && sameTenantWrite();
       // [MATRIZ DE TRANSIÇÃO] Reabrir concluída/ressuscitar cancelada exige
       // admin (competenciaTransicaoPermitida) — ver auditoria 2026-07-02.
-      allow update: if isOperacional() && competenciaPayloadValido() && sameTenantUpdate()
+      allow update: if isEquipeContabil() && competenciaPayloadValido() && sameTenantUpdate()
         && competenciaTransicaoPermitida();
       allow delete: if isAdmin() && sameTenantExisting();
     }
@@ -403,11 +411,11 @@ service cloud.firestore {
 
     match /tarefas/{id} {
       allow read: if canRead() && sameTenantExisting();
-      // Todos os ativos podem criar e atualizar tarefas (payload validado).
-      allow create: if isOperacional() && tarefaPayloadValido() && sameTenantWrite();
+      // Equipe contábil (admin/operacional/fiscal) cria e atualiza tarefas (payload validado).
+      allow create: if isEquipeContabil() && tarefaPayloadValido() && sameTenantWrite();
       // [MATRIZ DE TRANSIÇÃO] Reabrir concluída/ressuscitar cancelada exige
       // admin ou o responsável atual (tarefaTransicaoPermitida).
-      allow update: if isOperacional() && tarefaPayloadValido() && sameTenantUpdate()
+      allow update: if isEquipeContabil() && tarefaPayloadValido() && sameTenantUpdate()
         && tarefaTransicaoPermitida();
       // [MELHORIA 2] Delete separado: apenas operacional+ pode deletar tarefas.
       allow delete: if isOperacional() && sameTenantExisting();
@@ -415,7 +423,7 @@ service cloud.firestore {
 
     match /tarefas_comentarios/{id} {
       allow read: if canRead() && sameTenantExisting();
-      allow create: if isOperacional() && sameTenantNew();
+      allow create: if isEquipeContabil() && sameTenantNew();
       allow update: if isAdmin() && sameTenantUpdate();
       allow delete: if isAdmin() && sameTenantExisting();
     }
@@ -446,16 +454,16 @@ service cloud.firestore {
       // concedida via override (hasTela) — tela 'ir' em PERFIL_DEFAULT_TELAS não é
       // liberada por padrão para operacional/financeiro/leitura.
       allow read: if canReadIr() && sameTenantExisting();
-      allow create: if isOperacional() && sameTenantWrite();
-      allow update: if isOperacional() && sameTenantUpdate();
+      allow create: if isEquipeContabil() && sameTenantWrite();
+      allow update: if isEquipeContabil() && sameTenantUpdate();
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
     match /ir_checklist/{id} {
       // [P1] Mesma coleção-irmã de ir_declaracoes — mesma gate de leitura.
       allow read: if canReadIr() && sameTenantExisting();
-      allow create: if isOperacional() && sameTenantWrite();
-      allow update: if isOperacional() && sameTenantUpdate();
+      allow create: if isEquipeContabil() && sameTenantWrite();
+      allow update: if isEquipeContabil() && sameTenantUpdate();
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
@@ -487,12 +495,12 @@ service cloud.firestore {
       // a tela 'fechamento' concedida via override (hasTela) — não liberada por
       // padrão para financeiro/leitura.
       allow read: if canReadFechamento() && sameTenantExisting();
-      allow create: if isOperacional() && sameTenantWrite();
+      allow create: if isEquipeContabil() && sameTenantWrite();
       // [P1] Enforcement server-side da trava mensal: espelha o check client-side
       // em updateFechamentoField — nega update se o mês (ano/mes do próprio doc)
       // tiver uma revisão travada em fechamento_revisoes. Reabrir o mês (admin,
       // via fechamento_revisoes.update) libera este update novamente.
-      allow update: if isOperacional() && sameTenantUpdate() && !mesFechamentoTravado();
+      allow update: if isEquipeContabil() && sameTenantUpdate() && !mesFechamentoTravado();
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
