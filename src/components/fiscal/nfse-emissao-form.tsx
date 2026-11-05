@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -60,7 +61,7 @@ const nfseSchema = z.object({
     v => isValidCodigoServico(v),
     { message: 'Formato inválido. Use ex: 1.07 ou 17.19' }
   ),
-  valorServico:     z.number().min(0.01, 'Valor deve ser maior que zero'),
+  valorServico:     z.number({ error: 'Informe o valor do serviço' }).min(0.01, 'Valor deve ser maior que zero'),
   aliquota:         z.number().min(0).max(100).optional().nullable(),
   issRetido:        z.boolean().default(false),
 })
@@ -466,7 +467,7 @@ export function NfseEmissaoForm({
         <CardHeader><CardTitle className="text-sm">Vínculo</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Cliente <span className="text-destructive">*</span></Label>
+            <Label required>Cliente</Label>
             <Controller
               name="clienteId"
               control={control}
@@ -532,14 +533,14 @@ export function NfseEmissaoForm({
         <CardHeader><CardTitle className="text-sm">Dados do Tomador</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="tomadorNome">Nome / Razão Social <span className="text-destructive">*</span></Label>
+            <Label htmlFor="tomadorNome" required>Nome / Razão Social</Label>
             <Input id="tomadorNome" {...register('tomadorNome')} placeholder="Nome completo ou razão social" />
             {errors.tomadorNome && <p className="text-xs text-destructive">{errors.tomadorNome.message}</p>}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="tomadorCpfCnpj">CPF / CNPJ <span className="text-destructive">*</span></Label>
+              <Label htmlFor="tomadorCpfCnpj" required>CPF / CNPJ</Label>
               <Controller
                 name="tomadorCpfCnpj"
                 control={control}
@@ -607,19 +608,19 @@ export function NfseEmissaoForm({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="descricaoServico">Descrição do Serviço <span className="text-destructive">*</span></Label>
+            <Label htmlFor="descricaoServico" required>Descrição do Serviço</Label>
             <Textarea id="descricaoServico" rows={3} {...register('descricaoServico')} placeholder="Descreva o serviço prestado conforme contrato..." />
             {errors.descricaoServico && <p className="text-xs text-destructive">{errors.descricaoServico.message}</p>}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="codigoServico">Código do Serviço (município) <span className="text-destructive">*</span></Label>
+              <Label htmlFor="codigoServico" required>Código do Serviço (município)</Label>
               <Input id="codigoServico" {...register('codigoServico')} placeholder="Ex: 17.19" />
               {errors.codigoServico && <p className="text-xs text-destructive">{errors.codigoServico.message}</p>}
             </div>
             <div className="space-y-1.5">
-              <Label>Item Lista Serviço (LC 116) <span className="text-destructive">*</span></Label>
+              <Label required>Item Lista Serviço (LC 116)</Label>
               <Controller name="itemListaServico" control={control} render={({ field }) => (
                 <Lc116Picker value={field.value} onChange={field.onChange} />
               )} />
@@ -629,8 +630,10 @@ export function NfseEmissaoForm({
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="valorServico">Valor do Serviço (R$) <span className="text-destructive">*</span></Label>
-              <Input id="valorServico" type="number" step="0.01" min="0.01" placeholder="0,00" {...register('valorServico', { valueAsNumber: true })} />
+              <Label htmlFor="valorServico" required>Valor do Serviço (R$)</Label>
+              <Controller name="valorServico" control={control} render={({ field }) => (
+                <CurrencyInput id="valorServico" ref={field.ref} value={field.value} onChange={(v) => field.onChange(v ?? NaN)} onBlur={field.onBlur} />
+              )} />
               {errors.valorServico && <p className="text-xs text-destructive">{errors.valorServico.message}</p>}
             </div>
           </div>

@@ -280,7 +280,7 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
           )}
 
           <div className="space-y-1.5">
-            <Label>Cliente <span className="text-destructive">*</span></Label>
+            <Label required>Cliente</Label>
             <Controller
               name="clienteId"
               control={control}
@@ -301,7 +301,7 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
           </div>
 
           <div className="space-y-1.5">
-            <Label>Serviço <span className="text-destructive">*</span></Label>
+            <Label required>Serviço</Label>
             <Controller
               name="clienteServicoId"
               control={control}
@@ -336,7 +336,7 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>Mês <span className="text-destructive">*</span></Label>
+              <Label required>Mês</Label>
               <Controller
                 name="mes"
                 control={control}
@@ -354,7 +354,7 @@ export function CompetenciaForm({ initialData, onSuccess, onClose }: Competencia
             </div>
 
             <div className="space-y-1.5">
-              <Label>Ano <span className="text-destructive">*</span></Label>
+              <Label required>Ano</Label>
               <Controller
                 name="ano"
                 control={control}

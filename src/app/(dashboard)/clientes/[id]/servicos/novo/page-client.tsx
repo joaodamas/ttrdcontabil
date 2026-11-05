@@ -38,7 +38,7 @@ export default function Page() {
         setClienteNome(((cliente as Record<string, unknown> | null)?.razaoSocial as string | undefined) ?? undefined)
       })
       .catch((err) => {
-        const message = getErrorMessage(err, 'Nao foi possivel carregar os servicos cadastrados.')
+        const message = getErrorMessage(err, 'Não foi possível carregar os serviços cadastrados.')
         setError(message)
         toast.error(message)
       })

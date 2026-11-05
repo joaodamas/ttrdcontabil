@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -146,24 +147,24 @@ export function ProdutoForm({ clienteId, produto, onSaved }: ProdutoFormProps) {
             <p className="section-label">Identificação</p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="codigo">Código <span className="text-destructive">*</span></Label>
+                <Label htmlFor="codigo" required>Código</Label>
                 <Input id="codigo" {...register('codigo')} placeholder="Ex: P001" className="font-mono" />
                 {errors.codigo && <p className="text-xs text-destructive">{errors.codigo.message}</p>}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="unidade">Unidade <span className="text-destructive">*</span></Label>
+                <Label htmlFor="unidade" required>Unidade</Label>
                 <Input id="unidade" {...register('unidade')} placeholder="UN" className="uppercase" />
                 {errors.unidade && <p className="text-xs text-destructive">{errors.unidade.message}</p>}
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="descricao">Descrição <span className="text-destructive">*</span></Label>
+              <Label htmlFor="descricao" required>Descrição</Label>
               <Input id="descricao" {...register('descricao')} placeholder="Descrição do produto" />
               {errors.descricao && <p className="text-xs text-destructive">{errors.descricao.message}</p>}
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="ncm">NCM <span className="text-destructive">*</span></Label>
+                <Label htmlFor="ncm" required>NCM</Label>
                 <Input id="ncm" {...register('ncm')} placeholder="00000000" className="font-mono" />
                 {errors.ncm && <p className="text-xs text-destructive">{errors.ncm.message}</p>}
               </div>
@@ -193,8 +194,9 @@ export function ProdutoForm({ clienteId, produto, onSaved }: ProdutoFormProps) {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="valorUnitario">Valor unitário padrão (R$)</Label>
-              <Input id="valorUnitario" type="number" step="0.01" min="0" placeholder="0,00"
-                {...register('valorUnitario', { setValueAs: asNum })} />
+              <Controller name="valorUnitario" control={control} render={({ field }) => (
+                <CurrencyInput id="valorUnitario" ref={field.ref} value={field.value} onChange={field.onChange} onBlur={field.onBlur} />
+              )} />
             </div>
           </div>
 

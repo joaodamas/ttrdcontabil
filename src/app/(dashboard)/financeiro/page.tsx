@@ -222,14 +222,14 @@ function FinanceiroContent() {
         }
       }),
       [
-        { key: 'descricao', label: 'Descricao' },
+        { key: 'descricao', label: 'Descrição' },
         { key: 'cliente', label: 'Cliente' },
         { key: 'tipo', label: 'Tipo' },
         { key: 'status', label: 'Status' },
         { key: 'valor', label: 'Valor' },
         { key: 'vencimento', label: 'Vencimento' },
         { key: 'pagamento', label: 'Pagamento' },
-        { key: 'competencia', label: 'Competencia' },
+        { key: 'competencia', label: 'Competência' },
       ]
     )
   }

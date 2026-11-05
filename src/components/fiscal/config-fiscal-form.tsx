@@ -191,7 +191,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       onOpenChange(false)
       onSaved?.()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Nao foi possivel salvar a configuracao fiscal. Verifique permissao, municipio e credenciais.'))
+      toast.error(getErrorMessage(err, 'Não foi possível salvar a configuração fiscal. Verifique permissão, município e credenciais.'))
     } finally {
       setSaving(false)
     }
@@ -278,7 +278,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
           {/* Município + Ambiente */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Município de Emissão *</Label>
+              <Label required>Município de Emissão</Label>
               <Controller name="municipioIbge" control={control} render={({ field }) => (
                 <Select value={field.value ?? ''} onValueChange={field.onChange}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
@@ -293,7 +293,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
             </div>
 
             <div className="space-y-1.5">
-              <Label>Ambiente *</Label>
+              <Label required>Ambiente</Label>
               <Controller name="ambienteEmissao" control={control} render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -309,7 +309,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
           {/* Inscrições */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Inscrição Municipal *</Label>
+              <Label required>Inscrição Municipal</Label>
               <Input {...register('inscricaoMunicipal')} placeholder="Ex: 123456" />
               {errors.inscricaoMunicipal && <p className="text-xs text-destructive">{errors.inscricaoMunicipal.message}</p>}
             </div>
@@ -322,7 +322,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
           {/* Regime + Simples */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Regime Tributário *</Label>
+              <Label required>Regime Tributário</Label>
               <Controller name="regimeTributario" control={control} render={({ field }) => (
                 <Select value={field.value ?? ''} onValueChange={field.onChange}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
@@ -338,7 +338,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
               {errors.regimeTributario && <p className="text-xs text-destructive">{errors.regimeTributario.message}</p>}
             </div>
             <div className="space-y-1.5">
-              <Label>Optante Simples *</Label>
+              <Label required>Optante Simples</Label>
               <Controller name="optanteSimples" control={control} render={({ field }) => (
                 <Select value={field.value ? 'sim' : 'nao'} onValueChange={v => field.onChange(v === 'sim')}>
                   <SelectTrigger><SelectValue /></SelectTrigger>

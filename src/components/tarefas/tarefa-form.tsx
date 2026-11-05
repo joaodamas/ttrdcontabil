@@ -157,7 +157,7 @@ export function TarefaForm({ initialData, onSuccess, onClose }: TarefaFormProps)
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="titulo">Título <span className="text-destructive">*</span></Label>
+            <Label htmlFor="titulo" required>Título</Label>
             <Input id="titulo" {...register('titulo')} placeholder="Descreva brevemente a tarefa" />
             {errors.titulo && <p className="text-xs text-destructive">{errors.titulo.message}</p>}
           </div>

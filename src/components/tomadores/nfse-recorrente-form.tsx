@@ -7,6 +7,7 @@ import { Loader2, Repeat } from 'lucide-react'
 import { AppModal } from '@/components/ui/app-modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
@@ -268,14 +269,10 @@ export function NfseRecorrenteForm({
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="contrato-valor" required>Valor (R$)</Label>
-            <Input
+            <CurrencyInput
               id="contrato-valor"
-              type="number"
-              step="0.01"
-              min="0.01"
-              value={campos.valor}
-              onChange={(e) => set('valor', e.target.value)}
-              placeholder="0,00"
+              value={numeroOuNulo(campos.valor)}
+              onChange={(v) => set('valor', v == null ? '' : String(v))}
             />
           </div>
 

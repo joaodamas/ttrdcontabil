@@ -44,7 +44,7 @@ function getCredenciaisBloqueios(fiscal: Record<string, unknown>) {
   if (tipo === 'simpliss' && !hasText(credenciais.simplissToken)) return ['token Simpliss ausente']
   if (tipo === 'conam') {
     const missing = []
-    if (!hasText(credenciais.conamCodigoUsuario)) missing.push('usuario Conam ausente')
+    if (!hasText(credenciais.conamCodigoUsuario)) missing.push('usuário Conam ausente')
     if (!hasText(credenciais.conamCodigoContribuinte)) missing.push('contribuinte Conam ausente')
     return missing
   }
@@ -160,24 +160,24 @@ export async function fetchFiscalReadiness(): Promise<FiscalReadiness> {
       const bloqueiosEmissao: string[] = []
       const diaEmissao = cliente.diaEmissaoNFSe
 
-      if (servicosAtivos === 0) bloqueiosRascunho.push('sem servico ativo')
-      if (!hasPositiveNumber(diaEmissao)) bloqueiosRascunho.push('dia de emissao NFS-e ausente')
+      if (servicosAtivos === 0) bloqueiosRascunho.push('sem serviço ativo')
+      if (!hasPositiveNumber(diaEmissao)) bloqueiosRascunho.push('dia de emissão NFS-e ausente')
 
       if (!fiscal) {
-        bloqueiosRascunho.push('sem configuracao fiscal')
-        bloqueiosEmissao.push('sem configuracao fiscal')
+        bloqueiosRascunho.push('sem configuração fiscal')
+        bloqueiosEmissao.push('sem configuração fiscal')
       } else {
         const municipioIbge = fiscal.municipioIbge ?? fiscal.codigoMunicipioIbge
-        if (!hasText(municipioIbge)) bloqueiosRascunho.push('municipio emissor ausente')
-        if (!hasText(fiscal.inscricaoMunicipal)) bloqueiosRascunho.push('inscricao municipal ausente')
-        if (!hasText(fiscal.regimeTributario)) bloqueiosRascunho.push('regime tributario ausente')
-        if (!hasText(fiscal.codigoServicoPadrao)) bloqueiosRascunho.push('codigo de servico padrao ausente')
-        if (!hasText(fiscal.itemListaServico)) bloqueiosRascunho.push('item da lista de servico ausente')
-        if (!hasText(fiscal.descricaoServicoPadrao)) bloqueiosRascunho.push('descricao padrao da NFS-e ausente')
-        if (!hasPositiveNumber(fiscal.aliquotaPadrao)) bloqueiosRascunho.push('aliquota padrao ausente')
+        if (!hasText(municipioIbge)) bloqueiosRascunho.push('município emissor ausente')
+        if (!hasText(fiscal.inscricaoMunicipal)) bloqueiosRascunho.push('inscrição municipal ausente')
+        if (!hasText(fiscal.regimeTributario)) bloqueiosRascunho.push('regime tributário ausente')
+        if (!hasText(fiscal.codigoServicoPadrao)) bloqueiosRascunho.push('código de serviço padrão ausente')
+        if (!hasText(fiscal.itemListaServico)) bloqueiosRascunho.push('item da lista de serviço ausente')
+        if (!hasText(fiscal.descricaoServicoPadrao)) bloqueiosRascunho.push('descrição padrão da NFS-e ausente')
+        if (!hasPositiveNumber(fiscal.aliquotaPadrao)) bloqueiosRascunho.push('alíquota padrão ausente')
         bloqueiosEmissao.push(...getCredenciaisBloqueios(fiscal))
         if (fiscal.ambienteEmissao === 'producao' && fiscal.producaoLiberada !== true) {
-          bloqueiosEmissao.push('municipio nao liberado para producao')
+          bloqueiosEmissao.push('município não liberado para produção')
         }
       }
 
