@@ -290,6 +290,49 @@ describe('DPS com os campos da emissão completa (endereço, NBS, local, inf. co
   })
 })
 
+describe('IBS/CBS (CST, cClassTrib e indicador de operação)', () => {
+  const config: ConfigFiscalCliente = {
+    clienteId: 'c1', municipioEmissor: 'São Paulo', municipioIbge: '3550308', inscricaoMunicipal: '123456',
+    regimeTributario: 'lucro_presumido', optanteSimples: false, incentivadorCultural: false,
+    itemListaServico: '17.19', aliquotaPadrao: 5, ambienteEmissao: 'producao',
+    ibsCbsCst: '000', ibsCbsClassTrib: '000001', ibsCbsIndOp: '100301',
+  }
+  const entrada = (servico: Partial<EmitirNfseInput['servico']> = {}): EmitirNfseInput => ({
+    clienteId: 'c1',
+    tomador: { cpfCnpj: '11444777000161', razaoSocial: 'Tomador Ltda' },
+    servico: { discriminacao: 'Consultoria contábil mensal', codigoServico: '1719', itemListaServico: '17.19', valorServico: 1000, issRetido: false, ...servico },
+  })
+  const prestador = { cnpj: '11222333000181', inscricaoMunicipal: '123456', razaoSocial: 'Prestador', municipioIbge: '3550308' }
+  const ident = { serie: '1', numero: '7', competencia: '2026-10-01' }
+
+  it('usa o padrão do cliente e a nota tem precedência campo a campo', () => {
+    expect(montarDadosNotaNacional(entrada(), config, prestador, ident).ibscbs)
+      .toEqual({ cIndOp: '100301', indDest: 0, cst: '000', cClassTrib: '000001' })
+    expect(montarDadosNotaNacional(entrada({ ibsCbsCst: '200', ibsCbsClassTrib: '200001' }), config, prestador, ident).ibscbs)
+      .toMatchObject({ cst: '200', cClassTrib: '200001', cIndOp: '100301' })
+  })
+
+  it('sem nada preenchido não manda o grupo; parcial ou classificação de outro CST é recusado', () => {
+    const semPadrao = { ...config, ibsCbsCst: undefined, ibsCbsClassTrib: undefined, ibsCbsIndOp: undefined }
+    expect(montarDadosNotaNacional(entrada(), semPadrao, prestador, ident).ibscbs).toBeUndefined()
+    expect(() => montarDadosNotaNacional(entrada({ ibsCbsCst: '000' }), semPadrao, prestador, ident)).toThrow(/os três/)
+    expect(() => montarDadosNotaNacional(entrada({ ibsCbsClassTrib: '200001' }), config, prestador, ident)).toThrow(/não pertence ao CST 000/)
+  })
+
+  it('produção: finNFSe dentro de IBSCBS e CST/cClassTrib em gIBSCBS', () => {
+    const { xml } = montarDpsXml(montarDadosNotaNacional(entrada(), config, prestador, ident), { dhEmi: DH, ambiente: 'producao' })
+    expect(xml).toContain('<IBSCBS><finNFSe>0</finNFSe><cIndOp>100301</cIndOp><indDest>0</indDest><valores><trib><gIBSCBS><CST>000</CST><cClassTrib>000001</cClassTrib></gIBSCBS></trib></valores></IBSCBS>')
+  })
+
+  it.skipIf(!TEM_XMLLINT)('passa no XSD de PRODUÇÃO e no da produção restrita', () => {
+    const dados = montarDadosNotaNacional(entrada(), config, prestador, ident)
+    const prod = validarXsdProducao(montarDpsXml(dados, { dhEmi: DH, ambiente: 'producao' }).xml)
+    expect(prod.saida).toContain('validates')
+    const hom = validarXsd(montarDpsXml(dados, { dhEmi: DH, ambiente: 'homologacao' }).xml, 'DPS_v1.01.xsd')
+    expect(hom.saida).toContain('validates')
+  })
+})
+
 describe('pedido de cancelamento (e101101)', () => {
   const chave = '35259042211222333000181000000000000126110000000001'
 

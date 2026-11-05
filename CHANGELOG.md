@@ -13,6 +13,14 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Adicionado — listas suspensas oficiais e IBS/CBS na emissão (2026-11-05)
+- **Códigos viram listas suspensas com busca** (catálogo oficial em `src/lib/nfse-dominios`): na emissão, código de tributação nacional, NBS (só os 918 códigos emitíveis de 9 dígitos), local da prestação e município do tomador (preenche nome e UF); na configuração fiscal, município de emissão (os 5.570 do IBGE, não mais 8 cidades fixas, com aviso quando o município não emite pelo Ambiente Nacional), código de tributação nacional e NBS padrão.
+- **IBS/CBS**: CST, classificação tributária (cClassTrib, filtrada pelo CST e pela vigência) e indicador de operação (cIndOp), com padrão por cliente na configuração fiscal e troca por nota; gravados em `nfse_emitidas`, rascunhos, cópia de nota e modelo — **Exige homologação**. Os três juntos ou nenhum; classificação de outro CST é recusada antes do envio.
+- `indicador-operacao.json`: descrições das linhas que vinham vazias (células mescladas no Anexo C).
+
+### Corrigido — grupo IBS/CBS no leiaute de produção (2026-11-05)
+- **Exige homologação.** O montador da DPS gerava o IBS/CBS só no leiaute da produção restrita (NT 009: CST/cClassTrib direto em `valores/trib`, `finNFSe` em `infDPS`). Na produção (XSD v1.01-20260209) o grupo leva `finNFSe` dentro de `IBSCBS` e CST/cClassTrib em `valores/trib/gIBSCBS` — a nota seria recusada com E1235. Agora a forma depende do ambiente; testes validam os dois XSDs.
+
 ### Adicionado — copiar de nota anterior, modelo padrão e campos que faltavam na emissão (2026-11-05)
 - **Copiar de nota anterior** (Emitir NFS-e, depois de escolher o cliente): mostra a última nota ("nº X — competência MM/AAAA — tomador — valor") com **Usar esta nota como base**, **Escolher outra do histórico** (últimas 20 de `nfse_emitidas`, por `dataEmissao`) e **Usar modelo padrão do cliente**. Copia tomador (nome, CPF/CNPJ, e-mail, endereço), serviço (descrição, item LC 116, código municipal, cTribNac, NBS), local da prestação, valor, alíquota, ISS retido e informações complementares; lê os campos gravados e, nas notas antigas, completa pelo XML oficial. **Não** copia número, data, competência nem valores calculados. Tudo fica editável, com o aviso "Dados copiados da NFS-e nº X — confira competência, valor e descrição".
 - **Salvar como modelo padrão**: grava `clientes_fiscal.modeloNfse` (tomador com endereço, serviço, NBS, local, valor, alíquota, ISS retido, descrição com variáveis, informações complementares). Campo declarativo — as regras já permitiam; teste de regras novo.

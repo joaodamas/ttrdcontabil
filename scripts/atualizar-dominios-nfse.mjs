@@ -66,9 +66,14 @@ grava('nbs.json', linhas(b, 'LISTA.NBS_v2.0')
   .map((l) => ({ codigo: limpa(l[0]), descricao: limpa(l[1]) })))
 
 const c = await baixar(ANEXOS.C)
+// Células mescladas: a descrição da operação só vem na primeira linha do grupo.
+let descricaoAnterior = ''
 grava('indicador-operacao.json', linhas(c, 'IndOp')
   .filter((l) => /^\d{6}$/.test(String(l[6])))
-  .map((l) => ({ codigo: String(l[6]), descricao: limpa(l[3]) || limpa(l[1]), local: limpa(l[7]) })))
+  .map((l) => {
+    descricaoAnterior = limpa(l[3]) || limpa(l[1]) || descricaoAnterior
+    return { codigo: String(l[6]), descricao: descricaoAnterior, local: limpa(l[7]) }
+  }))
 
 // Listas fechadas do XSD de produção (enumerations com a documentação oficial).
 const xsd = fs.readFileSync(path.join(raiz, 'scripts/poc-nfse-nacional/schemas-producao/tiposSimples_v1.01.xsd'), 'utf8')

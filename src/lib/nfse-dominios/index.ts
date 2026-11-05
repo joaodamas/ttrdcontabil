@@ -24,7 +24,9 @@ const normalizar = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, 
 export const SERVICOS_NACIONAIS: OpcaoCatalogo[] = (servicosNacionais as { codigo: string; rotulo: string; descricao: string }[])
   .map((s) => ({ codigo: s.codigo, rotulo: s.rotulo, descricao: s.descricao }))
 
+// Só os códigos de 9 dígitos são emitíveis; os mais curtos são títulos de grupo (E0316).
 export const NBS: OpcaoCatalogo[] = (nbs as { codigo: string; descricao: string }[])
+  .filter((n) => n.codigo.replace(/\D/g, '').length === 9)
   .map((n) => ({ codigo: n.codigo, rotulo: n.codigo, descricao: n.descricao }))
 
 export const MUNICIPIOS: OpcaoCatalogo[] = (municipios as { ibge: string; nome: string; uf: string }[])

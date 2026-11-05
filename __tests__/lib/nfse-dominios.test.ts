@@ -7,7 +7,8 @@ import {
 describe('catálogo oficial da NFS-e Nacional', () => {
   it('traz as listas dos anexos oficiais', () => {
     expect(SERVICOS_NACIONAIS.length).toBeGreaterThan(300)
-    expect(NBS.length).toBeGreaterThan(1000)
+    expect(NBS.length).toBeGreaterThan(900)
+    expect(NBS.every((n) => n.codigo.replace(/\D/g, '').length === 9)).toBe(true)
     expect(MUNICIPIOS.length).toBe(5570)
     expect(PAISES.length).toBeGreaterThan(200)
     expect(INDICADOR_OPERACAO.length).toBeGreaterThan(20)

@@ -494,15 +494,21 @@ export function montarDpsXml(d: DadosNota, opcoes: OpcoesMontagem): { xml: strin
     ]),
   ])
 
-  // NT 009: CST e cClassTrib ficam direto em valores/trib (gIBSCBS só para
-  // crédito presumido / regular / diferimento, que este PoC não cobre).
+  // Leiautes diferentes por ambiente:
+  //  - PRODUÇÃO (v1.01-20260209): finNFSe dentro de IBSCBS e CST/cClassTrib em
+  //    valores/trib/gIBSCBS;
+  //  - produção restrita (NT 009): finNFSe fica em infDPS e CST/cClassTrib vão
+  //    direto em valores/trib.
   const g = d.ibscbs
   const ibscbs = g
     ? grupo('IBSCBS', [
+        producao ? el('finNFSe', '0') : null,
         opt('indFinal', g.indFinal),
         el('cIndOp', g.cIndOp),
         el('indDest', g.indDest),
-        grupo('valores', [grupo('trib', [el('CST', g.cst), el('cClassTrib', g.cClassTrib)])]),
+        grupo('valores', [grupo('trib', producao
+          ? [grupo('gIBSCBS', [el('CST', g.cst), el('cClassTrib', g.cClassTrib)])]
+          : [el('CST', g.cst), el('cClassTrib', g.cClassTrib)])]),
       ])
     : ''
 

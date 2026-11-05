@@ -29,13 +29,16 @@ export function CatalogoPicker({
 }: CatalogoPickerProps) {
   const [open, setOpen] = useState(false)
   const [busca, setBusca] = useState('')
-  const selecionado = value ? opcoes.find((o) => o.codigo === value) : undefined
+  // Valores antigos podem vir sem pontuação (ex.: NBS '115011000' copiado do XML).
+  const digitos = (v: string) => v.replace(/[^0-9A-Za-z]/g, '')
+  const selecionado = value ? opcoes.find((o) => o.codigo === value || digitos(o.codigo) === digitos(value)) : undefined
   const resultado = useMemo(() => buscarOpcoes(opcoes, busca, 80), [opcoes, busca])
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         disabled={disabled}
+        title={selecionado ? `${selecionado.rotulo} — ${selecionado.descricao}` : undefined}
         className={cn(
           'flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none',
           'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50',
@@ -61,7 +64,7 @@ export function CatalogoPicker({
               )}
               {resultado.map((o) => (
                 <CommandItem key={o.codigo} value={o.codigo} onSelect={() => { onChange(o.codigo); setOpen(false) }} className="items-start">
-                  <Check className={cn('mt-0.5 size-3.5 shrink-0', o.codigo === value ? 'opacity-100' : 'opacity-0')} />
+                  <Check className={cn('mt-0.5 size-3.5 shrink-0', o.codigo === selecionado?.codigo ? 'opacity-100' : 'opacity-0')} />
                   <span className="min-w-0">
                     <span className="block font-mono text-xs font-semibold">{o.rotulo}</span>
                     <span className="block text-xs leading-snug text-muted-foreground">{o.descricao}</span>
