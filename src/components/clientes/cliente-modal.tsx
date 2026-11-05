@@ -19,13 +19,14 @@ import { EmptyState } from '@/components/ui/empty-state'
 import {
   Mail, MapPin, Phone, DollarSign, Pencil,
   ShieldCheck, ShieldAlert, ShieldOff, ExternalLink,
-  Briefcase, CalendarDays, Receipt, Settings, AlertTriangle, Users,
+  Briefcase, CalendarDays, Receipt, Settings, AlertTriangle, Users, IdCard,
 } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO, defaultsDaConfigFiscal } from '@/components/fiscal/config-fiscal-form'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
 import { ClienteServicoDialog } from '@/components/clientes/cliente-servico-dialog'
 import { clientesKeys } from '@/features/clientes/queries'
+import { ClienteFichaCompleta } from '@/components/clientes/cliente-ficha-completa'
 
 const TAB_CONTENT_CLASS = 'mt-3 min-h-0 max-h-[calc(100dvh-19rem)] overflow-y-auto overscroll-contain md:max-h-[430px]'
 const MODAL_TAB_TRIGGER_CLASS = 'h-9 min-w-0 justify-center gap-1.5 rounded-lg px-2 text-xs'
@@ -243,10 +244,14 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                 </dl>
               </div>
 
-              {/* 4 tabs */}
+              {/* Abas — a ficha completa abre primeiro: é o que se procura ao clicar no cliente */}
               <div className="min-h-0 px-5 py-4">
-                <Tabs defaultValue="servicos" className="min-h-0">
-                  <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl bg-muted/70 p-1 md:h-10 md:grid-cols-4">
+                <Tabs defaultValue="cadastro" className="min-h-0">
+                  <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl bg-muted/70 p-1 md:h-10 md:grid-cols-5">
+                    <TabsTrigger value="cadastro" className={MODAL_TAB_TRIGGER_CLASS}>
+                      <IdCard className="h-3.5 w-3.5" />
+                      <span>Cadastro</span>
+                    </TabsTrigger>
                     <TabsTrigger value="servicos" className={MODAL_TAB_TRIGGER_CLASS}>
                       <Briefcase className="h-3.5 w-3.5" />
                       <span>Serviços</span>
@@ -268,6 +273,11 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                       <TabCount count={nfses.length} />
                     </TabsTrigger>
                   </TabsList>
+
+                  {/* ── Cadastro (ficha completa) ───────────────── */}
+                  <TabsContent value="cadastro" className={TAB_CONTENT_CLASS}>
+                    {cliente && clienteId ? <ClienteFichaCompleta cliente={cliente} clienteId={clienteId} /> : null}
+                  </TabsContent>
 
                   {/* ── Serviços ─────────────────────────────────── */}
                   <TabsContent value="servicos" className={TAB_CONTENT_CLASS}>

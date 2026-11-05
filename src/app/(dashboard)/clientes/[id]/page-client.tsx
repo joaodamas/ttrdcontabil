@@ -36,6 +36,7 @@ import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
 import { useAuth } from '@/contexts/auth-context'
 import { canAccessTela } from '@/lib/permissions'
 import { getPathSegmentAfter } from '@/lib/route-params'
+import { ClienteFichaCompleta } from '@/components/clientes/cliente-ficha-completa'
 
 const REGIME_LABELS: Record<string, string> = {
   simples_nacional: 'Simples Nacional',
@@ -140,15 +141,7 @@ type SecaoCliente =
   | 'cliente' | 'servicos' | 'competencias' | 'lancamentos' | 'tarefas'
   | 'rascunhos' | 'fiscal' | 'pop' | 'comentarios' | 'popNotas'
 
-function fieldValue(data: Record<string, unknown>, key: string) {
-  const value = data[key]
-  return typeof value === 'string' && value.trim() ? value : '—'
-}
 
-function passwordValue(data: Record<string, unknown>, key: string) {
-  const value = data[key]
-  return typeof value === 'string' && value.trim() ? '********' : '—'
-}
 
 function printableValue(data: Record<string, unknown>, key: string) {
   const value = data[key]
@@ -322,22 +315,6 @@ function exportFichaCadastralPdf(cliente: Record<string, unknown>) {
   printWindow.document.close()
 }
 
-function DataList({ data, fields, sensitive = false }: {
-  data: Record<string, unknown>
-  fields: readonly (readonly [string, string])[]
-  sensitive?: boolean
-}) {
-  return (
-    <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-      {fields.map(([key, label]) => (
-        <div key={key} className="min-w-0">
-          <dt className="text-xs text-muted-foreground">{label}</dt>
-          <dd className="mt-0.5 truncate font-medium">{sensitive ? passwordValue(data, key) : fieldValue(data, key)}</dd>
-        </div>
-      ))}
-    </dl>
-  )
-}
 
 export default function ClienteDetailPage() {
   const pathname = usePathname()
@@ -796,9 +773,9 @@ export default function ClienteDetailPage() {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_300px] items-start">
 
         {/* ── Left: Tabs ──────────────────────────────────── */}
-        <Tabs defaultValue="atividade">
+        <Tabs defaultValue="cadastro">
           <TabsList className="w-full justify-start border-b rounded-none bg-transparent h-auto p-0 mb-4 gap-1">
-            {(['atividade','cadastro','competencias','servicos'] as const).map(tab => (
+            {(['cadastro','atividade','competencias','servicos'] as const).map(tab => (
               <TabsTrigger
                 key={tab}
                 value={tab}
@@ -867,42 +844,13 @@ export default function ClienteDetailPage() {
 
           {/* Cadastro */}
           <TabsContent value="cadastro" className="space-y-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
-                <CardTitle className="text-sm">Dados cadastrais da empresa</CardTitle>
-                <Button size="sm" variant="outline" onClick={() => exportFichaCadastralPdf(cliente)}>
-                  <FileDown className="h-3.5 w-3.5" />
-                  Exportar PDF
-                </Button>
-              </CardHeader>
-              <CardContent className="px-4 pb-4 space-y-5">
-                <DataList data={cliente} fields={EMPRESA_CADASTRO_FIELDS} />
-                <div>
-                  <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Credenciais da empresa</h3>
-                  <DataList data={cliente} fields={EMPRESA_CREDENCIAIS_FIELDS} sensitive />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="py-3 px-4">
-                <CardTitle className="text-sm">Dados do representante</CardTitle>
-              </CardHeader>
-              <CardContent className="px-4 pb-4 space-y-5">
-                <DataList data={cliente} fields={REPRESENTANTE_FIELDS} />
-                <DataList data={cliente} fields={REPRESENTANTE_ENDERECO_FIELDS} />
-                <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-                  <div className="min-w-0">
-                    <dt className="text-xs text-muted-foreground">Cidade / UF</dt>
-                    <dd className="mt-0.5 truncate font-medium">{[cliente.responsavelCidade, cliente.responsavelUf].filter(Boolean).join(' / ') || '—'}</dd>
-                  </div>
-                </dl>
-                <div>
-                  <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Credenciais do representante</h3>
-                  <DataList data={cliente} fields={REPRESENTANTE_CREDENCIAIS_FIELDS} sensitive />
-                </div>
-              </CardContent>
-            </Card>
+            <div className="flex justify-end">
+              <Button size="sm" variant="outline" onClick={() => exportFichaCadastralPdf(cliente)}>
+                <FileDown className="h-3.5 w-3.5" />
+                Exportar PDF
+              </Button>
+            </div>
+            <ClienteFichaCompleta cliente={cliente} clienteId={id} />
           </TabsContent>
 
           {/* Competências */}
