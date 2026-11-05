@@ -447,9 +447,9 @@ describeIfEmulator('firestore.rules', () => {
     await assertSucceeds(updateDoc(doc(db, 'usuarios/operacional-a'), { nome: 'Novo Nome' }))
   })
 
-  it('admin promove usuario do proprio tenant, mas nao de outro', async () => {
+  it('nem admin muda perfil pelo navegador (so pelas Cloud Functions)', async () => {
     const db = dbAs('admin-a')
-    await assertSucceeds(updateDoc(doc(db, 'usuarios/operacional-a'), { perfil: 'fiscal' }))
+    await assertFails(updateDoc(doc(db, 'usuarios/operacional-a'), { perfil: 'fiscal' }))
     await assertFails(updateDoc(doc(db, 'usuarios/operacional-b'), { perfil: 'admin' }))
   })
 
@@ -462,6 +462,7 @@ describeIfEmulator('firestore.rules', () => {
       usuarioId: 'operacional-a',
       acao: 'update',
       entidade: 'clientes',
+      origem: 'client',
     }))
     await assertFails(updateDoc(doc(db, 'logs_auditoria/log-a'), { acao: 'adulterado' }))
     await assertFails(deleteDoc(doc(db, 'logs_auditoria/log-a')))
@@ -502,10 +503,11 @@ describeIfEmulator('firestore.rules', () => {
     }))
   })
 
-  // ─── usuarios/list: permitido p/ usuario ativo (isolamento single-tenant) ────
+  // ─── usuarios/list: só admin (seletores usam usuarios_diretorio) ──────────────
 
-  it('usuarios/list: usuario ativo lista; nao autenticado nao', async () => {
-    await assertSucceeds(getDocs(collection(dbAs('operacional-a'), 'usuarios')))
+  it('usuarios/list: admin lista; demais perfis e nao autenticado nao', async () => {
+    await assertSucceeds(getDocs(collection(dbAs('admin-a'), 'usuarios')))
+    await assertFails(getDocs(collection(dbAs('operacional-a'), 'usuarios')))
     await assertFails(getDocs(collection(testEnv.unauthenticatedContext().firestore(), 'usuarios')))
   })
 
