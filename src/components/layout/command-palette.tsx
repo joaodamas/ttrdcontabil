@@ -55,7 +55,7 @@ const NAV_ITEMS: CommandPaletteItem[] = [
   { label: 'Administração', href: '/admin', icon: Settings, telaKey: 'admin' },
   { label: 'Usuários', href: '/admin/usuarios', icon: UserCog, telaKey: 'admin' },
   { label: 'Tipos de serviço', href: '/admin/servicos', icon: Package2, telaKey: 'servicos' },
-  { label: 'Conectores', href: '/admin/conectores', icon: Plug, telaKey: 'admin' },
+  { label: 'Ambiente Nacional', href: '/admin/conectores', icon: Plug, telaKey: 'admin' },
   { label: 'Parâmetros', href: '/admin/parametros', icon: SlidersHorizontal, telaKey: 'admin' },
 ]
 

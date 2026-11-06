@@ -17,6 +17,7 @@ import { getFirestore } from 'firebase-admin/firestore'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { credentialSecrets } from './secrets'
 import { assertCanAccessCliente } from '../authz'
+import { atorDaRequisicao, requisicaoDoCallable } from '../audit'
 import { processarEmissao } from './emitir'
 import { normalizarRascunho } from './normalizar-rascunho'
 
@@ -71,6 +72,8 @@ export const emitirNfseLote = onCall(
     if (!request.auth) throw new HttpsError('unauthenticated', 'Autenticação necessária.')
     const uid = request.auth.uid
     const inicio = Date.now()
+    const actor = atorDaRequisicao(request)
+    const requisicao = requisicaoDoCallable(request)
 
     const ids = idsDoLote(request.data as EmitirLoteInput)
     if (ids.length === 0) {
@@ -104,6 +107,8 @@ export const emitirNfseLote = onCall(
         // nDPS e consulta a Sefin antes de reenviar um número já usado.
         const resultado = await processarEmissao(normalizarRascunho(rascunhoId, data), uid, {
           extrasNotaEmitida: { loteIndex: i, emitidaEmLote: true },
+          actor,
+          requisicao,
         })
 
         resultados.push({

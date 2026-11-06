@@ -22,8 +22,8 @@ export default function AdminPage() {
     {
       href: '/admin/conectores',
       icon: Plug,
-      title: 'Conectores',
-      desc: 'Homologação, capacidades e liberação de produção',
+      title: 'Ambiente Nacional',
+      desc: 'Liberação da emissão em produção pelo Ambiente Nacional',
     },
     {
       href: '/admin/parametros',

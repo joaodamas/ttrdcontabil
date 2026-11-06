@@ -258,7 +258,7 @@ export function NfseEmissaoForm({
   const [loadingRascunho, setLoadingRascunho] = useState(Boolean(rascunhoIdParam))
   const [rascunhoAtual, setRascunhoAtual] = useState<RascunhoNfse | null>(null)
   const [carteira, setCarteira] = useState<TomadorRecord[]>([])
-  // Chave única do Ambiente Nacional (Admin → Conectores). undefined = ainda não lida.
+  // Chave única do Ambiente Nacional (Administração → Ambiente Nacional). undefined = ainda não lida.
   const [producaoNacionalLiberada, setProducaoNacionalLiberada] = useState<boolean | undefined>(undefined)
   useEffect(() => {
     fetchChaveNfseNacional()
@@ -820,8 +820,7 @@ export function NfseEmissaoForm({
   const ambienteEmissao = fiscalDoCliente?.ambienteEmissao as string | undefined
   // Sem o campo = Ambiente Nacional (mesma regra do backend).
   const provedorEmissao = fiscalDoCliente ? provedorNfseEfetivo(fiscalDoCliente) : undefined
-  // Barra a emissão ANTES do último clique: antes, um cliente ainda com a Spedy
-  // (descontinuada) só descobria o problema no erro do backend, depois das 5 etapas.
+  // Barra a emissão ANTES do último clique (chave de produção desligada).
   // Município fora do Emissor Nacional e certificado A1 (ausente, vencido, de
   // outro CNPJ) agora vêm do motor de pré-validação (achadosFiscais, abaixo).
   const bloqueioEmissao: { titulo: string; detalhe: string } | null =
@@ -829,7 +828,7 @@ export function NfseEmissaoForm({
       : fiscalDoCliente === null
         ? { titulo: 'Cliente sem configuração fiscal.', detalhe: 'Configure município, inscrição municipal e certificado antes de emitir.' }
         : provedorEmissao === 'nacional' && ambienteEmissao === 'producao' && producaoNacionalLiberada === false
-          ? { titulo: 'Emissão em produção pelo Ambiente Nacional ainda não liberada.', detalhe: 'Um administrador libera em Administração → Conectores (chave "Ambiente Nacional"). Para testar, deixe o cliente em Homologação.' }
+          ? { titulo: 'Emissão em produção pelo Ambiente Nacional ainda não liberada.', detalhe: 'Um administrador libera em Administração → Ambiente Nacional. Para testar, deixe o cliente em Homologação.' }
           : null
   const previewTomadorCpf = watch('tomadorCpfCnpj')
   const previewTomadorEmail = watch('tomadorEmail')

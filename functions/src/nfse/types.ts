@@ -84,12 +84,9 @@ export interface ConfigFiscalCliente {
   naturezaOperacao?: string
   ambienteEmissao: 'producao' | 'homologacao'
   producaoLiberada?: boolean
-  // Provedor de emissão (ver provedor.ts → resolverProvedorNfse):
-  // - 'nacional' (PADRÃO, inclusive para config sem o campo): API pública da
-  //   Sefin Nacional/ADN com o A1 do próprio prestador (provedores/nacional.ts);
-  // - 'municipio' (legado): conector direto do webservice da prefeitura por IBGE;
-  // - 'spedy': só em configs antigas — conta encerrada, o roteador devolve
-  //   PROVEDOR_DESCONTINUADO (municipios/router.ts).
+  // Provedor de emissão: SÓ o Ambiente Nacional (decisão do dono — sem
+  // integrador e sem conector de prefeitura desde 2026-11-06). Valores antigos
+  // gravados ('municipio', 'prefeitura', 'spedy') são lidos como Nacional.
   provedorNfse?: ProvedorNfseGravado
   // ── Só para o Ambiente Nacional ──
   // cTribNac (6 dígitos) explícito. Sem ele, deriva do itemListaServico
@@ -99,6 +96,12 @@ export interface ConfigFiscalCliente {
   codigoTributacaoMunicipal?: string
   // Série da DPS (1 a 5 dígitos, padrão "1"). Numeração em dps_sequencias.
   serieDps?: string
+  // "Próximo número da DPS" informado por admin/fiscal (o cliente já emitiu
+  // pelo Emissor Nacional web/app nesta série). Só o callable
+  // definirNumeracaoDps grava (firestore.rules); vale como piso do contador
+  // para a série/ambiente de numeracaoDpsAjuste (nacional/numeracao.ts).
+  proximoNumeroDps?: number
+  numeracaoDpsAjuste?: { serie: string; tpAmb: '1' | '2' } | null
   // Percentual aproximado dos tributos do Simples (pTotTribSN) para ME/EPP.
   // Sem ele, usa aliquotaPadrao (ver mapeamento.ts — premissa a confirmar).
   aliquotaSimplesNacional?: number
@@ -115,40 +118,26 @@ export interface ConfigFiscalCliente {
   // decisão de reverter a trava "sem emissão automática" (ver
   // docs_dev/checklist-ajustes-producao.md) é por cliente, não global.
   emissaoAutomatica?: boolean
-  // Credenciais por municipio (salvas em Firestore — campo credenciais)
+  // Certificado A1 (gravado por uploadCertificado)
   credenciais?: CredenciaisConector
 }
 
-export type ProvedorNfse = 'municipio' | 'nacional' | 'spedy'
+export type ProvedorNfse = 'nacional'
 /**
- * Valor GRAVADO em clientes_fiscal.provedorNfse. 'prefeitura' é a escolha
- * explícita do conector municipal (legado). 'municipio' gravado é o valor que
- * o formulário antigo punha à força em todo cliente — não foi escolha, então
- * resolverProvedorNfse() o trata como Ambiente Nacional.
+ * Valor GRAVADO em clientes_fiscal.provedorNfse. Só 'nacional' é gravado hoje;
+ * 'municipio', 'prefeitura' e 'spedy' existem em configs antigas e emitem pelo
+ * Ambiente Nacional (o conector municipal e a Spedy saíram do código).
  */
-export type ProvedorNfseGravado = ProvedorNfse | 'prefeitura'
+export type ProvedorNfseGravado = ProvedorNfse | 'municipio' | 'prefeitura' | 'spedy'
 
-// ─── Credenciais (varia por provedor) ────────────────────────────────────────
+// ─── Credenciais ─────────────────────────────────────────────────────────────
 export interface CredenciaisConector {
-  // Para municípios que usam A1 (referencia ao Storage)
-  certificadoStoragePath?: string  // ex: "certificados/clienteId.pfx"
-  certificadoSenha?: string
-
-  // Para municípios que usam token/login
-  usuario?: string
-  senha?: string
-  token?: string
-
-  // Santana de Parnaíba (SimplissWeb)
-  simplissToken?: string
-
-  // Taboão da Serra (Conam)
-  conamCodigoUsuario?: string
-  conamCodigoContribuinte?: string
-
-  // Cotia (GIAP)
-  giaplogin?: string
-  giapSenha?: string
+  // Certificado A1 (arquivo cifrado no Storage — ver certificado.ts)
+  certificadoStoragePath?: string  // "certificados/<clienteId>.pfx.b64"
+  certificadoSenha?: string        // cifrada (encrypt.ts)
+  certTitular?: string
+  certVencimento?: string
+  certValido?: boolean
 }
 
 // ─── Carteira de tomadores e faturamento recorrente ──────────────────────────
@@ -175,10 +164,9 @@ export interface TomadorEnderecoDoc {
   bairro?: string
   municipio?: string        // nome do município (exibição)
   /**
-   * IBGE de 7 dígitos. OBRIGATÓRIO para emitir onde a prefeitura exige o
-   * endereço do tomador — em municipios/cajamar.ts ele vira <Cidade> do tomador
-   * e <MunicipioPrestacaoServico>. Opcional no tipo porque o cadastro pode
-   * nascer sem endereço; quem cobra é a validação de emissão.
+   * IBGE de 7 dígitos (cMun do endereço do tomador na DPS nacional).
+   * Opcional no tipo porque o cadastro pode nascer sem endereço; quem cobra
+   * é a pré-validação (E0234/E1235).
    */
   municipioIbge?: string
   uf?: string
@@ -334,13 +322,4 @@ export const IBGE_LEGADO: Record<string, string> = {
 export function normalizarIbge(ibge: string | undefined | null): string {
   const codigo = String(ibge ?? '').trim()
   return IBGE_LEGADO[codigo] ?? codigo
-}
-
-// ─── Regime tributário → código ABRASF ────────────────────────────────────────
-export const REGIME_CODIGO: Record<string, string> = {
-  simples_nacional: '1',
-  lucro_presumido:  '3',
-  lucro_real:       '4',
-  mei:              '1',
-  isento:           '6',
 }

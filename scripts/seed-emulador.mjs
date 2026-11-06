@@ -82,10 +82,11 @@ for (let i = 0; i < nomes.length; i++) {
     clienteId: id, clienteNome: c.razaoSocial, servicoId: 'contabilidade-mensal', servicoNome: 'Contabilidade Mensal',
     valor, diaVencimento: 10, dataInicio: dia(-400), status: 'ativo',
   })
-  await put('clientes_fiscal', `cf-${id}`, {
+  // id do doc = clienteId (uma config fiscal por cliente — firestore.rules).
+  await put('clientes_fiscal', id, {
     clienteId: id, municipioIbge: ibge, municipioEmissor: cidade, inscricaoMunicipal: String(100000 + i),
     regimeTributario: c.regimeTributario, aliquotaPadrao: 2 + (i % 4), ambienteEmissao: 'homologacao',
-    provedorNfse: i === 2 ? 'spedy' : 'municipio', optanteSimples: c.regimeTributario !== 'lucro_presumido',
+    provedorNfse: 'nacional', optanteSimples: c.regimeTributario !== 'lucro_presumido',
     // Certificado A1 (só os campos públicos que o uploadCertificado grava):
     // cli-02 válido, cli-03 vencendo em 20 dias, cli-04 vencido; o resto sem.
     ...(i >= 1 && i <= 3 ? {
@@ -186,16 +187,6 @@ for (let i = 0; i < 3; i++) {
       clienteId: clientes[i].id, razaoSocial, cpfCnpj, email: `financeiro${j + 1}@exemplo.com.br`, ativo: true,
     })
   }
-}
-
-const conectores = [
-  ['jundiai-sp', 'Jundiaí', '3525904', true], ['campinas-sp', 'Campinas', '3509502', true],
-  ['sao-paulo-sp', 'São Paulo', '3550308', true], ['barueri-sp', 'Barueri', '3505708', false],
-]
-for (const [id, nome, ibge, homologado] of conectores) {
-  await put('fiscal_conectores', id, {
-    nome, municipioIbge: ibge, ativo: true, homologado, producaoLiberada: false, emissao: true, consulta: true, cancelamento: true,
-  })
 }
 
 for (let i = 0; i < 12; i++) {

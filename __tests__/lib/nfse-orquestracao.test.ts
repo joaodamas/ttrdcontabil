@@ -51,7 +51,7 @@ import { consultarNfse, retryNfse } from '../../functions/src/nfse/ciclo'
 import { emitirNfseLote } from '../../functions/src/nfse/emitir-lote'
 import { executarReconciliacaoNfse } from '../../functions/src/scheduler/nfse-reconciliacao'
 import { isProducaoLiberadaPorConfigOuConector } from '../../functions/src/nfse/conectores'
-import { definirOpcoesConectorNacional } from '../../functions/src/nfse/municipios/router'
+import { definirOpcoesConectorNacional } from '../../functions/src/nfse/roteador'
 import { encrypt } from '../../functions/src/nfse/encrypt'
 import { compactarXml, descompactarXml } from '../../functions/src/nfse/nacional/ambiente'
 import type { RequisicaoHttp, RespostaHttp } from '../../functions/src/nfse/provedores/nacional'
@@ -475,8 +475,8 @@ describe('A4 — produção pelo Ambiente Nacional exige a chave global', () => 
     expect(ctx.db.colecaoInteira('nfse_rascunhos')).toHaveLength(0)
   })
 
-  it('provedor da prefeitura (legado) mantém o atalho da config', async () => {
-    expect(await isProducaoLiberadaPorConfigOuConector(cfg({ provedorNfse: 'prefeitura', producaoLiberada: true }))).toBe(true)
+  it('config antiga com provedor da prefeitura também exige a chave global (emite pelo Nacional)', async () => {
+    expect(await isProducaoLiberadaPorConfigOuConector(cfg({ provedorNfse: 'prefeitura', producaoLiberada: true }))).toBe(false)
   })
 })
 
@@ -579,6 +579,178 @@ describe.skipIf(!TEM_OPENSSL)('pré-validação fiscal no servidor', () => {
     await expect(processarEmissao(inputDoFormulario({ servico }), UID, { chaveIdempotencia: 'chave-pre-validacao-0003', persistirDados: true }))
       .rejects.toThrow(/não corresponde ao serviço 17\.19/)
     expect(sefin.pedidos).toHaveLength(0)
+  })
+})
+
+// ─── Numeração da DPS: colisão com o Emissor Nacional web/app ───────────────
+
+/** NFS-e "de fora" (emitida pelo site/app do governo) para a DPS nº n. */
+function notaDeFora(n: number) {
+  sefin.notas.set(idDps(n), chaveN(900 + n))
+}
+
+describe.skipIf(!TEM_OPENSSL)('E0014 com número novo — DPS usada fora da plataforma', { timeout: 30_000 }, () => {
+  it('pula os números já usados, NÃO registra a nota de fora e o contador passa do colidido', async () => {
+    notaDeFora(1)
+    notaDeFora(2)
+    const r = await chamar(emitirModulo.emitirNfse, { ...inputDoFormulario(), chaveIdempotencia: 'chave-colisao-00001' })
+    expect(r).toMatchObject({ sucesso: true })
+    expect(r.reconciliada).toBeUndefined()
+    expect(r.mensagem).toMatch(/usados fora da plataforma.*nº 3/)
+    expect(posts().map(idDpsDoCorpo)).toEqual([idDps(1), idDps(2), idDps(3)])
+    expect(notas()).toHaveLength(1)
+    expect(notas()[0]).toMatchObject({ numeroRps: '3', registradaPor: 'envio', tomadorNome: 'Tomador do Formulário Ltda' })
+    expect(notas()[0].chaveAcesso).not.toBe(chaveN(901))
+    expect(ctx.db.colecaoInteira('dps_sequencias')[0]).toMatchObject({ ultimoNumero: 3, ultimaColisaoNumero: 2 })
+
+    // A próxima nota já sai com o 4 — sem colidir de novo.
+    sefin.pedidos = []
+    await chamar(emitirModulo.emitirNfse, { ...inputDoFormulario(), chaveIdempotencia: 'chave-colisao-00002' })
+    expect(posts().map(idDpsDoCorpo)).toEqual([idDps(4)])
+  })
+
+  it('sem número livre no limite de saltos: erro claro, rascunho sem o número e contador adiantado', async () => {
+    for (let n = 1; n <= emitirModulo.MAX_SALTOS_COLISAO + 1; n++) notaDeFora(n)
+    const r = await chamar(emitirModulo.emitirNfse, { ...inputDoFormulario(), chaveIdempotencia: 'chave-colisao-00003' })
+    expect(r).toMatchObject({ sucesso: false, codigoErro: 'DPS_NUMERO_EM_USO' })
+    expect(r.erro).toMatch(/informe o próximo número da DPS/)
+    expect(notas()).toHaveLength(0)
+    const rasc = rascunho('emissao_chave-colisao-00003')
+    expect(rasc).toMatchObject({ status: 'erro_integracao', codigoErroUltimaTentativa: 'DPS_NUMERO_EM_USO' })
+    expect((rasc.dados as Record<string, unknown>).numeroRps).toBeNull()
+    expect(ctx.db.colecaoInteira('dps_sequencias')[0].ultimoNumero).toBe(emitirModulo.MAX_SALTOS_COLISAO + 1)
+  }, 30_000) // 6 envios assinados: lento com a suíte inteira em paralelo
+
+  it('número reaproveitado cuja nota na Sefin é de OUTRO tomador: não registra, renumera e envia', async () => {
+    criarRascunho('r1', { status: 'erro_integracao', dados: { ...dadosRascunho, numeroRps: '1', serieRps: '1', provedorRps: 'nacional', tpAmbRps: '2' } })
+    notaDeFora(1)
+    const base = rotaPadrao
+    definirOpcoesConectorNacional({
+      transporte: () => async (req) => {
+        sefin.pedidos.push(req)
+        const m = req.url.pathname.match(/\/nfse\/([0-9A-Z]{50})$/)
+        if (m && m[1] === chaveN(901)) {
+          // NFS-e de fora: outro tomador, outro valor.
+          const xml = `<NFSe><infNFSe Id="NFS${m[1]}"><nNFSe>77</nNFSe><DPS><infDPS><toma><CNPJ>99999999000191</CNPJ></toma><valores><vServPrest><vServ>5.00</vServ></vServPrest></valores></infDPS></DPS></infNFSe></NFSe>`
+          return json(200, { chaveAcesso: m[1], nfseXmlGZipB64: compactarXml(xml) })
+        }
+        return base(req)
+      },
+    })
+    const { normalizarRascunho } = await import('../../functions/src/nfse/normalizar-rascunho')
+    const r = await processarEmissao(normalizarRascunho('r1', rascunho('r1')), UID)
+    expect(r).toMatchObject({ sucesso: true })
+    expect(r.reconciliada).toBeUndefined()
+    expect(posts().map(idDpsDoCorpo)).toEqual([idDps(2)])
+    expect(notas()).toHaveLength(1)
+    expect(notas()[0]).toMatchObject({ numeroRps: '2', rascunhoId: 'r1' })
+    expect(notas()[0].numeroNfse).not.toBe('77')
+  })
+
+  it('E0014 em número reaproveitado também avança o contador além do colidido', async () => {
+    criarRascunho('r1', { status: 'erro_integracao', dados: { ...dadosRascunho, numeroRps: '9', serieRps: '1', provedorRps: 'nacional', tpAmbRps: '2' } })
+    let consultas = 0
+    const base = rotaPadrao
+    definirOpcoesConectorNacional({
+      transporte: () => async (req) => {
+        sefin.pedidos.push(req)
+        if (/\/dps\//.test(req.url.pathname) && consultas++ < 2) return json(404, {})
+        return base(req)
+      },
+    })
+    sefin.notas.set(idDps(9), CHAVE)
+    const { normalizarRascunho } = await import('../../functions/src/nfse/normalizar-rascunho')
+    const r = await processarEmissao(normalizarRascunho('r1', rascunho('r1')), UID)
+    expect(r).toMatchObject({ sucesso: true, reconciliada: true })
+    expect(ctx.db.colecaoInteira('dps_sequencias')[0]).toMatchObject({ ultimoNumero: 9 })
+  })
+})
+
+describe.skipIf(!TEM_OPENSSL)('próximo número da DPS informado na configuração fiscal', () => {
+  it('definirNumeracaoDps grava contador + config; a emissão sai com o número informado', async () => {
+    const r = await chamar(emitirModulo.definirNumeracaoDps, { clienteId: 'c1', serie: '1', proximoNumero: 51 })
+    expect(r).toMatchObject({ sucesso: true, serie: '1', proximoNumero: 51, ambiente: 'homologacao' })
+    expect(ctx.db.dados('dps_sequencias/11222333000181_2_1')).toMatchObject({ ultimoNumero: 50 })
+    expect(ctx.db.dados('clientes_fiscal/f1')).toMatchObject({ proximoNumeroDps: 51, serieDps: '1', numeracaoDpsAjuste: { serie: '1', tpAmb: '2' } })
+    await chamar(emitirModulo.emitirNfse, { ...inputDoFormulario(), chaveIdempotencia: 'chave-proximo-000001' })
+    expect(posts().map(idDpsDoCorpo)).toEqual([idDps(51)])
+  })
+
+  it('só avança: recusa número menor ou igual ao último já usado', async () => {
+    await chamar(emitirModulo.emitirNfse, { ...inputDoFormulario(), chaveIdempotencia: 'chave-proximo-000002' })
+    await expect(chamar(emitirModulo.definirNumeracaoDps, { clienteId: 'c1', serie: '1', proximoNumero: 1 }))
+      .rejects.toThrow(/já usou a DPS nº 1/)
+    await expect(chamar(emitirModulo.definirNumeracaoDps, { clienteId: 'c1', serie: '1', proximoNumero: 0 }))
+      .rejects.toThrow(/inteiro/)
+    expect(ctx.db.dados('dps_sequencias/11222333000181_2_1')).toMatchObject({ ultimoNumero: 1 })
+  })
+
+  it('piso da config vale mesmo com o contador perdido (backup restaurado sem dps_sequencias)', async () => {
+    ctx.db.gravar(ctx.db.collection('clientes_fiscal').doc('f1'), configFiscal({ proximoNumeroDps: 40, numeracaoDpsAjuste: { serie: '1', tpAmb: '2' } }) as Record<string, unknown>)
+    await chamar(emitirModulo.emitirNfse, { ...inputDoFormulario(), chaveIdempotencia: 'chave-proximo-000003' })
+    expect(posts().map(idDpsDoCorpo)).toEqual([idDps(40)])
+  })
+
+  it('o log de auditoria leva nome/e-mail do token e o IP da chamada', async () => {
+    await emitirModulo.definirNumeracaoDps.run({
+      auth: { uid: UID, token: { name: 'Fiscal do Token', email: 'fiscal@exemplo.com' } },
+      rawRequest: { ip: '203.0.113.7', headers: { 'user-agent': 'vitest' } },
+      data: { clienteId: 'c1', serie: '1', proximoNumero: 10 },
+    } as never)
+    const log = ctx.db.colecaoInteira('logs_auditoria').find((l) => l.acao === 'definir_numeracao_dps')
+    expect(log).toMatchObject({ usuarioId: UID, usuarioNome: 'Fiscal do Token', ip: '203.0.113.7', userAgent: 'vitest' })
+  })
+})
+
+describe.skipIf(!TEM_OPENSSL)('emissão: auditoria com ator do token e IP', () => {
+  it('emitirNfse grava no log o nome do token (não usuarios.nome) e o IP', async () => {
+    await emitirModulo.emitirNfse.run({
+      auth: { uid: UID, token: { name: 'Nome Assinado', email: 'f@exemplo.com' } },
+      rawRequest: { ip: '198.51.100.9', headers: {} },
+      data: { ...inputDoFormulario(), chaveIdempotencia: 'chave-auditoria-0001' },
+    } as never)
+    const log = ctx.db.colecaoInteira('logs_auditoria').find((l) => l.acao === 'emissao_nfse_sucesso')
+    expect(log).toMatchObject({ usuarioNome: 'Nome Assinado', usuarioEmail: 'f@exemplo.com', ip: '198.51.100.9' })
+  })
+})
+
+describe.skipIf(!TEM_OPENSSL)('uma configuração fiscal por cliente', () => {
+  it('doc de id = clienteId vence um antigo de auto-id', async () => {
+    ctx.db.gravar(ctx.db.collection('clientes_fiscal').doc('c1'), configFiscal({ serieDps: '7' }) as Record<string, unknown>)
+    await chamar(emitirModulo.emitirNfse, { ...inputDoFormulario(), chaveIdempotencia: 'chave-config-000001' })
+    expect(idDpsDoCorpo(posts()[0])).toContain('00007000000000000001')
+  })
+
+  it('sem o canônico, dois antigos: vale o mais recente (atualizadoEm), não o primeiro da consulta', async () => {
+    ctx.db.gravar(ctx.db.collection('clientes_fiscal').doc('f1'), { ...configFiscal({ serieDps: '3' }), atualizadoEm: TimestampFalso.fromMillis(1_000) } as Record<string, unknown>)
+    ctx.db.gravar(ctx.db.collection('clientes_fiscal').doc('f0'), { ...configFiscal({ serieDps: '5' }), atualizadoEm: TimestampFalso.fromMillis(9_000) } as Record<string, unknown>)
+    await chamar(emitirModulo.emitirNfse, { ...inputDoFormulario(), chaveIdempotencia: 'chave-config-000002' })
+    expect(idDpsDoCorpo(posts()[0])).toContain('00005000000000000001')
+  })
+})
+
+describe.skipIf(!TEM_OPENSSL)('certificado A1 cifrado no Storage', () => {
+  it('uploadCertificado grava o .pfx cifrado e a emissão continua assinando com ele', async () => {
+    const r = await chamar(emitirModulo.uploadCertificado, { clienteId: 'c1', pfxBase64, senha: 'teste' })
+    expect(r.sucesso).toBe(true)
+    const gravado = ctx.storage.get('certificados/c1.pfx.b64')!
+    expect(gravado.subarray(0, 4).toString('ascii')).toBe('JPC1')
+    expect(gravado.includes(Buffer.from(pfxBase64, 'base64').subarray(0, 64))).toBe(false)
+    const e = await chamar(emitirModulo.emitirNfse, { ...inputDoFormulario(), chaveIdempotencia: 'chave-cert-00000001' })
+    expect(e).toMatchObject({ sucesso: true })
+    expect(notas()).toHaveLength(1)
+  })
+
+  it('certificado legado em claro (binário DER) continua funcionando', async () => {
+    ctx.storage.set('certificados/c1.pfx.b64', Buffer.from(pfxBase64, 'base64'))
+    const e = await chamar(emitirModulo.emitirNfse, { ...inputDoFormulario(), chaveIdempotencia: 'chave-cert-00000002' })
+    expect(e).toMatchObject({ sucesso: true })
+  })
+
+  it('validarCertificado continua validando o .pfx enviado pelo navegador', async () => {
+    const v = await chamar(emitirModulo.validarCertificado, { pfxBase64, senha: 'teste' })
+    expect(v.valido).toBe(true)
+    await expect(chamar(emitirModulo.validarCertificado, { pfxBase64, senha: 'errada' })).rejects.toThrow(/senha incorreta/)
   })
 })
 

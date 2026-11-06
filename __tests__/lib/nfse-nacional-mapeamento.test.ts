@@ -14,7 +14,7 @@ import {
   normalizarInformacoesComplementares,
 } from '../../functions/src/nfse/nacional/mapeamento'
 import { montarDpsXml, validarDadosNota } from '../../functions/src/nfse/nacional/dps'
-import { conectorLiberaProducao, nacionalLiberadoParaProducao, resolverProvedorNfse } from '../../functions/src/nfse/provedor'
+import { nacionalLiberadoParaProducao } from '../../functions/src/nfse/provedor'
 import type { ConfigFiscalCliente, EmitirNfseInput, Prestador } from '../../functions/src/nfse/types'
 
 function config(over: Partial<ConfigFiscalCliente> = {}): ConfigFiscalCliente {
@@ -167,29 +167,6 @@ describe('montarDadosNotaNacional', () => {
     expect(nomeMunicipio('3508900')).toBe('Cajamar')
     expect(nomeMunicipio('3500105', { municipioIbge: '3500105', municipioEmissor: 'Adamantina' })).toBe('Adamantina')
     expect(nomeMunicipio('3500105')).toBe('o município 3500105')
-  })
-})
-
-describe('provedor', () => {
-  it('sem provedor = nacional; municipio e spedy só explícitos', () => {
-    expect(resolverProvedorNfse({})).toBe('nacional')
-    expect(resolverProvedorNfse(undefined)).toBe('nacional')
-    // 'municipio' era gravado à força pelo formulário antigo — não foi escolha: vai pelo Nacional.
-    expect(resolverProvedorNfse({ provedorNfse: 'municipio' })).toBe('nacional')
-    expect(resolverProvedorNfse({ provedorNfse: 'nacional' })).toBe('nacional')
-    // Só a escolha explícita do legado usa o conector da prefeitura.
-    expect(resolverProvedorNfse({ provedorNfse: 'prefeitura' })).toBe('municipio')
-    // Spedy (descontinuada) também vai pelo Nacional — sem precisar reabrir a config.
-    expect(resolverProvedorNfse({ provedorNfse: 'spedy' })).toBe('nacional')
-  })
-
-  it('homologar o conector da prefeitura não libera o nacional (e vice-versa)', () => {
-    const liberado = { ativo: true, homologado: true, producaoLiberada: true, emissao: true }
-    expect(conectorLiberaProducao(liberado, 'emissao', 'municipio')).toBe(true)
-    expect(conectorLiberaProducao(liberado, 'emissao', 'nacional')).toBe(false)
-    expect(conectorLiberaProducao({ ...liberado, provedor: 'nacional' }, 'emissao', 'nacional')).toBe(true)
-    expect(conectorLiberaProducao({ ...liberado, provedor: 'nacional' }, 'cancelamento', 'nacional')).toBe(false)
-    expect(conectorLiberaProducao({ ...liberado, provedor: 'nacional', homologado: false }, 'emissao', 'nacional')).toBe(false)
   })
 })
 

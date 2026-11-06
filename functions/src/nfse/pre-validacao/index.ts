@@ -24,7 +24,6 @@
 import catalogos from './catalogos.json'
 import { cnpjDoTitularCertificado, cpfCnpjValido, emailValido, soDigitos } from './documentos'
 import { ErroMapeamentoNacional, mapearCodigoTributacaoNacional, mapearRegime } from '../nacional/mapeamento'
-import { resolverProvedorNfse } from '../provedor'
 import { normalizarIbge } from '../types'
 import type { ConfigFiscalCliente, Servico, Tomador } from '../types'
 
@@ -185,7 +184,6 @@ class Coletor {
 
 /** Dados que valem para a nota (precedência nota > configuração, igual ao mapeamento nacional). */
 interface Resolvido {
-  nacional: boolean
   producao: boolean
   regime: Regime
   cTribNac?: string
@@ -226,7 +224,6 @@ function resolver(e: EntradaPreValidacao, c: Coletor, apenasConfig: boolean): Re
   const nbsBruto = texto(s.codigoNbs) || texto(config.codigoNbs)
   const dataComp = texto(e.nota.dataCompetencia)
   return {
-    nacional: resolverProvedorNfse(config as Pick<ConfigFiscalCliente, 'provedorNfse'>) === 'nacional',
     producao: config.ambienteEmissao === 'producao',
     regime,
     cTribNac,
@@ -256,10 +253,10 @@ function regrasPrestador(e: EntradaPreValidacao, r: Resolvido, c: Coletor, apena
     }
   }
 
-  // Inscrição municipal: obrigatória só no webservice da prefeitura (M6); no
-  // Nacional é opcional, mas se vier precisa ser plausível.
+  // Inscrição municipal: opcional no Ambiente Nacional (M6), mas se vier
+  // precisa ser plausível.
   const im = texto(prestador.inscricaoMunicipal ?? config.inscricaoMunicipal)
-  if ((!r.nacional || im) && (im.length < 2 || im.length > 30)) {
+  if (im && (im.length < 2 || im.length > 30)) {
     c.bloqueio('prestador_im', 'prestador.inscricaoMunicipal', 'Inscrição municipal do prestador inválida.')
   }
 
@@ -279,7 +276,7 @@ function regrasPrestador(e: EntradaPreValidacao, r: Resolvido, c: Coletor, apena
   const ibge = normalizarIbge(soDigitos(prestador.municipioIbge ?? config.municipioIbge))
   if (!/^\d{7}$/.test(ibge) || situacaoMunicipio(ibge) === undefined) {
     c.bloqueio('municipio_ibge', 'prestador.municipio', 'Município IBGE do prestador inválido. Escolha o município na configuração fiscal.')
-  } else if (r.nacional) {
+  } else {
     const sit = situacaoMunicipio(ibge)
     const nome = texto(config.municipioEmissor) || `O município ${ibge}`
     // Na homologação (produção restrita) a Sefin aceita qualquer município: lá é aviso.
@@ -293,7 +290,7 @@ function regrasPrestador(e: EntradaPreValidacao, r: Resolvido, c: Coletor, apena
     }
   }
 
-  if (r.nacional && !apenasConfig) regrasCertificado(e, c)
+  if (!apenasConfig) regrasCertificado(e, c)
 }
 
 function regrasCertificado(e: EntradaPreValidacao, c: Coletor) {
@@ -334,7 +331,7 @@ function regrasCertificado(e: EntradaPreValidacao, c: Coletor) {
 
 function regrasServico(e: EntradaPreValidacao, r: Resolvido, c: Coletor, apenasConfig: boolean) {
   const s = (e.nota.servico ?? {}) as Partial<Servico>
-  if (r.cTribNac && r.nacional) {
+  if (r.cTribNac) {
     const campo: CampoFiscal = texto(s.codigoTributacaoNacional) || texto(e.config.codigoTributacaoNacional) ? 'servico.codigoTributacaoNacional' : 'servico.itemListaServico'
     if (r.cTribNac.startsWith('99')) {
       c.bloqueio('ctribnac_99', campo, `O código ${r.cTribNac} (grupo 99 — operações sem ISSQN / locação / novos fatos de IBS/CBS) não pode ser emitido pela plataforma: exige campos que ela ainda não envia. Emita pelo portal.`, r.cTribNac.startsWith('9903') || r.cTribNac === '990401' ? 'E0309' : 'E0532')
@@ -359,7 +356,7 @@ function regrasServico(e: EntradaPreValidacao, r: Resolvido, c: Coletor, apenasC
   }
 
   // NBS
-  if (r.nbsBruto && r.nacional) {
+  if (r.nbsBruto) {
     if (r.nbs.length !== 9 || !/^[\d.\s-]+$/.test(r.nbsBruto)) {
       c.bloqueio('nbs_formato', 'servico.codigoNbs', `Código NBS "${r.nbsBruto}" inválido: são 9 dígitos (ex.: 1.1302.21.00).`, 'E0316')
     } else if (!NBS_EMITIVEIS.has(r.nbs)) {
@@ -389,7 +386,6 @@ export function formatarNbs(nbs: string): string {
 // ─── Regras: IBS/CBS ────────────────────────────────────────────────────────
 
 function regrasIbsCbs(r: Resolvido, c: Coletor) {
-  if (!r.nacional) return
   const { cst, cClassTrib, cIndOp } = r
   const algum = Boolean(cst || cClassTrib || cIndOp)
   if (!algum) {
@@ -456,11 +452,8 @@ function regrasTributos(e: EntradaPreValidacao, r: Resolvido, c: Coletor, apenas
     c.bloqueio('aliquota_maxima', 'servico.aliquota', `Alíquota do ISS de ${a}% acima do teto de ${ALIQUOTA_ISS_MAXIMA}% (LC 116). Corrija a alíquota.`, 'E0595')
   } else if (a !== undefined && a > 0 && a < ALIQUOTA_ISS_MINIMA && r.regime === 'normal') {
     c.aviso('aliquota_minima', 'servico.aliquota', `Alíquota do ISS de ${a}% abaixo do piso de ${ALIQUOTA_ISS_MINIMA}% (LC 157). Confirme com a legislação do município.`)
-  } else if (a === undefined && !apenasConfig && !r.nacional) {
-    c.bloqueio('aliquota_ausente', 'servico.aliquota', 'Informe a alíquota do ISS (na nota ou como padrão na configuração fiscal).')
   }
 
-  if (!r.nacional) return
   const natureza = texto(config.naturezaOperacao) || '1'
   if (!['1', '2', '4'].includes(natureza)) {
     c.bloqueio('natureza_nao_suportada', 'config.naturezaOperacao', 'Isenção e exigibilidade suspensa ainda não são suportadas na emissão pelo Ambiente Nacional. Ajuste a natureza da operação na configuração fiscal ou emita pelo portal.')
@@ -570,7 +563,7 @@ function regrasValores(e: EntradaPreValidacao, r: Resolvido, c: Coletor) {
     c.bloqueio('deducoes_negativas', 'servico.valorDeducoes', 'Valor de deduções não pode ser negativo.')
   } else if (ded !== undefined && valor !== undefined && ded > valor) {
     c.bloqueio('deducoes_maior_valor', 'servico.valorDeducoes', 'Valor de deduções não pode ser maior que o valor do serviço.', 'E0427')
-  } else if (r.nacional && positivo(ded)) {
+  } else if (positivo(ded)) {
     c.bloqueio('deducoes_nao_suportadas', 'servico.valorDeducoes', 'Deduções/reduções da base de cálculo ainda não são suportadas na emissão pelo Ambiente Nacional. Remova as deduções ou emita pelo portal.')
   }
   if (valor !== undefined && valor > 0) {

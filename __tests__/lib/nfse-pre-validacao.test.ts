@@ -95,7 +95,6 @@ const CASOS: Array<[string, Mut, 'bloqueio' | 'aviso', string?]> = [
   ['aliquota_faixa', (e) => { srv(e).aliquota = -1 }, 'bloqueio'],
   ['aliquota_maxima', (e) => { srv(e).aliquota = 6 }, 'bloqueio', 'E0595'],
   ['aliquota_minima', (e) => { e.config.regimeTributario = 'lucro_presumido'; e.config.optanteSimples = false; srv(e).aliquota = 1 }, 'aviso'],
-  ['aliquota_ausente', (e) => { e.config.provedorNfse = 'prefeitura'; e.config.aliquotaPadrao = undefined }, 'bloqueio'],
   ['natureza_nao_suportada', (e) => { e.config.naturezaOperacao = '3' }, 'bloqueio'],
   ['aliquota_simples_ausente', (e) => { e.config.aliquotaPadrao = undefined; e.config.aliquotaSimplesNacional = undefined }, 'bloqueio', 'E0712'],
   ['iss_retido_mei', (e) => { e.config.regimeTributario = 'mei'; srv(e).issRetido = true }, 'bloqueio', 'E0583'],
@@ -183,9 +182,10 @@ describe('detalhes das regras', () => {
     expect(bloqueiosDe(a)).toEqual([])
   })
 
-  it('prefeitura (legado) não aplica regras exclusivas do Nacional', () => {
+  it('config antiga com provedor da prefeitura emite pelo Nacional: as regras do Nacional valem', () => {
     const a = rodar((e) => { e.config.provedorNfse = 'prefeitura'; srv(e).ibsCbsIndOp = '020101'; e.config.credenciais = {} })
-    expect(a.some((x) => x.regra === 'cindop_imovel' || x.regra === 'certificado_ausente')).toBe(false)
+    expect(a.some((x) => x.regra === 'cindop_imovel')).toBe(true)
+    expect(a.some((x) => x.regra === 'certificado_ausente')).toBe(true)
   })
 
   it('textoBloqueios junta as mensagens com o código evitado', () => {

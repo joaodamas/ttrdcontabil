@@ -145,11 +145,13 @@ export function nomeMunicipio(ibge: string | null | undefined): string | undefin
 }
 
 /**
- * O cliente precisa de certificado A1? No Ambiente Nacional (padrão — tudo que
- * não for o conector legado 'prefeitura') sempre; no conector da prefeitura, só
- * nos municípios ABRASF/GeisWeb.
+ * O cliente precisa de certificado A1? Sempre: a emissão é só pelo Ambiente
+ * Nacional (mTLS + assinatura com o A1 do próprio cliente). Os parâmetros
+ * ficam pela compatibilidade das telas que ainda os passam — config antiga
+ * com 'prefeitura' também emite pelo Nacional desde 2026-11-06.
  */
-export function exigeCertificadoA1(provedorNfse: unknown, tipoConector: string | undefined): boolean {
-  if (provedorNfse !== 'prefeitura') return true
-  return tipoConector === 'abrasf_a1' || tipoConector === 'geisweb_a1'
+export function exigeCertificadoA1(_provedorNfse?: unknown, _tipoConector?: string): boolean {
+  void _provedorNfse
+  void _tipoConector
+  return true
 }

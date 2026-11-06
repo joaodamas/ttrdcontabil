@@ -1,7 +1,7 @@
 /**
  * Regras PURAS da orquestração de emissão (sem firebase-admin — testáveis no
  * vitest): trava do rascunho, chave de idempotência do formulário, transição
- * de status na consulta, motivo de cancelamento e allowlist de credenciais.
+ * de status na consulta e motivo de cancelamento.
  */
 
 // ─── Trava do rascunho ('processando') ──────────────────────────────────────
@@ -95,32 +95,4 @@ export function validarMotivoCancelamento(motivo: unknown): string | null {
     return `O motivo de cancelamento pode ter no máximo ${MOTIVO_CANCELAMENTO_MAX} caracteres.`
   }
   return null
-}
-
-// ─── Credenciais de portais (salvarCredenciaisFiscais) ──────────────────────
-
-/**
- * Únicas chaves que o callable aceita em `credenciais`. Certificado (caminho,
- * senha, titular, validade) só muda por uploadCertificado — aceitar qualquer
- * chave permitia sobrescrever `certificadoStoragePath` por aqui.
- */
-export const CHAVES_CREDENCIAIS_PERMITIDAS = [
-  'usuario', 'senha', 'token',
-  'simplissToken',
-  'conamCodigoUsuario', 'conamCodigoContribuinte',
-  'giaplogin', 'giapSenha',
-] as const
-
-export function filtrarCredenciais(credenciais: unknown): { aceitas: Record<string, string>; recusadas: string[] } {
-  const aceitas: Record<string, string> = {}
-  const recusadas: string[] = []
-  if (!credenciais || typeof credenciais !== 'object' || Array.isArray(credenciais)) return { aceitas, recusadas }
-  for (const [k, v] of Object.entries(credenciais as Record<string, unknown>)) {
-    if (!(CHAVES_CREDENCIAIS_PERMITIDAS as readonly string[]).includes(k)) {
-      recusadas.push(k)
-      continue
-    }
-    if (typeof v === 'string' && v.length > 0 && v.length <= 2000) aceitas[k] = v
-  }
-  return { aceitas, recusadas }
 }

@@ -128,20 +128,6 @@ const CLIENTES_PRESUMIDO: ClienteSeed[] = [
 
 const TODOS_CLIENTES = [...CLIENTES_SIMPLES, ...CLIENTES_PRESUMIDO]
 
-// ── Conectores Fiscais ────────────────────────────────────────────────────────
-
-const FISCAL_CONECTORES = [
-  { id: 'barueri-sp',         nome: 'Prefeitura de Barueri',           municipio: 'Barueri',           uf: 'SP', urlPortal: 'https://www.barueri.sp.gov.br/nfe/wfPrincipalNF.aspx',                                                       tipoIntegracao: 'manual_assistido', ativo: true },
-  { id: 'jandira-sp',         nome: 'Prefeitura de Jandira',           municipio: 'Jandira',           uf: 'SP', urlPortal: 'https://jandira.siltecnologia.com.br/loginCNPJContribuinte.jsp?execobj=ContribuintesWebRelacionados',         tipoIntegracao: 'manual_assistido', ativo: true },
-  { id: 'nf-eletronica',      nome: 'NF-Eletrônica',                   municipio: null,                uf: null, urlPortal: 'https://www.nf-eletronica.com.br/nfeletronica/login.asp',                                                   tipoIntegracao: 'manual_assistido', ativo: true },
-  { id: 'notadomilhao-sp',    nome: 'Nota do Milhão (São Paulo)',      municipio: 'São Paulo',         uf: 'SP', urlPortal: 'https://notadomilhao.prefeitura.sp.gov.br/',                                                                tipoIntegracao: 'manual_assistido', ativo: true },
-  { id: 'cajamar-sp',         nome: 'Prefeitura de Cajamar (Geisweb)', municipio: 'Cajamar',           uf: 'SP', urlPortal: 'https://geisweb.com.br/cajamar/index.php',                                                                   tipoIntegracao: 'manual_assistido', ativo: true },
-  { id: 'campinas-sp',        nome: 'Prefeitura de Campinas',          municipio: 'Campinas',          uf: 'SP', urlPortal: 'https://novanfse.campinas.sp.gov.br/notafiscal/paginas/portal/index.html#/',                                tipoIntegracao: 'manual_assistido', ativo: true },
-  { id: 'taboaodaserra-sp',   nome: 'Prefeitura de Taboão da Serra',   municipio: 'Taboão da Serra',   uf: 'SP', urlPortal: 'https://nfe.etransparencia.com.br/sp.taboaodaserra/nfe/principal.aspx',                                    tipoIntegracao: 'manual_assistido', ativo: true },
-  { id: 'francodarocha-sp',   nome: 'Prefeitura de Franco da Rocha',   municipio: 'Franco da Rocha',   uf: 'SP', urlPortal: 'https://francodarocha.meumunicipio.online/ISS/index.php',                                                   tipoIntegracao: 'manual_assistido', ativo: true },
-  { id: 'manual-assistido',   nome: 'Emissão Manual Assistida',        municipio: null,                uf: null, urlPortal: null, tipoIntegracao: 'manual_assistido', descricao: 'Para municípios sem integração direta.', ativo: true },
-]
-
 // ── Serviços padrão ───────────────────────────────────────────────────────────
 
 const SERVICOS_PADRAO = [
@@ -196,12 +182,7 @@ async function criarAdmin() {
 async function main() {
   console.log('=== TTRD Contábil — Seed ===\n')
 
-  // 1. Conectores fiscais
-  console.log('fiscal_conectores:')
-  for (const c of FISCAL_CONECTORES) {
-    const { id, ...data } = c
-    await upsert('fiscal_conectores', id, data as Record<string, unknown>)
-  }
+  // 1. (Conectores fiscais por município saíram em 2026-11-06 — emissão só pelo Ambiente Nacional.)
 
   // 2. Serviços
   console.log('\nservicos:')
@@ -226,14 +207,10 @@ async function main() {
 
     // 4. Dados fiscais do cliente
     if (c.portalUrl) {
-      const fiscalSnap = await db
-        .collection('clientes_fiscal')
-        .where('clienteId', '==', clienteId)
-        .limit(1)
-        .get()
-
-      if (fiscalSnap.empty) {
-        await db.collection('clientes_fiscal').add({
+      // id do doc = clienteId (uma config fiscal por cliente — firestore.rules).
+      const fiscalRef = db.collection('clientes_fiscal').doc(clienteId)
+      if (!(await fiscalRef.get()).exists) {
+        await fiscalRef.set({
           clienteId,
           tipoIntegracaoNfse:  'manual_assistido',
           ambienteEmissao:     'producao',

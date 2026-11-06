@@ -15,7 +15,7 @@ import {
   SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Loader2, Search } from 'lucide-react'
-import { createDocument, updateDocument, getDocument } from '@/lib/firestore-client'
+import { setDocument, updateDocument, getDocument } from '@/lib/firestore-client'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { getFirebaseApp } from '@/lib/firebase'
 import { getErrorMessage } from '@/lib/error-message'
@@ -40,6 +40,9 @@ import { CINDOP_PADRAO } from '@/lib/nfse-dominios'
 const nomeDoMunicipio = (ibge: string | null | undefined) =>
   (municipiosIbge as { ibge: string; nome: string }[]).find((m) => m.ibge === ibge)?.nome
 
+// MUNICIPIOS e MUNICIPIO_TIPO: só exibição na ficha do cliente (nome do
+// município). O conector de prefeitura saiu em 2026-11-06 — este formulário
+// não usa mais o tipo do conector; o A1 é sempre exigido (Ambiente Nacional).
 export const MUNICIPIOS = [
   { ibge: '3525904', nome: 'Jundiaí' },
   { ibge: '3509502', nome: 'Campinas' },
@@ -77,21 +80,15 @@ const schema = z.object({
   cnae:                z.string().optional().nullable(),
   aliquotaPadrao:      z.number().min(0).max(100).optional().nullable(),
   issRetidoPadrao:     z.boolean().optional(),
-  // token credentials
-  simplissToken:       z.string().optional().nullable(),
-  usuario:             z.string().optional().nullable(),
-  senha:               z.string().optional().nullable(),
-  conamCodigoUsuario:  z.string().optional().nullable(),
-  conamCodigoContribuinte: z.string().optional().nullable(),
-  giaplogin:           z.string().optional().nullable(),
-  giapSenha:           z.string().optional().nullable(),
-  // 'nacional' (padrão) ou 'prefeitura' (legado). 'municipio' e 'spedy' só vêm de config antiga
-  // e é migrado para 'nacional' ao salvar (ver aviso abaixo).
+  // Só 'nacional' é gravado; 'prefeitura', 'municipio' e 'spedy' vêm de config
+  // antiga (emitem pelo Ambiente Nacional) e viram 'nacional' ao salvar.
   provedorNfse:        z.enum(['nacional', 'prefeitura', 'municipio', 'spedy']).optional(),
   // Ambiente Nacional
   codigoTributacaoNacional:  z.string().regex(/^\d{6}$/, 'Use 6 dígitos (ex.: 171901)').optional().nullable().or(z.literal('')),
   codigoTributacaoMunicipal: z.string().regex(/^\d{3}$/, 'Use 3 dígitos (ex.: 001)').optional().nullable().or(z.literal('')),
   serieDps:                  z.string().regex(/^([0-9]{1,4}|[0-8][0-9]{4})$/, 'Série de 1 a 5 dígitos (até 89999)').optional().nullable().or(z.literal('')),
+  // Próximo nº da DPS (opcional): gravado pelo callable definirNumeracaoDps, que só deixa avançar.
+  proximoNumeroDps:          z.number().int('Número inteiro').min(1, 'A partir de 1').max(999_999_999_999_999, 'Até 15 dígitos').optional().nullable(),
   aliquotaSimplesNacional:   z.number().min(0).max(100).optional().nullable(),
   codigoNbs:                 z.string().optional().nullable(),
   ibsCbsCst:                 z.string().optional().nullable(),
@@ -136,6 +133,7 @@ export function defaultsDaConfigFiscal(
     codigoTributacaoNacional:  s(fiscal.codigoTributacaoNacional) ?? '',
     codigoTributacaoMunicipal: s(fiscal.codigoTributacaoMunicipal) ?? '',
     serieDps:                  s(fiscal.serieDps) ?? '',
+    proximoNumeroDps:          typeof fiscal.proximoNumeroDps === 'number' ? fiscal.proximoNumeroDps : null,
     aliquotaSimplesNacional:   typeof fiscal.aliquotaSimplesNacional === 'number' ? fiscal.aliquotaSimplesNacional : null,
     codigoNbs:                 s(fiscal.codigoNbs) ?? '',
     ibsCbsCst:                 s(fiscal.ibsCbsCst) ?? '',
@@ -181,36 +179,15 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       naturezaOperacao: '1',
       competenciaPadrao: 'mes_atual',
       ...defaultValues,
-      // Config sem provedor (antiga ou nova) emite pelo Ambiente Nacional.
-      // Só 'prefeitura' (escolha explícita) fica no conector municipal; o resto — inclusive o
-      // 'municipio' que o formulário antigo gravava à força — abre como Ambiente Nacional.
-      provedorNfse:     defaultValues?.provedorNfse === 'prefeitura' || defaultValues?.provedorNfse === 'spedy'
-        ? (defaultValues.provedorNfse as FormData['provedorNfse'])
-        : 'nacional',
+      // Emissão só pelo Ambiente Nacional: config antiga (prefeitura/municipio/spedy) abre como Nacional.
+      provedorNfse:     'nacional',
       // Config antiga pode ter o código IBGE errado de Cajamar/Taboão (ver src/lib/ibge.ts).
       municipioIbge:    normalizarIbge(defaultValues?.municipioIbge as string | undefined) || undefined,
-      // Credenciais NUNCA são pré-preenchidas: o que vem de defaultValues.credenciais
-      // já está criptografado (formato iv:authTag:ciphertext). Preencher o campo com
-      // isso e salvar de novo sem alterar reencripta o ciphertext por cima do
-      // ciphertext a cada edição (já corrompeu uma chave de API: 694 caracteres
-      // depois de 3 salvamentos). Campo fica
-      // sempre vazio; só é enviado pro backend se o usuário digitar algo novo.
-      simplissToken:          null,
-      usuario:                null,
-      senha:                  null,
-      conamCodigoUsuario:     null,
-      conamCodigoContribuinte:null,
-      giaplogin:              null,
-      giapSenha:              null,
     })
   }, [open, defaultValues, reset])
 
   const municipioIbge = watch('municipioIbge')
-  const provedorNfse = watch('provedorNfse') ?? 'nacional'
-  const nacional = provedorNfse !== 'prefeitura'
-  // Credenciais de portal municipal (token/login) só valem no conector legado;
-  // no Ambiente Nacional a única credencial é o certificado A1.
-  const tipo = nacional ? undefined : MUNICIPIO_TIPO[municipioIbge]
+  // Ambiente Nacional: a única credencial é o certificado A1 do cliente.
   const municipioNome = MUNICIPIOS.find(m => m.ibge === municipioIbge)?.nome ?? nomeDoMunicipio(municipioIbge) ?? ''
   const situacaoMunicipio = municipioIbge ? situacaoNacional(municipioIbge) : null
   const credenciais = (defaultValues?.credenciais ?? {}) as Record<string, unknown>
@@ -291,28 +268,29 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
         informacoesComplementaresPadrao: data.informacoesComplementaresPadrao?.trim() || null,
       }
 
-      let savedDocId = docId
       if (docId) {
         await updateDocument('clientes_fiscal', docId, payload)
       } else {
-        savedDocId = await createDocument('clientes_fiscal', payload)
+        // Uma config por cliente: o id do doc é o clienteId (firestore.rules recusam outro).
+        await setDocument('clientes_fiscal', clienteId, payload)
       }
 
-      // Credenciais sensíveis enviadas via Cloud Function (criptografadas no servidor)
-      const credenciais: Record<string, string> = {}
-      if (tipo === 'simpliss' && data.simplissToken)            credenciais.simplissToken = data.simplissToken
-      if (tipo === 'conam'    && data.conamCodigoUsuario)       credenciais.conamCodigoUsuario = data.conamCodigoUsuario
-      if (tipo === 'conam'    && data.conamCodigoContribuinte)  credenciais.conamCodigoContribuinte = data.conamCodigoContribuinte
-      if (tipo === 'giap'     && data.giaplogin)                credenciais.giaplogin = data.giaplogin
-      if (tipo === 'giap'     && data.giapSenha)                credenciais.giapSenha = data.giapSenha
-
-      if (Object.keys(credenciais).length > 0) {
-        const functions = getFunctions(getFirebaseApp(), 'southamerica-east1')
-        const salvar = httpsCallable(functions, 'salvarCredenciaisFiscais')
-        await salvar({ clienteId, docId: savedDocId, credenciais })
+      // Próximo nº da DPS: só pelo servidor, que confere o último já usado (a numeração só avança).
+      const proximo = Number.isFinite(data.proximoNumeroDps) ? (data.proximoNumeroDps as number) : null
+      if (proximo && proximo !== defaultValues?.proximoNumeroDps) {
+        const definir = httpsCallable<unknown, { proximoNumero: number; serie: string }>(
+          getFunctions(getFirebaseApp(), 'southamerica-east1'), 'definirNumeracaoDps')
+        try {
+          const r = await definir({ clienteId, serie: data.serieDps || '1', proximoNumero: proximo })
+          toast.success(`Configuração fiscal salva. A próxima DPS da série ${r.data.serie} sai com o nº ${r.data.proximoNumero}.`)
+        } catch (err) {
+          toast.error(getErrorMessage(err, 'Configuração salva, mas o próximo número da DPS não foi alterado.'))
+          onSaved?.()
+          return
+        }
+      } else {
+        toast.success('Configuração fiscal salva!')
       }
-
-      toast.success('Configuração fiscal salva!')
       onOpenChange(false)
       onSaved?.()
     } catch (err) {
@@ -369,14 +347,6 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
             {buscandoCnpj ? <Loader2 className="size-3.5 animate-spin" /> : <Search className="size-3.5" />}
             Buscar dados do CNPJ
           </Button>
-
-          {/* Config antiga apontando para a Spedy (conta encerrada, sem integrador) */}
-          {provedorNfse === 'spedy' && (
-            <div className="rounded-md border border-warning/30 bg-warning/8 p-3 text-xs text-muted-foreground">
-              Este cliente estava configurado com a Spedy, que foi descontinuada. Ele já emite pelo Ambiente
-              Nacional, com o certificado A1 do próprio cliente — não precisa fazer nada.
-            </div>
-          )}
 
           {/* Emissão só pelo Ambiente Nacional (decisão do dono, 2026-11-05): sem
               conector de prefeitura na operação, então não há escolha de provedor. */}
@@ -568,125 +538,133 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
           </div>
 
           {/* Ambiente Nacional: códigos e numeração da DPS */}
-          {nacional && (
-            <div className="space-y-3 rounded-md border p-3 bg-muted/30">
-              <p className="text-xs font-semibold uppercase text-muted-foreground">Ambiente Nacional</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Código de tributação nacional</Label>
-                  <Controller name="codigoTributacaoNacional" control={control} render={({ field }) => (
-                    <CatalogoPicker
-                      opcoes={SERVICOS_NACIONAIS}
-                      value={field.value}
-                      onChange={(v) => field.onChange(v ?? '')}
-                      placeholder="Automático pelo item LC 116"
-                      buscaPlaceholder="Buscar código ou serviço..."
-                      permitirLimpar
-                    />
-                  )} />
-                  {errors.codigoTributacaoNacional && <p className="text-xs text-destructive">{errors.codigoTributacaoNacional.message}</p>}
-                  <AchadosDoCampo achados={doCampo('codigoTributacaoNacional')} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Desdobro municipal (cTribMun)</Label>
-                  <Input {...register('codigoTributacaoMunicipal')} placeholder="Só se a prefeitura exigir (ex.: 001)" />
-                  {errors.codigoTributacaoMunicipal && <p className="text-xs text-destructive">{errors.codigoTributacaoMunicipal.message}</p>}
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Série da DPS</Label>
-                  <Input {...register('serieDps')} placeholder="Padrão: 1" />
-                  {errors.serieDps && <p className="text-xs text-destructive">{errors.serieDps.message}</p>}
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Alíquota efetiva do Simples (%)</Label>
-                  <Input
-                    type="number" step="0.01" min="0" max="100"
-                    placeholder="Só ME/EPP — padrão: alíquota ISS"
-                    {...register('aliquotaSimplesNacional', { setValueAs: (v) => (v === '' || v == null ? null : Number(v)) })}
-                  />
-                  <AchadosDoCampo achados={doCampo('aliquotaSimplesNacional')} />
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                A numeração da DPS é sequencial por CNPJ, ambiente e série, controlada pela plataforma.
-              </p>
-
+          <div className="space-y-3 rounded-md border p-3 bg-muted/30">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Ambiente Nacional</p>
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Código NBS padrão</Label>
-                <Controller name="codigoNbs" control={control} render={({ field }) => (
+                <Label>Código de tributação nacional</Label>
+                <Controller name="codigoTributacaoNacional" control={control} render={({ field }) => (
                   <CatalogoPicker
-                    opcoes={NBS}
+                    opcoes={SERVICOS_NACIONAIS}
                     value={field.value}
                     onChange={(v) => field.onChange(v ?? '')}
-                    placeholder={nbsConfigSugeridas.length > 0 ? 'Escolha o NBS do serviço (sugestões oficiais)' : 'Busque o NBS pela descrição do serviço'}
-                    buscaPlaceholder='Busque pela descrição (ex.: "contabilidade")...'
-                    buscaMinima={3}
-                    sugeridas={nbsConfigSugeridas}
-                    rotuloSugeridas="Correspondem ao serviço (Anexo VIII)"
+                    placeholder="Automático pelo item LC 116"
+                    buscaPlaceholder="Buscar código ou serviço..."
                     permitirLimpar
                   />
                 )} />
-                <AchadosDoCampo achados={doCampo('codigoNbs')} />
+                {errors.codigoTributacaoNacional && <p className="text-xs text-destructive">{errors.codigoTributacaoNacional.message}</p>}
+                <AchadosDoCampo achados={doCampo('codigoTributacaoNacional')} />
               </div>
-
-              <p className="pt-1 text-xs font-semibold uppercase text-muted-foreground">IBS/CBS padrão</p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label>CST do IBS/CBS</Label>
-                  <Controller name="ibsCbsCst" control={control} render={({ field }) => (
-                    <CatalogoPicker
-                      opcoes={CST_IBSCBS}
-                      value={field.value}
-                      onChange={(v) => {
-                        field.onChange(v ?? '')
-                        // Classificação de outro CST deixa de valer.
-                        if (!v || !String(watch('ibsCbsClassTrib') ?? '').startsWith(v)) setValue('ibsCbsClassTrib', '')
-                      }}
-                      placeholder="Selecione o CST"
-                      permitirLimpar
-                    />
-                  )} />
-                  <AchadosDoCampo achados={doCampo('ibsCbsCst')} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Classificação tributária (cClassTrib)</Label>
-                  <Controller name="ibsCbsClassTrib" control={control} render={({ field }) => (
-                    <CatalogoPicker
-                      opcoes={classificacoesIbsCbs(new Date().toISOString().slice(0, 10), watch('ibsCbsCst') || undefined)}
-                      value={field.value}
-                      onChange={(v) => {
-                        field.onChange(v ?? '')
-                        if (v) setValue('ibsCbsCst', v.slice(0, 3))
-                      }}
-                      placeholder="Selecione a classificação"
-                      permitirLimpar
-                    />
-                  )} />
-                  <AchadosDoCampo achados={doCampo('ibsCbsClassTrib')} />
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Indicador de operação (cIndOp)</Label>
-                  <Controller name="ibsCbsIndOp" control={control} render={({ field }) => (
-                    <CatalogoPicker
-                      opcoes={INDICADOR_OPERACAO}
-                      value={field.value}
-                      onChange={(v) => field.onChange(v ?? '')}
-                      placeholder="Busque pela descrição da operação"
-                      buscaPlaceholder='Busque pela descrição (ex.: "serviços em geral")...'
-                      buscaMinima={3}
-                      sugeridas={INDICADOR_OPERACAO.filter((o) => o.codigo === CINDOP_PADRAO)}
-                      rotuloSugeridas="Serviços em geral (consultoria, contabilidade, TI)"
-                      permitirLimpar
-                    />
-                  )} />
-                  <AchadosDoCampo achados={doCampo('ibsCbsIndOp')} />
-                </div>
+              <div className="space-y-1.5">
+                <Label>Desdobro municipal (cTribMun)</Label>
+                <Input {...register('codigoTributacaoMunicipal')} placeholder="Só se a prefeitura exigir (ex.: 001)" />
+                {errors.codigoTributacaoMunicipal && <p className="text-xs text-destructive">{errors.codigoTributacaoMunicipal.message}</p>}
               </div>
+              <div className="space-y-1.5">
+                <Label>Série da DPS</Label>
+                <Input {...register('serieDps')} placeholder="Padrão: 1" />
+                {errors.serieDps && <p className="text-xs text-destructive">{errors.serieDps.message}</p>}
+              </div>
+              <div className="space-y-1.5">
+                <Label>Alíquota efetiva do Simples (%)</Label>
+                <Input
+                  type="number" step="0.01" min="0" max="100"
+                  placeholder="Só ME/EPP — padrão: alíquota ISS"
+                  {...register('aliquotaSimplesNacional', { setValueAs: (v) => (v === '' || v == null ? null : Number(v)) })}
+                />
+                <AchadosDoCampo achados={doCampo('aliquotaSimplesNacional')} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Próximo número da DPS</Label>
+              <Input
+                type="number" step="1" min="1"
+                placeholder="Automático"
+                {...register('proximoNumeroDps', { setValueAs: (v) => (v === '' || v == null ? null : Number(v)) })}
+              />
+              {errors.proximoNumeroDps && <p className="text-xs text-destructive">{errors.proximoNumeroDps.message}</p>}
               <p className="text-xs text-muted-foreground">
-                Obrigatório para Lucro Presumido e Real; Simples e MEI a partir de 2027. Preencha os três ou deixe todos vazios.
+                Se o cliente já emitiu notas pelo site/app do governo (Emissor Nacional) nesta série, informe o próximo
+                número. Vale para o ambiente escolhido acima e só pode avançar.
               </p>
             </div>
-          )}
+
+            <div className="space-y-1.5">
+              <Label>Código NBS padrão</Label>
+              <Controller name="codigoNbs" control={control} render={({ field }) => (
+                <CatalogoPicker
+                  opcoes={NBS}
+                  value={field.value}
+                  onChange={(v) => field.onChange(v ?? '')}
+                  placeholder={nbsConfigSugeridas.length > 0 ? 'Escolha o NBS do serviço (sugestões oficiais)' : 'Busque o NBS pela descrição do serviço'}
+                  buscaPlaceholder='Busque pela descrição (ex.: "contabilidade")...'
+                  buscaMinima={3}
+                  sugeridas={nbsConfigSugeridas}
+                  rotuloSugeridas="Correspondem ao serviço (Anexo VIII)"
+                  permitirLimpar
+                />
+              )} />
+              <AchadosDoCampo achados={doCampo('codigoNbs')} />
+            </div>
+
+            <p className="pt-1 text-xs font-semibold uppercase text-muted-foreground">IBS/CBS padrão</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>CST do IBS/CBS</Label>
+                <Controller name="ibsCbsCst" control={control} render={({ field }) => (
+                  <CatalogoPicker
+                    opcoes={CST_IBSCBS}
+                    value={field.value}
+                    onChange={(v) => {
+                      field.onChange(v ?? '')
+                      // Classificação de outro CST deixa de valer.
+                      if (!v || !String(watch('ibsCbsClassTrib') ?? '').startsWith(v)) setValue('ibsCbsClassTrib', '')
+                    }}
+                    placeholder="Selecione o CST"
+                    permitirLimpar
+                  />
+                )} />
+                <AchadosDoCampo achados={doCampo('ibsCbsCst')} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Classificação tributária (cClassTrib)</Label>
+                <Controller name="ibsCbsClassTrib" control={control} render={({ field }) => (
+                  <CatalogoPicker
+                    opcoes={classificacoesIbsCbs(new Date().toISOString().slice(0, 10), watch('ibsCbsCst') || undefined)}
+                    value={field.value}
+                    onChange={(v) => {
+                      field.onChange(v ?? '')
+                      if (v) setValue('ibsCbsCst', v.slice(0, 3))
+                    }}
+                    placeholder="Selecione a classificação"
+                    permitirLimpar
+                  />
+                )} />
+                <AchadosDoCampo achados={doCampo('ibsCbsClassTrib')} />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Indicador de operação (cIndOp)</Label>
+                <Controller name="ibsCbsIndOp" control={control} render={({ field }) => (
+                  <CatalogoPicker
+                    opcoes={INDICADOR_OPERACAO}
+                    value={field.value}
+                    onChange={(v) => field.onChange(v ?? '')}
+                    placeholder="Busque pela descrição da operação"
+                    buscaPlaceholder='Busque pela descrição (ex.: "serviços em geral")...'
+                    buscaMinima={3}
+                    sugeridas={INDICADOR_OPERACAO.filter((o) => o.codigo === CINDOP_PADRAO)}
+                    rotuloSugeridas="Serviços em geral (consultoria, contabilidade, TI)"
+                    permitirLimpar
+                  />
+                )} />
+                <AchadosDoCampo achados={doCampo('ibsCbsIndOp')} />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Obrigatório para Lucro Presumido e Real; Simples e MEI a partir de 2027. Preencha os três ou deixe todos vazios.
+            </p>
+          </div>
 
           {/* Natureza da operação */}
           <div className="space-y-1.5">
@@ -707,60 +685,13 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
             <AchadosDoCampo achados={doCampo('naturezaOperacao')} />
           </div>
 
-          {/* Credenciais: Santana de Parnaíba */}
-          {tipo === 'simpliss' && (
-            <div className="border rounded-md p-3 bg-muted/30 space-y-3">
-              <p className="text-xs font-semibold uppercase text-muted-foreground">Credenciais — SimplissWeb (Santana de Parnaíba)</p>
-              <div className="space-y-1.5">
-                <Label>Token de Acesso</Label>
-                <Input {...register('simplissToken')} placeholder={credenciais.simplissToken ? 'Já configurado — deixe em branco para manter' : 'Token fornecido pela prefeitura'} />
-              </div>
-            </div>
-          )}
-
-          {/* Credenciais: Taboão da Serra */}
-          {tipo === 'conam' && (
-            <div className="border rounded-md p-3 bg-muted/30 space-y-3">
-              <p className="text-xs font-semibold uppercase text-muted-foreground">Credenciais — Conam/Etransparência (Taboão da Serra)</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Código de Usuário</Label>
-                  <Input {...register('conamCodigoUsuario')} placeholder={credenciais.conamCodigoUsuario ? 'Já configurado' : 'Cód. usuário'} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Código do Contribuinte</Label>
-                  <Input {...register('conamCodigoContribuinte')} placeholder={credenciais.conamCodigoContribuinte ? 'Já configurado' : 'Cód. contribuinte'} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Credenciais: Cotia */}
-          {tipo === 'giap' && (
-            <div className="border rounded-md p-3 bg-muted/30 space-y-3">
-              <p className="text-xs font-semibold uppercase text-muted-foreground">Credenciais — GIAP/Oracle APEX (Cotia)</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Login</Label>
-                  <Input {...register('giaplogin')} placeholder={credenciais.giaplogin ? 'Já configurado' : 'Login'} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Senha</Label>
-                  <Input type="password" {...register('giapSenha')} placeholder={credenciais.giapSenha ? 'Já configurada — deixe em branco para manter' : 'Senha'} />
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Aviso certificado A1 — obrigatório no Ambiente Nacional para qualquer município */}
-          {(nacional || tipo === 'abrasf_a1' || tipo === 'geisweb_a1') && (
-            <div className="space-y-3 rounded-md border border-warning/25 bg-warning/8 p-3">
-              <p className="text-xs text-warning">
-                <strong>Certificado A1 necessário.</strong> O upload pode ser feito aqui mesmo na configuração fiscal do cliente.
-              </p>
-              <CertificadoUpload clienteId={clienteId} certInfo={certInfo} onUploaded={() => onSaved?.()} />
-            </div>
-          )}
+          <div className="space-y-3 rounded-md border border-warning/25 bg-warning/8 p-3">
+            <p className="text-xs text-warning">
+              <strong>Certificado A1 necessário.</strong> O upload pode ser feito aqui mesmo na configuração fiscal do cliente.
+            </p>
+            <CertificadoUpload clienteId={clienteId} certInfo={certInfo} onUploaded={() => onSaved?.()} />
+          </div>
 
           <PainelPreValidacao
             achados={achadosConfig}

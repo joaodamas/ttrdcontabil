@@ -8,8 +8,7 @@
  */
 import { Timestamp, getFirestore } from 'firebase-admin/firestore'
 import { randomUUID } from 'node:crypto'
-import { rotearConsulta } from './municipios/router'
-import { resolverProvedorNfse } from './provedor'
+import { rotearConsulta } from './roteador'
 import { chaveAcessoValida } from './provedores/chave'
 import { normalizarRascunho } from './normalizar-rascunho'
 import { TRAVA_EMISSAO_MS, travaVencida } from './regras-emissao'
@@ -120,7 +119,7 @@ export async function gravarNotaEmitida(
     codigoVerificacao: resultado.codigoVerificacao ?? chave ?? null,
     chaveAcesso:       resultado.chaveAcesso ?? chave ?? null,
     idDps:             resultado.idDps ?? null,
-    provedorNfse:      resolverProvedorNfse(config),
+    provedorNfse:      'nacional',
     numeroRps:         input.numeroRps ?? null,
     serieRps:          input.serieRps ?? null,
     xmlNfse:           resultado.xmlNfse ?? null,
@@ -175,8 +174,36 @@ export function resultadoDeNotaExistente(
 
 export type DesfechoConsultaDps =
   | { tipo: 'existe'; resultado: ResultadoOperacaoNfse }
+  /** Existe nota com esta série+número, mas de outro tomador/valor: o número foi usado FORA desta nota. */
+  | { tipo: 'outra_nota'; resultado: ResultadoOperacaoNfse }
   | { tipo: 'nao_existe' }
   | { tipo: 'indefinido'; erro: string; codigoErro?: string; detalhes?: string }
+
+const soDigitos = (v: unknown) => String(v ?? '').replace(/\D/g, '')
+
+/**
+ * A NFS-e encontrada pela série+número da DPS é DESTA nota? Compara o tomador
+ * (CNPJ/CPF dentro de <toma>) e o valor do serviço (<vServ>) do XML devolvido
+ * pela Sefin com o que a plataforma enviaria. O cliente pode ter emitido pelo
+ * Emissor Nacional web/app usando a mesma série — aí o número coincide, mas a
+ * nota é de outra pessoa.
+ *  - true: os campos que deu para ler batem;
+ *  - false: algum campo lido diverge (é outra nota);
+ *  - undefined: sem XML ou sem os campos — não dá para afirmar (trata como desta).
+ */
+export function notaEncontradaEDestaNota(xmlNfse: string | undefined, input: EmitirNfseInput): boolean | undefined {
+  if (!xmlNfse) return undefined
+  const toma = xmlNfse.match(/<toma>([\s\S]*?)<\/toma>/)?.[1]
+  const docToma = toma?.match(/<(?:CNPJ|CPF)>(\d+)<\/(?:CNPJ|CPF)>/)?.[1]
+  const vServ = xmlNfse.match(/<vServ>([\d.]+)<\/vServ>/)?.[1]
+  const conferidos: boolean[] = []
+  const docInput = soDigitos(input.tomador?.cpfCnpj)
+  if (docToma && docInput) conferidos.push(docToma === docInput)
+  const valorInput = Number(input.servico?.valorServico)
+  if (vServ && Number.isFinite(valorInput)) conferidos.push(Math.abs(Number(vServ) - valorInput) < 0.005)
+  if (conferidos.length === 0) return undefined
+  return conferidos.every(Boolean)
+}
 
 /** GET /dps/{id} (via roteador) para o nDPS gravado no input. */
 export async function consultarDpsNaSefin(
@@ -201,7 +228,9 @@ export async function consultarDpsNaSefin(
   if (!r.sucesso) return { tipo: 'indefinido', erro: r.erro ?? 'Consulta da DPS falhou.', codigoErro: r.codigoErro, detalhes: r.detalhes }
   if (r.encontrada === false) return { tipo: 'nao_existe' }
   const chave = [r.chaveAcesso, r.codigoVerificacao].find(chaveAcessoValida)
-  if (chave && (r.status === 'emitida' || r.status === 'cancelada')) return { tipo: 'existe', resultado: r }
+  if (chave && (r.status === 'emitida' || r.status === 'cancelada')) {
+    return notaEncontradaEDestaNota(r.xmlNfse, input) === false ? { tipo: 'outra_nota', resultado: r } : { tipo: 'existe', resultado: r }
+  }
   // Sucesso sem dizer se existe nem chave: não dá para afirmar nada.
   return { tipo: 'indefinido', erro: r.mensagem ?? 'A Sefin não confirmou se a DPS gerou nota.' }
 }
@@ -259,7 +288,7 @@ export type DesfechoReconciliacao ='emitida' | 'nao_emitida' | 'indefinido' | 'i
  *    reenvio com o MESMO número;
  *  - inconclusivo → 'erro_integracao' / NAO_CONFIRMADA (a próxima rodada ou
  *    a próxima tentativa consultam de novo antes de enviar).
- * Provedor municipal (legado): só destrava, como fazia o alerta diário.
+ * Rascunho com RPS do antigo conector municipal (sem DPS nacional): só destrava.
  */
 export async function reconciliarRascunho(rascunhoId: string, agoraMs = Date.now()): Promise<DesfechoReconciliacao> {
   const ref = db().collection(COLECAO_RASCUNHOS).doc(rascunhoId)
@@ -313,6 +342,17 @@ export async function reconciliarRascunho(rascunhoId: string, agoraMs = Date.now
     if (desfecho.tipo === 'existe') {
       await gravarNotaEmitida({ input, config, cliente, uid: SYSTEM_ACTOR.id }, { ...desfecho.resultado, idDps: undefined }, 'reconciliacao')
       return 'emitida'
+    }
+    if (desfecho.tipo === 'outra_nota') {
+      // O número reservado foi usado fora desta nota (Emissor Nacional
+      // web/app): não registra a nota de outra pessoa. Tira o número do
+      // rascunho — a próxima tentativa aloca um número livre do contador.
+      await liberar({
+        erroUltimaTentativa: `A DPS nº ${input.numeroRps} já foi usada fora da plataforma (outra nota, emitida pelo Emissor Nacional). Pode emitir de novo — a nota sai com um número novo.`,
+        codigoErroUltimaTentativa: 'DPS_NUMERO_EM_USO',
+        'dados.numeroRps': null,
+      })
+      return 'nao_emitida'
     }
     if (desfecho.tipo === 'nao_existe') {
       await liberar({

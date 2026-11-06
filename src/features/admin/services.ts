@@ -12,7 +12,6 @@ import {
   updateDocument,
 } from '@/lib/firestore-client'
 import type {
-  ConectorFiscalAdmin,
   ParametrosEscritorio,
   ServicoAdmin,
   UsuarioAdmin,
@@ -114,11 +113,6 @@ export async function gerarTabelaCobAdmin() {
   await Promise.all(promises)
 }
 
-export async function fetchConectoresFiscaisAdmin() {
-  const conectores = await listDocuments<ConectorFiscalAdmin>('fiscal_conectores', [limit(200)])
-  return conectores.sort((a, b) => String(a.nome ?? a.id).localeCompare(String(b.nome ?? b.id), 'pt-BR'))
-}
-
 /** Chave única do Ambiente Nacional (espelha DOC_NFSE_NACIONAL em functions/src/nfse/provedor.ts). */
 export const DOC_NFSE_NACIONAL = 'nfse_nacional'
 
@@ -143,14 +137,6 @@ export async function salvarChaveNfseNacional(producaoLiberada: boolean, existe:
   const payload = { producaoLiberada, alteradoPorNome, alteradoEm: serverTimestamp() }
   if (existe) return updateDocument('configuracoes', DOC_NFSE_NACIONAL, payload)
   return setDocument('configuracoes', DOC_NFSE_NACIONAL, payload)
-}
-
-export async function updateConectorFiscalAdmin(
-  id: string,
-  field: keyof ConectorFiscalAdmin,
-  value: boolean
-) {
-  return updateDocument('fiscal_conectores', id, { [field]: value })
 }
 
 export async function fetchParametrosEscritorio(tenantId?: string) {

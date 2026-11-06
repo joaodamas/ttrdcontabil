@@ -124,7 +124,7 @@ const ADMIN_SECTIONS: NavSection[] = [
       { href: '/admin',            label: 'Administração',    icon: Settings,          telaKey: 'admin' },
       { href: '/admin/usuarios',   label: 'Usuários',         icon: UserCog,           telaKey: 'admin' },
       { href: '/admin/servicos',   label: 'Tipos de serviço', icon: Package2,          telaKey: 'servicos' },
-      { href: '/admin/conectores', label: 'Conectores',       icon: Plug,              telaKey: 'admin' },
+      { href: '/admin/conectores', label: 'Ambiente Nacional', icon: Plug,              telaKey: 'admin' },
       { href: '/admin/parametros', label: 'Parâmetros',       icon: SlidersHorizontal, telaKey: 'admin' },
     ],
   },

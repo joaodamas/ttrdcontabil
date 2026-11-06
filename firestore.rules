@@ -237,8 +237,13 @@ service cloud.firestore {
     // `producaoLiberada` é a trava que separa homologação de nota real: se o
     // fiscal pudesse ligá-la, a liberação por município não valeria nada. Nenhuma
     // tela grava este campo — a liberação é feita pelo console/Admin SDK.
+    // `proximoNumeroDps`/`numeracaoDpsAjuste` (piso da numeração da DPS) só
+    // mudam pelo callable definirNumeracaoDps, que confere contra o último
+    // número já usado em dps_sequencias: pelo navegador, baixar o piso não
+    // faria mal, mas subir à toa queimaria numeração e mascararia a trilha.
     function camposFiscalDoServidor() {
-      return ['credenciais', 'spedyCompanyId', 'spedyProvisionadoEm', 'spedyCertificadoEnviadoEm', 'producaoLiberada'];
+      return ['credenciais', 'spedyCompanyId', 'spedyProvisionadoEm', 'spedyCertificadoEnviadoEm', 'producaoLiberada',
+        'proximoNumeroDps', 'numeracaoDpsAjuste'];
     }
 
     // Armadilha: no create não existe resource.data para o diff() comparar. Se só
@@ -252,6 +257,21 @@ service cloud.firestore {
     function fiscalUpdateSemCampoDeServidor() {
       return !request.resource.data.diff(resource.data).affectedKeys()
         .hasAny(camposFiscalDoServidor());
+    }
+
+    // [UMA CONFIG POR CLIENTE] Desde 2026-11-06 o id do doc de clientes_fiscal
+    // É o clienteId: criar com outro id (o que deixava um cliente com duas
+    // configs e as functions escolhendo qualquer uma) é recusado, e o clienteId
+    // de um doc nunca muda. Docs antigos de auto-id continuam editáveis até
+    // scripts/unificar-config-fiscal.mjs migrar.
+    function fiscalCreateComIdDoCliente(id) {
+      return ('clienteId' in request.resource.data)
+        && request.resource.data.clienteId is string
+        && request.resource.data.clienteId == id;
+    }
+
+    function fiscalUpdateMantemCliente() {
+      return request.resource.data.get('clienteId', null) == resource.data.get('clienteId', null);
     }
 
     // [PRESTADOR→TOMADOR] O par (clienteId, cpfCnpj) é o que identifica um
@@ -586,17 +606,19 @@ service cloud.firestore {
       // [P0-A] O navegador escreve só a configuração declarativa (município,
       // regime, alíquota, provedor). Credenciais e IDs da Spedy são território
       // exclusivo das Cloud Functions — ver camposFiscalDoServidor().
-      allow create: if isFiscal() && sameTenantWrite() && fiscalCreateSemCampoDeServidor();
-      allow update: if isFiscal() && sameTenantUpdate() && fiscalUpdateSemCampoDeServidor();
+      allow create: if isFiscal() && sameTenantWrite() && fiscalCreateSemCampoDeServidor()
+        && fiscalCreateComIdDoCliente(id);
+      allow update: if isFiscal() && sameTenantUpdate() && fiscalUpdateSemCampoDeServidor()
+        && fiscalUpdateMantemCliente();
       // Configuração fiscal nunca deve ser deletada sem supervisão admin.
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
+    // Liberação por município do antigo conector da prefeitura — sem uso desde
+    // 2026-11-06 (emissão só pelo Ambiente Nacional, cuja liberação é a chave
+    // única configuracoes/nfse_nacional). Trancada; os docs ficam como histórico.
     match /fiscal_conectores/{id} {
-      allow read: if canRead() && sameTenantExisting();
-      allow create: if isAdmin() && sameTenantNew();
-      allow update: if isAdmin() && sameTenantUpdate();
-      allow delete: if isAdmin() && sameTenantExisting();
+      allow read, write: if false;
     }
 
     // Contador da numeração da DPS (Ambiente Nacional) por prestador +
