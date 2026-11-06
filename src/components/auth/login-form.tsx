@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import '@/lib/zod-config'
 import { sendPasswordResetEmail } from 'firebase/auth'
 import { toast } from 'sonner'
-import { signIn } from '@/lib/auth-client'
+import { concluirLoginComTotp, SegundoFatorNecessario, signIn } from '@/lib/auth-client'
+import { CHAVE_MOTIVO_SAIDA, MOTIVO_INATIVIDADE } from '@/lib/sessao-inatividade'
 import { getClientAuth } from '@/lib/firebase'
 import { appConfig } from '@/lib/app-config'
 import { brandRgba, brandLight } from '@/lib/brand-theme'
@@ -57,6 +59,50 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [resetLoading, setResetLoading] = useState(false)
+  // Senha conferida, falta o código do aplicativo autenticador (2º fator).
+  const [pendenteMfa, setPendenteMfa] = useState<SegundoFatorNecessario | null>(null)
+  const [codigoMfa, setCodigoMfa] = useState('')
+  const [validandoMfa, setValidandoMfa] = useState(false)
+  const [aviso, setAviso] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      if (window.sessionStorage.getItem(CHAVE_MOTIVO_SAIDA) === MOTIVO_INATIVIDADE) {
+        window.sessionStorage.removeItem(CHAVE_MOTIVO_SAIDA)
+        setAviso('Sua sessão foi encerrada após 30 minutos sem atividade. Entre de novo.')
+      }
+    } catch {}
+  }, [])
+
+  async function confirmarCodigoMfa(e: React.FormEvent) {
+    e.preventDefault()
+    if (!pendenteMfa) return
+    const codigo = codigoMfa.replace(/\D/g, '')
+    if (codigo.length !== 6) {
+      setError('Digite os 6 dígitos do aplicativo autenticador.')
+      return
+    }
+    setError(null)
+    setValidandoMfa(true)
+    try {
+      await concluirLoginComTotp(pendenteMfa, codigo)
+      router.push(from)
+    } catch (err) {
+      const code = (err as { code?: string }).code
+      if (code === 'auth/invalid-verification-code' || code === 'auth/missing-code') {
+        setError('Código incorreto ou expirado. Digite o código atual do aplicativo.')
+      } else if (code === 'auth/too-many-requests') {
+        setError('Muitas tentativas. Aguarde alguns minutos.')
+      } else if (code === 'auth/code-expired' || code === 'auth/multi-factor-info-not-found') {
+        setError('A etapa de login expirou. Entre com a senha de novo.')
+        setPendenteMfa(null)
+      } else {
+        setError((err as { message?: string }).message || 'Não foi possível validar o código.')
+      }
+    } finally {
+      setValidandoMfa(false)
+    }
+  }
 
   const {
     register,
@@ -69,10 +115,16 @@ export function LoginForm() {
 
   async function onSubmit(data: LoginFormValues) {
     setError(null)
+    setAviso(null)
     try {
       await signIn(data.email, data.senha)
       router.push(from)
     } catch (err) {
+      if (err instanceof SegundoFatorNecessario) {
+        setCodigoMfa('')
+        setPendenteMfa(err)
+        return
+      }
       const code = (err as { code?: string }).code
       const msg = (err as { message?: string }).message ?? ''
       if (
@@ -321,7 +373,58 @@ export function LoginForm() {
             </p>
           </div>
 
-          {/* Formulário */}
+          {aviso && !pendenteMfa && (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-900">
+              {aviso}
+            </div>
+          )}
+
+          {pendenteMfa ? (
+            <form onSubmit={confirmarCodigoMfa} className="space-y-4" noValidate>
+              <div className="space-y-1.5">
+                <Label htmlFor="codigo-mfa" className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                  Código do aplicativo autenticador
+                </Label>
+                <Input
+                  id="codigo-mfa"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  maxLength={7}
+                  placeholder="000000"
+                  value={codigoMfa}
+                  onChange={(e) => setCodigoMfa(e.target.value)}
+                  className="h-11 bg-gray-50 border-gray-200 text-center font-mono text-lg tracking-[0.4em] text-[#0a0a0a] rounded-xl"
+                />
+                <p className="text-xs text-gray-500">
+                  Abra o aplicativo (Google Authenticator, Microsoft Authenticator…) e digite o código de 6 dígitos do {appConfig.shortName}.
+                </p>
+              </div>
+              {error && (
+                <div className="flex items-start gap-2.5 text-sm rounded-xl px-3.5 py-3" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', color: '#dc2626' }}>
+                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={validandoMfa}
+                className="w-full h-11 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer text-white"
+                style={{ background: BRAND_BLUE }}
+              >
+                {validandoMfa ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Confirmar e entrar
+              </button>
+              <button
+                type="button"
+                onClick={() => { setPendenteMfa(null); setError(null) }}
+                className="w-full text-xs font-medium text-gray-500 hover:text-primary"
+              >
+                Voltar e usar outra conta
+              </button>
+            </form>
+          ) : (
+          /* Formulário */
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
             {/* Email */}
             <div className="space-y-1.5">
@@ -425,6 +528,7 @@ export function LoginForm() {
               )}
             </button>
           </form>
+          )}
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-6 relative z-10">

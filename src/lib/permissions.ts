@@ -28,7 +28,7 @@ export function canAccessAnyTela(usuario: UserSession | null, telas: TelaKey[]):
   return telas.some((t) => canAccessTela(usuario, t))
 }
 
-/** Senhas de portal dos clientes: só admin e fiscal (espelha podeVerCredenciais() nas regras). */
+/** Senhas de portal dos clientes: só admin e fiscal (espelha PERFIS_CREDENCIAIS dos callables de credenciais). */
 export function podeVerCredenciais(usuario: Pick<UserSession, 'perfil'> | null | undefined): boolean {
   return !!usuario && (PERFIS_CREDENCIAIS as readonly string[]).includes(usuario.perfil)
 }

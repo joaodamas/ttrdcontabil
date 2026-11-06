@@ -162,50 +162,25 @@ describeIfEmulator('regras de usuários, credenciais e auditoria', () => {
     await assertFails(setDoc(doc(dbAs('admin-a'), 'usuarios_diretorio/x'), { nome: 'x', ativo: true, tenantId: 'tenant-a' }))
   })
 
-  // ─── clientes_credenciais ─────────────────────────────────────────────────
+  // ─── clientes_credenciais: só pelo servidor ───────────────────────────────
 
   const credValida = (extra: Record<string, unknown> = {}) => ({
     tenantId: 'tenant-a', clienteId: 'cliente-a', senhaWebPrefeitura: 'nova', responsavelSenhaMeuGov: 'gov', ...extra,
   })
 
-  it('credenciais: admin e fiscal leem e gravam', async () => {
-    for (const uid of ['admin-a', 'fiscal-a']) {
-      const db = dbAs(uid)
-      await assertSucceeds(getDoc(doc(db, 'clientes_credenciais/cliente-a')))
-      await assertSucceeds(getDocs(query(collection(db, 'clientes_credenciais'), where('tenantId', '==', 'tenant-a'))))
-      await assertSucceeds(setDoc(doc(db, 'clientes_credenciais/cliente-a'), credValida({ atualizadoPorId: uid })))
-      await assertSucceeds(updateDoc(doc(db, 'clientes_credenciais/cliente-a'), { senhaPostoFiscal: deleteField() }))
-    }
-    await assertSucceeds(setDoc(doc(dbAs('fiscal-a'), 'clientes_credenciais/cliente-legado'), {
-      tenantId: 'tenant-a', clienteId: 'cliente-legado', senhaWebPrefeitura: 'antiga',
-    }))
-  })
-
-  it('credenciais: operacional, financeiro, leitura, override de tela e inativo não leem nem gravam', async () => {
-    for (const uid of ['operacional-a', 'financeiro-a', 'leitura-a', 'operacional-telas-fiscal', 'inativo-a']) {
+  it('credenciais: NINGUÉM lê nem grava pelo navegador — nem admin nem fiscal (só callables)', async () => {
+    for (const uid of ['admin-a', 'fiscal-a', 'operacional-a', 'financeiro-a', 'leitura-a', 'operacional-telas-fiscal', 'inativo-a']) {
       const db = dbAs(uid)
       await assertFails(getDoc(doc(db, 'clientes_credenciais/cliente-a')))
       await assertFails(getDocs(query(collection(db, 'clientes_credenciais'), where('tenantId', '==', 'tenant-a'))))
       await assertFails(setDoc(doc(db, 'clientes_credenciais/cliente-a'), credValida()))
       await assertFails(updateDoc(doc(db, 'clientes_credenciais/cliente-a'), { senhaWebPrefeitura: 'x' }))
+      await assertFails(updateDoc(doc(db, 'clientes_credenciais/cliente-a'), { senhaPostoFiscal: deleteField() }))
+      await assertFails(deleteDoc(doc(db, 'clientes_credenciais/cliente-a')))
     }
-  })
-
-  it('credenciais: isolamento de tenant e payload validado', async () => {
-    const db = dbAs('admin-a')
-    await assertFails(getDoc(doc(db, 'clientes_credenciais/cliente-b')))
-    // Doc no tenant A apontando para cliente do tenant B.
-    await assertFails(setDoc(doc(db, 'clientes_credenciais/cliente-b'), { tenantId: 'tenant-a', clienteId: 'cliente-b' }))
-    // Id do doc diferente do clienteId.
-    await assertFails(setDoc(doc(db, 'clientes_credenciais/cliente-legado'), credValida()))
-    // Campo fora da lista e valor não-texto.
-    await assertFails(setDoc(doc(db, 'clientes_credenciais/cliente-a'), credValida({ razaoSocial: 'x' })))
-    await assertFails(setDoc(doc(db, 'clientes_credenciais/cliente-a'), credValida({ senhaWebPrefeitura: 123 })))
-    // Cliente inexistente.
-    await assertFails(setDoc(doc(db, 'clientes_credenciais/nao-existe'), { tenantId: 'tenant-a', clienteId: 'nao-existe' }))
-    // Exclusão: só admin.
-    await assertFails(deleteDoc(doc(dbAs('fiscal-a'), 'clientes_credenciais/cliente-a')))
-    await assertSucceeds(deleteDoc(doc(db, 'clientes_credenciais/cliente-a')))
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'clientes_credenciais/cliente-legado'), {
+      tenantId: 'tenant-a', clienteId: 'cliente-legado', senhaWebPrefeitura: 'antiga',
+    }))
   })
 
   // ─── clientes: senha em texto puro não volta ──────────────────────────────
@@ -224,15 +199,128 @@ describeIfEmulator('regras de usuários, credenciais e auditoria', () => {
     await assertSucceeds(updateDoc(doc(db, 'clientes/cliente-legado'), { senhaWebPrefeitura: deleteField() }))
   })
 
-  // ─── logs_auditoria ───────────────────────────────────────────────────────
+  // ─── logs_auditoria: trilha não forjável ──────────────────────────────────
 
-  it('logs_auditoria: ninguém grava log em nome de outro nem como servidor', async () => {
+  const dbComEmail = (uid: string, email: string, extra: Record<string, unknown> = {}) =>
+    testEnv.authenticatedContext(uid, { email, ...extra }).firestore()
+  const logValido = (extra: Record<string, unknown> = {}) => ({
+    tenantId: 'tenant-a', usuarioId: 'operacional-a', usuarioNome: 'Operacional', usuarioEmail: 'operacional@a.com',
+    entidade: 'tarefas', entidadeId: 't1', acao: 'update', dadosAntes: null, dadosDepois: { titulo: 'x' },
+    origem: 'client', path: '/tarefas', criadoEm: serverTimestamp(), ...extra,
+  })
+
+  it('logs_auditoria: grava em nome próprio, com e-mail do token e hora do servidor', async () => {
+    const db = dbComEmail('operacional-a', 'operacional@a.com')
+    await assertSucceeds(setDoc(doc(db, 'logs_auditoria/ok'), logValido()))
+  })
+
+  it('logs_auditoria: ninguém grava log em nome de outro, como servidor, nem com e-mail alheio', async () => {
+    const db = dbComEmail('operacional-a', 'operacional@a.com')
+    await assertFails(setDoc(doc(db, 'logs_auditoria/l2'), logValido({ usuarioId: 'admin-a' })))
+    await assertFails(setDoc(doc(db, 'logs_auditoria/l3'), logValido({ origem: 'cloud_function' })))
+    await assertFails(setDoc(doc(db, 'logs_auditoria/l4'), logValido({ origem: 'trigger' })))
+    await assertFails(setDoc(doc(db, 'logs_auditoria/l5'), logValido({ usuarioEmail: 'admin@a.com' })))
+    const semUsuario: Record<string, unknown> = logValido()
+    delete semUsuario.usuarioId
+    await assertFails(setDoc(doc(db, 'logs_auditoria/l6'), semUsuario))
+    await assertFails(setDoc(doc(dbComEmail('inativo-a', 'inativo@a.com'), 'logs_auditoria/l7'), logValido({ usuarioId: 'inativo-a', usuarioEmail: 'inativo@a.com' })))
+  })
+
+  it('logs_auditoria: data retroativa/futura e campos extras são recusados', async () => {
+    const db = dbComEmail('operacional-a', 'operacional@a.com')
+    await assertFails(setDoc(doc(db, 'logs_auditoria/d1'), logValido({ criadoEm: Timestamp.fromDate(new Date('2020-01-01')) })))
+    await assertFails(setDoc(doc(db, 'logs_auditoria/d2'), logValido({ criadoEm: Timestamp.fromDate(new Date('2099-01-01')) })))
+    const semData: Record<string, unknown> = logValido()
+    delete semData.criadoEm
+    await assertFails(setDoc(doc(db, 'logs_auditoria/d3'), semData))
+    await assertFails(setDoc(doc(db, 'logs_auditoria/d4'), logValido({ ip: '1.2.3.4' })))
+    await assertFails(setDoc(doc(db, 'logs_auditoria/d5'), logValido({ tenantId: 'tenant-b' })))
+  })
+
+  // ─── events / nfse_eventos ────────────────────────────────────────────────
+
+  const eventoFechamento = (extra: Record<string, unknown> = {}) => ({
+    tenantId: 'tenant-a', tipo: 'fechamento', titulo: 'Revisão encerrada', descricao: 'ok',
+    origemColecao: 'fechamento_revisoes', origemId: '2026_07', actorId: 'operacional-a', actorNome: 'Op',
+    metadata: { severidade: 'baixa' }, criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp(),
+    criadoPorId: 'operacional-a', criadoPorNome: 'Op', ...extra,
+  })
+
+  it('events: navegador cria só fechamento/lancamento, em nome próprio e com hora do servidor', async () => {
+    await assertSucceeds(setDoc(doc(dbAs('operacional-a'), 'events/e1'), eventoFechamento()))
+    await assertSucceeds(setDoc(doc(dbAs('fiscal-a'), 'events/e2'), eventoFechamento({ actorId: 'fiscal-a', criadoPorId: 'fiscal-a' })))
+    // Cobrança iniciada (fila-cobranca.tsx): financeiro, sem actorId.
+    const cobranca: Record<string, unknown> = {
+      ...eventoFechamento({ tipo: 'lancamento', origemColecao: 'lancamentos', origemId: 'l1', clienteId: null,
+        criadoPorId: 'financeiro-a' }),
+    }
+    delete cobranca.actorId
+    delete cobranca.actorNome
+    await assertSucceeds(setDoc(doc(dbAs('financeiro-a'), 'events/e3'), cobranca))
+  })
+
+  it('events: tipo fora da lista, autor alheio, data forjada, perfil errado ou campo extra são recusados', async () => {
     const db = dbAs('operacional-a')
-    const log = { tenantId: 'tenant-a', acao: 'update', entidade: 'clientes', origem: 'client' }
-    await assertSucceeds(setDoc(doc(db, 'logs_auditoria/l1'), { ...log, usuarioId: 'operacional-a' }))
-    await assertFails(setDoc(doc(db, 'logs_auditoria/l2'), { ...log, usuarioId: 'admin-a' }))
-    await assertFails(setDoc(doc(db, 'logs_auditoria/l3'), { ...log }))
-    await assertFails(setDoc(doc(db, 'logs_auditoria/l4'), { ...log, usuarioId: 'operacional-a', origem: 'cloud_function' }))
-    await assertFails(setDoc(doc(dbAs('inativo-a'), 'logs_auditoria/l5'), { ...log, usuarioId: 'inativo-a' }))
+    await assertFails(setDoc(doc(db, 'events/f1'), eventoFechamento({ tipo: 'nfse_emitida' })))
+    await assertFails(setDoc(doc(db, 'events/f2'), eventoFechamento({ actorId: 'admin-a' })))
+    await assertFails(setDoc(doc(db, 'events/f3'), eventoFechamento({ criadoPorId: 'admin-a' })))
+    await assertFails(setDoc(doc(db, 'events/f4'), eventoFechamento({ criadoEm: Timestamp.fromDate(new Date('2020-01-01')) })))
+    await assertFails(setDoc(doc(db, 'events/f5'), eventoFechamento({ extra: true })))
+    await assertFails(setDoc(doc(db, 'events/f6'), eventoFechamento({ tipo: 'lancamento', origemColecao: 'lancamentos' })))
+    await assertFails(setDoc(doc(dbAs('leitura-a'), 'events/f7'), eventoFechamento({ actorId: 'leitura-a', criadoPorId: 'leitura-a' })))
+  })
+
+  it('nfse_eventos: navegador não cria (só Cloud Functions), nem o fiscal', async () => {
+    for (const uid of ['admin-a', 'fiscal-a']) {
+      await assertFails(setDoc(doc(dbAs(uid), `nfse_eventos/${uid}`), {
+        tenantId: 'tenant-a', nfseId: 'n1', tipo: 'cancelamento', criadoEm: serverTimestamp(),
+      }))
+    }
+  })
+
+  // ─── M1: financeiro não lê config fiscal ──────────────────────────────────
+
+  it('clientes_fiscal: financeiro com a tela fiscal (padrão do perfil) NÃO lê; operacional com a tela concedida lê', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore()
+      await setDoc(doc(db, 'usuarios/financeiro-telas'), {
+        nome: 'fin', perfil: 'financeiro', ativo: true, tenantId: 'tenant-a', telas: ['hoje', 'dashboard', 'clientes', 'financeiro', 'fiscal'],
+      })
+      await setDoc(doc(db, 'clientes_fiscal/cf-a'), {
+        tenantId: 'tenant-a', clienteId: 'cliente-a', credenciais: { certificadoSenha: 'cifrado' },
+      })
+      await setDoc(doc(db, 'nfse_emitidas/n-a'), { tenantId: 'tenant-a', clienteId: 'cliente-a' })
+    })
+    await assertFails(getDoc(doc(dbAs('financeiro-telas'), 'clientes_fiscal/cf-a')))
+    await assertFails(getDocs(query(collection(dbAs('financeiro-telas'), 'clientes_fiscal'), where('tenantId', '==', 'tenant-a'))))
+    await assertFails(getDoc(doc(dbAs('financeiro-a'), 'clientes_fiscal/cf-a')))
+    // Continua lendo NFS-e (conciliação).
+    await assertSucceeds(getDoc(doc(dbAs('financeiro-telas'), 'nfse_emitidas/n-a')))
+    await assertSucceeds(getDoc(doc(dbAs('operacional-telas-fiscal'), 'clientes_fiscal/cf-a')))
+    await assertSucceeds(getDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-a')))
+    await assertSucceeds(getDoc(doc(dbAs('admin-a'), 'clientes_fiscal/cf-a')))
+  })
+
+  // ─── configuracoes/seguranca: interruptor do 2º fator ─────────────────────
+
+  it('configuracoes/seguranca: só admin que entrou com 2º fator liga/desliga; ninguém apaga', async () => {
+    const adminSemMfa = dbAs('admin-a')
+    // Claim do ID token de quem entrou com TOTP (o tipo do rules-unit-testing não a lista).
+    const tokenMfa = { firebase: { sign_in_provider: 'password', sign_in_second_factor: 'totp' } } as unknown as
+      Parameters<typeof testEnv.authenticatedContext>[1]
+    const adminComMfa = testEnv.authenticatedContext('admin-a', tokenMfa).firestore()
+    const fiscalComMfa = testEnv.authenticatedContext('fiscal-a', tokenMfa).firestore()
+    const ref = (db: ReturnType<typeof dbAs>) => doc(db, 'configuracoes/seguranca')
+
+    await assertFails(setDoc(ref(adminSemMfa), { tenantId: 'tenant-a', mfaObrigatorio: true }))
+    await assertFails(setDoc(ref(fiscalComMfa), { tenantId: 'tenant-a', mfaObrigatorio: true }))
+    await assertSucceeds(setDoc(ref(adminComMfa), { tenantId: 'tenant-a', mfaObrigatorio: true }))
+    await assertFails(updateDoc(ref(adminSemMfa), { mfaObrigatorio: false }))
+    await assertSucceeds(updateDoc(ref(adminComMfa), { mfaObrigatorio: false }))
+    await assertFails(deleteDoc(ref(adminComMfa)))
+    // Todo usuário ativo lê (o front decide o redirecionamento).
+    await assertSucceeds(getDoc(ref(dbAs('leitura-a'))))
+    // Outros docs de configuracoes seguem só admin, sem exigir 2º fator.
+    await assertSucceeds(setDoc(doc(adminSemMfa, 'configuracoes/escritorio'), { tenantId: 'tenant-a', nome: 'X' }))
   })
 })

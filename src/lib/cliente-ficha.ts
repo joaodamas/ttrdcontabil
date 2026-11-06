@@ -55,8 +55,8 @@ function rotulo(label: string) {
 }
 
 /**
- * `credenciais` só para quem pode vê-las (admin/fiscal), lidas de
- * clientes_credenciais. Sem elas, credencial sai com valor vazio e o
+ * `credenciais` só para quem pode vê-las (admin/fiscal), reveladas pelo
+ * callable lerCredenciaisCliente (pode trazer só alguns campos). Sem elas, credencial sai com valor vazio e o
  * "preenchida/em branco" vem de `credenciaisPreenchidas` — nunca da senha.
  */
 export function montarFichaCliente(cliente: Record<string, unknown>, credenciais?: CredenciaisCliente | null) {
@@ -67,8 +67,11 @@ export function montarFichaCliente(cliente: Record<string, unknown>, credenciais
     const lista = grupos.get(secao) ?? []
     const credencial = CAMPOS_CREDENCIAL.has(col.key)
     if (credencial) {
-      const valor = credenciais ? texto(credenciais[col.key as keyof CredenciaisCliente]) : ''
-      lista.push({ key: col.key, label: rotulo(col.label), valor, preenchido: credenciais ? !!valor : preenchidas.has(col.key), credencial })
+      // Senhas são reveladas campo a campo (cada revelação vai para o log):
+      // campo ainda não revelado segue o "preenchida/em branco" do cliente.
+      const revelado = !!credenciais && col.key in credenciais
+      const valor = revelado ? texto(credenciais[col.key as keyof CredenciaisCliente]) : ''
+      lista.push({ key: col.key, label: rotulo(col.label), valor, preenchido: revelado ? !!valor : preenchidas.has(col.key), credencial })
     } else {
       const valor = texto(cliente[col.key])
       lista.push({ key: col.key, label: rotulo(col.label), valor, preenchido: !!valor, credencial })

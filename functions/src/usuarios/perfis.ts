@@ -48,7 +48,8 @@ export const PERFIL_DEFAULT_TELAS: Record<Perfil, readonly TelaKey[]> = {
 /**
  * Perfis que leem/gravam as senhas de portal dos clientes
  * (clientes_credenciais). Decisão do dono, 2026-11-05: só administrador e
- * fiscal. Espelha podeVerCredenciais() em firestore.rules.
+ * fiscal. Conferido nos callables de functions/src/clientes/credenciais-callables.ts
+ * (as regras negam clientes_credenciais ao navegador).
  */
 export const PERFIS_CREDENCIAIS: readonly Perfil[] = ['admin', 'fiscal']
 

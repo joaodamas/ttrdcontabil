@@ -45,13 +45,11 @@ service firebase.storage {
           || (('telas' in userDoc()) && (userDoc().telas is list) && ('fiscal' in userDoc().telas)));
     }
 
-    // Documentos de clientes — leitura para quem lê o cliente (mesmo critério de
-    // `documentos` em firestore.rules: canRead + tenant), escrita via Admin SDK.
-    // Nenhuma tela grava ou lê este caminho hoje; se um dia guardar documento
-    // fiscal/pessoal sensível aqui, restringir por perfil como o nfse/ abaixo.
+    // Documentos de clientes: nenhuma tela grava ou lê este caminho
+    // (conferido em 2026-11-06). Trancado até existir uma tela — e então
+    // restringir por perfil como o nfse/ abaixo, não por "lê o cliente".
     match /documentos/{clienteId}/{allPaths=**} {
-      allow read: if canReadCliente(clienteId);
-      allow write: if false;
+      allow read, write: if false;
     }
 
     // Certificados digitais — acesso restrito (Admin SDK only)

@@ -11,7 +11,7 @@ export {
 
 export { emitirNfseLote } from './nfse/emitir-lote'
 export { cancelarNfse, consultarNfse, retryNfse } from './nfse/ciclo'
-export { gerarDanfse } from './nfse/danfse/callable'
+export { gerarDanfse, obterUrlDanfse } from './nfse/danfse/callable'
 export { gerarRascunhosNfseMensais, processarNfseRecorrenteDiaria } from './nfse/rascunhos'
 // Spedy (conta encerrada em 2026-09) e NF-e de produto, que só existia por ela,
 // saíram do código em 2026-11-05: a emissão é direta (prefeitura / Ambiente
@@ -28,6 +28,23 @@ export {
   excluirUsuario,
 } from './usuarios/callables'
 export { sincronizarDiretorioUsuario } from './usuarios/diretorio'
+
+// ── Senhas de portal dos clientes (cifradas, só pelo servidor) ─────────────────
+export {
+  lerCredenciaisCliente,
+  salvarCredenciaisCliente,
+  exportarCredenciaisClientes,
+} from './clientes/credenciais-callables'
+
+// ── Auditoria no servidor e descarte LGPD ─────────────────────────────────────
+export {
+  auditarClientes,
+  auditarClientesFiscal,
+  auditarClientesCredenciais,
+  auditarLancamentos,
+  auditarUsuarios,
+} from './auditoria/triggers'
+export { descartarDadosClienteExcluido } from './clientes/descarte'
 
 // ── Backup ────────────────────────────────────────────────────────────────────
 export { exportarFirestoreSemanal } from './backup'

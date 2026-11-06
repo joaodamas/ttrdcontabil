@@ -21,8 +21,9 @@ import * as admin from 'firebase-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 
-import { montarAuditLog, type AuditActor } from '../audit'
-import { assertAdmin, type UsuarioAutorizado } from '../authz'
+import { atorDaRequisicao, montarAuditLog, requisicaoDoCallable } from '../audit'
+import { assertAdmin } from '../authz'
+import { exigirSegundoFatorSeObrigatorio } from '../seguranca/mfa'
 import {
   ErroRegraUsuario,
   camposAlterados,
@@ -42,8 +43,19 @@ function traduzirErro(err: unknown): never {
   throw err
 }
 
-function ator(usuario: UsuarioAutorizado): AuditActor {
-  return { id: usuario.id, nome: usuario.nome, email: usuario.email }
+type RequisicaoCallable = Parameters<typeof atorDaRequisicao>[0]
+
+/** Admin ativo do tenant + 2º fator quando configuracoes/seguranca o exige. */
+async function autorizarAdmin(request: RequisicaoCallable, mensagem: string) {
+  const quem = await assertAdmin(request.auth?.uid, mensagem)
+  await exigirSegundoFatorSeObrigatorio(request.auth)
+  return quem
+}
+
+// Ator e origem do log: nome/e-mail do token (não do perfil, que o usuário
+// edita) + IP e navegador da chamada.
+function logDe(request: RequisicaoCallable) {
+  return { actor: atorDaRequisicao(request), requisicao: requisicaoDoCallable(request) }
 }
 
 // Senha que ninguém conhece: a conta nasce com provedor de senha (o e-mail de
@@ -80,7 +92,7 @@ async function carregarAlvo(tx: FirebaseFirestore.Transaction, uid: string, tena
 // ─── criarUsuario ─────────────────────────────────────────────────────────────
 
 export const criarUsuario = onCall(OPCOES, async (request) => {
-  const quem = await assertAdmin(request.auth?.uid, 'Apenas administradores criam usuários.')
+  const quem = await autorizarAdmin(request, 'Apenas administradores criam usuários.')
   let entrada
   try {
     entrada = validarEntradaCriar(request.data)
@@ -149,7 +161,7 @@ export const criarUsuario = onCall(OPCOES, async (request) => {
       db().collection('logs_auditoria').doc(),
       montarAuditLog({
         tenantId: quem.tenantId,
-        actor: ator(quem),
+        ...logDe(request),
         entidade: 'usuarios',
         entidadeId: uid,
         acao: existente ? 'usuario_criado_conta_existente' : 'usuario_criado',
@@ -174,7 +186,7 @@ export const criarUsuario = onCall(OPCOES, async (request) => {
 // ─── atualizarUsuario ─────────────────────────────────────────────────────────
 
 export const atualizarUsuario = onCall(OPCOES, async (request) => {
-  const quem = await assertAdmin(request.auth?.uid, 'Apenas administradores alteram usuários.')
+  const quem = await autorizarAdmin(request, 'Apenas administradores alteram usuários.')
   let entrada
   try {
     entrada = validarEntradaAtualizar(request.data)
@@ -210,7 +222,7 @@ export const atualizarUsuario = onCall(OPCOES, async (request) => {
       db().collection('logs_auditoria').doc(),
       montarAuditLog({
         tenantId: quem.tenantId,
-        actor: ator(quem),
+        ...logDe(request),
         entidade: 'usuarios',
         entidadeId: uid,
         acao: alteracoes.ativo === false && antes.ativo !== false
@@ -253,7 +265,7 @@ export const atualizarUsuario = onCall(OPCOES, async (request) => {
 // ─── redefinirSenhaUsuario ────────────────────────────────────────────────────
 
 export const redefinirSenhaUsuario = onCall(OPCOES, async (request) => {
-  const quem = await assertAdmin(request.auth?.uid, 'Apenas administradores reenviam convites.')
+  const quem = await autorizarAdmin(request, 'Apenas administradores reenviam convites.')
   let uid: string
   try {
     uid = validarUid((request.data as { uid?: unknown } | undefined)?.uid)
@@ -270,7 +282,7 @@ export const redefinirSenhaUsuario = onCall(OPCOES, async (request) => {
       db().collection('logs_auditoria').doc(),
       montarAuditLog({
         tenantId: quem.tenantId,
-        actor: ator(quem),
+        ...logDe(request),
         entidade: 'usuarios',
         entidadeId: uid,
         acao: 'usuario_convite_reenviado',
@@ -297,7 +309,7 @@ export const redefinirSenhaUsuario = onCall(OPCOES, async (request) => {
 // ─── excluirUsuario ───────────────────────────────────────────────────────────
 
 export const excluirUsuario = onCall(OPCOES, async (request) => {
-  const quem = await assertAdmin(request.auth?.uid, 'Apenas administradores excluem usuários.')
+  const quem = await autorizarAdmin(request, 'Apenas administradores excluem usuários.')
   let uid: string
   try {
     uid = validarUid((request.data as { uid?: unknown } | undefined)?.uid)
@@ -318,7 +330,7 @@ export const excluirUsuario = onCall(OPCOES, async (request) => {
       db().collection('logs_auditoria').doc(),
       montarAuditLog({
         tenantId: quem.tenantId,
-        actor: ator(quem),
+        ...logDe(request),
         entidade: 'usuarios',
         entidadeId: uid,
         acao: 'usuario_excluido',

@@ -63,10 +63,13 @@ describe('XML da NFS-e', () => {
 })
 
 describe('DANFSe pronto', () => {
-  it('reaproveita pdfUrl, exceto o da plataforma gerado antes do cancelamento', () => {
-    expect(pdfProntoDaNota({ pdfUrl: 'https://x/a.pdf', status: 'emitida', pdfOrigem: 'plataforma' })).toBe('https://x/a.pdf')
-    expect(pdfProntoDaNota({ pdfUrl: 'https://x/a.pdf', status: 'cancelada', pdfOrigem: 'plataforma' })).toBeNull()
-    expect(pdfProntoDaNota({ pdfUrl: 'https://x/a.pdf', status: 'cancelada', pdfOrigem: 'plataforma', pdfCancelada: true })).toBe('https://x/a.pdf')
+  it('reaproveita só o PDF do provedor; o da plataforma é sempre pedido ao servidor (URL curta)', () => {
+    expect(pdfProntoDaNota({ pdfUrl: 'https://x/a.pdf', status: 'emitida', pdfOrigem: 'plataforma' })).toBeNull()
+    expect(pdfProntoDaNota({ pdfUrl: 'https://x/a.pdf', status: 'cancelada', pdfOrigem: 'plataforma', pdfCancelada: true })).toBeNull()
+    // Link antigo com token do Storage, mesmo sem pdfOrigem: ignorado.
+    expect(pdfProntoDaNota({
+      pdfUrl: 'https://firebasestorage.googleapis.com/v0/b/b/o/nfse%2Fc%2Fx.pdf?alt=media&token=abc',
+    })).toBeNull()
     expect(pdfProntoDaNota({ pdfUrl: 'https://prefeitura/a.pdf', status: 'cancelada' })).toBe('https://prefeitura/a.pdf')
     expect(pdfProntoDaNota({ pdfUrl: null })).toBeNull()
   })
@@ -74,6 +77,7 @@ describe('DANFSe pronto', () => {
   it('podeObterDanfse quando há PDF ou XML', () => {
     expect(podeObterDanfse({ xmlNfse: xml })).toBe(true)
     expect(podeObterDanfse({ pdfUrl: 'https://x/a.pdf' })).toBe(true)
+    expect(podeObterDanfse({ pdfUrl: 'https://x/a.pdf', pdfOrigem: 'plataforma' })).toBe(false)
     expect(podeObterDanfse({})).toBe(false)
   })
 })

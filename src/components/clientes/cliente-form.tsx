@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -182,8 +182,11 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
   // Senhas de portal: só admin e fiscal leem/gravam (clientes_credenciais).
   // Os demais veem só "preenchida/em branco" e o save não mexe nelas.
   const podeCredenciais = podeVerCredenciais(usuario)
-  const [credStatus, setCredStatus] = useState<'carregando' | 'ok' | 'erro'>(
-    isEditing && podeCredenciais ? 'carregando' : 'ok'
+  // Editando: as senhas só são lidas no clique de "Mostrar e editar senhas"
+  // (cada leitura é uma revelação registrada no log, com IP). Até lá o save
+  // não mexe nelas.
+  const [credStatus, setCredStatus] = useState<StatusCredenciais>(
+    isEditing && podeCredenciais ? 'oculto' : 'ok'
   )
   const credPreenchidas = credenciaisPreenchidasDe(initialData as Record<string, unknown> | undefined)
 
@@ -206,23 +209,18 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
     },
   })
 
-  useEffect(() => {
+  async function revelarCredenciais() {
     if (!isEditing || !podeCredenciais || !initialData?.id) return
-    let ativo = true
-    carregarCredenciaisCliente(initialData.id, initialData as Record<string, unknown>)
-      .then((cred) => {
-        if (!ativo) return
-        for (const [k, v] of Object.entries(cred)) setValue(k as FieldName, v, { shouldDirty: false })
-        setCredStatus('ok')
-      })
-      .catch((err) => {
-        console.error('[cliente-form] credenciais', err)
-        if (ativo) setCredStatus('erro')
-      })
-    return () => { ativo = false }
-    // Carrega uma vez por cliente aberto.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialData?.id, podeCredenciais])
+    setCredStatus('carregando')
+    try {
+      const cred = await carregarCredenciaisCliente(initialData.id, initialData as Record<string, unknown>)
+      for (const [k, v] of Object.entries(cred)) setValue(k as FieldName, v, { shouldDirty: false })
+      setCredStatus('ok')
+    } catch (err) {
+      console.error('[cliente-form] credenciais', err)
+      setCredStatus('erro')
+    }
+  }
 
   const tipoPessoa = watch('tipoPessoa')
   const aceiteWhatsAppCobranca = watch('aceiteWhatsAppCobranca')
@@ -779,7 +777,7 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          <AvisoCredenciais pode={podeCredenciais} status={credStatus} />
+          <AvisoCredenciais pode={podeCredenciais} status={credStatus} onRevelar={() => void revelarCredenciais()} />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {EMPRESA_CREDENCIAIS_FIELDS.map((field) => (
               <CampoCredencial
@@ -992,15 +990,24 @@ export function ClienteForm({ initialData, onSuccess, onClose }: ClienteFormProp
   )
 }
 
-function AvisoCredenciais({ pode, status }: { pode: boolean; status: 'carregando' | 'ok' | 'erro' }) {
+type StatusCredenciais = 'oculto' | 'carregando' | 'ok' | 'erro'
+
+function AvisoCredenciais({ pode, status, onRevelar }: { pode: boolean; status: StatusCredenciais; onRevelar: () => void }) {
   const texto = !pode
     ? 'Logins e senhas de portal só são visíveis e editáveis por administrador e fiscal. Aqui aparece só se cada um está preenchido.'
     : status === 'erro'
-      ? 'Não foi possível carregar as senhas deste cliente. Salvar agora não altera as senhas; recarregue a página para editá-las.'
-      : 'Senhas ficam mascaradas e guardadas à parte do cadastro, visíveis só para administrador e fiscal.'
+      ? 'Não foi possível carregar as senhas deste cliente. Salvar agora não altera as senhas; tente mostrar de novo ou recarregue a página.'
+      : status === 'oculto'
+        ? 'Senhas ficam cifradas e à parte do cadastro. Para ver ou editar, clique em "Mostrar e editar senhas" — a consulta fica registrada no log de auditoria. Salvar sem mostrar não altera as senhas.'
+        : 'Senhas ficam mascaradas e guardadas à parte do cadastro, visíveis só para administrador e fiscal.'
   return (
-    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-      {texto}
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+      <span className="min-w-0 flex-1">{texto}</span>
+      {pode && (status === 'oculto' || status === 'erro') && (
+        <Button type="button" size="sm" variant="outline" onClick={onRevelar}>
+          Mostrar e editar senhas
+        </Button>
+      )}
     </div>
   )
 }
@@ -1012,11 +1019,11 @@ function CampoCredencial({
   label: string
   type: string
   pode: boolean
-  status: 'carregando' | 'ok' | 'erro'
+  status: StatusCredenciais
   preenchida: boolean
   register: ReturnType<typeof useForm<ClienteFormData>>['register']
 }) {
-  if (!pode) {
+  if (!pode || status === 'oculto') {
     return (
       <div className="space-y-2">
         <Label>{label}</Label>

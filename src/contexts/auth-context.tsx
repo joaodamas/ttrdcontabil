@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
+import '@/lib/zod-config'
 import { onSession, signOut, type UserSession } from '@/lib/auth-client'
 import { queryClient } from '@/lib/query-client'
 import { invalidateUsuariosCache } from '@/lib/firestore-client'

@@ -1,16 +1,20 @@
 /**
  * DANFSe gerado pela plataforma: lê o XML oficial gravado em nfse_emitidas,
  * renderiza o PDF, guarda no Storage em caminho determinístico e grava
- * pdfUrl/pdfPath na nota. Usado pelo callable gerarDanfse e, em modo
- * best-effort, logo após a emissão (processarEmissao).
+ * pdfPath na nota. Usado pelos callables obterUrlDanfse/gerarDanfse e, em
+ * modo best-effort, logo após a emissão (processarEmissao).
+ *
+ * Sem URL permanente (2026-11-06): antes o arquivo ganhava um token de
+ * download do Storage e a nota guardava `pdfUrl` com ele — link que ignora
+ * storage.rules e vale para sempre na mão de quem o copiou. Agora não há token;
+ * quem pode ler a nota pede uma URL assinada de 5 minutos (urlAssinadaDanfse).
  *
  * Por que geramos: a API de DANFSe do ADN foi sobrestada (NT 008/2026), então
  * o PDF oficial deixou de existir — o DANFSe passa a ser responsabilidade do
  * software emissor.
  */
-import { randomUUID } from 'node:crypto'
 import * as admin from 'firebase-admin'
-import { Timestamp } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 
 import { DanfseXmlInvalidoError, montarDadosDanfse } from './dados'
@@ -19,10 +23,13 @@ import { renderizarDanfsePdf } from './render'
 const db = () => admin.firestore()
 
 export interface ResultadoDanfse {
-  pdfUrl: string
   pdfPath: string
+  nomeArquivo: string
   reutilizado: boolean
 }
+
+/** Validade da URL assinada devolvida ao navegador. */
+export const VALIDADE_URL_DANFSE_MS = 5 * 60_000
 
 /** nfse/{clienteId}/{chave}.pdf — a versão cancelada ganha sufixo próprio. */
 export function caminhoDanfse(clienteId: string, chave: string, cancelada: boolean): string {
@@ -30,9 +37,31 @@ export function caminhoDanfse(clienteId: string, chave: string, cancelada: boole
   return `nfse/${seguro(clienteId)}/${seguro(chave)}${cancelada ? '-cancelada' : ''}.pdf`
 }
 
-/** URL de download com token (mesmo formato do getDownloadURL do SDK web). */
-function urlComToken(bucket: string, caminho: string, token: string): string {
-  return `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(caminho)}?alt=media&token=${token}`
+/** URL de download com token do Storage — o formato que NÃO usamos mais. */
+export function ehUrlComTokenDoStorage(url: unknown): boolean {
+  return typeof url === 'string' && url.includes('firebasestorage.googleapis.com') && /[?&]token=/.test(url)
+}
+
+/**
+ * URL assinada (V4) de leitura, curta. Exige que a conta de serviço das
+ * functions possa assinar (roles/iam.serviceAccountTokenCreator nela mesma);
+ * sem isso lança — o callable cai para devolver o PDF em base64.
+ */
+export async function urlAssinadaDanfse(pdfPath: string, nomeArquivo: string): Promise<{ url: string; expiraEm: string }> {
+  const expires = Date.now() + VALIDADE_URL_DANFSE_MS
+  const [url] = await getStorage().bucket().file(pdfPath).getSignedUrl({
+    version: 'v4',
+    action: 'read',
+    expires,
+    responseDisposition: `inline; filename="${nomeArquivo}"`,
+    responseType: 'application/pdf',
+  })
+  return { url, expiraEm: new Date(expires).toISOString() }
+}
+
+export async function lerPdfDanfse(pdfPath: string): Promise<Buffer> {
+  const [conteudo] = await getStorage().bucket().file(pdfPath).download()
+  return conteudo
 }
 
 export function nomeArquivoDanfse(numero: string | undefined, chave: string): string {
@@ -58,14 +87,16 @@ export async function gerarESalvarDanfse(nfseId: string, opcoes: { forcar?: bool
   const pdfPath = caminhoDanfse(clienteId, dados.chaveAcesso, cancelada)
   const bucket = getStorage().bucket()
 
-  if (!opcoes.forcar && nota.pdfPath === pdfPath && typeof nota.pdfUrl === 'string' && nota.pdfUrl) {
+  const nomeArquivo = nomeArquivoDanfse(dados.identificacao.numeroNfse, dados.chaveAcesso)
+  // PDF já gerado no mesmo caminho e sem o link permanente antigo: reaproveita.
+  // Com pdfUrl de token (gerado antes de 2026-11-06), regrava sem token — o
+  // save() substitui o objeto e o token antigo deixa de valer.
+  if (!opcoes.forcar && nota.pdfPath === pdfPath && !ehUrlComTokenDoStorage(nota.pdfUrl)) {
     const [existe] = await bucket.file(pdfPath).exists()
-    if (existe) return { pdfUrl: nota.pdfUrl, pdfPath, reutilizado: true }
+    if (existe) return { pdfPath, nomeArquivo, reutilizado: true }
   }
 
   const pdf = await renderizarDanfsePdf(dados, { cancelada })
-  const token = randomUUID()
-  const nomeArquivo = nomeArquivoDanfse(dados.identificacao.numeroNfse, dados.chaveAcesso)
   await bucket.file(pdfPath).save(pdf, {
     resumable: false,
     contentType: 'application/pdf',
@@ -73,20 +104,19 @@ export async function gerarESalvarDanfse(nfseId: string, opcoes: { forcar?: bool
       contentDisposition: `inline; filename="${nomeArquivo}"`,
       cacheControl: 'private, max-age=300',
       metadata: {
-        firebaseStorageDownloadTokens: token,
         nfseId,
         chaveAcesso: dados.chaveAcesso,
         geradoPor: 'plataforma',
       },
     },
   })
-  const pdfUrl = urlComToken(bucket.name, pdfPath, token)
   await ref.update({
-    pdfUrl,
+    // Some com o link permanente; o PDF é pedido pelo callable a cada abertura.
+    pdfUrl: FieldValue.delete(),
     pdfPath,
     pdfOrigem: 'plataforma',
     pdfCancelada: cancelada,
     pdfGeradoEm: Timestamp.now(),
   })
-  return { pdfUrl, pdfPath, reutilizado: false }
+  return { pdfPath, nomeArquivo, reutilizado: false }
 }

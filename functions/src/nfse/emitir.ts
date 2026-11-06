@@ -8,6 +8,7 @@ import { getStorage } from 'firebase-admin/storage'
 import { rotearEmissao } from './municipios/router'
 import { encrypt, decrypt, isEncrypted } from './encrypt'
 import { credentialSecrets } from './secrets'
+import { exigirSegundoFatorSeObrigatorio } from '../seguranca/mfa'
 import { isProducaoLiberadaPorConfigOuConector } from './conectores'
 import { resolverProvedorNfse } from './provedor'
 import {
@@ -576,6 +577,7 @@ export const uploadCertificado = onCall(
       throw new HttpsError('invalid-argument', 'clienteId, pfxBase64 e senha são obrigatórios.')
     }
     await assertCanAccessCliente(request.auth.uid, clienteId, 'fiscal')
+    await exigirSegundoFatorSeObrigatorio(request.auth)
 
     let info: { valido: boolean; vencimento: Date; titular: string }
     try {
@@ -669,6 +671,7 @@ export const validarCertificado = onCall(
     // Só quem pode enviar o certificado (uploadCertificado → 'fiscal'). Antes
     // bastava estar logado: qualquer conta testava senhas de .pfx à vontade.
     await assertPerfil(request.auth.uid, ['admin', 'fiscal'], 'Apenas administradores e fiscais validam certificados.')
+    await exigirSegundoFatorSeObrigatorio(request.auth)
 
     const { pfxBase64, senha } = request.data as { pfxBase64: string; senha: string }
     if (!pfxBase64 || !senha) throw new HttpsError('invalid-argument', 'pfxBase64 e senha são obrigatórios.')
