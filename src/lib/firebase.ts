@@ -53,13 +53,16 @@ export function getFirebaseApp(): FirebaseApp {
 }
 
 /**
- * Só em desenvolvimento, com NEXT_PUBLIC_USE_FIREBASE_EMULATORS=1: aponta Auth e
- * Firestore para os emuladores locais (dados fictícios, revisão visual, e2e).
- * Em build de produção a variável não existe e nada muda.
+ * Com NEXT_PUBLIC_USE_FIREBASE_EMULATORS=1: aponta Auth e Firestore para os
+ * emuladores locais (dados fictícios, revisão visual, e2e). Em desenvolvimento
+ * basta a variável; num BUILD (static export servido pelo emulador de hosting,
+ * que é como o app roda em produção — e onde bugs como o do placeholder das
+ * rotas [id] aparecem) exige também um projeto `demo-*`, que nunca existe na
+ * nuvem. O build de produção não tem nenhuma das duas e nada muda.
  */
 function conectarEmuladores(app: FirebaseApp): void {
-  if (process.env.NODE_ENV !== 'development') return
   if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS !== '1') return
+  if (process.env.NODE_ENV !== 'development' && !app.options.projectId?.startsWith('demo-')) return
   connectAuthEmulator(getAuth(app), 'http://127.0.0.1:9099', { disableWarnings: true })
   connectFirestoreEmulator(getFirestore(app), '127.0.0.1', 8080)
 }

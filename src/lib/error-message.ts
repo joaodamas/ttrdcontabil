@@ -67,3 +67,14 @@ export function getErrorMessage(error: unknown, fallback: string): string {
   if (typeof error === 'string' && error.trim()) return isTechnicalErrorMessage(error) ? fallback : error
   return fallback
 }
+
+/**
+ * A leitura foi barrada pelas regras/functions (falta de permissão), e não
+ * falhou por rede/índice? Serve para a tela dizer "Sem acesso a este módulo"
+ * em vez de mostrar a lista vazia como se não houvesse dados.
+ */
+export function ehPermissaoNegada(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code
+  if (typeof code !== 'string') return false
+  return code === 'permission-denied' || code.endsWith('/permission-denied')
+}

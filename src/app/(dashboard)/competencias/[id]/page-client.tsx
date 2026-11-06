@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { useState, useEffect, useMemo } from 'react'
+import { usePathname } from 'next/navigation'
+import { getPathSegmentAfter } from '@/lib/route-params'
 import Link from 'next/link'
 import { where, orderBy, limit } from 'firebase/firestore'
 
@@ -16,7 +17,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, Pencil } from 'lucide-react'
 
 export default function CompetenciaDetalhePage() {
-  const { id } = useParams<{ id: string }>()
+  const pathname = usePathname()
+  const id = useMemo(() => getPathSegmentAfter(pathname, 'competencias'), [pathname])
 
   const [competencia, setCompetencia] = useState<Record<string, unknown> | null>(null)
   const [tarefas, setTarefas] = useState<Array<Record<string, unknown>>>([])

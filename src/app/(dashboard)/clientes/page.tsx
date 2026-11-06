@@ -33,6 +33,7 @@ import { listDocuments, registrarExportacaoSensivel } from '@/lib/firestore-clie
 import { listarCredenciaisClientes } from '@/features/clientes/credenciais'
 import { baixarRelatorioClientesXlsx } from '@/lib/clientes-relatorio'
 import { useAuth } from '@/contexts/auth-context'
+import { canAccessTela, podeEscreverEm, podeOperarNfse } from '@/lib/permissions'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 const REGIME_LABELS: Record<string, string> = {
@@ -311,6 +312,13 @@ function ClientesContent() {
   const [confirmarSenhas, setConfirmarSenhas] = useState(false)
   const { usuario } = useAuth()
   const ehAdmin = usuario?.perfil === 'admin'
+  // Ações oferecidas na lista seguem o que o perfil pode fazer de fato (regras
+  // do Firestore / Cloud Functions) — antes o menu ⋯ mostrava tudo para todos.
+  const podeEditarCliente = podeEscreverEm(usuario, 'clientes')
+  const podeCriarTarefa = podeEscreverEm(usuario, 'tarefas')
+  const podeCriarCompetencia = podeEscreverEm(usuario, 'competencias')
+  const podeEmitirNfse = canAccessTela(usuario, 'fiscal') && podeOperarNfse(usuario)
+  const temAcaoSecundaria = podeCriarTarefa || podeCriarCompetencia || podeEmitirNfse
 
   // Relatório de TODOS os clientes ativos (não só a página/filtro da tela), com
   // cada campo da ficha e o que está em branco, mais a situação fiscal. Com
@@ -386,14 +394,18 @@ function ClientesContent() {
                 Ficha completa (Excel)
               </Button>
             )}
-            <Link href="/clientes/importar" className={buttonVariants({ variant: 'outline', size: 'cta' })}>
-              <Upload />
-              Importar
-            </Link>
-            <Link href="/clientes/novo" className={buttonVariants({ size: 'cta' })}>
-              <Plus />
-              Novo cliente
-            </Link>
+            {podeEditarCliente && (
+              <>
+                <Link href="/clientes/importar" className={buttonVariants({ variant: 'outline', size: 'cta' })}>
+                  <Upload />
+                  Importar
+                </Link>
+                <Link href="/clientes/novo" className={buttonVariants({ size: 'cta' })}>
+                  <Plus />
+                  Novo cliente
+                </Link>
+              </>
+            )}
           </>
         }
       />
@@ -480,7 +492,7 @@ function ClientesContent() {
                 colSpan={9}
                 icon={Users}
                 title="Não foi possível carregar clientes"
-                description="Atualize a página. Se continuar, valide regras e índices do Firestore."
+                description="Atualize a página. Se o problema continuar, fale com o administrador do sistema."
               />
             ) : clientesFiltrados.length === 0 ? (
               <TableEmptyState
@@ -489,8 +501,8 @@ function ClientesContent() {
                 title={busca || status || regime ? 'Nenhum cliente encontrado' : 'Ainda não há clientes'}
                 description={busca || status || regime
                   ? 'Tente ajustar os filtros de busca.'
-                  : 'Clique em "Novo Cliente" para começar.'}
-                action={!busca && !status && !regime ? { label: 'Novo Cliente', href: '/clientes/novo' } : undefined}
+                  : podeEditarCliente ? 'Clique em "Novo cliente" para começar.' : 'Os clientes cadastrados pelo escritório aparecem aqui.'}
+                action={podeEditarCliente && !busca && !status && !regime ? { label: 'Novo cliente', href: '/clientes/novo' } : undefined}
               />
             ) : (
               clientesFiltrados.map((c) => {
@@ -570,19 +582,27 @@ function ClientesContent() {
                         <DropdownMenuItem onClick={() => router.push(`/clientes/${c.id as string}`)}>
                           <Users className="h-3.5 w-3.5 mr-2" />Abrir cliente
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => router.push(`/clientes/${c.id as string}/editar`)}>
-                          <Pencil className="h-3.5 w-3.5 mr-2" />Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => router.push(`/tarefas/nova?clienteId=${c.id as string}`)}>
-                          <CheckSquare className="h-3.5 w-3.5 mr-2" />Nova tarefa
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => router.push(`/competencias/nova?clienteId=${c.id as string}`)}>
-                          <Layers className="h-3.5 w-3.5 mr-2" />Nova competência
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => router.push(`/fiscal?emitir=1&clienteId=${c.id as string}`)}>
-                          <Receipt className="h-3.5 w-3.5 mr-2" />Emitir NFS-e
-                        </DropdownMenuItem>
+                        {podeEditarCliente && (
+                          <DropdownMenuItem onClick={() => router.push(`/clientes/${c.id as string}/editar`)}>
+                            <Pencil className="h-3.5 w-3.5 mr-2" />Editar
+                          </DropdownMenuItem>
+                        )}
+                        {temAcaoSecundaria && <DropdownMenuSeparator />}
+                        {podeCriarTarefa && (
+                          <DropdownMenuItem onClick={() => router.push(`/tarefas/nova?clienteId=${c.id as string}`)}>
+                            <CheckSquare className="h-3.5 w-3.5 mr-2" />Nova tarefa
+                          </DropdownMenuItem>
+                        )}
+                        {podeCriarCompetencia && (
+                          <DropdownMenuItem onClick={() => router.push(`/competencias/nova?clienteId=${c.id as string}`)}>
+                            <Layers className="h-3.5 w-3.5 mr-2" />Nova competência
+                          </DropdownMenuItem>
+                        )}
+                        {podeEmitirNfse && (
+                          <DropdownMenuItem onClick={() => router.push(`/fiscal?emitir=1&clienteId=${c.id as string}`)}>
+                            <Receipt className="h-3.5 w-3.5 mr-2" />Emitir NFS-e
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </td>

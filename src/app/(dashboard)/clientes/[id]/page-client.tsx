@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import Link from 'next/link'
+import { LinkPermitido } from '@/components/ui/link-permitido'
 import { where, orderBy, limit } from 'firebase/firestore'
 import { Timestamp } from 'firebase/firestore'
 import { toast } from 'sonner'
@@ -35,7 +35,8 @@ import { exigeCertificadoA1, nomeMunicipio } from '@/lib/nfse-dominios'
 import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
 import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
 import { useAuth } from '@/contexts/auth-context'
-import { canAccessTela, podeVerCredenciais } from '@/lib/permissions'
+import { canAccessTela, podeEscreverEm, podeOperarNfse, podeVerCredenciais } from '@/lib/permissions'
+import { ehPermissaoNegada } from '@/lib/error-message'
 import { CAMPOS_CREDENCIAL_LISTA, credenciaisPreenchidasDe } from '@/lib/clientes-credenciais'
 import { carregarCredenciaisCliente } from '@/features/clientes/credenciais'
 import { getPathSegmentAfter } from '@/lib/route-params'
@@ -356,6 +357,10 @@ export default function ClienteDetailPage() {
   const router  = useRouter()
   const { usuario } = useAuth()
   const podeAcessarFiscal = canAccessTela(usuario, 'fiscal')
+  // Configurar NFS-e, certificado e emitir: admin/fiscal (regras de
+  // clientes_fiscal + functions). Financeiro tem a tela, mas não opera.
+  const podeOperarFiscal = podeOperarNfse(usuario)
+  const podeEditarCliente = podeEscreverEm(usuario, 'clientes')
   const isAdmin = usuario?.perfil === 'admin'
 
   const [cliente,      setCliente]      = useState<Record<string, unknown> | null>(null)
@@ -368,6 +373,8 @@ export default function ClienteDetailPage() {
   const [loading,      setLoading]      = useState(true)
   const [erroCarga,    setErroCarga]    = useState<unknown>(null)
   const [secoesComFalha, setSecoesComFalha] = useState<Partial<Record<SecaoCliente, boolean>>>({})
+  // Falhas que são falta de permissão (não erro de carga): a tela diz "sem acesso".
+  const [secoesNegadas, setSecoesNegadas] = useState<Partial<Record<SecaoCliente, boolean>>>({})
   const [configOpen,   setConfigOpen]   = useState(false)
   const [servicoDialogOpen, setServicoDialogOpen] = useState(false)
   const [comentarios,  setComentarios]  = useState<Array<Record<string, unknown>>>([])
@@ -415,6 +422,9 @@ export default function ClienteDetailPage() {
       const falhas: Partial<Record<SecaoCliente, boolean>> = {}
       for (const secao of erros.keys()) falhas[secao] = true
       setSecoesComFalha(falhas)
+      const negadas: Partial<Record<SecaoCliente, boolean>> = {}
+      for (const [secao, err] of erros) if (ehPermissaoNegada(err)) negadas[secao] = true
+      setSecoesNegadas(negadas)
       setErroCarga([...erros.values()][0] ?? null)
 
       // Falhar ao buscar o cliente é diferente de o cliente não existir:
@@ -632,6 +642,7 @@ export default function ClienteDetailPage() {
   const semTarefas      = secoesComFalha.tarefas      === true
   const semRascunhos    = secoesComFalha.rascunhos    === true
   const semFiscal       = secoesComFalha.fiscal       === true
+  const fiscalNegado    = secoesNegadas.fiscal        === true
 
   /* ── proximosPassos ───────────────────────────────────── */
   const proximosPassos = useMemo(() => {
@@ -775,10 +786,10 @@ export default function ClienteDetailPage() {
         }
         action={
           <>
-        <Link href={`/clientes/${id}/editar`} className={buttonVariants({ size: 'cta', variant: 'outline' })}>
+        <LinkPermitido semAcesso="ocultar" href={`/clientes/${id}/editar`} className={buttonVariants({ size: 'cta', variant: 'outline' })}>
           <Pencil />
           Editar
-        </Link>
+        </LinkPermitido>
         {isAdmin && (
           <Button
             size="cta"
@@ -893,8 +904,8 @@ export default function ClienteDetailPage() {
               <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
                 <CardTitle className="text-sm">Competências</CardTitle>
                 <div className="flex gap-2">
-                  <Link href={`/competencias?clienteId=${id}`} className={buttonVariants({ size: 'xs', variant: 'ghost' })}>Ver todas</Link>
-                  <Link href={`/competencias/nova?clienteId=${id}`} className={buttonVariants({ size: 'xs' })}><Plus className="h-3 w-3" />Nova</Link>
+                  <LinkPermitido semAcesso="ocultar" href={`/competencias?clienteId=${id}`} className={buttonVariants({ size: 'xs', variant: 'ghost' })}>Ver todas</LinkPermitido>
+                  <LinkPermitido semAcesso="ocultar" href={`/competencias/nova?clienteId=${id}`} className={buttonVariants({ size: 'xs' })}><Plus className="h-3 w-3" />Nova</LinkPermitido>
                 </div>
               </CardHeader>
               <CardContent className="px-4 pb-4">
@@ -909,14 +920,14 @@ export default function ClienteDetailPage() {
                   ? <EmptyState size="sm" title="Nenhuma competência" description="Crie uma competência para este cliente." action={{ label: 'Nova competência', href: `/competencias/nova?clienteId=${id}` }} />
                   : <div className="divide-y">
                       {competencias.map(c => (
-                        <Link key={c.id as string} href={`/competencias/${c.id as string}`}
+                        <LinkPermitido key={c.id as string} href={`/competencias/${c.id as string}`}
                           className="flex items-center justify-between py-2.5 hover:bg-muted/30 px-2 -mx-2 rounded transition-colors">
                           <div>
                             <p className="text-sm font-medium">{formatMesAno(c.mes as number, c.ano as number)}</p>
                             {(c.servicoNome as string | undefined) && <p className="text-xs text-muted-foreground">{c.servicoNome as string}</p>}
                           </div>
                           <CompetenciaStatusBadge status={c.status as string} />
-                        </Link>
+                        </LinkPermitido>
                       ))}
                     </div>
                 }
@@ -929,7 +940,7 @@ export default function ClienteDetailPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
                 <CardTitle className="text-sm">Serviços Vinculados</CardTitle>
-                <Button size="xs" onClick={() => setServicoDialogOpen(true)}><Plus className="h-3 w-3" />Serviço</Button>
+                {podeEditarCliente && <Button size="xs" onClick={() => setServicoDialogOpen(true)}><Plus className="h-3 w-3" />Serviço</Button>}
               </CardHeader>
               <CardContent className="px-4 pb-4">
                 {semServicos
@@ -940,7 +951,7 @@ export default function ClienteDetailPage() {
                       action={{ label: 'Tentar novamente', onClick: () => { void loadClienteContext() } }}
                     />
                   : servicos.length === 0
-                  ? <EmptyState size="sm" title="Nenhum serviço vinculado" description="Vincule um serviço para gerar competências e honorários." action={{ label: 'Vincular serviço', onClick: () => setServicoDialogOpen(true) }} />
+                  ? <EmptyState size="sm" title="Nenhum serviço vinculado" description={podeEditarCliente ? 'Vincule um serviço para gerar competências e honorários.' : 'Este cliente ainda não tem serviços vinculados.'} {...(podeEditarCliente ? { action: { label: 'Vincular serviço', onClick: () => setServicoDialogOpen(true) } } : {})} />
                   : <div className="divide-y">
                       {servicos.map(s => (
                         <div key={s.id as string} className="flex items-center justify-between py-2.5">
@@ -1003,16 +1014,20 @@ export default function ClienteDetailPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <Link href={`/clientes/${id}/tomadores`} className={buttonVariants({ size: 'sm', variant: 'ghost' })}>
+                      <LinkPermitido href={`/clientes/${id}/tomadores`} className={buttonVariants({ size: 'sm', variant: 'ghost' })}>
                         Tomadores
-                      </Link>
-                      <Button size="sm" variant="outline" onClick={() => setConfigOpen(true)}>
-                        <Pencil className="h-3.5 w-3.5" />{fiscal ? 'Editar' : 'Configurar'}
-                      </Button>
+                      </LinkPermitido>
+                      {podeOperarFiscal && !semFiscal && (
+                        <Button size="sm" variant="outline" onClick={() => setConfigOpen(true)}>
+                          <Pencil className="h-3.5 w-3.5" />{fiscal ? 'Editar' : 'Configurar'}
+                        </Button>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent className="px-4 pb-4">
-                    {semFiscal
+                    {fiscalNegado
+                      ? <EmptyState size="sm" icon={ShieldOff} title="Sem acesso a este módulo" description="Seu perfil não permite ver a configuração fiscal deste cliente. Se precisar, fale com o administrador." />
+                      : semFiscal
                       ? <InlineAlert
                           tone="danger"
                           title="Não foi possível carregar a configuração fiscal."
@@ -1021,8 +1036,8 @@ export default function ClienteDetailPage() {
                         />
                       : !fiscal
                       ? <div className="text-center py-6 space-y-3">
-                          <EmptyState size="sm" title="Sem configuração fiscal" description="Configure os dados de NFS-e deste cliente." />
-                          <Button size="sm" onClick={() => setConfigOpen(true)}>Configurar NFS-e</Button>
+                          <EmptyState size="sm" title="Sem configuração fiscal" description={podeOperarFiscal ? 'Configure os dados de NFS-e deste cliente.' : 'A equipe fiscal ainda não configurou a emissão deste cliente.'} />
+                          {podeOperarFiscal && <Button size="sm" onClick={() => setConfigOpen(true)}>Configurar NFS-e</Button>}
                         </div>
                       : <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
                           <div><dt className="text-xs text-muted-foreground">Município</dt><dd className="font-medium">{municipioNome}</dd></div>
@@ -1043,12 +1058,20 @@ export default function ClienteDetailPage() {
                       <CardTitle className="text-sm">Certificado Digital A1</CardTitle>
                     </CardHeader>
                     <CardContent className="px-4 pb-4">
-                      <CertificadoUpload clienteId={id} certInfo={certInfo} onUploaded={() => loadFiscal()} />
+                      {podeOperarFiscal ? (
+                        <CertificadoUpload clienteId={id} certInfo={certInfo} onUploaded={() => loadFiscal()} />
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          {certInfo
+                            ? `${certInfo.titular}${certInfo.vencimento ? ` · válido até ${certInfo.vencimento}` : ''}`
+                            : 'Certificado ainda não enviado.'}
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
                 )}
 
-                {fiscal && podeAcessarFiscal && (
+                {fiscal && podeAcessarFiscal && podeOperarFiscal && (
                   <div className="flex justify-end">
                     <Button size="sm" onClick={() => setEmitirOpen(true)}><Receipt className="h-3.5 w-3.5" />Emitir NFS-e</Button>
                   </div>
@@ -1346,7 +1369,7 @@ export default function ClienteDetailPage() {
                     </div>
                   )
                   return item.href
-                    ? <Link key={item.id} href={item.href} className="block hover:opacity-90 transition-opacity">{row}</Link>
+                    ? <LinkPermitido key={item.id} href={item.href} className="block hover:opacity-90 transition-opacity">{row}</LinkPermitido>
                     : <div key={item.id}>{row}</div>
                 })}
               </CardContent>
@@ -1358,24 +1381,24 @@ export default function ClienteDetailPage() {
             <CardHeader className="py-3 px-4"><CardTitle className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Ações Rápidas</CardTitle></CardHeader>
             <CardContent className="px-4 pb-4">
               <div className="grid grid-cols-1 min-[280px]:grid-cols-2 gap-2">
-                <Link href={`/competencias/nova?clienteId=${id}`} className="aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
+                <LinkPermitido semAcesso="ocultar" href={`/competencias/nova?clienteId=${id}`} className="aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
                   <Plus className="h-5 w-5 text-primary" />
                   <span className="text-xs font-medium leading-tight">Nova Competência</span>
-                </Link>
-                {fiscal && podeAcessarFiscal && (
+                </LinkPermitido>
+                {fiscal && podeAcessarFiscal && podeOperarFiscal && (
                   <button type="button" onClick={() => setEmitirOpen(true)} className="aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
                     <Receipt className="h-5 w-5 text-primary" />
                     <span className="text-xs font-medium leading-tight">Emitir NFS-e</span>
                   </button>
                 )}
-                <Link href={`/financeiro?clienteId=${id}`} className="aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
+                <LinkPermitido semAcesso="ocultar" href={`/financeiro?clienteId=${id}`} className="aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
                   <Wallet className="h-5 w-5 text-muted-foreground" />
                   <span className="text-xs font-medium leading-tight">Financeiro</span>
-                </Link>
-                <Link href={`/clientes/${id}/editar`} className="aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
+                </LinkPermitido>
+                <LinkPermitido semAcesso="ocultar" href={`/clientes/${id}/editar`} className="aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
                   <Pencil className="h-5 w-5 text-muted-foreground" />
                   <span className="text-xs font-medium leading-tight">Editar</span>
-                </Link>
+                </LinkPermitido>
               </div>
             </CardContent>
           </Card>

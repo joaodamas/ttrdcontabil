@@ -28,6 +28,9 @@ import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
 import { ClienteServicoDialog } from '@/components/clientes/cliente-servico-dialog'
 import { clientesKeys } from '@/features/clientes/queries'
 import { ClienteFichaCompleta } from '@/components/clientes/cliente-ficha-completa'
+import { useAuth } from '@/contexts/auth-context'
+import { canAccessTela, podeEscreverEm, podeOperarNfse } from '@/lib/permissions'
+import { ehPermissaoNegada } from '@/lib/error-message'
 
 const TAB_CONTENT_CLASS = 'mt-3 min-h-0 max-h-[calc(100dvh-19rem)] overflow-y-auto overscroll-contain md:max-h-[430px]'
 const MODAL_TAB_TRIGGER_CLASS = 'h-9 min-w-0 justify-center gap-1.5 rounded-lg px-2 text-xs'
@@ -50,6 +53,39 @@ interface ClienteModalProps {
   onOpenChange: (open: boolean) => void
 }
 
+/* Cada aba lê uma coleção com regra própria. allSettled engolia a rejeição e a
+   aba mostrava "Nenhum lançamento"/"Sem configuração fiscal" — e oferecia
+   "Configurar NFS-e" — quando o motivo era falta de permissão. */
+type SecaoModal = 'servicos' | 'competencias' | 'lancamentos' | 'nfses' | 'fiscal'
+type FalhaSecao = 'negado' | 'erro'
+
+const GRID_ABAS: Record<number, string> = {
+  2: 'md:grid-cols-2',
+  3: 'md:grid-cols-3',
+  4: 'md:grid-cols-4',
+  5: 'md:grid-cols-5',
+}
+
+function SecaoIndisponivel({ falha, onRetry }: { falha: FalhaSecao; onRetry: () => void }) {
+  if (falha === 'negado') {
+    return (
+      <EmptyState
+        icon={ShieldOff}
+        title="Sem acesso a este módulo"
+        description="Seu perfil não permite ver estas informações. Se precisar, fale com o administrador."
+      />
+    )
+  }
+  return (
+    <EmptyState
+      icon={AlertTriangle}
+      title="Não foi possível carregar"
+      description="A lista não foi lida — não quer dizer que esteja vazia."
+      action={{ label: 'Tentar novamente', onClick: onRetry }}
+    />
+  )
+}
+
 function TabCount({ count }: { count?: number }) {
   const hasCount = typeof count === 'number' && count > 0
 
@@ -66,6 +102,13 @@ function TabCount({ count }: { count?: number }) {
 export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: ClienteModalProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const { usuario } = useAuth()
+  const verOperacional = canAccessTela(usuario, 'competencias')
+  const verFinanceiro = canAccessTela(usuario, 'financeiro')
+  const verFiscal = canAccessTela(usuario, 'fiscal')
+  const podeEditarCliente = podeEscreverEm(usuario, 'clientes')
+  const podeOperarFiscal = podeOperarNfse(usuario)
+  const [falhas, setFalhas] = useState<Partial<Record<SecaoModal, FalhaSecao>>>({})
   const [loading,     setLoading]     = useState(false)
   const [cliente,     setCliente]     = useState<Record<string, unknown> | null>(null)
   const [servicos,    setServicos]    = useState<Array<Record<string, unknown>>>([])
@@ -88,15 +131,36 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
     setLancamentos([])
     setNfses([])
     setFiscal(null)
+    setFalhas({})
 
+    // Aba escondida pelo perfil não lê nada (evita leituras que as regras negam).
+    const vazio = Promise.resolve([] as Array<Record<string, unknown>>)
     Promise.allSettled([
       getDocument('clientes', clienteId),
       listDocuments('clientes_servicos', [where('clienteId', '==', clienteId), limit(50)]),
-      listDocuments('competencias', [where('clienteId', '==', clienteId), orderBy('ano', 'desc'), orderBy('mes', 'desc'), limit(12)]),
-      listDocuments('lancamentos', [where('clienteId', '==', clienteId), orderBy('dataVencimento', 'desc'), limit(10)]),
-      listDocuments('nfse_emitidas', [where('clienteId', '==', clienteId), orderBy('criadoEm', 'desc'), limit(20)]),
-      listDocuments('clientes_fiscal', [where('clienteId', '==', clienteId), limit(1)]),
+      verOperacional
+        ? listDocuments('competencias', [where('clienteId', '==', clienteId), orderBy('ano', 'desc'), orderBy('mes', 'desc'), limit(12)])
+        : vazio,
+      verFinanceiro
+        ? listDocuments('lancamentos', [where('clienteId', '==', clienteId), orderBy('dataVencimento', 'desc'), limit(10)])
+        : vazio,
+      verFiscal
+        ? listDocuments('nfse_emitidas', [where('clienteId', '==', clienteId), orderBy('criadoEm', 'desc'), limit(20)])
+        : vazio,
+      verFiscal
+        ? listDocuments('clientes_fiscal', [where('clienteId', '==', clienteId), limit(1)])
+        : vazio,
     ]).then(([clienteR, servicosR, competenciasR, lancamentosR, nfseEmitR, fiscalR]) => {
+      const novasFalhas: Partial<Record<SecaoModal, FalhaSecao>> = {}
+      const marcar = (secao: SecaoModal, r: PromiseSettledResult<unknown>) => {
+        if (r.status === 'rejected') novasFalhas[secao] = ehPermissaoNegada(r.reason) ? 'negado' : 'erro'
+      }
+      marcar('servicos', servicosR)
+      marcar('competencias', competenciasR)
+      marcar('lancamentos', lancamentosR)
+      marcar('nfses', nfseEmitR)
+      marcar('fiscal', fiscalR)
+      setFalhas(novasFalhas)
       if (clienteR.status === 'fulfilled' && clienteR.value) {
         setCliente(clienteR.value as Record<string, unknown>)
       } else {
@@ -122,7 +186,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
         setNfses(nfseEmitR.value as Array<Record<string, unknown>>)
       }
     }).finally(() => setLoading(false))
-  }, [clienteId])
+  }, [clienteId, verOperacional, verFinanceiro, verFiscal])
 
   useEffect(() => {
     if (!open) return
@@ -160,9 +224,11 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
           <Button size="sm" variant="ghost" className="gap-1.5" onClick={() => navigateTo(`/clientes/${clienteId}`)}>
             <ExternalLink className="w-3.5 h-3.5" />Ver completo
           </Button>
-          <Button size="sm" variant="outline" onClick={() => navigateTo(`/clientes/${clienteId}/editar`)}>
-            <Pencil className="w-3.5 h-3.5" />Editar
-          </Button>
+          {podeEditarCliente && (
+            <Button size="sm" variant="outline" onClick={() => navigateTo(`/clientes/${clienteId}/editar`)}>
+              <Pencil className="w-3.5 h-3.5" />Editar
+            </Button>
+          )}
         </div>
       }
     >
@@ -248,7 +314,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
               {/* Abas — a ficha completa abre primeiro: é o que se procura ao clicar no cliente */}
               <div className="min-h-0 px-5 py-4">
                 <Tabs defaultValue="cadastro" className="min-h-0">
-                  <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl bg-muted/70 p-1 md:h-10 md:grid-cols-5">
+                  <TabsList className={`grid h-auto w-full grid-cols-2 gap-1 rounded-xl bg-muted/70 p-1 md:h-10 ${GRID_ABAS[2 + Number(verOperacional) + Number(verFinanceiro) + Number(verFiscal)]}`}>
                     <TabsTrigger value="cadastro" className={MODAL_TAB_TRIGGER_CLASS}>
                       <IdCard className="h-3.5 w-3.5" />
                       <span>Cadastro</span>
@@ -258,21 +324,27 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                       <span>Serviços</span>
                       <TabCount count={servicos.length} />
                     </TabsTrigger>
-                    <TabsTrigger value="operacional" className={MODAL_TAB_TRIGGER_CLASS}>
-                      <CalendarDays className="h-3.5 w-3.5" />
-                      <span>Operacional</span>
-                      <TabCount count={competencias.length} />
-                    </TabsTrigger>
-                    <TabsTrigger value="financeiro" className={MODAL_TAB_TRIGGER_CLASS}>
-                      <DollarSign className="h-3.5 w-3.5" />
-                      <span>Financeiro</span>
-                      <TabCount count={lancamentos.length} />
-                    </TabsTrigger>
-                    <TabsTrigger value="fiscal" className={MODAL_TAB_TRIGGER_CLASS}>
-                      <Receipt className="h-3.5 w-3.5" />
-                      <span>Fiscal</span>
-                      <TabCount count={nfses.length} />
-                    </TabsTrigger>
+                    {verOperacional && (
+                      <TabsTrigger value="operacional" className={MODAL_TAB_TRIGGER_CLASS}>
+                        <CalendarDays className="h-3.5 w-3.5" />
+                        <span>Operacional</span>
+                        <TabCount count={competencias.length} />
+                      </TabsTrigger>
+                    )}
+                    {verFinanceiro && (
+                      <TabsTrigger value="financeiro" className={MODAL_TAB_TRIGGER_CLASS}>
+                        <DollarSign className="h-3.5 w-3.5" />
+                        <span>Financeiro</span>
+                        <TabCount count={lancamentos.length} />
+                      </TabsTrigger>
+                    )}
+                    {verFiscal && (
+                      <TabsTrigger value="fiscal" className={MODAL_TAB_TRIGGER_CLASS}>
+                        <Receipt className="h-3.5 w-3.5" />
+                        <span>Fiscal</span>
+                        <TabCount count={nfses.length} />
+                      </TabsTrigger>
+                    )}
                   </TabsList>
 
                   {/* ── Cadastro (ficha completa) ───────────────── */}
@@ -285,17 +357,21 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                     <Card className={MODAL_CARD_CLASS}>
                       <CardHeader className={MODAL_CARD_HEADER_CLASS}>
                         <CardTitle className="text-sm">Serviços Vinculados</CardTitle>
-                        <Button size="sm" className="h-8" onClick={() => setServicoDialogOpen(true)}>
-                          + Serviço
-                        </Button>
+                        {podeEditarCliente && !falhas.servicos && (
+                          <Button size="sm" className="h-8" onClick={() => setServicoDialogOpen(true)}>
+                            + Serviço
+                          </Button>
+                        )}
                       </CardHeader>
                       <CardContent className={MODAL_CARD_CONTENT_CLASS}>
-                        {servicos.length === 0 ? (
+                        {falhas.servicos ? (
+                          <SecaoIndisponivel falha={falhas.servicos} onRetry={load} />
+                        ) : servicos.length === 0 ? (
                           <EmptyState
                             icon={Briefcase}
                             title="Nenhum serviço vinculado"
-                            description="Adicione serviços para gerar competências automaticamente."
-                            action={{ label: '+ Vincular Serviço', onClick: () => setServicoDialogOpen(true) }}
+                            description={podeEditarCliente ? 'Adicione serviços para gerar competências automaticamente.' : 'Este cliente ainda não tem serviços vinculados.'}
+                            {...(podeEditarCliente ? { action: { label: '+ Vincular Serviço', onClick: () => setServicoDialogOpen(true) } } : {})}
                           />
                         ) : (
                           <>
@@ -328,6 +404,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                   </TabsContent>
 
                   {/* ── Operacional (Competências) ────────────────── */}
+                  {verOperacional && (
                   <TabsContent value="operacional" className={TAB_CONTENT_CLASS}>
                     <Card className={MODAL_CARD_CLASS}>
                       <CardHeader className={MODAL_CARD_HEADER_CLASS}>
@@ -337,7 +414,9 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                         </Button>
                       </CardHeader>
                       <CardContent className={MODAL_CARD_CONTENT_CLASS}>
-                        {competencias.length === 0 ? (
+                        {falhas.competencias ? (
+                          <SecaoIndisponivel falha={falhas.competencias} onRetry={load} />
+                        ) : competencias.length === 0 ? (
                           <EmptyState
                             icon={CalendarDays}
                             title="Nenhuma competência"
@@ -369,7 +448,10 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                     </Card>
                   </TabsContent>
 
+                  )}
+
                   {/* ── Financeiro ───────────────────────────────── */}
+                  {verFinanceiro && (
                   <TabsContent value="financeiro" className={TAB_CONTENT_CLASS}>
                     <Card className={MODAL_CARD_CLASS}>
                       <CardHeader className={MODAL_CARD_HEADER_CLASS}>
@@ -379,7 +461,9 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                         </Button>
                       </CardHeader>
                       <CardContent className={MODAL_CARD_CONTENT_CLASS}>
-                        {lancamentos.length === 0 ? (
+                        {falhas.lancamentos ? (
+                          <SecaoIndisponivel falha={falhas.lancamentos} onRetry={load} />
+                        ) : lancamentos.length === 0 ? (
                           <EmptyState
                             icon={DollarSign}
                             title="Nenhum lançamento"
@@ -407,7 +491,10 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                     </Card>
                   </TabsContent>
 
+                  )}
+
                   {/* ── Fiscal (config + NFS-e) ───────────────────── */}
+                  {verFiscal && (
                   <TabsContent value="fiscal" className={`${TAB_CONTENT_CLASS} space-y-3`}>
                     {(() => {
                       const creds      = (fiscal?.credenciais ?? {}) as Record<string, unknown>
@@ -432,17 +519,23 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                                 <Settings className="w-4 h-4 text-muted-foreground" />
                                 Configuração NFS-e
                               </CardTitle>
-                              <Button size="sm" variant="outline" className="h-8" onClick={() => setConfigOpen(true)}>
-                                <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                                {fiscal ? 'Editar' : 'Configurar'}
-                              </Button>
+                              {/* Configurar é admin/fiscal (regras de clientes_fiscal) — e
+                                  nunca por cima de uma configuração que não foi lida. */}
+                              {podeOperarFiscal && !falhas.fiscal && (
+                                <Button size="sm" variant="outline" className="h-8" onClick={() => setConfigOpen(true)}>
+                                  <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                                  {fiscal ? 'Editar' : 'Configurar'}
+                                </Button>
+                              )}
                             </CardHeader>
                             <CardContent className={MODAL_CARD_CONTENT_CLASS}>
-                              {!fiscal ? (
+                              {falhas.fiscal ? (
+                                <SecaoIndisponivel falha={falhas.fiscal} onRetry={load} />
+                              ) : !fiscal ? (
                                 <EmptyState
                                   title="Sem configuração fiscal"
-                                  description="Configure o município e as credenciais para emitir NFS-e."
-                                  action={{ label: 'Configurar NFS-e', onClick: () => setConfigOpen(true) }}
+                                  description={podeOperarFiscal ? 'Configure o município e as credenciais para emitir NFS-e.' : 'A equipe fiscal ainda não configurou a emissão deste cliente.'}
+                                  {...(podeOperarFiscal ? { action: { label: 'Configurar NFS-e', onClick: () => setConfigOpen(true) } } : {})}
                                 />
                               ) : (
                                 <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
@@ -487,7 +580,15 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                                 <CardTitle className="text-sm">Certificado Digital A1</CardTitle>
                               </CardHeader>
                               <CardContent className={MODAL_CARD_CONTENT_CLASS}>
-                                <CertificadoUpload clienteId={clienteId} certInfo={certInfo} onUploaded={() => { void syncClienteAfterMutation() }} />
+                                {podeOperarFiscal ? (
+                                  <CertificadoUpload clienteId={clienteId} certInfo={certInfo} onUploaded={() => { void syncClienteAfterMutation() }} />
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">
+                                    {certInfo
+                                      ? `${certInfo.titular}${certInfo.vencimento ? ` · válido até ${certInfo.vencimento}` : ''}`
+                                      : 'Certificado ainda não enviado.'}
+                                  </p>
+                                )}
                               </CardContent>
                             </Card>
                           )}
@@ -502,18 +603,20 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                                   <span className="text-xs text-muted-foreground">({nfses.length})</span>
                                 )}
                               </CardTitle>
-                              {fiscal && (
+                              {fiscal && podeOperarFiscal && (
                                 <Button size="sm" className="h-8" onClick={() => setEmitirOpen(true)}>
                                   + Emitir
                                 </Button>
                               )}
                             </CardHeader>
                             <CardContent className={MODAL_CARD_CONTENT_CLASS}>
-                              {nfses.length === 0 ? (
+                              {falhas.nfses ? (
+                                <SecaoIndisponivel falha={falhas.nfses} onRetry={load} />
+                              ) : nfses.length === 0 ? (
                                 <EmptyState
                                   icon={Receipt}
                                   title="Nenhuma NFS-e emitida"
-                                  {...(fiscal ? { action: { label: 'Emitir NFS-e', onClick: () => setEmitirOpen(true) } } : {})}
+                                  {...(fiscal && podeOperarFiscal ? { action: { label: 'Emitir NFS-e', onClick: () => setEmitirOpen(true) } } : {})}
                                 />
                               ) : (
                                 <table className="w-full text-sm">
@@ -546,6 +649,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
                     })()}
 
                   </TabsContent>
+                  )}
                 </Tabs>
               </div>
             </div>
@@ -566,7 +670,7 @@ export function ClienteModal({ clienteId, clienteNome, open, onOpenChange }: Cli
           onSaved={() => { void syncClienteAfterMutation() }}
         />
         <EmitirNfseModal
-          open={emitirOpen}
+          open={podeOperarFiscal && emitirOpen}
           onOpenChange={setEmitirOpen}
           clienteId={clienteId}
           onFinished={async () => {

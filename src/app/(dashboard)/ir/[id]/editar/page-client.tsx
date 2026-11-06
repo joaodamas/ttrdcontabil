@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { useState, useEffect, useMemo } from 'react'
+import { usePathname } from 'next/navigation'
+import { getPathSegmentAfter } from '@/lib/route-params'
 import { PageHeader } from '@/components/layout/page-header'
 import { getDocument } from '@/lib/firestore-client'
 import { IrForm } from '@/components/ir/ir-form'
@@ -10,7 +11,8 @@ import { getErrorMessage } from '@/lib/error-message'
 import { Loader2 } from 'lucide-react'
 
 export default function Page() {
-  const { id } = useParams<{ id: string }>()
+  const pathname = usePathname()
+  const id = useMemo(() => getPathSegmentAfter(pathname, 'ir'), [pathname])
   const [data, setData] = useState<(Record<string, unknown> & { id: string }) | null>(null)
   const [loading, setLoading] = useState(true)
   const [falha, setFalha] = useState<{ reason: RecordLoadFailure; message?: string } | null>(null)

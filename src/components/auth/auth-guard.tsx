@@ -5,27 +5,10 @@ import { usePathname, useRouter } from 'next/navigation'
 import { LOGOUT_EXPLICITO_KEY, useAuth } from '@/contexts/auth-context'
 import { Loader2, ShieldOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { canAccessTela, type TelaKey } from '@/lib/permissions'
+import { toast } from 'sonner'
+import { canAccessTela, TELA_LABELS, telaDaRota, type TelaKey } from '@/lib/permissions'
 
-function getTelaFromPath(pathname: string): TelaKey | null {
-  if (pathname.startsWith('/hoje')) return 'hoje'
-  if (pathname.startsWith('/clientes')) return 'clientes'
-  if (pathname.startsWith('/tarefas')) return 'tarefas'
-  if (pathname.startsWith('/competencias')) return 'competencias'
-  if (pathname.startsWith('/fechamento')) return 'fechamento'
-  if (pathname.startsWith('/financeiro')) return 'financeiro'
-  if (pathname.startsWith('/fiscal')) return 'fiscal'
-  if (pathname.startsWith('/ir')) return 'ir'
-  // Mesmas telas da sidebar (app-sidebar.tsx): sem isto os relatórios abriam
-  // por URL para qualquer perfil — Carteira tem receita por cliente.
-  if (pathname.startsWith('/relatorios/carteira')) return 'financeiro'
-  if (pathname.startsWith('/relatorios/produtividade')) return 'admin'
-  if (pathname.startsWith('/servicos')) return 'servicos'
-  if (pathname.startsWith('/admin/servicos')) return 'servicos'
-  if (pathname.startsWith('/admin')) return 'admin'
-  if (pathname.startsWith('/dashboard')) return 'dashboard'
-  return null
-}
+const getTelaFromPath = telaDaRota
 
 function getFirstAllowedRoute(usuario: NonNullable<ReturnType<typeof useAuth>['usuario']>): string {
   const priority: Array<{ tela: TelaKey; href: string }> = [
@@ -71,7 +54,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       const tela = getTelaFromPath(pathname)
       if (tela && !canAccessTela(usuario, tela)) {
         const fallback = getFirstAllowedRoute(usuario)
-        if (pathname !== fallback) router.replace(fallback)
+        if (pathname !== fallback) {
+          // Sem o aviso, o redirecionamento parecia um clique que "não pegou".
+          // id fixo: o efeito pode rodar de novo antes da troca de rota.
+          toast.error(`Você não tem acesso a ${TELA_LABELS[tela]}.`, { id: 'sem-acesso-tela' })
+          router.replace(fallback)
+        }
       }
     }
   }, [usuario, loading, semAcesso, router, pathname])

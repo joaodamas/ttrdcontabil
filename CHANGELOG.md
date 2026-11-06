@@ -13,6 +13,19 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Corrigido — telas de detalhe em produção, ações por perfil e WhatsApp desligado (2026-11-06)
+- **Detalhe e edição abriam "não encontrado" em produção**: `/tarefas/<id>`, `/competencias/<id>`, `/fiscal/<id>`, `/ir/<id>` e os `/editar` usavam `useParams()`, que no static export (rewrites do `firebase.json` servem a página `placeholder`) devolve `"placeholder"`. Agora leem o id da URL real com `getPathSegmentAfter(usePathname(), '<área>')`, como `/clientes/<id>` já fazia. Passou porque só se testava em `next dev`.
+- **Teste contra o build estático**: `npm run test:e2e:estatico` faz o build apontando para os emuladores (`NEXT_PUBLIC_USE_FIREBASE_EMULATORS=1` + projeto `demo-*`), sobe auth/firestore/storage/hosting com o seed (`scripts/seed-emulador.mjs`) e roda `e2e-estatico/` (Playwright) contra `out/` servido com os rewrites de produção. Emulador de hosting na porta 5050 (a 5000 é do AirPlay no macOS). `src/lib/firebase.ts` só conecta aos emuladores fora de `development` se o projeto for `demo-*`.
+- **Ações só para quem pode usar** (`src/lib/permissions.ts`: `podeOperarNfse`, `podeEscreverEm`, `podeAbrirRota`, espelhando `functions/src/authz.ts` e as regras):
+  - Emitir, emitir em lote, preparar mês, revisar/remover rascunho, consultar e cancelar NFS-e: só admin e fiscal. O financeiro continua vendo notas e histórico (tela NFS-e só de consulta). Botão "Nova NFS-e" do topo, atalhos da barra lateral e do botão flutuante seguem a mesma regra; "Novo cliente/tarefa/lançamento" só para quem grava no módulo.
+  - Menu ⋯ da lista de clientes, "Novo cliente"/"Importar", links e atalhos do Painel e do Hoje: o que leva a módulo sem acesso deixa de ser link (o número continua) e botões de ação somem (`LinkPermitido`).
+  - Abrir por URL uma tela sem acesso agora avisa "Você não tem acesso a <tela>." ao redirecionar.
+- **Ficha do cliente** (modal e `/clientes/<id>`): abas de módulos sem acesso somem; leitura negada pelas regras mostra "Sem acesso a este módulo" em vez de lista vazia; "Configurar NFS-e", certificado e "Emitir" só para admin/fiscal (o financeiro via "Sem configuração fiscal" + "Configurar NFS-e" porque as regras negam `clientes_fiscal` a ele).
+- **WhatsApp desligado de verdade na interface**: constante única `WHATSAPP_HABILITADO = false` (`src/lib/features.ts`) esconde no Financeiro o menu Enviar cobrança/Pausar/Retomar/Reagendar régua/Histórico e as colunas WhatsApp, Status WhatsApp, Última e Próxima ação; em Parâmetros, o bloco WhatsApp/Twilio e o catálogo de templates. Os serviços de `src/features/whatsapp` recusam chamar os callables (que não estão publicados) com mensagem clara. Código do módulo preservado — religar é trocar a constante e publicar as functions.
+- Barra lateral: perfil com rótulo ("Somente Leitura", não "leitura"); "Sair" sem o fundo de item ativo; em `/fiscal/<id>` acende "Histórico de NFS-e".
+- Textos técnicos trocados por pt-BR simples: erro da lista de clientes ("valide regras e índices do Firestore"), confirmação do fechamento ("salvo no Firestore"), resumo da emissão ("Validado pela Cloud Function fiscal"), "Swimlanes" → "Separar por responsável", "Close" (leitor de tela) → "Fechar" em diálogos e painéis.
+- Testes: `__tests__/lib/route-params.test.ts`, `__tests__/lib/permissions-acoes.test.ts`, `e2e-estatico/rotas-detalhe.spec.ts`.
+
 ### Segurança — usuários, permissões e senhas de portal dos clientes (2026-11-05)
 Detalhes, matriz perfil × capacidade, ordem de deploy e rollback: `docs/USUARIOS-PERMISSOES.md`.
 - **Usuário novo por convite**: a tela não pede mais senha. O callable `criarUsuario` (só admin ativo) cria a conta com senha aleatória que ninguém conhece e o perfil na mesma operação (falhou o perfil, a conta sai — sem login órfão); o Firebase envia o e-mail de definir senha. E-mail que já tinha login sem perfil é reaproveitado com a senha antiga anulada.

@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
 import { appConfig } from '@/lib/app-config'
 import { onBrand } from '@/lib/brand-theme'
-import { canAccessTela, type TelaKey } from '@/lib/permissions'
+import { canAccessTela, podeEscreverEm, podeOperarNfse, rotuloPerfil, type TelaComEscrita, type TelaKey } from '@/lib/permissions'
 import { getInitials } from '@/lib/utils'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
@@ -35,6 +35,8 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string; size?: number }>
   telaKey?: TelaKey
   badgeKey?: BadgeKey
+  /** Só para quem emite NFS-e (admin/fiscal) — ver podeOperarNfse. */
+  somenteOperadorNfse?: boolean
 }
 type NavSection = {
   id: string
@@ -46,7 +48,9 @@ type NavSection = {
   items?: NavItem[]
 }
 
-type QuickAction = NavItem
+// Atalho de CRIAÇÃO: além da tela, o perfil precisa poder gravar no módulo
+// (ex.: "leitura" vê Clientes mas não cadastra) — ver podeEscreverEm.
+type QuickAction = NavItem & { escrita?: TelaComEscrita }
 
 // ── Navigation structure ───────────────────────────────────────
 const NAV_SECTIONS: NavSection[] = [
@@ -128,10 +132,10 @@ const ADMIN_SECTIONS: NavSection[] = [
 ]
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { href: '/clientes/novo', label: 'Cliente', icon: Users, telaKey: 'clientes' },
-  { href: '/tarefas/nova', label: 'Tarefa', icon: CheckSquare, telaKey: 'tarefas' },
-  { href: '/financeiro/novo', label: 'Lançamento', icon: Wallet, telaKey: 'financeiro' },
-  { href: '/fiscal?emitir=1', label: 'NFS-e', icon: Receipt, telaKey: 'fiscal' },
+  { href: '/clientes/novo', label: 'Cliente', icon: Users, telaKey: 'clientes', escrita: 'clientes' },
+  { href: '/tarefas/nova', label: 'Tarefa', icon: CheckSquare, telaKey: 'tarefas', escrita: 'tarefas' },
+  { href: '/financeiro/novo', label: 'Lançamento', icon: Wallet, telaKey: 'financeiro', escrita: 'financeiro' },
+  { href: '/fiscal?emitir=1', label: 'NFS-e', icon: Receipt, telaKey: 'fiscal', somenteOperadorNfse: true },
 ]
 
 // ── Persistência dos grupos abertos ────────────────────────────
@@ -243,6 +247,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const counts = useNavCounts()
 
   function canSeeItem(item: NavItem) {
+    if (item.somenteOperadorNfse && !podeOperarNfse(usuario)) return false
     if (item.telaKey) return canAccessTela(usuario, item.telaKey)
     return true
   }
@@ -259,8 +264,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   ])
   // Entre hrefs que casam com a rota atual (ex: '/fiscal' e '/fiscal/produtos'
   // casam ambos em '/fiscal/produtos'), só o mais específico (mais longo) fica ativo.
+  // O detalhe de uma nota (/fiscal/<id>) pertence ao Histórico de NFS-e — é de
+  // lá que se chega nele —, não à tela de emissão.
+  const caminhoNav = /^\/fiscal\/(?!historico(?:\/|$)|produtos(?:\/|$)|emitir(?:\/|$))[^/]+\/?$/.test(pathname)
+    ? '/fiscal/historico'
+    : pathname
   const bestMatchHref = allNavHrefs
-    .filter(href => pathname === href || pathname.startsWith(href + '/'))
+    .filter(href => caminhoNav === href || caminhoNav.startsWith(href + '/'))
     .sort((a, b) => b.length - a.length)[0]
 
   function isActive(href: string) {
@@ -434,7 +444,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           Criar
         </p>
         <div className="flex items-center gap-1.5">
-          {QUICK_ACTIONS.filter(canSeeItem).map((action) => {
+          {QUICK_ACTIONS.filter((a) => canSeeItem(a) && (!a.escrita || podeEscreverEm(usuario, a.escrita))).map((action) => {
             const ActionIcon = action.icon
             return (
               <Link
@@ -468,17 +478,18 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold leading-tight text-sidebar-foreground">{usuario?.nome ?? '—'}</p>
-            <p className="truncate text-xs capitalize text-sidebar-foreground/55">{usuario?.perfil ?? ''}</p>
+            <p className="truncate text-xs text-sidebar-foreground/55">{rotuloPerfil(usuario?.perfil)}</p>
           </div>
         </div>
 
-        {/* Sair como botão preenchido, não como ícone perdido no canto: é uma
-            ação destrutiva de sessão e merece peso próprio. */}
+        {/* Sair como botão com contorno, não como ícone perdido no canto: é uma
+            ação destrutiva de sessão e merece peso próprio — mas sem o fundo
+            do item ativo, que fazia "Sair" parecer a tela aberta. */}
         <button
           type="button"
           onClick={logout}
           className={cn(
-            'flex w-full items-center gap-3 rounded-xl bg-sidebar-accent/70 px-3 min-h-11',
+            'flex w-full items-center gap-3 rounded-xl border border-sidebar-border bg-transparent px-3 min-h-11',
             'text-sm font-medium text-sidebar-foreground/80 transition-colors',
             'hover:bg-destructive/12 hover:text-destructive',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40',

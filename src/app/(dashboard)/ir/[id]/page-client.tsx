@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { useState, useEffect, useMemo } from 'react'
+import { usePathname } from 'next/navigation'
+import { getPathSegmentAfter } from '@/lib/route-params'
 import Link from 'next/link'
 import { where, orderBy, Timestamp } from 'firebase/firestore'
 
@@ -17,7 +18,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Pencil, Loader2 } from 'lucide-react'
 
 export default function IrDetalhePage() {
-  const { id } = useParams<{ id: string }>()
+  const pathname = usePathname()
+  const id = useMemo(() => getPathSegmentAfter(pathname, 'ir'), [pathname])
 
   const [declaracao, setDeclaracao] = useState<Record<string, unknown> | null>(null)
   const [checklist, setChecklist] = useState<Array<Record<string, unknown>>>([])
