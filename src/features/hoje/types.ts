@@ -26,5 +26,5 @@ export type HojeCockpitData = {
   atrasadas: HojeTask[]
   hoje: HojeTask[]
   proximos7Dias: HojeTask[]
-  bloqueiosFechamento: Array<{ id: string; clienteNome?: string }>
+  bloqueiosFechamento: Array<{ id: string; clienteId?: string; clienteNome?: string }>
 }

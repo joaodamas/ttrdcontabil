@@ -10,8 +10,9 @@ export type CompetenciaRecord = Record<string, unknown> & {
 }
 
 export type CompetenciasFilters = {
-  mes: number
-  ano: number
+  /** null = todos os meses (só com clienteId: histórico do cliente). */
+  mes: number | null
+  ano: number | null
   status: string
   clienteId: string
   page: number

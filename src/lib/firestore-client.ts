@@ -829,6 +829,7 @@ type HojeTaskLike = {
 
 type FechamentoBloqueioLike = {
   id: string
+  clienteId?: string
   clienteNome?: string
   dasStatus?: string
   esocialStatus?: string

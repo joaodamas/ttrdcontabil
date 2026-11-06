@@ -1159,10 +1159,10 @@ export default function DashboardPage() {
       {/* Quick actions */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {([
-          { href: '/clientes/novo',     label: 'Novo Cliente',     icon: Users },
-          { href: '/competencias/nova', label: 'Nova Competência', icon: ClipboardList },
-          { href: '/tarefas/nova',      label: 'Nova Tarefa',      icon: CheckSquare },
-          { href: '/financeiro/novo',   label: 'Novo Lançamento',  icon: TrendingUp },
+          { href: '/clientes/novo',     label: 'Novo cliente',     icon: Users },
+          { href: '/competencias/nova', label: 'Nova competência', icon: ClipboardList },
+          { href: '/tarefas/nova',      label: 'Nova tarefa',      icon: CheckSquare },
+          { href: '/financeiro/novo',   label: 'Novo lançamento',  icon: TrendingUp },
         ] as const).map(({ href, label, icon: Icon }) => (
           <LinkPermitido semAcesso="ocultar"
             key={href}

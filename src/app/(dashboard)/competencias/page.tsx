@@ -5,11 +5,11 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { formatMesAno } from '@/lib/utils'
 import { PageHeader } from '@/components/layout/page-header'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
 import { CompetenciaStatusBadge } from '@/components/ui/status-badge'
 import { getStatusLabel } from '@/lib/status-semantics'
 import { getErrorMessage } from '@/lib/error-message'
-import { Plus, ChevronLeft, ChevronRight, Layers, LayoutList, Group } from 'lucide-react'
+import { Plus, Layers, LayoutList, Group } from 'lucide-react'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
 import { FilterBtn } from '@/components/ui/filter-btn'
@@ -19,6 +19,12 @@ import { useCompetenciasList } from '@/features/competencias/hooks'
 import type { CompetenciaRecord, CompetenciasFilters } from '@/features/competencias/types'
 import { FilterSheet, FilterSheetTrigger } from '@/components/ui/filter-sheet'
 import { useRouter } from 'next/navigation'
+import { LinhaClicavel } from '@/components/ui/linha-clicavel'
+import { LinkPermitido } from '@/components/ui/link-permitido'
+import { FiltrosAtivos } from '@/components/ui/filtros-ativos'
+import { SeletorMes } from '@/components/ui/seletor-mes'
+import { useNomeCliente } from '@/lib/use-nomes-filtro'
+import { hrefComFiltro, hrefSemFiltro, inteiroDaUrl } from '@/lib/url-filtros'
 
 function CompetenciasContent() {
   const searchParams = useSearchParams()
@@ -27,15 +33,23 @@ function CompetenciasContent() {
   const mesAtual = hoje.getMonth() + 1
   const anoAtual = hoje.getFullYear()
 
+  const clienteIdUrl = searchParams.get('clienteId') ?? ''
+  const mesUrl = inteiroDaUrl(searchParams.get('mes'))
+  const anoUrl = inteiroDaUrl(searchParams.get('ano'))
+  // Com cliente e sem mês explícito na URL ("Competências do cliente"), lista
+  // o histórico inteiro dele; sem cliente, o padrão continua sendo o mês atual.
+  const todosOsMeses = !!clienteIdUrl && mesUrl === null
   const parsed: CompetenciasFilters = competenciasFiltroSchema.parse({
-    mes: searchParams.get('mes') ? parseInt(searchParams.get('mes')!) : mesAtual,
-    ano: searchParams.get('ano') ? parseInt(searchParams.get('ano')!) : anoAtual,
+    mes: todosOsMeses ? null : (mesUrl ?? mesAtual),
+    ano: todosOsMeses ? null : (anoUrl ?? anoAtual),
     status: searchParams.get('status') ?? '',
-    clienteId: searchParams.get('clienteId') ?? '',
-    page: parseInt(searchParams.get('page') ?? '1'),
+    clienteId: clienteIdUrl,
+    page: parseInt(searchParams.get('page') ?? '1') || 1,
   })
   const { mes, ano, status, clienteId, page } = parsed
   const { competencias, total, totalPages, isLoading, isError, error, refetch } = useCompetenciasList(parsed)
+  const nomeCliente = useNomeCliente(clienteId, competencias[0]?.clienteNome)
+  const periodo = mes != null && ano != null ? formatMesAno(mes, ano) : 'todos os meses'
   const router = useRouter()
   const [groupBy, setGroupBy] = useState<'none' | 'status' | 'responsavel'>('none')
   const [filterSheetOpen, setFilterSheetOpen] = useState(false)
@@ -66,33 +80,29 @@ function CompetenciasContent() {
       }))
   }, [competencias, groupBy])
 
+  // Parte da URL atual: quem chegou com ?mes=&ano= mantém; quem está vendo
+  // "todos os meses" do cliente continua sem mês. '' remove a chave.
   function buildUrl(overrides: Record<string, string | number>) {
-    const params = new URLSearchParams({
-      mes: String(mes),
-      ano: String(ano),
-      ...(status && { status }),
-      ...(clienteId && { clienteId }),
-      page: String(page),
-      ...Object.fromEntries(Object.entries(overrides).map(([k, v]) => [k, String(v)])),
-    })
-    return `/competencias?${params.toString()}`
+    return hrefComFiltro('/competencias', searchParams, { page: 1, ...overrides })
   }
+  const hrefMes = (m: number, a: number) => buildUrl({ mes: m, ano: a })
+  const novaHref = clienteId ? `/competencias/nova?clienteId=${encodeURIComponent(clienteId)}` : '/competencias/nova'
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Competências"
-        description={`${total} competência${total !== 1 ? 's' : ''} — ${formatMesAno(mes, ano)}`}
+        description={`${total} competência${total !== 1 ? 's' : ''} — ${periodo}`}
         action={
           <>
             <FilterSheetTrigger
               onClick={() => setFilterSheetOpen(true)}
               activeCount={status ? 1 : 0}
             />
-            <Link href="/competencias/nova" className={buttonVariants({ size: 'cta' })}>
+            <LinkPermitido href={novaHref} semAcesso="ocultar" className={buttonVariants({ size: 'cta' })}>
               <Plus />
               Nova competência
-            </Link>
+            </LinkPermitido>
           </>
         }
       />
@@ -115,30 +125,17 @@ function CompetenciasContent() {
         </div>
       </FilterSheet>
 
-      <div className="surface-subtle hidden sm:flex flex-wrap items-center gap-3 border px-3 py-2.5">
-        <div className="flex items-center gap-1">
-          <Link
-            href={buildUrl(
-              mes === 1 ? { mes: 12, ano: ano - 1, page: 1 } : { mes: mes - 1, page: 1 }
-            )}
-          >
-            <Button variant="outline" size="sm" className="h-9 w-9 rounded-xl p-0">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <span className="px-3 text-sm font-medium">{formatMesAno(mes, ano)}</span>
-          <Link
-            href={buildUrl(
-              mes === 12 ? { mes: 1, ano: ano + 1, page: 1 } : { mes: mes + 1, page: 1 }
-            )}
-          >
-            <Button variant="outline" size="sm" className="h-9 w-9 rounded-xl p-0">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </Link>
-        </div>
+      {/* Seletor de mês visível também no celular (status e agrupamento ficam
+          no painel de filtros). "Todos os meses" só faz sentido com cliente. */}
+      <div className="surface-subtle flex flex-wrap items-center gap-3 border px-3 py-2.5">
+        <SeletorMes
+          mes={mes}
+          ano={ano}
+          hrefPara={hrefMes}
+          hrefTodos={clienteId ? buildUrl({ mes: '', ano: '' }) : undefined}
+        />
 
-        <div className="flex items-center gap-1">
+        <div className="hidden sm:flex items-center gap-1">
           {(['', 'aberta', 'em_andamento', 'concluida', 'cancelada'] as const).map((s) => (
             <FilterBtn key={s} href={buildUrl({ status: s, page: 1 })} active={status === s}>
               {s === '' ? 'Todos' : getStatusLabel('competencia', s)}
@@ -146,7 +143,7 @@ function CompetenciasContent() {
           ))}
         </div>
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto hidden sm:flex items-center gap-1">
           <span className="text-xs text-muted-foreground mr-1">Agrupar:</span>
           {([
             ['none',       'Lista',         LayoutList],
@@ -164,6 +161,14 @@ function CompetenciasContent() {
           ))}
         </div>
       </div>
+
+      <FiltrosAtivos
+        chips={[
+          clienteId && { chave: 'clienteId', rotulo: 'Cliente', valor: nomeCliente, removerHref: hrefSemFiltro('/competencias', searchParams, ['clienteId']) },
+          status && { chave: 'status', rotulo: 'Status', valor: getStatusLabel('competencia', status), removerHref: hrefSemFiltro('/competencias', searchParams, ['status']) },
+        ]}
+        limparHref={mes != null && ano != null ? `/competencias?mes=${mes}&ano=${ano}` : '/competencias'}
+      />
 
       <DataTableShell density="compact">
         <table className="w-full text-sm">
@@ -192,8 +197,8 @@ function CompetenciasContent() {
                 colSpan={5}
                 icon={Layers}
                 title="Nenhuma competência encontrada"
-                description={status ? 'Tente ajustar os filtros.' : `Nenhuma competência para ${formatMesAno(mes, ano)}.`}
-                action={!status ? { label: 'Nova Competência', href: '/competencias/nova' } : undefined}
+                description={status ? 'Tente ajustar os filtros.' : mes != null && ano != null ? `Nenhuma competência para ${formatMesAno(mes, ano)}.` : 'Este cliente ainda não tem competências.'}
+                action={!status ? { label: 'Nova competência', href: novaHref } : undefined}
               />
             ) : (
               groupedRows.flatMap(({ groupKey, groupLabel, rows }) => [
@@ -206,7 +211,7 @@ function CompetenciasContent() {
                 ),
                 ...rows.map((c: CompetenciaRecord) => {
                   return (
-                    <tr key={c.id as string} className="transition-colors hover:bg-muted/35">
+                    <LinhaClicavel key={c.id as string} alvo={`/competencias/${c.id}`} className="transition-colors hover:bg-muted/35">
                       <td className="px-4 py-3">
                         <Link href={`/competencias/${c.id}`} className="font-medium hover:underline">
                           {(c.clienteNome as string) ?? '—'}
@@ -216,7 +221,7 @@ function CompetenciasContent() {
                       <td className="px-4 py-3">{formatMesAno(c.mes as number, c.ano as number)}</td>
                       <td className="px-4 py-3"><CompetenciaStatusBadge status={c.status as string} /></td>
                       <td className="px-4 py-3 text-muted-foreground">{(c.responsavelNome as string) ?? '—'}</td>
-                    </tr>
+                    </LinhaClicavel>
                   )
                 }),
               ])

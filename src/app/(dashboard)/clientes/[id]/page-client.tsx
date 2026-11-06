@@ -1383,7 +1383,7 @@ export default function ClienteDetailPage() {
               <div className="grid grid-cols-1 min-[280px]:grid-cols-2 gap-2">
                 <LinkPermitido semAcesso="ocultar" href={`/competencias/nova?clienteId=${id}`} className="aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">
                   <Plus className="h-5 w-5 text-primary" />
-                  <span className="text-xs font-medium leading-tight">Nova Competência</span>
+                  <span className="text-xs font-medium leading-tight">Nova competência</span>
                 </LinkPermitido>
                 {fiscal && podeAcessarFiscal && podeOperarFiscal && (
                   <button type="button" onClick={() => setEmitirOpen(true)} className="aspect-square flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-background dark:bg-card hover:bg-muted/60 dark:hover:bg-muted/30 transition-colors p-3 text-center">

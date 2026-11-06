@@ -32,6 +32,11 @@ import { useTarefasList } from '@/features/tarefas/hooks'
 import { tarefasKeys } from '@/features/tarefas/queries'
 import { getErrorMessage } from '@/lib/error-message'
 import type { TarefaRecord, TarefasFilters } from '@/features/tarefas/types'
+import { useLinhaClicavel, PararLinha } from '@/components/ui/linha-clicavel'
+import { LinkPermitido } from '@/components/ui/link-permitido'
+import { FiltrosAtivos } from '@/components/ui/filtros-ativos'
+import { useNomeCliente, useNomeResponsavel, useRotuloCompetencia } from '@/lib/use-nomes-filtro'
+import { hrefSemFiltro } from '@/lib/url-filtros'
 
 function TarefasContent() {
   const router = useRouter()
@@ -47,6 +52,13 @@ function TarefasContent() {
   })
   const { status, prioridade, responsavelId, clienteId, competenciaId, page } = filters
   const { tarefas, total, totalPages, isLoading, isError, error, refetch } = useTarefasList(filters)
+  const linha = useLinhaClicavel()
+  // Filtros que chegam de outras telas ("Tarefas do cliente", da competência,
+  // do responsável) agora aparecem como chips com o nome, e saem com um clique.
+  const nomeCliente = useNomeCliente(clienteId, tarefas.find((t) => t.clienteId === clienteId)?.clienteNome as string | undefined)
+  const nomeResponsavel = useNomeResponsavel(responsavelId, tarefas.find((t) => t.responsavelId === responsavelId)?.responsavelNome as string | undefined)
+  const rotuloCompetencia = useRotuloCompetencia(competenciaId)
+  const semFiltro = (...chaves: string[]) => hrefSemFiltro('/tarefas', searchParams, chaves)
 
   const [concluding, setConcluding] = useState<string | null>(null)
   const [confirmUrgente, setConfirmUrgente] = useState<{ id: string; titulo: string } | null>(null)
@@ -138,10 +150,14 @@ function TarefasContent() {
               onClick={() => setFilterSheetOpen(true)}
               activeCount={(status ? 1 : 0) + (prioridade ? 1 : 0)}
             />
-            <Link href="/tarefas/nova" className={buttonVariants({ size: 'cta' })}>
+            <LinkPermitido
+              href={clienteId ? `/tarefas/nova?clienteId=${encodeURIComponent(clienteId)}` : '/tarefas/nova'}
+              semAcesso="ocultar"
+              className={buttonVariants({ size: 'cta' })}
+            >
               <Plus />
               Nova tarefa
-            </Link>
+            </LinkPermitido>
           </>
         }
       />
@@ -189,17 +205,34 @@ function TarefasContent() {
             </FilterBtn>
           ))}
         </div>
+        {/* A lista vem paginada do Firestore (sem busca por texto no servidor):
+            o campo filtra só as linhas desta página, e diz isso. */}
         <div className="relative ml-auto">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
           <input
-            type="text"
-            placeholder="Buscar na página..."
+            type="search"
+            placeholder="Filtrar nesta página…"
+            aria-label={`Filtrar as ${tarefas.length} tarefas desta página por título, cliente ou responsável`}
+            title="Filtra só as tarefas desta página. Para outras, use os filtros ou mude de página."
             value={localSearch}
             onChange={e => setLocalSearch(e.target.value)}
-            className="h-8 w-48 rounded-lg border border-border bg-background pl-8 pr-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary/50"
+            className="h-8 w-52 rounded-lg border border-border bg-background pl-8 pr-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary/50"
           />
         </div>
       </div>
+
+      <FiltrosAtivos
+        chips={[
+          clienteId && { chave: 'clienteId', rotulo: 'Cliente', valor: nomeCliente, removerHref: semFiltro('clienteId') },
+          competenciaId && { chave: 'competenciaId', rotulo: 'Competência', valor: rotuloCompetencia, removerHref: semFiltro('competenciaId') },
+          responsavelId && { chave: 'responsavelId', rotulo: 'Responsável', valor: nomeResponsavel, removerHref: semFiltro('responsavelId') },
+          status && { chave: 'status', rotulo: 'Status', valor: getStatusLabel('tarefa', status), removerHref: semFiltro('status') },
+          prioridade && { chave: 'prioridade', rotulo: 'Prioridade', valor: getStatusLabel('tarefaPrioridade', prioridade), removerHref: semFiltro('prioridade') },
+          localSearch.trim() && { chave: 'busca-local', rotulo: 'Nesta página', valor: `“${localSearch.trim()}”`, onRemover: () => setLocalSearch('') },
+        ]}
+        limparHref="/tarefas"
+        onLimpar={() => setLocalSearch('')}
+      />
 
       <DataTableShell density="compact">
         <table className="w-full table-fixed text-sm sm:table-auto sm:min-w-[940px]">
@@ -230,8 +263,16 @@ function TarefasContent() {
                 colSpan={7}
                 icon={ClipboardList}
                 title="Nenhuma tarefa encontrada"
-                description={status || prioridade ? 'Tente ajustar os filtros.' : 'Clique em "Nova Tarefa" para começar.'}
-                action={!status && !prioridade ? { label: 'Nova Tarefa', href: '/tarefas/nova' } : undefined}
+                description={status || prioridade || clienteId || responsavelId || competenciaId ? 'Tente ajustar os filtros.' : 'Clique em "Nova tarefa" para começar.'}
+                action={!status && !prioridade ? { label: 'Nova tarefa', href: '/tarefas/nova' } : undefined}
+              />
+            ) : tarefasFiltradas.length === 0 ? (
+              <TableEmptyState
+                colSpan={7}
+                icon={Search}
+                title="Nenhuma tarefa desta página corresponde"
+                description="O filtro de texto procura só nas tarefas desta página. Limpe o texto ou mude de página."
+                action={{ label: 'Limpar texto', variant: 'outline', onClick: () => setLocalSearch('') }}
               />
             ) : tarefasFiltradas.map((t) => {
                 const dataPrazo = t.dataPrazo as Timestamp | undefined
@@ -242,7 +283,7 @@ function TarefasContent() {
 
                 return (
                   <Fragment key={t.id as string}>
-                  <tr className="transition-colors hover:bg-muted/35 hidden sm:table-row">
+                  <tr {...linha(`/tarefas/${t.id as string}`, { className: 'transition-colors hover:bg-muted/35 hidden sm:table-row' })}>
                     <td className="px-3 py-1.5">
                       <Link
                         href={`/tarefas/${t.id}`}
@@ -287,7 +328,7 @@ function TarefasContent() {
                       <TarefaStatusBadge status={t.status as string} />
                     </td>
                     <td className="px-3 py-1.5">
-                      <div className="flex items-center justify-end gap-1">
+                      <PararLinha className="flex items-center justify-end gap-1">
                       {!['concluida', 'cancelada'].includes(t.status as string) && (
                         <button
                           onClick={() => handleConcluirClick(t)}
@@ -329,10 +370,10 @@ function TarefasContent() {
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                      </div>
+                      </PararLinha>
                     </td>
                   </tr>
-                  <tr className="sm:hidden">
+                  <tr {...linha(`/tarefas/${t.id as string}`, { className: 'sm:hidden active:bg-muted/40' })}>
                     <td colSpan={7} className="px-3 py-2 sm:hidden">
                       <div className="flex items-start gap-3">
                         <div className="min-w-0 flex-1">

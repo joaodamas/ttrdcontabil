@@ -41,7 +41,7 @@ export const WithIcons: Story = {
   name: 'Com Ícones',
   render: () => (
     <div className="flex items-center gap-3 flex-wrap p-4">
-      <Button size="sm"><Plus size={14} />Novo Cliente</Button>
+      <Button size="sm"><Plus size={14} />Novo cliente</Button>
       <Button size="sm" variant="outline"><CheckSquare size={14} />Concluir Tarefa</Button>
       <Button size="icon-sm" variant="ghost"><Plus size={14} /></Button>
     </div>

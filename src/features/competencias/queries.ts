@@ -11,8 +11,8 @@ export const competenciasKeys = {
   list: (filters: CompetenciasFilters) =>
     [
       ...base.list('list'),
-      filters.mes,
-      filters.ano,
+      filters.mes ?? 'todos-meses',
+      filters.ano ?? 'todos-anos',
       filters.status || 'todos',
       filters.clienteId || 'todos-clientes',
       filters.page,

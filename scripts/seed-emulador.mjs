@@ -41,6 +41,9 @@ for (const [email, nome, perfil] of usuarios) {
   const u = await auth.createUser({ email, password: 'demo1234', displayName: nome })
   uids[perfil] = { id: u.uid, nome }
   await put('usuarios', u.uid, { nome, email, perfil, ativo: true })
+  // Projeção que o trigger sincronizarDiretorioUsuario manteria (functions não
+  // rodam neste emulador): seletores e chips de responsável leem daqui.
+  await put('usuarios_diretorio', u.uid, { nome, ativo: true })
 }
 
 const regimes = ['simples_nacional', 'simples_nacional', 'lucro_presumido', 'mei', 'lucro_real']

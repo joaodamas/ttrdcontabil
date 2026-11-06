@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation'
 
 import { toast } from 'sonner'
 import { formatCpfCnpj, formatCurrency } from '@/lib/utils'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
 import { ClienteStatusBadge } from '@/components/ui/status-badge'
 import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { TableEmptyState } from '@/components/ui/empty-state'
@@ -35,6 +35,9 @@ import { baixarRelatorioClientesXlsx } from '@/lib/clientes-relatorio'
 import { useAuth } from '@/contexts/auth-context'
 import { canAccessTela, podeEscreverEm, podeOperarNfse } from '@/lib/permissions'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { useLinhaClicavel, PararLinha } from '@/components/ui/linha-clicavel'
+import { FiltrosAtivos } from '@/components/ui/filtros-ativos'
+import { hrefSemFiltro } from '@/lib/url-filtros'
 
 const REGIME_LABELS: Record<string, string> = {
   simples_nacional: 'Simples',
@@ -60,6 +63,16 @@ const DOC_FISCAL_LABEL: Record<string, string> = {
   produto: 'NF-e',
   transporte: 'CT-e',
 }
+/** Filtro rápido de regime (barra e painel de filtros) — inclui "Isento", que existe no cadastro. */
+const REGIMES_FILTRO = [
+  ['', 'Todos'],
+  ['simples_nacional', 'Simples'],
+  ['lucro_presumido', 'L. Presumido'],
+  ['lucro_real', 'L. Real'],
+  ['mei', 'MEI'],
+  ['isento', 'Isento'],
+] as const
+
 const DOC_FISCAL_BADGE: Record<string, string> = {
   servico: 'bg-info/10 text-info border-info/20',
   produto: 'bg-primary/10 text-foreground/70 border-primary/20',
@@ -303,6 +316,7 @@ function ClientesContent() {
     router.replace(q ? `/clientes?${q}` : '/clientes', { scroll: false })
   }
   const [filterSheetOpen,  setFilterSheetOpen]  = useState(false)
+  const linha = useLinhaClicavel()
 
   const clientesFiltrados = regime
     ? filteredClientes.filter(c => (c.regimeTributario as string | undefined) === regime)
@@ -368,43 +382,43 @@ function ClientesContent() {
               onClick={() => setFilterSheetOpen(true)}
               activeCount={(status ? 1 : 0) + (regime ? 1 : 0)}
             />
-            <Button
-              variant="outline"
-              size="cta"
-              disabled={isLoading || clientesFiltrados.length === 0}
-              onClick={() => exportClientesListaPdf(clientesFiltrados, mensalidadeDe)}
-            >
-              <FileDown />
-              Exportar PDF
-            </Button>
-            {ehAdmin ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger className={buttonVariants({ variant: 'outline', size: 'cta' })} disabled={gerandoRelatorio}>
-                  {gerandoRelatorio ? <Loader2 className="animate-spin" /> : <FileSpreadsheet />}
-                  Ficha completa (Excel)
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => void exportarFichaCompleta(false)}>Sem senhas</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setConfirmarSenhas(true)}>Com senhas visíveis…</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <Button variant="outline" size="cta" disabled={gerandoRelatorio} onClick={() => void exportarFichaCompleta(false)}>
-                {gerandoRelatorio ? <Loader2 className="animate-spin" /> : <FileSpreadsheet />}
-                Ficha completa (Excel)
-              </Button>
-            )}
+            {/* Exportar PDF, ficha completa e importar ficam num menu "Mais":
+                eram 5 botões no topo, que no celular quebravam em 3 linhas. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger className={buttonVariants({ variant: 'outline', size: 'cta' })} disabled={gerandoRelatorio}>
+                {gerandoRelatorio ? <Loader2 className="animate-spin" /> : <MoreHorizontal />}
+                Mais
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                <DropdownMenuItem
+                  disabled={isLoading || clientesFiltrados.length === 0}
+                  onClick={() => exportClientesListaPdf(clientesFiltrados, mensalidadeDe)}
+                >
+                  <FileDown className="h-3.5 w-3.5 mr-2" />Exportar lista (PDF)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => void exportarFichaCompleta(false)}>
+                  <FileSpreadsheet className="h-3.5 w-3.5 mr-2" />Ficha completa (Excel)
+                </DropdownMenuItem>
+                {ehAdmin && (
+                  <DropdownMenuItem onClick={() => setConfirmarSenhas(true)}>
+                    <FileSpreadsheet className="h-3.5 w-3.5 mr-2" />Ficha completa com senhas…
+                  </DropdownMenuItem>
+                )}
+                {podeEditarCliente && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => router.push('/clientes/importar')}>
+                      <Upload className="h-3.5 w-3.5 mr-2" />Importar planilha
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
             {podeEditarCliente && (
-              <>
-                <Link href="/clientes/importar" className={buttonVariants({ variant: 'outline', size: 'cta' })}>
-                  <Upload />
-                  Importar
-                </Link>
-                <Link href="/clientes/novo" className={buttonVariants({ size: 'cta' })}>
-                  <Plus />
-                  Novo cliente
-                </Link>
-              </>
+              <Link href="/clientes/novo" className={buttonVariants({ size: 'cta' })}>
+                <Plus />
+                Novo cliente
+              </Link>
             )}
           </>
         }
@@ -429,13 +443,7 @@ function ClientesContent() {
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Regime tributário</p>
           <div className="flex flex-wrap gap-2">
-            {([
-              ['', 'Todos'],
-              ['simples_nacional', 'Simples'],
-              ['lucro_presumido',  'L. Presumido'],
-              ['lucro_real',       'L. Real'],
-              ['mei',              'MEI'],
-            ] as const).map(([val, label]) => (
+            {REGIMES_FILTRO.map(([val, label]) => (
               <FilterBtn key={val} href={clientesFilterHref({ busca, status, regime: val })} active={regime === val}>
                 {label}
               </FilterBtn>
@@ -444,20 +452,16 @@ function ClientesContent() {
         </div>
       </FilterSheet>
 
-      <div className="surface-subtle border px-3 py-2.5 space-y-2.5 hidden sm:block">
+      {/* Busca sempre visível (também no celular); status e regime ficam no
+          painel de filtros no celular. */}
+      <div className="surface-subtle border px-3 py-2.5 space-y-2.5">
         <Suspense>
           <ClientesFiltros busca={busca} status={status} />
         </Suspense>
         {/* Filtros rápidos de regime */}
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="hidden sm:flex flex-wrap items-center gap-1">
           <span className="text-xs text-muted-foreground mr-1">Regime:</span>
-          {([
-            ['', 'Todos'],
-            ['simples_nacional', 'Simples'],
-            ['lucro_presumido',  'L. Presumido'],
-            ['lucro_real',       'L. Real'],
-            ['mei',              'MEI'],
-          ] as const).map(([val, label]) => (
+          {REGIMES_FILTRO.map(([val, label]) => (
             <FilterBtn
               key={val}
               href={clientesFilterHref({ busca, status, regime: val })}
@@ -468,6 +472,16 @@ function ClientesContent() {
           ))}
         </div>
       </div>
+
+      <FiltrosAtivos
+        className="mt-3"
+        chips={[
+          busca && { chave: 'busca', rotulo: 'Busca', valor: `“${busca}”`, removerHref: hrefSemFiltro('/clientes', searchParams, ['busca', 'cliente']) },
+          status && { chave: 'status', rotulo: 'Status', valor: status.charAt(0).toUpperCase() + status.slice(1), removerHref: hrefSemFiltro('/clientes', searchParams, ['status', 'cliente']) },
+          regime && { chave: 'regime', rotulo: 'Regime', valor: REGIME_LABELS[regime] ?? regime, removerHref: hrefSemFiltro('/clientes', searchParams, ['regime', 'cliente']) },
+        ]}
+        limparHref="/clientes"
+      />
 
       <DataTableShell className="mt-4" density="compact">
         <table className="w-full table-fixed text-sm sm:table-auto sm:min-w-[900px]">
@@ -512,10 +526,7 @@ function ClientesContent() {
                 const vencimento = c.vencimento as string | undefined
                 return (
                 <Fragment key={c.id as string}>
-                <tr
-                  className="group cursor-pointer transition-colors hover:bg-muted/35 hidden sm:table-row"
-                  onClick={() => abrirCliente(c)}
-                >
+                <tr {...linha(() => abrirCliente(c), { className: 'group transition-colors hover:bg-muted/35 hidden sm:table-row' })}>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2.5">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/10">
@@ -571,6 +582,7 @@ function ClientesContent() {
                     <SaudeBadge nivel={saude.nivel} motivo={saude.motivo} />
                   </td>
                   <td className="px-3 py-2">
+                    <PararLinha>
                     <DropdownMenu>
                       <DropdownMenuTrigger
                         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-opacity hover:bg-muted focus-visible:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
@@ -605,9 +617,11 @@ function ClientesContent() {
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
+                    </PararLinha>
                   </td>
                 </tr>
-                <tr className="sm:hidden cursor-pointer active:bg-muted/40" onClick={() => abrirCliente(c)}>
+                <tr {...linha(() => abrirCliente(c), { className: 'sm:hidden active:bg-muted/40' })}>
+
                   <td colSpan={9} className="px-3 py-2 sm:hidden">
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 ring-1 ring-primary/10">
