@@ -12,9 +12,13 @@
  * perfil/telas vale na hora, sem esperar novo login.
  */
 import {
+  getMultiFactorResolver,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
+  TotpMultiFactorGenerator,
+  type MultiFactorError,
+  type MultiFactorResolver,
   type User,
 } from 'firebase/auth'
 import { doc, getDoc, onSnapshot, serverTimestamp, updateDoc, type DocumentData } from 'firebase/firestore'
@@ -64,14 +68,51 @@ export function avaliarPerfil(
   return { ok: true, usuario }
 }
 
+/**
+ * A senha confere, mas a conta tem segundo fator (TOTP) cadastrado: o login
+ * só termina com o código do aplicativo autenticador (concluirLoginComTotp).
+ */
+export class SegundoFatorNecessario extends Error {
+  constructor(readonly resolver: MultiFactorResolver, readonly fatorUid: string, readonly email: string) {
+    super('Informe o código do aplicativo autenticador.')
+    this.name = 'SegundoFatorNecessario'
+  }
+}
+
+export const MOTIVO_FATOR_NAO_SUPORTADO =
+  'Sua conta tem um segundo fator que este sistema não usa (só aplicativo autenticador). Contate o administrador.'
+
 export async function signIn(email: string, password: string): Promise<UserSession> {
-  const cred = await signInWithEmailAndPassword(getClientAuth(), email, password)
-  const ref = doc(getClientDb(), 'usuarios', cred.user.uid)
+  const auth = getClientAuth()
+  let user: User
+  try {
+    user = (await signInWithEmailAndPassword(auth, email, password)).user
+  } catch (err) {
+    if ((err as { code?: string }).code === 'auth/multi-factor-auth-required') {
+      const resolver = getMultiFactorResolver(auth, err as MultiFactorError)
+      const totp = resolver.hints.find((h) => h.factorId === TotpMultiFactorGenerator.FACTOR_ID)
+      if (!totp) throw new Error(MOTIVO_FATOR_NAO_SUPORTADO)
+      throw new SegundoFatorNecessario(resolver, totp.uid, email)
+    }
+    throw err
+  }
+  return finalizarLogin(user, email)
+}
+
+/** Segunda etapa do login com TOTP. Código errado/expirado: auth/invalid-verification-code. */
+export async function concluirLoginComTotp(pendente: SegundoFatorNecessario, codigo: string): Promise<UserSession> {
+  const assertion = TotpMultiFactorGenerator.assertionForSignIn(pendente.fatorUid, codigo.replace(/\D/g, ''))
+  const cred = await pendente.resolver.resolveSignIn(assertion)
+  return finalizarLogin(cred.user, pendente.email)
+}
+
+async function finalizarLogin(user: User, email: string): Promise<UserSession> {
+  const ref = doc(getClientDb(), 'usuarios', user.uid)
 
   let resultado: ReturnType<typeof avaliarPerfil>
   try {
     const snap = await getDoc(ref)
-    resultado = avaliarPerfil(cred.user.uid, cred.user.email ?? email, snap.exists() ? snap.data() : null)
+    resultado = avaliarPerfil(user.uid, user.email ?? email, snap.exists() ? snap.data() : null)
   } catch {
     resultado = { ok: false, motivo: MOTIVO_FALHA }
   }

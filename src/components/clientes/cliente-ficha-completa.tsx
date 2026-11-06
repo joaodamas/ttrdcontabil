@@ -8,7 +8,8 @@ import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
 import { montarFichaCliente } from '@/lib/cliente-ficha'
-import type { CredenciaisCliente } from '@/lib/clientes-credenciais'
+import type { CampoCredencial, CredenciaisCliente } from '@/lib/clientes-credenciais'
+import { getErrorMessage } from '@/lib/error-message'
 import { podeVerCredenciais } from '@/lib/permissions'
 import { carregarCredenciaisCliente } from '@/features/clientes/credenciais'
 import { cn, formatCpfCnpj } from '@/lib/utils'
@@ -17,7 +18,7 @@ import { cn, formatCpfCnpj } from '@/lib/utils'
  * Ficha de cadastro completa do cliente — todos os campos do formulário,
  * agrupados nas mesmas seções, com o que está preenchido e o que está em
  * branco. Senhas ficam ocultas; administrador e fiscal podem revelar uma a uma
- * — só então elas são lidas de clientes_credenciais. Os demais perfis veem só
+ * — só então o servidor decifra aquele campo e registra a revelação no log. Os demais perfis veem só
  * se cada senha está preenchida (clientes.credenciaisPreenchidas).
  */
 export function ClienteFichaCompleta({ cliente, clienteId }: { cliente: Record<string, unknown>; clienteId: string }) {
@@ -30,13 +31,17 @@ export function ClienteFichaCompleta({ cliente, clienteId }: { cliente: Record<s
   const pct = Math.round((ficha.preenchidos / ficha.total) * 100)
 
   async function alternar(key: string) {
-    if (!credenciais) {
+    // Revela só o campo clicado (um log de auditoria por revelação, com IP);
+    // esconder e mostrar de novo o mesmo campo não chama o servidor outra vez.
+    if (!credenciais || !(key in credenciais)) {
       setCarregando(true)
       try {
-        setCredenciais(await carregarCredenciaisCliente(clienteId, cliente))
+        const lidas = await carregarCredenciaisCliente(clienteId, cliente, [key as CampoCredencial])
+        // Campo vazio no servidor: registra como revelado (em branco).
+        setCredenciais((prev) => ({ ...(prev ?? {}), [key]: lidas[key as CampoCredencial] ?? '' }))
       } catch (err) {
         console.error('[ficha] credenciais', err)
-        toast.error('Não foi possível carregar as senhas deste cliente.')
+        toast.error(getErrorMessage(err, 'Não foi possível carregar a senha deste cliente.'))
         return
       } finally {
         setCarregando(false)

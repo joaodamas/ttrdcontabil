@@ -64,28 +64,53 @@ export function baixarXmlNfse(nota: NotaComArquivos): void {
 }
 
 /**
- * PDF já pronto para abrir sem chamar o servidor. Um DANFSe gerado antes do
- * cancelamento não serve para a nota cancelada (falta a marca "CANCELADA").
+ * PDF já pronto para abrir sem chamar o servidor — só o link do PROVEDOR
+ * (prefeitura). O DANFSe gerado pela plataforma não tem mais link permanente:
+ * é pedido a cada abertura ao callable obterUrlDanfse, que confere a permissão
+ * e devolve uma URL de 5 minutos. `pdfUrl` antigo da plataforma (com token do
+ * Storage, de antes de 2026-11-06) é ignorado de propósito.
  */
 export function pdfProntoDaNota(nota: NotaComArquivos): string | null {
   const url = typeof nota.pdfUrl === 'string' && nota.pdfUrl ? nota.pdfUrl : null
   if (!url) return null
-  if (nota.pdfOrigem === 'plataforma' && nota.status === 'cancelada' && nota.pdfCancelada !== true) return null
+  if (nota.pdfOrigem === 'plataforma') return null
+  if (url.includes('firebasestorage.googleapis.com')) return null
   return url
 }
 
-/** Pode haver DANFSe: PDF pronto ou XML para gerá-lo. */
+/** Pode haver DANFSe: PDF do provedor ou XML para o servidor gerá-lo. */
 export function podeObterDanfse(nota: NotaComArquivos): boolean {
   return Boolean(pdfProntoDaNota(nota)) || temXmlNfse(nota)
 }
 
+type RespostaDanfse = {
+  status: string
+  message: string
+  data?: { pdfUrl?: string; pdfBase64?: string; nomeArquivo?: string }
+}
+
+/** PDF devolvido em base64 (servidor sem permissão de assinar URL) → blob: local. */
+export function urlDeBase64Pdf(base64: string): string {
+  const bin = atob(base64)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }))
+  // A aba aberta já carregou o PDF; o blob some depois de um tempo.
+  setTimeout(() => URL.revokeObjectURL(url), 5 * 60_000)
+  return url
+}
+
+/**
+ * Endereço de curta duração do DANFSe: gera o PDF se preciso e devolve uma URL
+ * assinada de 5 minutos (ou o PDF, que vira blob: local). Nada fica gravado.
+ */
 export async function gerarDanfse(nfseId: string): Promise<string> {
-  const fn = httpsCallable<{ nfseId: string }, { status: string; message: string; data?: { pdfUrl?: string } }>(
+  const fn = httpsCallable<{ nfseId: string }, RespostaDanfse>(
     getFunctions(getFirebaseApp(), 'southamerica-east1'),
-    'gerarDanfse',
+    'obterUrlDanfse',
   )
   const { data } = await fn({ nfseId })
-  const url = data?.data?.pdfUrl
-  if (!url) throw new Error(data?.message || 'O servidor não devolveu o endereço do DANFSe.')
-  return url
+  if (data?.data?.pdfUrl) return data.data.pdfUrl
+  if (data?.data?.pdfBase64) return urlDeBase64Pdf(data.data.pdfBase64)
+  throw new Error(data?.message || 'O servidor não devolveu o DANFSe.')
 }

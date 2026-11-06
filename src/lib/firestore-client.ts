@@ -34,8 +34,8 @@ const AUDITED_COLLECTIONS = new Set([
   'ir_declaracoes',
   'ir_checklist',
   'usuarios',
-  // Só os nomes de campo vão para o log: os valores saem [REDACTED]
-  // (SENSITIVE_KEY_PARTS cobre 'senha' e 'login').
+  // Gravada só pelos callables (as regras negam o navegador); fica aqui para
+  // o caso de algum fluxo antigo — o log dela é do servidor.
   'clientes_credenciais',
   'configuracoes',
   'whatsapp_templates',
@@ -43,6 +43,20 @@ const AUDITED_COLLECTIONS = new Set([
   'whatsapp_jobs',
   'whatsapp_messages',
   'whatsapp_webhook_events',
+])
+
+/**
+ * Auditadas no SERVIDOR (triggers em functions/src/auditoria/triggers.ts):
+ * o navegador não grava log delas — o trigger registra antes/depois do que
+ * mudou de fato, com o uid do contexto do evento, venha a escrita de onde vier.
+ * Continuam em AUDITED_COLLECTIONS só para setDocument recusar id repetido.
+ */
+const SERVER_AUDITED_COLLECTIONS = new Set([
+  'clientes',
+  'clientes_fiscal',
+  'clientes_credenciais',
+  'lancamentos',
+  'usuarios',
 ])
 
 const TENANT_SCOPED_COLLECTIONS = new Set([
@@ -180,6 +194,7 @@ async function writeAuditLog(params: {
   dadosDepois?: Record<string, unknown> | null
 }) {
   if (!AUDITED_COLLECTIONS.has(params.entidade)) return
+  if (SERVER_AUDITED_COLLECTIONS.has(params.entidade)) return
   const actor = await getAuditActor()
   if (!actor) return
 

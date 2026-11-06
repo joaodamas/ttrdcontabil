@@ -7,7 +7,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { doc, getDoc, getDocs, collection, setDoc, updateDoc, deleteDoc } from 'firebase/firestore'
+import { doc, getDoc, getDocs, collection, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
 
 const PROJECT_ID = 'ttrdcontabil-rules-test'
 
@@ -456,13 +456,15 @@ describeIfEmulator('firestore.rules', () => {
   // ─── logs_auditoria: append-only e leitura só admin ──────────────────────────
 
   it('logs_auditoria: cria, mas nunca edita nem deleta', async () => {
-    const db = dbAs('operacional-a')
+    const db = testEnv.authenticatedContext('operacional-a', { email: 'operacional@a.com' }).firestore()
     await assertSucceeds(setDoc(doc(db, 'logs_auditoria/novo-log'), {
       tenantId: 'tenant-a',
       usuarioId: 'operacional-a',
+      usuarioEmail: 'operacional@a.com',
       acao: 'update',
-      entidade: 'clientes',
+      entidade: 'tarefas',
       origem: 'client',
+      criadoEm: serverTimestamp(),
     }))
     await assertFails(updateDoc(doc(db, 'logs_auditoria/log-a'), { acao: 'adulterado' }))
     await assertFails(deleteDoc(doc(db, 'logs_auditoria/log-a')))
@@ -584,9 +586,10 @@ describeIfEmulator('firestore.rules', () => {
     await assertFails(getDoc(doc(dbAs('leitura-a'), 'clientes_fiscal/cf-seed')))
   })
 
-  it('clientes_fiscal_integracao: leitura restrita a admin/fiscal, negada para leitura', async () => {
-    await assertSucceeds(getDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal_integracao/cfi-seed')))
-    await assertFails(getDoc(doc(dbAs('leitura-a'), 'clientes_fiscal_integracao/cfi-seed')))
+  it('clientes_fiscal_integracao: sem uso, trancada para todos (inclusive admin/fiscal)', async () => {
+    await assertFails(getDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal_integracao/cfi-seed')))
+    await assertFails(getDoc(doc(dbAs('admin-a'), 'clientes_fiscal_integracao/cfi-seed')))
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal_integracao/novo'), { tenantId: 'tenant-a', clienteId: 'cliente-a' }))
   })
 
   it('fechamento_revisoes: leitura restrita a admin/operacional/fiscal, negada para leitura/financeiro', async () => {

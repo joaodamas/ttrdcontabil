@@ -13,7 +13,11 @@ Estado a partir da branch `feat/usuarios-permissoes` (2026-11-05). Decisões do 
 | Criar / atualizar / reenviar convite / excluir usuário | `functions/src/usuarios/callables.ts` (validação pura em `regras.ts`) |
 | Checagem de perfil nas functions (uma só) | `functions/src/authz.ts` (`carregarUsuarioAtivo`, `assertPerfil`, `assertAdmin`, `assertCanAccessCliente`) |
 | Projeção pública de usuários para seletores | trigger `sincronizarDiretorioUsuario` → `usuarios_diretorio/{uid}` (id, nome, ativo, tenant) |
-| Senhas de portal do cliente | `clientes_credenciais/{clienteId}`; lista de campos em `functions/src/clientes/credenciais-campos.ts` |
+| Senhas de portal do cliente | `clientes_credenciais/{clienteId}`, **cifradas** e só pelos callables `lerCredenciaisCliente` / `salvarCredenciaisCliente` / `exportarCredenciaisClientes` (`functions/src/clientes/credenciais-callables.ts`); lista de campos em `credenciais-campos.ts` |
+| Auditoria de CRUD (clientes, clientes_fiscal, clientes_credenciais, lancamentos, usuarios) | triggers `auditar*` (`functions/src/auditoria/triggers.ts`); redator em `functions/src/audit.ts` |
+| Segundo fator (TOTP) e interruptor `configuracoes/seguranca.mfaObrigatorio` | tela `/conta/seguranca`, `src/lib/mfa.ts`; servidor `functions/src/seguranca/mfa.ts` |
+| Logout por inatividade (admin/fiscal, 30 min) | `src/lib/sessao-inatividade.ts`, `src/hooks/use-logout-inatividade.ts` |
+| Descarte ao excluir cliente (LGPD) | trigger `descartarDadosClienteExcluido` (`functions/src/clientes/descarte.ts`); ver `docs/LGPD-TRATAMENTO.md` |
 | Status "preenchida/em branco" sem ler a senha | trigger `sincronizarCredenciaisPreenchidas` → `clientes.credenciaisPreenchidas` (só nomes de campo) |
 | Sessão no navegador | `src/lib/auth-client.ts` (ouve `usuarios/{uid}` em tempo real) |
 
@@ -29,13 +33,16 @@ seguem o **perfil** (e, onde indicado, a tela concedida), conferido em `firestor
 | Ver nomes nos seletores de responsável (`usuarios_diretorio`) | ✔ | ✔ | ✔ | ✔ | ✔ |
 | Ler clientes | ✔ | ✔ | ✔ | ✔ | ✔ |
 | Criar/editar clientes | ✔ | ✔ | — | — | — |
-| Ver/editar **senhas de portal** do cliente | ✔ | — | ✔ | — | — |
+| Ver/editar **senhas de portal** do cliente (só pelo servidor; cada revelação no log, com IP) | ✔ | — | ✔ | — | — |
 | Ver se cada senha está preenchida | ✔ | ✔ | ✔ | ✔ | ✔ |
 | Relatório da ficha **com senhas** (exportação auditada) | ✔ | — | — | — | — |
-| Ler NFS-e, baixar XML/DANFSe (Firestore, Storage `nfse/`, `gerarDanfse`) | ✔ | tela fiscal | ✔ | ✔ | — |
+| Ler NFS-e, baixar XML/DANFSe (Firestore, Storage `nfse/`, `obterUrlDanfse` — URL de 5 min) | ✔ | tela fiscal | ✔ | ✔ | — |
+| Ler configuração fiscal do cliente (`clientes_fiscal`, `produtos`) | ✔ | tela fiscal | ✔ | — (mesmo com a tela fiscal) | tela fiscal |
 | Validar/enviar certificado A1 (`validarCertificado`, `uploadCertificado`) | ✔ | — | ✔ | — | — |
-| Storage `documentos/` (leitura; escrita só servidor) | ✔ | ✔ | ✔ | ✔ | ✔ |
-| Gravar log de auditoria (só em nome próprio, origem `client`) | ✔ | ✔ | ✔ | ✔ | ✔ |
+| Storage `documentos/` (nenhuma tela usa — trancado) | — | — | — | — | — |
+| Gravar log de auditoria pelo navegador (só coleções não sensíveis; em nome próprio, e-mail do token, hora do servidor, campos fechados) | ✔ | ✔ | ✔ | ✔ | ✔ |
+| Ligar/desligar a exigência de 2º fator (só em sessão que entrou com 2º fator) | ✔ | — | — | — | — |
+| 2º fator obrigatório (quando o interruptor está ligado) e logout após 30 min parado | ✔ | — | ✔ | — | — |
 
 Telas padrão (`PERFIL_DEFAULT_TELAS`): admin = todas; operacional = hoje, dashboard, clientes,
 competências, tarefas, fechamento; fiscal = + fiscal, IR; financeiro = hoje, dashboard, clientes,
@@ -126,13 +133,103 @@ ou por Admin SDK (`usuarios/{uid}` com `nome`, `email`, `perfil: 'admin'`, `ativ
   de reverter as regras — com as regras novas o navegador não grava senha em `clientes`.
 - **Cadastro público**: reabilitar "Enable create (sign-up)" só junto com o rollback do hosting.
 
+## Segurança e auditoria (branch `feat/seguranca-auditoria`, 2026-11-06)
+
+### O que mudou
+- **Trilha de auditoria no servidor**: triggers `auditarClientes`, `auditarClientesFiscal`,
+  `auditarClientesCredenciais`, `auditarLancamentos`, `auditarUsuarios` gravam antes/depois de toda
+  escrita (tela, SDK direto, script ou console), com o uid do contexto do evento e nome/e-mail da
+  conta no Firebase Auth. O navegador deixou de logar essas coleções. Senhas de portal: o log leva
+  só os nomes dos campos. Id do log = id do evento (reentrega não duplica).
+- **Callables gravam IP e navegador** (`ip`, `userAgent`) e o ator vem do token, não de
+  `usuarios.nome` (que o próprio usuário edita).
+- **Redator** (`audit.ts`): mantém `certTitular`/`certVencimento`/`certValido` e a lista
+  `credenciaisPreenchidas`; dentro de um bloco de credenciais todo o resto vira `[REDACTED]`;
+  `login*` (usuário do portal) passou a ser redigido também no servidor.
+- **`logs_auditoria` pelo navegador**: só em nome próprio, `usuarioEmail` = e-mail do token,
+  `origem: 'client'`, `criadoEm` = hora do servidor, conjunto fechado de campos.
+- **`events`**: o navegador cria só `fechamento` (operacional/fiscal/admin) e `lancamento`
+  (financeiro/admin), em nome próprio e com hora do servidor. **`nfse_eventos`**: só servidor.
+- **Senhas de portal**: o navegador não lê nem grava `clientes_credenciais`; os callables cifram com
+  `CREDENTIAL_KEY` (mesmo helper AES-256-GCM das credenciais fiscais). A ficha mostra mascarado e
+  revela **um campo por clique** (cada clique = 1 log com IP); o formulário só carrega as senhas no
+  botão "Mostrar e editar senhas". Exportação com senhas (admin) pelo callable, auditada.
+- **M1**: financeiro não lê mais `clientes_fiscal`/`produtos` (a tela 'fiscal' padrão dele dava
+  acesso ao bloco `credenciais`). As telas dele seguem lendo NFS-e.
+- **DANFSe**: sem token de download permanente; `obterUrlDanfse` confere quem lê a nota e devolve
+  URL assinada de 5 min (ou o PDF em base64, se a conta de serviço não puder assinar).
+  `gerarDanfse` segue no ar com o mesmo contrato, para o front antigo em cache.
+- **2º fator (TOTP)** em `/conta/seguranca` (QR Code) e no login; interruptor
+  `configuracoes/seguranca.mfaObrigatorio` (padrão desligado). Ligado: admin/fiscal sem 2º fator
+  vão para o cadastro, e os callables de usuários, senhas de portal e certificado A1 recusam sessão
+  sem 2º fator.
+- **Inatividade**: admin/fiscal saem após 30 min sem mexer em nenhuma aba (aviso 1 min antes).
+- **Cabeçalhos** no hosting: CSP **aplicada** (não report-only), `X-Frame-Options: DENY`,
+  `frame-ancestors 'none'`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, HSTS.
+- **Baixos**: `clientes_fiscal_integracao` trancada; `measurementId` removido do config (sem
+  Analytics); Storage `documentos/` trancado.
+- **Descarte LGPD** ao excluir cliente (ver `docs/LGPD-TRATAMENTO.md`).
+
+### Ordem de deploy (esta branch)
+
+1. Confirme que o segredo `CREDENTIAL_KEY` existe (já usado pelas credenciais fiscais):
+   `firebase functions:secrets:access CREDENTIAL_KEY` (não cole a saída em lugar nenhum).
+2. `firebase deploy --only functions` — **primeiro**: o front novo chama `lerCredenciaisCliente`,
+   `salvarCredenciaisCliente`, `exportarCredenciaisClientes` e `obterUrlDanfse`. Triggers de
+   auditoria e de descarte entram junto.
+3. `firebase deploy --only hosting` — front novo + cabeçalhos/CSP. O front novo funciona com as
+   regras antigas.
+4. `firebase deploy --only firestore:rules,storage` — tranca `clientes_credenciais`, endurece
+   logs/events, M1, `documentos/`. Depois deste passo o front **antigo** não lê mais senhas; por isso
+   vem depois do hosting.
+5. Scripts, sempre primeiro em dry-run e depois com `--aplicar`:
+   - `node scripts/migrar-credenciais-clientes.mjs` (se ainda houver senha em `clientes`);
+   - `node scripts/cifrar-credenciais-clientes.mjs` com `CREDENTIAL_KEY` no ambiente (pegue com
+     `gcloud secrets versions access latest --secret=CREDENTIAL_KEY --project ttrdcontabil-jpproject`);
+   - `node scripts/revogar-tokens-danfse.mjs` (apaga os links permanentes antigos do DANFSe).
+
+### Passos de console (nesta ordem)
+1. **URL assinada do DANFSe** (recomendado, junto do passo 2 acima): IAM → conta de serviço das
+   functions (`<número-do-projeto>-compute@developer.gserviceaccount.com`) → conceder a ela mesma
+   **Service Account Token Creator** (`roles/iam.serviceAccountTokenCreator`) e habilitar a
+   **IAM Service Account Credentials API**. Sem isso o DANFSe ainda abre (o PDF vem em base64).
+2. **2º fator** (quando for usar): Firebase Console → Authentication → Settings → **Upgrade to
+   Firebase Authentication with Identity Platform** (confira o plano/custos). Depois habilitar TOTP —
+   não há botão no console; uma vez, com credencial de dono do projeto:
+   ```bash
+   curl -X PATCH "https://identitytoolkit.googleapis.com/admin/v2/projects/ttrdcontabil-jpproject/config?updateMask=mfa" \
+     -H "Authorization: Bearer $(gcloud auth print-access-token)" -H "Content-Type: application/json" \
+     -H "X-Goog-User-Project: ttrdcontabil-jpproject" \
+     -d '{"mfa":{"providerConfigs":[{"state":"ENABLED","totpProviderConfig":{"adjacentIntervals":5}}]}}'
+   ```
+3. Cada admin e fiscal abre **Administração → Segurança** (ou `/conta/seguranca`), confirma o
+   e-mail se pedido e cadastra o aplicativo. Um admin **sai e entra de novo com o código** e liga
+   "Exigir 2º fator de administradores e fiscais". Desligar em emergência sem admin com 2º fator:
+   Console do Firestore → `configuracoes/seguranca` → `mfaObrigatorio: false`.
+4. **Futuro — App Check** (não feito): registrar o app web com reCAPTCHA Enterprise no Console →
+   App Check, pôr a chave no build (`initializeAppCheck`), observar as métricas e só então ligar o
+   enforcement em Firestore, Storage e Functions.
+
+### Rollback
+- Hosting: versão anterior no Console — reverter as regras junto (o front antigo lê senhas direto).
+- Regras: `git checkout <commit-anterior> -- firestore.rules storage.rules` e publicar.
+- CSP quebrando alguma tela: trocar a chave `Content-Security-Policy` por
+  `Content-Security-Policy-Report-Only` no `firebase.json` e publicar só o hosting.
+- 2º fator: `configuracoes/seguranca.mfaObrigatorio = false` pelo console.
+- Senhas cifradas não voltam a texto puro sozinhas; o leitor aceita os dois formatos.
+
 ## Riscos e pendências conhecidos
 
-- DANFSe: `pdfUrl` é URL com token de download do Storage, que ignora `storage.rules`. Ela só fica
-  em `nfse_emitidas` (lido por quem lê NFS-e), mas quem a copiou continua com acesso. Trocar por
-  URL assinada de curta duração se isso importar.
-- `documentos/` no Storage segue legível por qualquer usuário ativo do tenant (como a coleção
-  `documentos`); nenhuma tela usa hoje. Restringir por perfil antes de guardar ali documento sensível.
+- **CSP com `'unsafe-inline'` em `script-src`/`style-src`**: o export estático do Next injeta
+  scripts inline (`self.__next_f.push(...)`, hidratação) sem nonce — site estático não gera nonce
+  por requisição — e a UI usa `style=""`. A CSP ainda bloqueia script de outro domínio, `eval`,
+  `object`, `<base>` e iframe de terceiros. Validada com build + emuladores e Playwright nas telas
+  principais (CHANGELOG); tela não visitada pode esbarrar num domínio novo (ex.: logo externo) — o
+  rollback é Report-Only.
+- Os triggers de auditoria usam `authType`/`authId` do evento; o `firebase-functions` 6.x não tipa
+  `app_user`, então um `authId` sem `@` é tratado como uid e confirmado no Auth.
+- Callables de emissão/ciclo de NFS-e (`functions/src/nfse/**`, fora desta branch) ainda tiram o
+  nome do ator de `usuarios.nome` e não gravam IP.
 - Sem testes automáticos de `storage.rules` (só Firestore no emulador).
 - Callables testados por unidade nas regras puras; o fluxo completo (Auth + Firestore) não roda em
   CI — validar em homologação: criar, convite, desativar com sessão aberta, último admin, excluir.

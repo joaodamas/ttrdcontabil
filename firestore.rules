@@ -41,10 +41,9 @@ service cloud.firestore {
     function isEquipeContabil() { return isAtivo() && userDoc().perfil in ['admin', 'operacional', 'fiscal']; }
     function canRead()       { return isAtivo(); }
 
-    // Senhas de portal dos clientes (clientes_credenciais). Decisão do dono
-    // (2026-11-05): só administrador e fiscal — por PERFIL, sem override de
-    // tela. Espelha PERFIS_CREDENCIAIS em functions/src/usuarios/perfis.ts.
-    function podeVerCredenciais() { return isAtivo() && userDoc().perfil in ['admin', 'fiscal']; }
+    // Senhas de portal dos clientes (clientes_credenciais): só administrador e
+    // fiscal, por PERFIL — conferido nos callables (PERFIS_CREDENCIAIS em
+    // functions/src/usuarios/perfis.ts); as regras negam o navegador.
 
     // Campos que saíram de `clientes` para `clientes_credenciais/{clienteId}`.
     // Espelha CAMPOS_CREDENCIAL em src/lib/clientes-import.ts.
@@ -72,9 +71,16 @@ service cloud.firestore {
     // nfse_*: PERFIL_DEFAULT_TELAS libera a tela 'fiscal' tanto para 'fiscal' quanto
     // para 'financeiro' (financeiro concilia emissão de NFS-e com cobrança).
     function canReadNfse()         { return isFiscal() || isFinanceiro() || hasTela('fiscal'); }
-    // clientes_fiscal / clientes_fiscal_integracao: mesma tela 'fiscal', mas restrito
-    // ao perfil 'fiscal' (financeiro não configura integração fiscal do cliente).
-    function canReadFiscalConfig() { return isFiscal() || hasTela('fiscal'); }
+    // clientes_fiscal / produtos: mesma tela 'fiscal', mas SEM o perfil
+    // 'financeiro' (financeiro não configura integração fiscal do cliente).
+    // [M1, 2026-11-06] Antes era isFiscal() || hasTela('fiscal'): como
+    // PERFIL_DEFAULT_TELAS dá a tela 'fiscal' ao financeiro e o formulário de
+    // usuários grava esse array, todo financeiro lia clientes_fiscal — inclusive
+    // o bloco `credenciais` (senha do A1 cifrada, caminho do .pfx). O override
+    // de tela continua valendo para operacional/leitura com 'fiscal' concedida.
+    function canReadFiscalConfig() {
+      return isFiscal() || (hasTela('fiscal') && userDoc().perfil != 'financeiro');
+    }
     function canReadIr()           { return isFiscal() || hasTela('ir'); }
     function canReadFinanceiro()   { return isFinanceiro() || hasTela('financeiro'); }
     function canReadFechamento()   { return isOperacional() || isFiscal() || hasTela('fechamento'); }
@@ -380,33 +386,13 @@ service cloud.firestore {
 
     // Logins e senhas de portal do cliente (prefeitura, posto fiscal, PIN do
     // certificado, Meu Gov, e-CAC). Id do doc = id do cliente.
-    function credencialTextoOk(d, campo) {
-      return !(campo in d) || (d[campo] is string && d[campo].size() <= 500);
-    }
-    function credenciaisPayloadValido(clienteId) {
-      let d = request.resource.data;
-      let clientePath = /databases/$(database)/documents/clientes/$(clienteId);
-      return d.clienteId == clienteId
-        && d.keys().hasOnly(camposCredencialCliente().concat(['tenantId', 'clienteId', 'criadoEm', 'atualizadoEm',
-          'criadoPorId', 'criadoPorNome', 'atualizadoPorId', 'atualizadoPorNome']))
-        && credencialTextoOk(d, 'loginPrefeitura')
-        && credencialTextoOk(d, 'senhaWebPrefeitura')
-        && credencialTextoOk(d, 'senhaPinCertificadoDigitalECnpj')
-        && credencialTextoOk(d, 'loginPostoFiscal')
-        && credencialTextoOk(d, 'senhaPostoFiscal')
-        && credencialTextoOk(d, 'responsavelSenhaMeuGov')
-        && credencialTextoOk(d, 'responsavelSenhaEcacPf')
-        && credencialTextoOk(d, 'responsavelSenhaWebPrefeitura')
-        && credencialTextoOk(d, 'responsavelSenhaPinCertificadoDigitalCpf')
-        && exists(clientePath)
-        && get(clientePath).data.tenantId == d.tenantId;
-    }
-
+    // [2026-11-06] Só pelo servidor: os callables lerCredenciaisCliente /
+    // salvarCredenciaisCliente / exportarCredenciaisClientes
+    // (functions/src/clientes/credenciais-callables.ts) exigem admin/fiscal
+    // (podeVerCredenciais), cifram com CREDENTIAL_KEY e gravam log com IP a
+    // cada revelação. Ler direto daqui era ler em massa (2000 docs) sem rastro.
     match /clientes_credenciais/{clienteId} {
-      allow read: if podeVerCredenciais() && sameTenantExisting();
-      allow create: if podeVerCredenciais() && sameTenantNew() && credenciaisPayloadValido(clienteId);
-      allow update: if podeVerCredenciais() && sameTenantUpdate() && credenciaisPayloadValido(clienteId);
-      allow delete: if isAdmin() && sameTenantExisting();
+      allow read, write: if false;
     }
 
     match /clientes_servicos/{id} {
@@ -621,12 +607,10 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Sem uso (integração da Spedy, encerrada em 2026-09; nenhuma tela nem
+    // function lê ou grava). Trancada para não virar depósito de credencial.
     match /clientes_fiscal_integracao/{id} {
-      // [P1] Mesma gate de leitura de clientes_fiscal (mesma tela 'fiscal').
-      allow read: if canReadFiscalConfig() && sameTenantExisting();
-      allow create: if isFiscal() && sameTenantWrite();
-      allow update: if isFiscal() && sameTenantUpdate();
-      allow delete: if isAdmin() && sameTenantExisting();
+      allow read, write: if false;
     }
 
     // Catálogo de produtos (NF-e/NFC-e): ficha fiscal por produto, preenchida
@@ -659,13 +643,34 @@ service cloud.firestore {
     match /nfse_eventos/{id} {
       // [P0-1] Leitura restrita a admin/fiscal/financeiro (ver canReadNfse()).
       allow read: if canReadNfse() && sameTenantExisting();
-      allow create: if isFiscal() && sameTenantNew();
-      allow update, delete: if false;
+      // Histórico fiscal da nota (cancelamento, consulta): só as Cloud
+      // Functions gravam (functions/src/nfse/ciclo.ts). Nenhuma tela cria.
+      allow write: if false;
+    }
+
+    // Timeline do cliente. Quase tudo é gravado pelas functions; o navegador
+    // cria só dois tipos (fechamento: revisão encerrada/mês reaberto em
+    // src/features/fechamento/services.ts; lancamento: cobrança iniciada em
+    // src/components/financeiro/fila-cobranca.tsx), sempre em nome próprio e
+    // com a hora do servidor — antes qualquer ativo forjava evento de qualquer
+    // tipo, com qualquer autor e data.
+    function eventoDoNavegadorValido() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['tenantId', 'tipo', 'titulo', 'descricao', 'clienteId', 'origemColecao', 'origemId',
+          'actorId', 'actorNome', 'metadata', 'criadoEm', 'atualizadoEm', 'criadoPorId', 'criadoPorNome'])
+        && d.criadoPorId == request.auth.uid
+        && (!('actorId' in d) || d.actorId == request.auth.uid)
+        && d.criadoEm == request.time
+        && d.titulo is string && d.titulo.size() <= 300
+        && (!('descricao' in d) || (d.descricao is string && d.descricao.size() <= 2000))
+        && (!('metadata' in d) || d.metadata is map)
+        && ((d.tipo == 'fechamento' && d.origemColecao == 'fechamento_revisoes' && (isOperacional() || isFiscal()))
+          || (d.tipo == 'lancamento' && d.origemColecao == 'lancamentos' && isFinanceiro()));
     }
 
     match /events/{id} {
       allow read: if canRead() && sameTenantExisting();
-      allow create: if isAtivo() && sameTenantNew();
+      allow create: if isAtivo() && sameTenantNew() && eventoDoNavegadorValido();
       allow update, delete: if false;
     }
 
@@ -752,23 +757,50 @@ service cloud.firestore {
 
     // ─── Logs de auditoria — append-only, nunca deletar ──────────────────────
 
+    // [2026-11-06] O CRUD das coleções sensíveis (clientes, clientes_fiscal,
+    // clientes_credenciais, lancamentos, usuarios) é auditado por triggers no
+    // servidor (functions/src/auditoria/triggers.ts) e os callables gravam o
+    // próprio log com IP. O que o navegador ainda grava (demais coleções) é só
+    // um registro "declarado pelo cliente": em nome próprio (uid e e-mail do
+    // token), origem 'client', com a hora do servidor e um conjunto fechado de
+    // campos — sem isso dava para gravar log com data retroativa ou com
+    // qualquer nome/e-mail.
+    function logDoNavegadorValido() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['tenantId', 'usuarioId', 'usuarioNome', 'usuarioEmail', 'entidade', 'entidadeId',
+          'acao', 'dadosAntes', 'dadosDepois', 'origem', 'path', 'criadoEm'])
+        && d.usuarioId == request.auth.uid
+        && d.usuarioEmail == request.auth.token.email
+        && d.origem == 'client'
+        && d.criadoEm == request.time
+        && d.entidade is string && d.entidade.size() <= 100
+        && d.acao is string && d.acao.size() <= 100;
+    }
+
     match /logs_auditoria/{id} {
       allow read: if isAdmin() && sameTenantExisting();
-      // Ninguém registra log em nome de outro, nem se passa pelo servidor
-      // (origem 'cloud_function' só pelo Admin SDK).
-      allow create: if isAtivo() && sameTenantNew()
-        && request.resource.data.usuarioId == request.auth.uid
-        && request.resource.data.origem == 'client';
+      allow create: if isAtivo() && sameTenantNew() && logDoNavegadorValido();
       allow update, delete: if false;
     }
 
     // ─── Configurações do sistema ─────────────────────────────────────────────
 
+    // Sessão que entrou com segundo fator (TOTP). Claim do ID token, assinada
+    // pelo Google — o navegador não forja.
+    function sessaoComSegundoFator() {
+      return ('firebase' in request.auth.token)
+        && ('sign_in_second_factor' in request.auth.token.firebase)
+        && request.auth.token.firebase.sign_in_second_factor is string;
+    }
+
     match /configuracoes/{id} {
       allow read: if canRead() && sameTenantExisting();
-      allow create: if isAdmin() && sameTenantNew();
-      allow update: if isAdmin() && sameTenantUpdate();
-      allow delete: if isAdmin() && sameTenantExisting();
+      // configuracoes/seguranca (interruptor mfaObrigatorio): só admin que
+      // entrou com 2º fator liga ou desliga — quem liga prova que o TOTP
+      // funciona no projeto, e uma senha de admin vazada não desliga a exigência.
+      allow create: if isAdmin() && sameTenantNew() && (id != 'seguranca' || sessaoComSegundoFator());
+      allow update: if isAdmin() && sameTenantUpdate() && (id != 'seguranca' || sessaoComSegundoFator());
+      allow delete: if isAdmin() && sameTenantExisting() && id != 'seguranca';
     }
 
     match /dashboard_kpis/{id} {

@@ -45,7 +45,8 @@ export default function ClienteFiscalPage() {
     setFalha(null)
     Promise.all([
       getDocument('clientes', id),
-      listDocuments('clientes_fiscal', [where('clienteId', '==', id), limit(1)]),
+      // Financeiro não lê clientes_fiscal (regras, M1): segue mostrando as notas.
+      listDocuments('clientes_fiscal', [where('clienteId', '==', id), limit(1)]).catch(() => []),
       listDocuments('nfse_emitidas', [where('clienteId', '==', id), orderBy('dataEmissao', 'desc'), limit(10)]),
     ]).then(([clienteData, fiscalData, notasData]) => {
       if (!clienteData) { setCliente(null); setFalha({ reason: 'nao_encontrado' }); return }

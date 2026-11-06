@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Users, Briefcase, Plug, SlidersHorizontal } from 'lucide-react'
+import { Users, Briefcase, Plug, SlidersHorizontal, ShieldCheck } from 'lucide-react'
 
 export default function AdminPage() {
   const links = [
@@ -30,6 +30,12 @@ export default function AdminPage() {
       icon: SlidersHorizontal,
       title: 'Parâmetros',
       desc: 'Dados do escritório, alertas e ambiente fiscal padrão',
+    },
+    {
+      href: '/conta/seguranca',
+      icon: ShieldCheck,
+      title: 'Segurança',
+      desc: 'Segundo fator (aplicativo autenticador) e exigência para admin e fiscal',
     },
   ]
 

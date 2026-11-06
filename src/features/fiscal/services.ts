@@ -153,7 +153,9 @@ export async function fetchFiscalReadiness(): Promise<FiscalReadiness> {
   const [clientes, clientesServicos, fiscais] = await Promise.all([
     listDocuments<Record<string, unknown>>('clientes', [where('status', '==', 'ativo'), limit(500)]),
     listDocuments<Record<string, unknown>>('clientes_servicos', [limit(1000)]),
-    listDocuments<Record<string, unknown>>('clientes_fiscal', [limit(500)]),
+    // Financeiro tem a tela 'fiscal' mas não lê a configuração fiscal (regras,
+    // M1): sem ela o painel mostra a carteira como "sem configuração" em vez de cair.
+    listDocuments<Record<string, unknown>>('clientes_fiscal', [limit(500)]).catch(() => []),
   ])
 
   const servicosPorCliente = new Map<string, Array<Record<string, unknown>>>()
