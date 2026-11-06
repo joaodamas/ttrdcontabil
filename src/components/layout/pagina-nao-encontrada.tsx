@@ -41,6 +41,10 @@ export function GuardaRotaInexistente({ children }: { children: ReactNode }) {
     queueMicrotask(() => setCaminhoReal(window.location.pathname))
   }, [pathname])
 
-  if (caminhoReal !== null && !rotaConhecida(caminhoReal)) return <PaginaNaoEncontrada />
+  // Até conferir o endereço não renderiza a página: senão o Painel aparecia por
+  // um instante (e disparava as consultas dele) antes do "não encontrada". O
+  // AuthGuard acima já mostra o carregamento nesse intervalo.
+  if (caminhoReal === null) return null
+  if (!rotaConhecida(caminhoReal)) return <PaginaNaoEncontrada />
   return <>{children}</>
 }

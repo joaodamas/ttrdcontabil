@@ -25,6 +25,7 @@ export const ROTAS_CONHECIDAS = [
   '/clientes/:id/servicos/novo',
   '/clientes/:id/tomadores',
   '/clientes/:id/tomadores/importar',
+  '/conta/seguranca',
   '/competencias',
   '/competencias/nova',
   '/competencias/:id',
