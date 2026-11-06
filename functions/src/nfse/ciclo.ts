@@ -1,18 +1,19 @@
 import * as admin from 'firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { getStorage } from 'firebase-admin/storage'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { processarEmissao } from './emitir'
 import { rotearCancelamento, rotearConsulta } from './municipios/router'
-import { decrypt, isEncrypted } from './encrypt'
 import { credentialSecrets } from './secrets'
-import { isProducaoLiberadaPorConfigOuConector } from './conectores'
-import { assertCaminhoCertificado, pfxBase64FromStorageBuffer } from './certificado'
 import { assertCanAccessCliente } from '../authz'
 import { gerarESalvarDanfse } from './danfse/servico'
-import { requireEnvironmentTenant } from '../tenant'
 import { redactAuditData, writeAuditLog } from '../audit'
-import type { CertificadoA1, ConfigFiscalCliente, EmitirNfseInput, Prestador } from './types'
+import { getConfigFiscal, montarContextoFiscal } from './contexto'
+import { normalizarRascunho } from './normalizar-rascunho'
+import { resolverProvedorNfse } from './provedor'
+import { statusAposConsulta, validarMotivoCancelamento } from './regras-emissao'
+import type { EmitirNfseInput } from './types'
+
+export { normalizarRascunho } from './normalizar-rascunho'
 
 const db = () => admin.firestore()
 
@@ -77,132 +78,11 @@ async function auditarAcaoFiscal(params: {
   })
 }
 
-async function getConfigFiscal(clienteId: string): Promise<ConfigFiscalCliente> {
-  const snap = await db().collection('clientes_fiscal')
-    .where('clienteId', '==', clienteId)
-    .limit(1)
-    .get()
-  if (snap.empty) throw new HttpsError('not-found', 'Configuração fiscal do cliente não encontrada.')
-  const data = snap.docs[0].data()
-  return { clienteId, ...data, tenantId: requireEnvironmentTenant(data.tenantId, 'Configuração fiscal') } as ConfigFiscalCliente
-}
-
-async function getCliente(clienteId: string): Promise<Record<string, unknown>> {
-  const doc = await db().collection('clientes').doc(clienteId).get()
-  if (!doc.exists) throw new HttpsError('not-found', 'Cliente não encontrado.')
-  return { id: doc.id, ...doc.data() } as Record<string, unknown>
-}
-
-function decryptSenhaCertificado(senhaRaw: string | undefined): string {
-  if (!senhaRaw) return ''
-  if (!isEncrypted(senhaRaw)) {
-    throw new HttpsError(
-      'failed-precondition',
-      'Senha do certificado em formato legado não criptografado. Reenvie o certificado A1 para salvar a credencial com criptografia.'
-    )
-  }
-
-  const senha = decrypt(senhaRaw)
-  if (!senha) {
-    throw new HttpsError(
-      'failed-precondition',
-      'Não foi possível descriptografar a senha do certificado. Verifique o secret CREDENTIAL_KEY e reenvie o certificado A1.'
-    )
-  }
-  return senha
-}
-
-async function getCertificado(config: ConfigFiscalCliente): Promise<CertificadoA1 | undefined> {
-  const pathPersistido = config.credenciais?.certificadoStoragePath
-  // Nunca baixa pelo campo cru — ver a armadilha em certificado.ts. Cliente sem
-  // certificado continua sendo caminho válido e segue sem A1.
-  if (!pathPersistido) return undefined
-  const path = assertCaminhoCertificado(config.clienteId, pathPersistido)
-  const file = getStorage().bucket().file(path)
-  const [exists] = await file.exists()
-  if (!exists) return undefined
-  const [buffer] = await file.download()
-  return {
-    pfxBase64: pfxBase64FromStorageBuffer(buffer),
-    senha: decryptSenhaCertificado(config.credenciais?.certificadoSenha as string | undefined),
-  }
-}
-
-async function montarContextoFiscal(nota: Record<string, unknown>, operacao: 'consulta' | 'cancelamento') {
-  const clienteId = nota.clienteId as string | undefined
-  if (!clienteId) throw new HttpsError('failed-precondition', 'NFS-e sem clienteId.')
-
-  const [config, cliente] = await Promise.all([
-    getConfigFiscal(clienteId),
-    getCliente(clienteId),
-  ])
-  if (config.ambienteEmissao === 'producao' && !(await isProducaoLiberadaPorConfigOuConector(config, operacao))) {
-    throw new HttpsError('failed-precondition', 'Município/configuração fiscal ainda não liberado para produção.')
-  }
-
-  const prestador: Prestador = {
-    cnpj: String(cliente.cpfCnpj ?? '').replace(/\D/g, ''),
-    inscricaoMunicipal: config.inscricaoMunicipal,
-    razaoSocial: cliente.razaoSocial as string,
-    municipioIbge: config.municipioIbge,
-  }
-
-  return { config, prestador, cert: await getCertificado(config) }
-}
-
 /**
- * Achata um documento de `nfse_rascunhos` no payload de emissão, cobrindo os
- * dois formatos que a coleção tem (o antigo, com campos soltos em `dados`, e o
- * novo, com `dados.tomador`/`dados.servico`).
+ * Consulta prévia do RPS antes do retry — só para o webservice da PREFEITURA
+ * (legado). No Ambiente Nacional quem consulta a DPS antes de reenviar é o
+ * próprio processarEmissao, que além disso REGISTRA a nota encontrada.
  */
-export function normalizarRascunho(id: string, data: Record<string, unknown>): EmitirNfseInput {
-  const dados = (data.dados ?? {}) as Record<string, unknown>
-  const tomadorRaw = dados.tomador as Record<string, unknown> | undefined
-  const servicoRaw = dados.servico as Record<string, unknown> | undefined
-
-  return {
-    clienteId: data.clienteId as string,
-    rascunhoId: id,
-    competenciaId: (data.competenciaId ?? dados.competenciaId ?? undefined) as string | undefined,
-    tomador: tomadorRaw ? {
-      razaoSocial: tomadorRaw.razaoSocial as string,
-      cpfCnpj: String(tomadorRaw.cpfCnpj ?? '').replace(/\D/g, ''),
-      email: tomadorRaw.email as string | undefined,
-    } : {
-      razaoSocial: dados.tomadorNome as string,
-      cpfCnpj: String(dados.tomadorCpfCnpj ?? '').replace(/\D/g, ''),
-      email: (dados.tomadorEmail as string | null | undefined) ?? undefined,
-      // Gravados pelo formulário de emissão (rascunho "Salvar rascunho").
-      endereco: (dados.tomadorEndereco as EmitirNfseInput['tomador']['endereco'] | null | undefined) ?? undefined,
-    },
-    servico: servicoRaw ? {
-      discriminacao: servicoRaw.discriminacao as string,
-      codigoServico: servicoRaw.codigoServico as string,
-      valorServico: Number(servicoRaw.valorServico ?? 0),
-      aliquota: servicoRaw.aliquota as number | undefined,
-      issRetido: Boolean(servicoRaw.issRetido),
-    } : {
-      discriminacao: dados.descricaoServico as string,
-      codigoServico: dados.codigoServico as string,
-      itemListaServico: (dados.itemListaServico as string | null | undefined) ?? undefined,
-      valorServico: Number(dados.valorServico ?? 0),
-      aliquota: (dados.aliquota as number | null | undefined) ?? undefined,
-      issRetido: Boolean(dados.issRetido),
-      codigoTributacaoNacional: (dados.codigoTributacaoNacional as string | null | undefined) ?? undefined,
-      codigoNbs: (dados.codigoNbs as string | null | undefined) ?? undefined,
-      municipioPrestacao: (dados.municipioPrestacaoIbge as string | null | undefined) ?? undefined,
-      informacoesComplementares: (dados.informacoesComplementares as string | null | undefined) ?? undefined,
-      ibsCbsCst: (dados.ibsCbsCst as string | null | undefined) ?? undefined,
-      ibsCbsClassTrib: (dados.ibsCbsClassTrib as string | null | undefined) ?? undefined,
-      ibsCbsIndOp: (dados.ibsCbsIndOp as string | null | undefined) ?? undefined,
-      descricaoModelo: (dados.descricaoServicoModelo as string | null | undefined) ?? undefined,
-    },
-    dataCompetencia: (dados.dataCompetencia as string | null | undefined) ?? undefined,
-    numeroRps: (dados.numeroRps as string | undefined) ?? undefined,
-    serieRps: (dados.serieRps as string | undefined) ?? undefined,
-  }
-}
-
 async function consultarRpsAntesRetry(
   input: EmitirNfseInput,
   uid: string,
@@ -246,13 +126,7 @@ async function consultarRpsAntesRetry(
     return ok('Retry bloqueado: este RPS já possui NFS-e no histórico interno.', { id: doc.id })
   }
 
-  const notaConsulta: Record<string, unknown> = {
-    clienteId: input.clienteId,
-    tenantId: contexto.tenantId,
-    numeroRps: input.numeroRps,
-    serieRps: input.serieRps,
-  }
-  const { config, prestador, cert } = await montarContextoFiscal(notaConsulta, 'consulta')
+  const { config, prestador, cert } = await montarContextoFiscal(input.clienteId, 'consulta')
   const resultadoConsulta = await rotearConsulta({
     nfseId: input.rascunhoId ?? input.numeroRps,
     clienteId: input.clienteId,
@@ -288,24 +162,26 @@ async function consultarRpsAntesRetry(
 }
 
 export const consultarNfse = onCall(
-  { region: 'southamerica-east1', timeoutSeconds: 30, memory: '256MiB', invoker: 'public', secrets: credentialSecrets },
+  // Consulta + eventos: até 2 × 20 s (PRAZOS_NACIONAL_MS.consulta).
+  { region: 'southamerica-east1', timeoutSeconds: 60, memory: '256MiB', invoker: 'public', secrets: credentialSecrets },
   async (request): Promise<StandardResponse> => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Autenticação necessária.')
 
     const { nfseId } = request.data as { nfseId?: string }
     if (!nfseId) throw new HttpsError('invalid-argument', 'nfseId obrigatório.')
 
-    const snap = await db().collection('nfse_emitidas').doc(nfseId).get()
+    const ref = db().collection('nfse_emitidas').doc(nfseId)
+    const snap = await ref.get()
     if (!snap.exists) throw new HttpsError('not-found', 'NFS-e não encontrada.')
 
     const data = { id: snap.id, ...snap.data() } as Record<string, unknown>
     await assertCanAccessCliente(request.auth.uid, data.clienteId as string | undefined, 'fiscal')
-    const { config, prestador, cert } = await montarContextoFiscal(data, 'consulta')
+    const { config, prestador, cert } = await montarContextoFiscal(data.clienteId as string | undefined, 'consulta')
     const resultado = await rotearConsulta({
       nfseId,
       clienteId: data.clienteId as string,
       numeroNfse: data.numeroNfse as string | undefined,
-      codigoVerificacao: data.codigoVerificacao as string | undefined,
+      codigoVerificacao: (data.chaveAcesso ?? data.codigoVerificacao) as string | undefined,
       numeroRps: data.numeroRps as string | undefined,
       serieRps: data.serieRps as string | undefined,
       rascunhoId: data.rascunhoId as string | undefined,
@@ -330,7 +206,7 @@ export const consultarNfse = onCall(
     })
 
     if (!resultado.sucesso) {
-      await db().collection('nfse_emitidas').doc(nfseId).update({
+      await ref.update({
         erroUltimaConsulta: resultado.erro ?? null,
         codigoErroUltimaConsulta: resultado.codigoErro ?? null,
         atualizadoEm: Timestamp.now(),
@@ -338,18 +214,33 @@ export const consultarNfse = onCall(
       return error(resultado.erro ?? 'Consulta fiscal falhou.', resultado.codigoErro, { id: nfseId })
     }
 
-    const updates: Record<string, unknown> = {
-      status: resultado.status ?? data.status,
-      ultimaConsultaEm: Timestamp.now(),
-      erroUltimaConsulta: null,
-      codigoErroUltimaConsulta: null,
-      atualizadoEm: Timestamp.now(),
-    }
-    if (resultado.xmlNfse) updates.xmlNfse = resultado.xmlNfse
-    if (resultado.pdfUrl) updates.pdfUrl = resultado.pdfUrl
-    await db().collection('nfse_emitidas').doc(nfseId).update(updates)
+    // Grava em transação com a guarda de status (A3): nota cancelada nunca
+    // volta a 'emitida' por uma consulta que não trouxe o evento, e um
+    // cancelamento confirmado pela Sefin é refletido.
+    const updates = await db().runTransaction(async (tx) => {
+      const atual = await tx.get(ref)
+      const statusAtual = atual.data()?.status
+      const novoStatus = statusAposConsulta(statusAtual, resultado.status)
+      const u: Record<string, unknown> = {
+        status: novoStatus,
+        ultimaConsultaEm: Timestamp.now(),
+        erroUltimaConsulta: null,
+        codigoErroUltimaConsulta: null,
+        atualizadoEm: Timestamp.now(),
+      }
+      if (novoStatus === 'cancelada' && statusAtual !== 'cancelada') {
+        u.canceladoEm = Timestamp.now()
+        u.canceladaConfirmadaPorConsulta = true
+      }
+      if (resultado.xmlNfse) u.xmlNfse = resultado.xmlNfse
+      if (resultado.pdfUrl) u.pdfUrl = resultado.pdfUrl
+      if (resultado.numeroNfse && !atual.data()?.numeroNfse) u.numeroNfse = resultado.numeroNfse
+      if (resultado.chaveAcesso && !atual.data()?.chaveAcesso) u.chaveAcesso = resultado.chaveAcesso
+      tx.update(ref, u)
+      return u
+    })
 
-    if (resultado.status === 'processando') {
+    if (updates.status === 'processando') {
       return processing(resultado.mensagem ?? 'NFS-e ainda em processamento.', { id: nfseId, ...updates })
     }
 
@@ -358,15 +249,17 @@ export const consultarNfse = onCall(
 )
 
 export const cancelarNfse = onCall(
-  { region: 'southamerica-east1', timeoutSeconds: 60, memory: '256MiB', invoker: 'public', secrets: credentialSecrets },
+  { region: 'southamerica-east1', timeoutSeconds: 120, memory: '256MiB', invoker: 'public', secrets: credentialSecrets },
   async (request): Promise<StandardResponse> => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Autenticação necessária.')
 
     const { nfseId, motivo } = request.data as { nfseId?: string; motivo?: string }
     if (!nfseId) throw new HttpsError('invalid-argument', 'nfseId obrigatório.')
-    if (!motivo || motivo.trim().length < 10) {
-      throw new HttpsError('invalid-argument', 'Informe um motivo de cancelamento com pelo menos 10 caracteres.')
-    }
+    // 15 a 255 caracteres: exigência do Ambiente Nacional (xMotivo) — antes o
+    // servidor aceitava 10 e a Sefin recusava depois.
+    const erroMotivo = validarMotivoCancelamento(motivo)
+    if (erroMotivo) throw new HttpsError('invalid-argument', erroMotivo)
+    const motivoLimpo = String(motivo).trim()
 
     const ref = db().collection('nfse_emitidas').doc(nfseId)
     const snap = await ref.get()
@@ -379,16 +272,16 @@ export const cancelarNfse = onCall(
       throw new HttpsError('failed-precondition', 'Apenas NFS-e emitida pode entrar em cancelamento.')
     }
 
-    const { config, prestador, cert } = await montarContextoFiscal(nota, 'cancelamento')
+    const { config, prestador, cert } = await montarContextoFiscal(nota.clienteId as string | undefined, 'cancelamento')
     const resultado = await rotearCancelamento({
       nfseId,
       clienteId: nota.clienteId as string,
       numeroNfse: nota.numeroNfse as string | undefined,
-      codigoVerificacao: nota.codigoVerificacao as string | undefined,
+      codigoVerificacao: (nota.chaveAcesso ?? nota.codigoVerificacao) as string | undefined,
       numeroRps: nota.numeroRps as string | undefined,
       serieRps: nota.serieRps as string | undefined,
       rascunhoId: nota.rascunhoId as string | undefined,
-      motivo: motivo.trim(),
+      motivo: motivoLimpo,
     }, config, prestador, cert)
 
     if (!resultado.sucesso) {
@@ -399,7 +292,7 @@ export const cancelarNfse = onCall(
         atualizadoEm: Timestamp.now(),
       })
       await registrarEvento(nfseId, 'cancelamento_erro', request.auth.uid, resultado.erro ?? 'Cancelamento fiscal falhou.', {
-        motivo: motivo.trim(),
+        motivo: motivoLimpo,
         codigoErro: resultado.codigoErro ?? null,
         detalhes: resultado.detalhes ?? null,
       }, { tenantId: nota.tenantId as string | undefined, clienteId: nota.clienteId as string | undefined })
@@ -419,7 +312,7 @@ export const cancelarNfse = onCall(
 
     await ref.update({
       status: resultado.status === 'processando' ? 'cancelamento_pendente' : 'cancelada',
-      motivoCancelamento: motivo.trim(),
+      motivoCancelamento: motivoLimpo,
       cancelamentoSolicitadoEm: Timestamp.now(),
       cancelamentoSolicitadoPorId: request.auth.uid,
       canceladoEm: resultado.status === 'cancelada' ? Timestamp.now() : null,
@@ -429,7 +322,7 @@ export const cancelarNfse = onCall(
       atualizadoEm: Timestamp.now(),
     })
     await registrarEvento(nfseId, 'cancelamento_solicitado', request.auth.uid, resultado.mensagem ?? 'Cancelamento solicitado.', {
-      motivo: motivo.trim(),
+      motivo: motivoLimpo,
       resultado,
     }, { tenantId: nota.tenantId as string | undefined, clienteId: nota.clienteId as string | undefined })
     await auditarAcaoFiscal({
@@ -461,7 +354,8 @@ export const cancelarNfse = onCall(
 )
 
 export const retryNfse = onCall(
-  { region: 'southamerica-east1', timeoutSeconds: 120, memory: '512MiB', invoker: 'public', secrets: credentialSecrets },
+  // Mesmo orçamento da emissão (consulta prévia + envio + reconciliação).
+  { region: 'southamerica-east1', timeoutSeconds: 300, memory: '512MiB', invoker: 'public', secrets: credentialSecrets },
   async (request): Promise<StandardResponse> => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Autenticação necessária.')
 
@@ -481,12 +375,21 @@ export const retryNfse = onCall(
     } else if (erroId) {
       const snap = await db().collection('nfse_erros').doc(erroId).get()
       if (!snap.exists) throw new HttpsError('not-found', 'Erro de NFS-e não encontrado.')
+      const rascunhoDoErro = snap.data()?.rascunhoId as string | undefined
       const raw = (snap.data()?.input as string | undefined) ?? ''
-      if (!raw) {
+      if (!raw && !rascunhoDoErro) {
         throw new HttpsError('failed-precondition', 'Retry por erro legado indisponível. Reemita a partir do rascunho NFS-e.')
       }
-      input = JSON.parse(raw) as EmitirNfseInput
-      await assertCanAccessCliente(request.auth.uid, input.clienteId, 'fiscal')
+      if (rascunhoDoErro) {
+        // Erro com rascunho: o retry é SEMPRE pelo rascunho (mesmo nDPS).
+        const rSnap = await db().collection('nfse_rascunhos').doc(rascunhoDoErro).get()
+        if (!rSnap.exists) throw new HttpsError('not-found', 'Rascunho do erro não encontrado.')
+        await assertCanAccessCliente(request.auth.uid, rSnap.data()?.clienteId as string | undefined, 'fiscal')
+        input = normalizarRascunho(rSnap.id, rSnap.data() as Record<string, unknown>)
+      } else {
+        input = JSON.parse(raw) as EmitirNfseInput
+        await assertCanAccessCliente(request.auth.uid, input.clienteId, 'fiscal')
+      }
       retryContext = {
         tenantId: snap.data()?.tenantId as string | undefined,
         clienteId: input.clienteId,
@@ -495,13 +398,24 @@ export const retryNfse = onCall(
 
     if (!input) throw new HttpsError('invalid-argument', 'Informe rascunhoId ou erroId.')
 
-    const retryBloqueadoOuEncontrado = await consultarRpsAntesRetry(input, request.auth.uid, retryContext)
-    if (retryBloqueadoOuEncontrado) return retryBloqueadoOuEncontrado
+    const provedor = resolverProvedorNfse(await getConfigFiscal(input.clienteId))
+    if (provedor === 'nacional') {
+      // Sem rascunho não há nDPS reservado para reusar: reemitir geraria número
+      // novo — e, se a primeira tentativa saiu, uma segunda nota.
+      if (!input.rascunhoId) {
+        throw new HttpsError('failed-precondition', 'Este erro não tem rascunho com o número da DPS reservado. Confira o histórico de notas antes de emitir de novo.')
+      }
+      // A consulta prévia (GET /dps/{id}) e o registro da nota encontrada
+      // acontecem dentro de processarEmissao.
+    } else {
+      const retryBloqueadoOuEncontrado = await consultarRpsAntesRetry(input, request.auth.uid, retryContext)
+      if (retryBloqueadoOuEncontrado) return retryBloqueadoOuEncontrado
+    }
 
     const resultado = await processarEmissao(input, request.auth.uid)
     if (!resultado.sucesso) {
-      if (rascunhoId) {
-        await registrarEvento(rascunhoId, 'retry_erro', request.auth.uid, resultado.erro ?? 'Retry falhou.', {
+      if (input.rascunhoId) {
+        await registrarEvento(input.rascunhoId, 'retry_erro', request.auth.uid, resultado.erro ?? 'Retry falhou.', {
           codigoErro: resultado.codigoErro ?? null,
         }, retryContext)
       }
@@ -512,7 +426,7 @@ export const retryNfse = onCall(
         acao: 'retry_nfse_erro',
         dadosDepois: {
           clienteId: input.clienteId,
-          rascunhoId: rascunhoId ?? null,
+          rascunhoId: input.rascunhoId ?? null,
           erroId: erroId ?? null,
           codigoErro: resultado.codigoErro ?? null,
           erro: resultado.erro ?? null,
@@ -521,24 +435,25 @@ export const retryNfse = onCall(
       return { status: 'error', message: resultado.erro ?? 'Retry falhou.', data: { resultado }, errorCode: resultado.codigoErro }
     }
 
-    if (rascunhoId) {
-      await registrarEvento(rascunhoId, 'retry_sucesso', request.auth.uid, 'Retry emitido com sucesso.', {
-        numeroNfse: resultado.numeroNfse ?? null,
-      }, retryContext)
+    if (input.rascunhoId) {
+      await registrarEvento(input.rascunhoId, resultado.reconciliada ? 'retry_reconciliado' : 'retry_sucesso', request.auth.uid,
+        resultado.reconciliada ? 'Nota já existia na Sefin — registrada sem reenviar.' : 'Retry emitido com sucesso.', {
+          numeroNfse: resultado.numeroNfse ?? null,
+        }, retryContext)
     }
     await auditarAcaoFiscal({
       tenantId: retryContext.tenantId,
       uid: request.auth.uid,
       entidadeId: rascunhoId ?? erroId ?? input.clienteId,
-      acao: 'retry_nfse_sucesso',
+      acao: resultado.reconciliada ? 'retry_nfse_reconciliado' : 'retry_nfse_sucesso',
       dadosDepois: {
         clienteId: input.clienteId,
-        rascunhoId: rascunhoId ?? null,
+        rascunhoId: input.rascunhoId ?? null,
         erroId: erroId ?? null,
         numeroNfse: resultado.numeroNfse ?? null,
       },
     })
 
-    return ok('Retry emitido com sucesso.', { resultado })
+    return ok(resultado.mensagem ?? 'Retry emitido com sucesso.', { resultado })
   }
 )

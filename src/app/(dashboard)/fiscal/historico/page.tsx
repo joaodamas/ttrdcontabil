@@ -252,8 +252,8 @@ function FiscalHistoricoContent() {
   async function confirmarCancelamento() {
     if (!cancelamentoId) return
     const motivo = motivoCancelamento.trim()
-    if (motivo.length < 10) {
-      toast.error('Informe um motivo com pelo menos 10 caracteres.')
+    if (motivo.length < 15) { // Ambiente Nacional: xMotivo de 15 a 255 caracteres
+      toast.error('Informe um motivo com pelo menos 15 caracteres.')
       return
     }
     setCancelando(true)
@@ -632,7 +632,7 @@ function FiscalHistoricoContent() {
           </div>
         }
       >
-        <Textarea value={motivoCancelamento} onChange={(e) => setMotivoCancelamento(e.target.value)} placeholder="Informe o motivo fiscal do cancelamento (mínimo 10 caracteres)" className="min-h-28" />
+        <Textarea value={motivoCancelamento} onChange={(e) => setMotivoCancelamento(e.target.value)} placeholder="Informe o motivo fiscal do cancelamento (mínimo 15 caracteres)" className="min-h-28" />
       </AppModal>
 
       <LogsNfseModal

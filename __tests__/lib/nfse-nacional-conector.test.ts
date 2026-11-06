@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import {
   NacionalConector,
+  PRAZOS_NACIONAL_MS,
   lerDadosNfseXml,
   type RequisicaoHttp,
   type RespostaHttp,
@@ -241,5 +242,94 @@ describe('tradução de erros e leitura da NFS-e', () => {
 
   it('lê nNFSe e a chave do Id do infNFSe', () => {
     expect(lerDadosNfseXml(NFSE_XML)).toMatchObject({ numeroNfse: '123', chaveAcesso: CHAVE })
+  })
+})
+
+describe.skipIf(!TEM_OPENSSL)('prazos, convênio em cache e E0014 (2026-11-06)', () => {
+  it('cada chamada leva prazo total próprio: convênio curto, envio longo', async () => {
+    const { conector, pedidos } = falso((req) =>
+      req.url.pathname.endsWith('/convenio') ? CONVENIO_OK : json(201, { chaveAcesso: CHAVE, nfseXmlGZipB64: compactarXml(NFSE_XML) }),
+    )
+    await conector.emitir(input, config(), cert, prestador)
+    expect(pedidos.map((p) => p.timeoutMs)).toEqual([PRAZOS_NACIONAL_MS.convenio, PRAZOS_NACIONAL_MS.envio])
+    expect(PRAZOS_NACIONAL_MS.convenio).toBeLessThanOrEqual(10_000)
+  })
+
+  it('convênio conclusivo fica em cache: a segunda emissão não consulta o ADN de novo', async () => {
+    const pedidos: RequisicaoHttp[] = []
+    const cacheConvenio = new Map()
+    const novo = () => new NacionalConector({
+      agora: AGORA,
+      cacheConvenio,
+      transporte: () => async (req) => {
+        pedidos.push(req)
+        return req.url.pathname.endsWith('/convenio') ? CONVENIO_OK : json(201, { chaveAcesso: CHAVE, nfseXmlGZipB64: compactarXml(NFSE_XML) })
+      },
+    })
+    await novo().emitir(input, config(), cert, prestador)
+    await novo().emitir(input, config(), cert, prestador)
+    expect(pedidos.filter((p) => p.url.pathname.endsWith('/convenio'))).toHaveLength(1)
+  })
+
+  it('E0014 no meio de outras rejeições vira codigoErro E0014 (quem chama reconcilia)', async () => {
+    const { conector } = falso((req) =>
+      req.url.pathname.endsWith('/convenio')
+        ? CONVENIO_OK
+        : json(400, { erros: [{ Codigo: 'E0008', Descricao: 'data' }, { Codigo: 'E0014', Descricao: 'Conjunto de Série, Número... já existe' }] }),
+    )
+    const r = await conector.emitir(input, config(), cert, prestador)
+    expect(r).toMatchObject({ sucesso: false, codigoErro: 'E0014' })
+    expect(r.erro).toContain('Já existe uma NFS-e gerada com esta série e número')
+  })
+
+  it('timeout no envio: mensagem diz que o número fica reservado e que a plataforma consulta antes de reenviar', async () => {
+    const { conector } = falso((req) => {
+      if (req.url.pathname.endsWith('/convenio')) return CONVENIO_OK
+      throw new Error('tempo esgotado (90 s)')
+    })
+    const r = await conector.emitir(input, config(), cert, prestador)
+    expect(r.codigoErro).toBe('SEFIN_SEM_RESPOSTA')
+    expect(r.erro).toMatch(/DPS nº 7/)
+    expect(r.erro).toMatch(/consulta a Sefin antes de qualquer reenvio/)
+  })
+
+  it('GET /dps/{id}: tenta o Id com prefixo (45) e o identificador de 42 dígitos do manual; 404 nos dois = não existe', async () => {
+    const { conector, pedidos } = falso(() => json(404, {}))
+    const r = await conector.consultar({ nfseId: 'n', clienteId: 'c1', numeroRps: '7', serieRps: '1' }, config(), cert, prestador)
+    expect(r).toMatchObject({ sucesso: true, encontrada: false })
+    const ids = pedidos.map((p) => p.url.pathname.split('/').pop())
+    expect(ids).toEqual(['DPS350570821122233300018100001000000000000007', '350570821122233300018100001000000000000007'])
+    expect(ids[1]).toHaveLength(42)
+  })
+
+  it('GET /dps/{id}: 400 no formato com prefixo e 200 no de 42 dígitos → encontrada', async () => {
+    const { conector } = falso((req) => {
+      const id = req.url.pathname.split('/').pop()!
+      if (req.url.pathname.includes('/dps/')) return id.startsWith('DPS') ? json(400, {}) : json(200, { chaveAcesso: CHAVE })
+      if (req.url.pathname.endsWith('/eventos')) return json(404, {})
+      return json(200, { chaveAcesso: CHAVE, nfseXmlGZipB64: compactarXml(NFSE_XML) })
+    })
+    const r = await conector.consultar({ nfseId: 'n', clienteId: 'c1', numeroRps: '7', serieRps: '1' }, config(), cert, prestador)
+    expect(r).toMatchObject({ sucesso: true, encontrada: true, status: 'emitida', chaveAcesso: CHAVE })
+  })
+
+  it('GET /dps/{id}: 503 é inconclusivo (não vira "não existe")', async () => {
+    const { conector, pedidos } = falso(() => json(503, {}))
+    const r = await conector.consultar({ nfseId: 'n', clienteId: 'c1', numeroRps: '7', serieRps: '1' }, config(), cert, prestador)
+    expect(r.sucesso).toBe(false)
+    expect(pedidos).toHaveLength(1)
+  })
+
+  it('consulta por chave com evento de cancelamento → cancelada; sem evento → emitida', async () => {
+    const rotas = (cancelada: boolean) => (req: RequisicaoHttp) => {
+      if (req.url.pathname.endsWith('/eventos')) {
+        return cancelada ? json(200, { eventos: [{ tipoEvento: '101101' }] }) : json(404, {})
+      }
+      return json(200, { chaveAcesso: CHAVE, nfseXmlGZipB64: compactarXml(NFSE_XML) })
+    }
+    const a = await falso(rotas(true)).conector.consultar({ nfseId: 'n', clienteId: 'c1', codigoVerificacao: CHAVE }, config(), cert, prestador)
+    expect(a).toMatchObject({ sucesso: true, status: 'cancelada', encontrada: true })
+    const b = await falso(rotas(false)).conector.consultar({ nfseId: 'n', clienteId: 'c1', codigoVerificacao: CHAVE }, config(), cert, prestador)
+    expect(b).toMatchObject({ sucesso: true, status: 'emitida' })
   })
 })

@@ -54,3 +54,17 @@ export const DOC_NFSE_NACIONAL = 'nfse_nacional'
 export function nacionalLiberadoParaProducao(doc: { producaoLiberada?: unknown } | null | undefined): boolean {
   return doc?.producaoLiberada === true
 }
+
+/**
+ * Produção pelo Ambiente Nacional liberada para ESTE cliente? A chave global
+ * (configuracoes/nfse_nacional.producaoLiberada) é SEMPRE obrigatória — o
+ * `producaoLiberada` da config do cliente não a dispensa (antes, `true` na
+ * config passava por cima do interruptor geral). A config só pode restringir:
+ * `producaoLiberada: false` explícito bloqueia aquele cliente.
+ */
+export function producaoNacionalLiberada(
+  config: { producaoLiberada?: unknown } | null | undefined,
+  docGlobal: { producaoLiberada?: unknown } | null | undefined,
+): boolean {
+  return nacionalLiberadoParaProducao(docGlobal) && config?.producaoLiberada !== false
+}

@@ -48,19 +48,33 @@ export async function sendEmail(opts: EmailOptions): Promise<void> {
 
 // ─── Templates ────────────────────────────────────────────────────────────────
 
+/**
+ * Escapa texto para HTML. Tudo que vem do banco (nome de cliente, descrição,
+ * mensagem de erro da Sefin/prefeitura) entra no e-mail por aqui — antes um
+ * `<` num nome de tomador quebrava o e-mail ou injetava marcação (B12).
+ */
+export function escapeHtml(valor: unknown): string {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export function tableHtml(
   title: string,
   headers: string[],
-  rows: string[][]
+  rows: unknown[][]
 ): string {
-  const headerRow = headers.map((h) => `<th style="text-align:left;padding:6px 12px;background:#f5f5f5;border-bottom:2px solid #ddd">${h}</th>`).join('')
+  const headerRow = headers.map((h) => `<th style="text-align:left;padding:6px 12px;background:#f5f5f5;border-bottom:2px solid #ddd">${escapeHtml(h)}</th>`).join('')
   const bodyRows  = rows.map((r) =>
-    `<tr>${r.map((c) => `<td style="padding:6px 12px;border-bottom:1px solid #eee">${c}</td>`).join('')}</tr>`
+    `<tr>${r.map((c) => `<td style="padding:6px 12px;border-bottom:1px solid #eee">${escapeHtml(c)}</td>`).join('')}</tr>`
   ).join('')
 
   return `
 <div style="font-family:sans-serif;max-width:800px;margin:0 auto">
-  <h2 style="color:#222">${title}</h2>
+  <h2 style="color:#222">${escapeHtml(title)}</h2>
   <table style="width:100%;border-collapse:collapse">
     <thead><tr>${headerRow}</tr></thead>
     <tbody>${bodyRows}</tbody>

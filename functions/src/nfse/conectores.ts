@@ -3,7 +3,7 @@ import { IBGE_LEGADO, normalizarIbge, type ConfigFiscalCliente } from './types'
 import {
   conectorLiberaProducao,
   DOC_NFSE_NACIONAL,
-  nacionalLiberadoParaProducao,
+  producaoNacionalLiberada,
   resolverProvedorNfse,
   type OperacaoFiscal,
 } from './provedor'
@@ -14,19 +14,21 @@ export async function isProducaoLiberadaPorConfigOuConector(
   config: ConfigFiscalCliente,
   operacao: OperacaoFiscal = 'emissao',
 ) {
-  if (config.producaoLiberada === true) return true
-
   const provedor = resolverProvedorNfse(config)
 
   // Ambiente Nacional: a liberação de produção é a chave única do escritório
   // (configuracoes/nfse_nacional, ligada pelo admin) — não mais município a
-  // município. A adesão de cada município é conferida pelo NacionalConector
-  // no convênio, antes de enviar.
+  // município — e é SEMPRE exigida: o producaoLiberada da config do cliente
+  // não a dispensa (só pode bloquear). Por isso este ramo vem ANTES do atalho
+  // da config. A adesão de cada município é conferida pelo NacionalConector no
+  // convênio, antes de enviar.
   if (provedor === 'nacional') {
     const chave = await db().collection('configuracoes').doc(DOC_NFSE_NACIONAL).get()
-    return nacionalLiberadoParaProducao(chave.exists ? chave.data() : null)
+    return producaoNacionalLiberada(config, chave.exists ? chave.data() : null)
   }
 
+  // Legado (webservice da prefeitura): comportamento anterior.
+  if (config.producaoLiberada === true) return true
   if (!config.municipioIbge) return false
 
   // Conector e config podem estar com o código antigo ou o corrigido (IBGE_LEGADO).

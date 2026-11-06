@@ -5,8 +5,10 @@
  * Envia um email consolidado quando encontra:
  *   1. Tarefas vencendo nos próximos 3 dias (status != 'concluida' e != 'cancelada')
  *   2. Lançamentos atrasados (dataVencimento < hoje, status == 'pendente')
- *   3. Certificados digitais vencendo em até 30 dias
- *   4. NFS-e com erro, cancelamento pendente ou rascunho aguardando emissão
+ *   3. Certificados digitais vencidos ou vencendo em até 30 dias
+ *   4. NFS-e com erro, falhas de emissão das últimas 24 h (nfse_erros),
+ *      cancelamento pendente ou rascunho aguardando emissão
+ * Todo texto vindo do banco é escapado (tableHtml → escapeHtml).
  *
  * Destinatário: variável de ambiente EMAIL_TO (email do escritório).
  *
@@ -69,57 +71,37 @@ export const enviarAlertasDiarios = onSchedule(
       .orderBy('dataVencimento', 'asc')
       .get()
 
-    // ── 3. Certificados vencendo em 30 dias ───────────────────────────────────
+    // ── 3. Certificados vencidos e vencendo em 30 dias ────────────────────────
+    // Vencido entra também (antes só "vencendo"): A1 vencido para TODA emissão
+    // e consulta do cliente no Ambiente Nacional — é o alerta mais urgente.
     const fiscalSnap = await db().collection('clientes_fiscal').get()
     const certAlertas: Array<{ cliente: string; titular: string; vencimento: string }> = []
+    const certVencidos: Array<{ cliente: string; titular: string; vencimento: string }> = []
 
     for (const doc of fiscalSnap.docs) {
       const data = doc.data()
       const vencimentoStr = data?.credenciais?.certVencimento as string | undefined
       if (!vencimentoStr) continue
       const venc = new Date(vencimentoStr)
-      if (venc > hoje && venc <= em30Dias) {
-        // Busca razaoSocial
-        const clienteDoc = await db().collection('clientes').doc(data.clienteId as string).get()
-        certAlertas.push({
-          cliente:    (clienteDoc.data()?.razaoSocial ?? data.clienteId) as string,
-          titular:    (data?.credenciais?.certTitular ?? '—') as string,
-          vencimento: venc.toLocaleDateString('pt-BR'),
-        })
+      if (Number.isNaN(venc.getTime()) || venc > em30Dias) continue
+      const clienteDoc = await db().collection('clientes').doc(data.clienteId as string).get()
+      const linha = {
+        cliente:    (clienteDoc.data()?.razaoSocial ?? data.clienteId) as string,
+        titular:    (data?.credenciais?.certTitular ?? '—') as string,
+        vencimento: venc.toLocaleDateString('pt-BR'),
       }
+      if (venc <= hoje) certVencidos.push(linha)
+      else certAlertas.push(linha)
     }
 
-    // ── 3b. Recupera rascunhos travados em 'processando' ──────────────────────
-    // Se a function de emissão (manual ou automática) morrer no meio — timeout,
-    // crash — o rascunho fica em 'processando' pra sempre: invisível em todo
-    // KPI/lista/alerta, e trava qualquer nova tentativa pra aquele cliente
-    // naquela competência (emitir.ts rejeita reprocessar rascunho 'processando').
-    // Aqui, qualquer rascunho travado há mais de 30min é revertido para
-    // 'erro_integracao' — libera nova tentativa e cai automaticamente na seção
-    // "Rascunhos NFS-e pendentes" abaixo (mesma query, roda depois deste passo).
-    const LIMITE_PROCESSANDO_MIN = 30
-    const processandoSnap = await db().collection('nfse_rascunhos').where('status', '==', 'processando').get()
-    const batchTravados = db().batch()
-    let travados = 0
-    for (const doc of processandoSnap.docs) {
-      const atualizadoEm = doc.data().atualizadoEm as FirebaseFirestore.Timestamp | undefined
-      const minutosParado = atualizadoEm ? (hoje.getTime() - atualizadoEm.toMillis()) / 60000 : Infinity
-      if (minutosParado < LIMITE_PROCESSANDO_MIN) continue
-      batchTravados.update(doc.ref, {
-        status: 'erro_integracao',
-        erroUltimaTentativa: `Emissão não concluiu em tempo hábil (travado em 'processando' por ${Math.round(minutosParado)}min) — revertido automaticamente, libere para nova tentativa.`,
-        atualizadoEm: Timestamp.now(),
-      })
-      travados++
-    }
-    if (travados > 0) {
-      await batchTravados.commit()
-      console.log(`[alertas] ${travados} rascunho(s) travado(s) em 'processando' revertido(s) para 'erro_integracao'.`)
-    }
+    // Rascunhos travados em 'processando' não são mais destravados aqui (1x/dia):
+    // a rotina reconciliarNfsePendentes (scheduler/nfse-reconciliacao.ts), a cada
+    // 15 min, consulta a Sefin e registra a nota se ela tiver saído.
 
     // ── 4. Alertas NFS-e ─────────────────────────────────────────────────────
     const inicioDoDia = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())
-    const [nfseErroSnap, nfseCancelamentoSnap, nfseRascunhosSnap, rascunhosGeradosHojeSnap] = await Promise.all([
+    const ha24h = Timestamp.fromMillis(hoje.getTime() - 24 * 60 * 60_000)
+    const [nfseErroSnap, nfseCancelamentoSnap, nfseRascunhosSnap, rascunhosGeradosHojeSnap, nfseErros24hSnap] = await Promise.all([
       db().collection('nfse_emitidas').where('status', 'in', ['erro_integracao', 'rejeitada']).limit(50).get(),
       db().collection('nfse_emitidas').where('status', '==', 'cancelamento_pendente').limit(50).get(),
       db().collection('nfse_rascunhos').where('status', 'in', ['aguardando_emissao', 'erro_integracao']).limit(50).get(),
@@ -132,6 +114,9 @@ export const enviarAlertasDiarios = onSchedule(
         .where('criadoEm', '>=', Timestamp.fromDate(inicioDoDia))
         .limit(100)
         .get(),
+      // Falhas de emissão das últimas 24 h (manual, lote e automática) — é onde
+      // processarEmissao grava cada recusa/timeout; o alerta não lia esta coleção.
+      db().collection('nfse_erros').where('criadoEm', '>=', ha24h).orderBy('criadoEm', 'desc').limit(50).get(),
     ])
 
     // Se nada a alertar, não envia email
@@ -139,6 +124,8 @@ export const enviarAlertasDiarios = onSchedule(
       tarefasAlerta.length === 0
       && lancamentosSnap.empty
       && certAlertas.length === 0
+      && certVencidos.length === 0
+      && nfseErros24hSnap.empty
       && nfseErroSnap.empty
       && nfseCancelamentoSnap.empty
       && nfseRascunhosSnap.empty
@@ -180,6 +167,31 @@ export const enviarAlertasDiarios = onSchedule(
             l.descricao   as string ?? '—',
             fmtDate(l.dataVencimento as FirebaseFirestore.Timestamp),
             fmtMoney((l.valor ?? 0) as number),
+          ]
+        })
+      )
+    }
+
+    if (certVencidos.length > 0) {
+      html += tableHtml(
+        `⛔ Certificados A1 VENCIDOS — emissão bloqueada (${certVencidos.length})`,
+        ['Cliente', 'Titular', 'Venceu em'],
+        certVencidos.map((c) => [c.cliente, c.titular, c.vencimento])
+      )
+    }
+
+    if (!nfseErros24hSnap.empty) {
+      html += tableHtml(
+        `NFS-e que falharam nas últimas 24 h (${nfseErros24hSnap.size})`,
+        ['Cliente', 'Quando', 'Código', 'Erro'],
+        nfseErros24hSnap.docs.map((d) => {
+          const e = d.data()
+          const quando = (e.criadoEm as FirebaseFirestore.Timestamp | undefined)?.toDate()
+          return [
+            e.clienteNome ?? '—',
+            quando ? quando.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—',
+            e.codigoErro ?? '—',
+            String(e.erro ?? '—').slice(0, 300),
           ]
         })
       )
@@ -262,6 +274,8 @@ export const enviarAlertasDiarios = onSchedule(
       tarefasAlerta.length
       + lancamentosSnap.size
       + certAlertas.length
+      + certVencidos.length
+      + nfseErros24hSnap.size
       + nfseErroSnap.size
       + nfseCancelamentoSnap.size
       + nfseRascunhosSnap.size
@@ -271,7 +285,7 @@ export const enviarAlertasDiarios = onSchedule(
       html,
     })
 
-    console.log(`[alertas] Email enviado. Tarefas: ${tarefasAlerta.length}, Lançamentos: ${lancamentosSnap.size}, Certs: ${certAlertas.length}, NFS-e erro: ${nfseErroSnap.size}, cancelamento: ${nfseCancelamentoSnap.size}, rascunhos: ${nfseRascunhosSnap.size}, gerados hoje: ${rascunhosGeradosHojeSnap.size}, travados recuperados: ${travados}`)
+    console.log(`[alertas] Email enviado. Tarefas: ${tarefasAlerta.length}, Lançamentos: ${lancamentosSnap.size}, Certs: ${certAlertas.length}, vencidos: ${certVencidos.length}, NFS-e erro: ${nfseErroSnap.size}, falhas 24h: ${nfseErros24hSnap.size}, cancelamento: ${nfseCancelamentoSnap.size}, rascunhos: ${nfseRascunhosSnap.size}, gerados hoje: ${rascunhosGeradosHojeSnap.size}`)
   }
 )
 

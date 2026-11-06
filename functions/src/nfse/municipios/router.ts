@@ -20,6 +20,7 @@ import type {
 } from '../types'
 import { normalizarIbge } from '../types'
 import { resolverProvedorNfse } from '../provedor'
+import type { OpcoesNacionalConector } from '../provedores/nacional'
 
 /** Prestador com o IBGE corrigido (configs antigas guardam código errado — ver IBGE_LEGADO). */
 function comIbgeCorreto(prestador: Prestador): Prestador {
@@ -48,10 +49,21 @@ const CERTIFICADO_NACIONAL_AUSENTE = {
   erro: 'Certificado A1 não encontrado. O Ambiente Nacional exige o A1 do próprio cliente — faça o upload na configuração fiscal.',
 }
 
+let opcoesConectorNacional: OpcoesNacionalConector | undefined
+
+/**
+ * SÓ TESTES: injeta transporte/relógio no NacionalConector usado pelo roteador
+ * (testes de orquestração de emitir/retry/consultar/lote sem rede).
+ * `undefined` volta ao transporte mTLS real.
+ */
+export function definirOpcoesConectorNacional(opcoes: OpcoesNacionalConector | undefined): void {
+  opcoesConectorNacional = opcoes
+}
+
 /** Ambiente Nacional (padrão): mesmo conector para todo município conveniado. */
 async function carregarNacional() {
   const { NacionalConector } = await import('../provedores/nacional')
-  return new NacionalConector()
+  return new NacionalConector(opcoesConectorNacional)
 }
 export type ConsultarNfseInputRoteado = ConsultarNfseInput & ChaveProvedor
 export type CancelarNfseInputRoteado = CancelarNfseInput & ChaveProvedor

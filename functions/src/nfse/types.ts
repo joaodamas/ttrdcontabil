@@ -265,6 +265,15 @@ export interface ResultadoEmissao {
   erro?: string
   codigoErro?: string
   detalhes?: string
+  /** Rascunho que guarda a numeração desta emissão (criado pelo servidor quando a emissão é direta). */
+  rascunhoId?: string
+  /** id em nfse_emitidas da nota gravada/encontrada. */
+  nfseId?: string
+  /** A nota já existia (rascunho já emitido ou encontrada na Sefin) — nada foi reenviado. */
+  jaEmitida?: boolean
+  /** A nota foi encontrada na Sefin por consulta (timeout anterior / DPS repetida) e registrada sem reenviar. */
+  reconciliada?: boolean
+  mensagem?: string
 }
 
 export interface ConsultarNfseInput {
@@ -282,6 +291,11 @@ export interface CancelarNfseInput extends ConsultarNfseInput {
 
 export interface ResultadoOperacaoNfse {
   sucesso: boolean
+  /**
+   * Consulta pela DPS/chave: true = a nota existe na Sefin; false = consulta
+   * CONCLUSIVA de que não existe (404). Ausente = o conector não informa.
+   */
+  encontrada?: boolean
   status?: 'emitida' | 'cancelada' | 'rejeitada' | 'processando' | 'erro'
   mensagem?: string
   numeroNfse?: string
