@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin'
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore'
 import { detectouBaixaDePagamento } from '../whatsapp/decisao'
+import { logErro } from '../log'
 
 const db = () => admin.firestore()
 
@@ -152,7 +153,7 @@ async function confirmarBaixaNoWhatsapp(
       console.info('[whatsapp][confirmacao-nao-enfileirada]', JSON.stringify({ lancamentoId, motivo: resultado.motivo }))
     }
   } catch (error) {
-    console.error('[whatsapp][confirmacao-falhou]', JSON.stringify({ lancamentoId, erro: String((error as Error)?.message ?? error) }))
+    logErro('[whatsapp][confirmacao-falhou]', { lancamentoId }, error)
   }
 }
 

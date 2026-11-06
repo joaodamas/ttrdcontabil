@@ -10,7 +10,7 @@ import {
 } from '../../functions/src/usuarios/perfis'
 
 export type { Perfil, TelaKey } from '../../functions/src/usuarios/perfis'
-export { PERFIS, PERFIL_LABELS, PERFIL_DEFAULT_TELAS, TELAS, ehPerfil } from '../../functions/src/usuarios/perfis'
+export { PERFIS, PERFIL_LABELS, PERFIL_DEFAULT_TELAS, TELAS, ehPerfil, podeLerFinanceiro } from '../../functions/src/usuarios/perfis'
 
 export function canAccessTela(usuario: UserSession | null, tela: TelaKey): boolean {
   if (!usuario) return false

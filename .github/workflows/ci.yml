@@ -1,0 +1,145 @@
+# CI — tipos, lint, testes unitários, regras do Firestore no emulador e e2e
+# contra o build estático. Sem segredos do repositório: o build usa um projeto
+# `demo-*` (nunca existe na nuvem) e chaves fictícias, e tudo roda nos emuladores.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+  FIREBASE_TOOLS: firebase-tools@14
+  # Next lê .env.production no build; variáveis do processo têm precedência.
+  NEXT_PUBLIC_USE_FIREBASE_EMULATORS: '1'
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID: demo-ttrd
+  NEXT_PUBLIC_FIREBASE_API_KEY: demo-api-key
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: demo-ttrd.firebaseapp.com
+  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: demo-ttrd.appspot.com
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: '000000000000'
+  NEXT_PUBLIC_FIREBASE_APP_ID: '1:000000000000:web:0000000000000000'
+  NEXT_PUBLIC_APP_TENANT_ID: ttrd
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  verificar:
+    name: Tipos, lint e testes unitários
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+
+      - name: npm ci (raiz)
+        run: npm ci --no-audit --no-fund
+
+      - name: npm ci (functions)
+        run: npm ci --no-audit --no-fund
+        working-directory: functions
+
+      - name: tsc (raiz)
+        run: npx tsc --noEmit
+
+      - name: tsc (functions)
+        run: npx tsc --noEmit
+        working-directory: functions
+
+      - name: eslint
+        run: npx eslint .
+
+      - name: vitest
+        run: npx vitest run
+
+  regras:
+    name: Regras do Firestore (emulador)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache dos emuladores do Firebase
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ env.FIREBASE_TOOLS }}
+
+      - name: npm ci (raiz)
+        run: npm ci --no-audit --no-fund
+
+      - name: vitest __tests__/rules no emulador
+        run: npx -y ${{ env.FIREBASE_TOOLS }} emulators:exec --only firestore --project ttrdcontabil-rules-test "npx vitest run __tests__/rules"
+
+  e2e-estatico:
+    name: E2E no build estático (emuladores)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache dos emuladores do Firebase
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ env.FIREBASE_TOOLS }}
+
+      - name: npm ci (raiz)
+        run: npm ci --no-audit --no-fund
+
+      # O front importa módulos puros de functions/src (perfis, pré-validação).
+      - name: npm ci (functions)
+        run: npm ci --no-audit --no-fund
+        working-directory: functions
+
+      - name: Chromium do Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Build estático + e2e nos emuladores
+        run: npm run test:e2e:estatico
+
+      - name: Relatório do Playwright (falha)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-estatico
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore

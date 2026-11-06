@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { LinkPermitido } from '@/components/ui/link-permitido'
 import { useRouter } from 'next/navigation'
 import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
@@ -9,12 +9,18 @@ import { getDocument, listDocuments } from '@/lib/firestore-client'
 import { getFirebaseApp } from '@/lib/firebase'
 import { appConfig } from '@/lib/app-config'
 import { getErrorMessage } from '@/lib/error-message'
+import { toast } from 'sonner'
 import { getStatusInfo, type StatusTone } from '@/lib/status-semantics'
 import { useAuth } from '@/contexts/auth-context'
+import { podeLerFinanceiro } from '@/lib/permissions'
+import {
+  COLECAO_KPIS, COLECAO_KPIS_FINANCEIRO, idDocKpis,
+  dataAtualizacaoKpis, kpisDesatualizados, rotuloAtualizacaoKpis,
+} from '@/lib/dashboard-kpis'
 import { useFeatureFlags } from '@/contexts/feature-flags-context'
 import { formatCurrency, formatDate, formatMesAno, tsToDate, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { buttonVariants } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { PageHeader } from '@/components/layout/page-header'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import {
@@ -24,7 +30,7 @@ import {
   Users, ClipboardList, CheckSquare, TrendingUp,
   AlertTriangle, AlertCircle, ArrowRight, CheckCircle2, DollarSign,
   Receipt, Bell, CalendarClock, WalletCards, Gauge, BarChart2, Sparkles,
-  ChevronDown,
+  ChevronDown, RefreshCw,
 } from 'lucide-react'
 
 /* ─── Skeleton ──────────────────────────────────────────────────────────── */
@@ -69,45 +75,85 @@ const COMP_STATUS: Record<string, { label: string; variant: StatusTone }> = {
   concluida:    { label: 'Concluídas',   variant: getStatusInfo('competencia', 'concluida').tone },
 }
 
+// dashboard_kpis: legível por todo perfil ativo. Os financeiros ficam em
+// dashboard_kpis_financeiro (só quem lê lançamentos — podeLerFinanceiro).
 type DashboardKpis = {
   id?: string
   totalClientesAtivos?: number
   compCounts?: Record<string, number>
   tarefasPendentes?: number
+  atualizadoEm?: unknown
+}
+
+type DashboardKpisFinanceiro = {
   somaVencendo?: number
   vencendoCount?: number
   somaAtrasados?: number
   atrasadosCount?: number
+  atualizadoEm?: unknown
 }
 
-function applyKpis(
-  kpis: DashboardKpis,
-  setters: {
-    setTotalClientesAtivos: (value: number) => void
-    setCompCounts: (value: Record<string, number>) => void
-    setTarefasPendentes: (value: number) => void
-    setSomaVencendo: (value: number) => void
-    setVencendoCount: (value: number) => void
-    setSomaAtrasados: (value: number) => void
-    setAtrasadosCount: (value: number) => void
-  }
-) {
+type RecalculoKpis = DashboardKpis & { financeiro?: DashboardKpisFinanceiro }
+
+type KpiSetters = {
+  setTotalClientesAtivos: (value: number) => void
+  setCompCounts: (value: Record<string, number>) => void
+  setTarefasPendentes: (value: number) => void
+  setSomaVencendo: (value: number) => void
+  setVencendoCount: (value: number) => void
+  setSomaAtrasados: (value: number) => void
+  setAtrasadosCount: (value: number) => void
+  setKpisAtualizadoEm: (value: Date | null) => void
+}
+
+function applyKpis(kpis: DashboardKpis, fin: DashboardKpisFinanceiro | null, setters: KpiSetters) {
   setters.setTotalClientesAtivos(kpis.totalClientesAtivos ?? 0)
   setters.setCompCounts(kpis.compCounts ?? {})
   setters.setTarefasPendentes(kpis.tarefasPendentes ?? 0)
-  setters.setSomaVencendo(kpis.somaVencendo ?? 0)
-  setters.setVencendoCount(kpis.vencendoCount ?? 0)
-  setters.setSomaAtrasados(kpis.somaAtrasados ?? 0)
-  setters.setAtrasadosCount(kpis.atrasadosCount ?? 0)
+  setters.setSomaVencendo(fin?.somaVencendo ?? 0)
+  setters.setVencendoCount(fin?.vencendoCount ?? 0)
+  setters.setSomaAtrasados(fin?.somaAtrasados ?? 0)
+  setters.setAtrasadosCount(fin?.atrasadosCount ?? 0)
+  setters.setKpisAtualizadoEm(dataAtualizacaoKpis(kpis.atualizadoEm))
 }
 
 async function recalcularDashboardKpis(params: { mes: number; ano: number }) {
-  const fn = httpsCallable<{ mes: number; ano: number }, DashboardKpis>(
+  const fn = httpsCallable<{ mes: number; ano: number }, RecalculoKpis>(
     getFunctions(getFirebaseApp(), 'southamerica-east1'),
     'recalcularDashboardKpis'
   )
   const { data } = await fn(params)
   return data
+}
+
+/** "Atualizado há X min" + botão Atualizar (recalcula pelo callable). */
+function AtualizacaoKpis(props: {
+  atualizadoEm: Date | null
+  agora: Date
+  atualizando: boolean
+  onAtualizar: () => void
+}) {
+  const desatualizado = kpisDesatualizados(props.atualizadoEm, props.agora)
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="kpis-atualizacao">
+      <span
+        className={cn(desatualizado && 'text-warning')}
+        title={props.atualizadoEm ? props.atualizadoEm.toLocaleString('pt-BR') : undefined}
+      >
+        {props.atualizando ? 'Atualizando…' : rotuloAtualizacaoKpis(props.atualizadoEm, props.agora)}
+      </span>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={props.onAtualizar}
+        disabled={props.atualizando}
+        aria-label="Atualizar indicadores do painel"
+      >
+        <RefreshCw className={cn(props.atualizando && 'animate-spin')} /> Atualizar
+      </Button>
+    </div>
+  )
 }
 
 type ClienteRisco = {
@@ -152,6 +198,9 @@ type DashboardV2Props = {
   erroParcial: unknown
   secoesComFalha: SecoesComFalha
   onRetry: () => void
+  /** Só quem lê lançamentos (podeLerFinanceiro) vê os blocos financeiros. */
+  leFinanceiro: boolean
+  atualizacao: React.ReactNode
 }
 
 function CurvaSFechamento({
@@ -294,6 +343,7 @@ function DashboardV2(props: DashboardV2Props) {
         description={`Visão executiva · ${props.hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}`}
         action={
           <>
+            {props.atualizacao}
             <LinkPermitido semAcesso="ocultar" href="/hoje" className={buttonVariants({ variant: 'outline', size: 'cta' })}>
               <CalendarClock /> Fila de execução
             </LinkPermitido>
@@ -352,22 +402,26 @@ function DashboardV2(props: DashboardV2Props) {
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 {podeAfirmarSemAlerta || totalUrgente > 0
-                  ? 'Prioridade calculada por tarefas vencidas, cobranças atrasadas e emissão fiscal próxima.'
+                  ? (props.leFinanceiro
+                    ? 'Prioridade calculada por tarefas vencidas, cobranças atrasadas e emissão fiscal próxima.'
+                    : 'Prioridade calculada por tarefas vencidas e emissão fiscal próxima.')
                   : 'As cobranças não foram carregadas — o que aparece como “—” não foi verificado.'}
               </p>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
+          <div className={cn('grid gap-2 text-center', props.leFinanceiro ? 'grid-cols-3 sm:min-w-[360px]' : 'grid-cols-2 sm:min-w-[240px]')}>
             <LinkPermitido href="/tarefas" className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2 hover:bg-muted/45">
               <p className="text-lg font-bold tabular-nums text-destructive">{props.tarefasVencidas.length}</p>
               <p className="text-[11px] text-muted-foreground">tarefas</p>
             </LinkPermitido>
-            <LinkPermitido href="/financeiro?status=pendente" className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2 hover:bg-muted/45">
-              <p className={cn('text-lg font-bold tabular-nums', props.secoesComFalha.lancamentos ? 'text-muted-foreground' : 'text-destructive')}>
-                {props.secoesComFalha.lancamentos ? '—' : props.lancamentosVencidos.length}
-              </p>
-              <p className="text-[11px] text-muted-foreground">cobranças</p>
-            </LinkPermitido>
+            {props.leFinanceiro && (
+              <LinkPermitido href="/financeiro?status=pendente" className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2 hover:bg-muted/45">
+                <p className={cn('text-lg font-bold tabular-nums', props.secoesComFalha.lancamentos ? 'text-muted-foreground' : 'text-destructive')}>
+                  {props.secoesComFalha.lancamentos ? '—' : props.lancamentosVencidos.length}
+                </p>
+                <p className="text-[11px] text-muted-foreground">cobranças</p>
+              </LinkPermitido>
+            )}
             <LinkPermitido href="/fiscal" className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2 hover:bg-muted/45">
               <p className="text-lg font-bold tabular-nums text-warning">{props.alertasNFSe.length}</p>
               <p className="text-[11px] text-muted-foreground">NFS-e</p>
@@ -390,7 +444,7 @@ function DashboardV2(props: DashboardV2Props) {
         </div>
       )}
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className={cn('grid gap-3 sm:grid-cols-2', props.leFinanceiro && 'xl:grid-cols-4')}>
         <InsightCard
           title="Clientes ativos"
           value={props.totalClientesAtivos}
@@ -406,6 +460,7 @@ function DashboardV2(props: DashboardV2Props) {
           icon={CheckSquare}
           tone={props.tarefasVencidas.length > 0 ? 'danger' : 'success'}
         />
+        {props.leFinanceiro && (<>
         <InsightCard
           title="Recebíveis 7 dias"
           value={formatCurrency(props.somaVencendo)}
@@ -422,6 +477,7 @@ function DashboardV2(props: DashboardV2Props) {
           icon={DollarSign}
           tone={props.atrasadosCount > 0 ? 'danger' : 'neutral'}
         />
+        </>)}
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
@@ -622,6 +678,20 @@ export default function DashboardPage() {
   const [erroParcial,          setErroParcial]          = useState<unknown>(null)
   const [secoesComFalha,       setSecoesComFalha]       = useState<SecoesComFalha>(SEM_FALHA)
   const [reloadToken,          setReloadToken]          = useState(0)
+  const [kpisAtualizadoEm,     setKpisAtualizadoEm]     = useState<Date | null>(null)
+  const [atualizandoKpis,      setAtualizandoKpis]      = useState(false)
+  const [agora,                setAgora]                = useState(() => new Date())
+  // "Atualizar" pede recálculo no servidor sem voltar ao skeleton.
+  const forcarRecalculoRef = useRef(false)
+  // Espelha canReadFinanceiro() das regras: sem isto o Painel buscava
+  // lançamentos e KPIs financeiros para quem não pode lê-los.
+  const leFinanceiro = usuario ? podeLerFinanceiro(usuario) : false
+
+  // Relógio do rótulo "atualizado há X min".
+  useEffect(() => {
+    const t = setInterval(() => setAgora(new Date()), 60_000)
+    return () => clearInterval(t)
+  }, [])
 
   const AVISO_DIAS = 5 // janela de alerta em dias
 
@@ -629,15 +699,17 @@ export default function DashboardPage() {
     const em7Dias   = new Date(hoje); em7Dias.setDate(hoje.getDate() + 7)
     const hojeTs    = Timestamp.fromDate(hoje)
 
-    setLoading(true)
+    const forcar = forcarRecalculoRef.current
+    forcarRecalculoRef.current = false
+    if (!forcar) setLoading(true)
     setErro(null)
     setErroParcial(null)
     setSecoesComFalha(SEM_FALHA)
 
     async function load() {
       const tenantId = usuario?.tenantId ?? appConfig.tenantId
-      const kpiDocId = `${tenantId}_${anoAtual}_${String(mesAtual).padStart(2, '0')}`
-      const setters = {
+      const kpiDocId = idDocKpis(tenantId, anoAtual, mesAtual)
+      const setters: KpiSetters = {
         setTotalClientesAtivos,
         setCompCounts,
         setTarefasPendentes,
@@ -645,28 +717,49 @@ export default function DashboardPage() {
         setVencendoCount,
         setSomaAtrasados,
         setAtrasadosCount,
+        setKpisAtualizadoEm,
       }
 
       // KPI doc + recálculo engolem falhas individualmente para não travar a
-      // tela por causa de um doc ausente; só marcamos falha crítica se AMBAS
-      // as tentativas (doc + recálculo) não conseguirem produzir dados.
+      // tela por causa de um doc ausente; só marcamos falha crítica se nem o
+      // doc nem o recálculo produzirem dados. Doc com mais de 1 h (ou o botão
+      // Atualizar) pede recálculo; se ele falhar, fica o doc antigo — o rótulo
+      // "atualizado há…" mostra a idade.
       let kpiErro: unknown = null
-      const kpis = await getDocument<DashboardKpis>('dashboard_kpis', kpiDocId).catch((err) => { kpiErro = err; return null })
-      if (kpis) {
-        applyKpis(kpis, setters)
-      } else {
-        const refreshed = await recalcularDashboardKpis({ mes: mesAtual, ano: anoAtual }).catch((err) => { kpiErro = err; return null })
+      const [kpis, kpisFin] = await Promise.all([
+        getDocument<DashboardKpis>(COLECAO_KPIS, kpiDocId).catch((err) => { kpiErro = err; return null }),
+        leFinanceiro
+          ? getDocument<DashboardKpisFinanceiro>(COLECAO_KPIS_FINANCEIRO, kpiDocId).catch(() => null)
+          : Promise.resolve(null),
+      ])
+      const docAtualizadoEm = kpis ? dataAtualizacaoKpis(kpis.atualizadoEm) : null
+      const precisaRecalcular = forcar || !kpis || (leFinanceiro && !kpisFin)
+        || kpisDesatualizados(docAtualizadoEm, new Date())
+      if (kpis) applyKpis(kpis, kpisFin, setters)
+      if (precisaRecalcular) {
+        const refreshed = await recalcularDashboardKpis({ mes: mesAtual, ano: anoAtual }).catch((err) => {
+          if (!kpis) kpiErro = err
+          else {
+            console.error('[dashboard] recálculo dos KPIs falhou; exibindo o último cálculo', err)
+            if (forcar) toast.error('Não foi possível recalcular agora. Mostrando o último cálculo.')
+          }
+          return null
+        })
         if (refreshed) {
-          applyKpis(refreshed, setters)
+          applyKpis(refreshed, refreshed.financeiro ?? null, setters)
           kpiErro = null // recálculo recuperou os dados: não é falha
         }
       }
 
+      const semLeitura = Promise.resolve([] as unknown[])
       const results = await Promise.allSettled([
         listDocuments('clientes',     [where('status', '==', 'ativo'), limit(500)]),
         listDocuments('tarefas',      [where('status', 'in', ['pendente', 'em_andamento']), orderBy('dataPrazo', 'asc'), limit(300)]),
         listDocuments('competencias', [where('mes', '==', mesAnterior), where('ano', '==', anoAnterior), where('status', '==', 'aberta'), limit(5)]),
-        listDocuments('lancamentos',  [where('tipo', '==', 'receita'), where('status', '==', 'pendente'), where('dataVencimento', '<', hojeTs), orderBy('dataVencimento', 'asc'), limit(5)]),
+        // lancamentos é negado pelas regras a quem não lê o financeiro: nem pede.
+        leFinanceiro
+          ? listDocuments('lancamentos',  [where('tipo', '==', 'receita'), where('status', '==', 'pendente'), where('dataVencimento', '<', hojeTs), orderBy('dataVencimento', 'asc'), limit(5)])
+          : semLeitura,
         listDocuments('fechamentos',  [where('mes', '==', mesAtual), where('ano', '==', anoAtual), limit(300)]),
       ])
 
@@ -788,9 +881,28 @@ export default function DashboardPage() {
     }).catch((err) => {
       console.error('[dashboard] falha ao carregar o painel', err)
       setErro(err)
-    }).finally(() => setLoading(false))
+    }).finally(() => {
+      setLoading(false)
+      setAtualizandoKpis(false)
+      setAgora(new Date())
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [usuario?.tenantId, reloadToken])
+  }, [usuario?.tenantId, leFinanceiro, reloadToken])
+
+  function atualizarPainel() {
+    forcarRecalculoRef.current = true
+    setAtualizandoKpis(true)
+    setReloadToken((t) => t + 1)
+  }
+
+  const atualizacao = (
+    <AtualizacaoKpis
+      atualizadoEm={kpisAtualizadoEm}
+      agora={agora}
+      atualizando={atualizandoKpis}
+      onAtualizar={atualizarPainel}
+    />
+  )
 
   /* ─── Loading ─────────────────────────────────────────────────────────── */
   if (loading) {
@@ -842,6 +954,8 @@ export default function DashboardPage() {
         erroParcial={erroParcial}
         secoesComFalha={secoesComFalha}
         onRetry={() => setReloadToken((t) => t + 1)}
+        leFinanceiro={leFinanceiro}
+        atualizacao={atualizacao}
       />
     )
   }
@@ -853,6 +967,7 @@ export default function DashboardPage() {
       <PageHeader
         title="Painel"
         description={hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+        action={atualizacao}
       />
 
       {erro ? (
@@ -928,8 +1043,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* KPI — 3 cards principais */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {/* KPI — 3 cards principais (2 sem o financeiro) */}
+      <div className={cn('grid grid-cols-1 gap-4', leFinanceiro ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
 
         {/* Clientes */}
         <LinkPermitido href="/clientes?status=ativo" className="group rounded-xl border border-border bg-card p-5 card-shadow hover:border-primary/30 hover:shadow-md transition-all block">
@@ -965,7 +1080,8 @@ export default function DashboardPage() {
           )}
         </LinkPermitido>
 
-        {/* Financeiro — combinado */}
+        {/* Financeiro — combinado (só quem lê lançamentos) */}
+        {leFinanceiro && (
         <div className="rounded-xl border border-border bg-card p-5 card-shadow">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Financeiro</span>
@@ -991,6 +1107,7 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Competências do mês — strip compacto */}
@@ -1016,7 +1133,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
 
         {/* Coluna esquerda (3/5) — Tarefas + Fechamentos */}
-        <div className="lg:col-span-3 space-y-4">
+        <div className={cn('space-y-4', leFinanceiro ? 'lg:col-span-3' : 'lg:col-span-5')}>
 
           {/* Tarefas Vencidas */}
           <div className="rounded-xl border border-border bg-card card-shadow overflow-hidden">
@@ -1108,7 +1225,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Coluna direita (2/5) — Cobranças vencidas */}
+        {/* Coluna direita (2/5) — Cobranças vencidas (só quem lê lançamentos) */}
+        {leFinanceiro && (
         <div className="lg:col-span-2">
           <div className="rounded-xl border border-border bg-card card-shadow overflow-hidden h-full">
             <div className="flex items-center justify-between px-5 py-3.5 border-b">
@@ -1154,6 +1272,7 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+        )}
       </div>
 
       {/* Quick actions */}

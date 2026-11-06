@@ -17,7 +17,7 @@ export { gerarRascunhosNfseMensais, processarNfseRecorrenteDiaria } from './nfse
 // saíram do código em 2026-11-05: a emissão é direta (prefeitura / Ambiente
 // Nacional), sem integrador. Ver docs/RADAR-NFSE-NACIONAL-2026-11-05.md.
 export { gerarFechamentoMensal } from './fechamento'
-export { recalcularDashboardKpis } from './dashboard'
+export { recalcularDashboardKpis, recalcularDashboardKpisAgendado } from './dashboard'
 
 // ── Usuários ──────────────────────────────────────────────────────────────────
 // Criação/alteração/exclusão de usuários só pelo servidor (ver usuarios/callables.ts).

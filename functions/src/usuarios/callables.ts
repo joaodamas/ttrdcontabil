@@ -23,6 +23,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https'
 
 import { atorDaRequisicao, montarAuditLog, requisicaoDoCallable } from '../audit'
 import { assertAdmin } from '../authz'
+import { logErro } from '../log'
 import { exigirSegundoFatorSeObrigatorio } from '../seguranca/mfa'
 import {
   ErroRegraUsuario,
@@ -174,9 +175,9 @@ export const criarUsuario = onCall(OPCOES, async (request) => {
   } catch (err) {
     // Sem órfão: o login criado agora sai junto com o perfil que falhou.
     if (criadoAgora) {
-      await auth.deleteUser(uid).catch((e) => console.error('[criarUsuario] falha ao desfazer conta', { uid, e }))
+      await auth.deleteUser(uid).catch((e) => logErro('[criarUsuario][falha-desfazer-conta]', { uid }, e))
     }
-    console.error('[criarUsuario] falha ao gravar perfil', { uid, err })
+    logErro('[criarUsuario][falha-gravar-perfil]', { uid }, err)
     throw new HttpsError('internal', 'Não foi possível criar o usuário. Nada foi gravado; tente novamente.')
   }
 
@@ -251,7 +252,7 @@ export const atualizarUsuario = onCall(OPCOES, async (request) => {
     if (alteracoes.ativo === false) await auth.revokeRefreshTokens(uid)
   } catch (err) {
     if (codigoAuth(err) !== 'auth/user-not-found') {
-      console.error('[atualizarUsuario] perfil salvo, falha no Auth', { uid, err })
+      logErro('[atualizarUsuario][falha-auth]', { uid }, err)
       throw new HttpsError(
         'internal',
         'O perfil foi salvo, mas o login não foi atualizado. Repita a operação para concluir.',
@@ -348,7 +349,7 @@ export const excluirUsuario = onCall(OPCOES, async (request) => {
       // Perfil já saiu (sem perfil não há acesso). Ao menos tranca o login; a
       // conta que sobrar é reaproveitada se o e-mail for cadastrado de novo.
       await admin.auth().updateUser(uid, { disabled: true }).catch(() => undefined)
-      console.error('[excluirUsuario] perfil excluído, falha ao apagar login', { uid, err })
+      logErro('[excluirUsuario][falha-apagar-login]', { uid }, err)
     }
   }
   return { uid }

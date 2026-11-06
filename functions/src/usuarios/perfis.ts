@@ -69,3 +69,13 @@ export function podeLerNfse(usuario: { perfil?: unknown; telas?: unknown }): boo
   if (usuario.perfil === 'admin' || usuario.perfil === 'fiscal' || usuario.perfil === 'financeiro') return true
   return Array.isArray(usuario.telas) && usuario.telas.includes('fiscal')
 }
+
+/**
+ * Lê o financeiro (lançamentos, KPIs financeiros do Painel): espelha
+ * canReadFinanceiro() de firestore.rules — perfil admin/financeiro OU a tela
+ * 'financeiro' concedida ao usuário.
+ */
+export function podeLerFinanceiro(usuario: { perfil?: unknown; telas?: unknown }): boolean {
+  if (usuario.perfil === 'admin' || usuario.perfil === 'financeiro') return true
+  return Array.isArray(usuario.telas) && usuario.telas.includes('financeiro')
+}

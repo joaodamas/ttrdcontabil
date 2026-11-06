@@ -26,6 +26,7 @@ import { SYSTEM_ACTOR, writeAuditLog } from './audit'
 import { DEFAULT_TENANT_ID } from './tenant'
 import { sendEmail } from './email/mailer'
 import { emailSecrets } from './email/secrets'
+import { logErro } from './log'
 
 const PROJECT_ID  = 'ttrdcontabil-jpproject'
 const BACKUP_BUCKET = `gs://${PROJECT_ID}-backups`
@@ -69,7 +70,7 @@ export const exportarFirestoreSemanal = onSchedule(
       const mensagem = (error as Error)?.message ?? 'Erro desconhecido ao exportar Firestore.'
       const contexto = { outputUriPrefix, projectId: PROJECT_ID, database: DATABASE, erro: mensagem }
 
-      console.error('[backup][falha]', JSON.stringify(contexto))
+      logErro('[backup][falha]', contexto, error)
 
       await writeAuditLog({
         tenantId: DEFAULT_TENANT_ID,
@@ -94,7 +95,7 @@ export const exportarFirestoreSemanal = onSchedule(
         })
       } catch (emailError) {
         // Falha ao enviar o alerta não deve mascarar o erro original do backup.
-        console.error('[backup][falha-email]', String((emailError as Error)?.message ?? emailError))
+        logErro('[backup][falha-email]', { outputUriPrefix }, emailError)
       }
 
       // Propaga o erro para que a execução da Cloud Function também apareça

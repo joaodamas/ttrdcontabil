@@ -803,8 +803,18 @@ service cloud.firestore {
       allow delete: if isAdmin() && sameTenantExisting() && id != 'seguranca';
     }
 
+    // KPIs do Painel (escritos só pelo servidor: functions/src/dashboard.ts).
+    // [2026-11-06] Os financeiros (somas/contagens de recebíveis) saíram de
+    // dashboard_kpis para dashboard_kpis_financeiro: dashboard_kpis é legível
+    // por todo perfil ativo, enquanto lancamentos é negado a operacional,
+    // fiscal e leitura — o Painel mostrava a eles o total a receber e em atraso.
     match /dashboard_kpis/{id} {
       allow read: if canRead() && sameTenantExisting();
+      allow write: if false;
+    }
+
+    match /dashboard_kpis_financeiro/{id} {
+      allow read: if canReadFinanceiro() && sameTenantExisting();
       allow write: if false;
     }
 

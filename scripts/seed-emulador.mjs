@@ -197,4 +197,17 @@ for (let i = 0; i < 12; i++) {
   })
 }
 
-console.log(`seed ok: ${clientes.length} clientes, 36 tarefas, 45 lançamentos, 24 NFS-e — login admin@demo.local / demo1234`)
+// KPIs do Painel do mês (o cron/callable não rodam neste emulador). Calculados
+// agora: a tela não pede recálculo. Financeiros em doc próprio (só quem lê
+// lançamentos) — valores fixos para o e2e conferir quem vê.
+const kpiId = `${TENANT}_${ano}_${String(mes).padStart(2, '0')}`
+const metaKpis = { mes, ano, atualizadoPorId: 'system', atualizadoPorNome: 'Sistema', origem: 'scheduler' }
+await put('dashboard_kpis', kpiId, {
+  ...metaKpis, totalClientesAtivos: clientes.filter((c) => c.status === 'ativo').length,
+  compCounts: { aberta: 10, em_andamento: 5, concluida: 5 }, tarefasPendentes: 20,
+})
+await put('dashboard_kpis_financeiro', kpiId, {
+  ...metaKpis, somaVencendo: 4321.5, vencendoCount: 3, somaAtrasados: 12345.67, atrasadosCount: 4,
+})
+
+console.log(`seed ok:${clientes.length} clientes, 36 tarefas, 45 lançamentos, 24 NFS-e — login admin@demo.local / demo1234`)

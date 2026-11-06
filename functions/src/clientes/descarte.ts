@@ -25,6 +25,7 @@ import { montarAuditLog, SYSTEM_ACTOR } from '../audit'
 import { resolverCaminhoCertificado } from '../nfse/certificado'
 import { atorDoEvento } from '../auditoria/regras'
 import { DEFAULT_TENANT_ID } from '../tenant'
+import { logErro } from '../log'
 
 const db = () => admin.firestore()
 const LOTE = 400
@@ -82,7 +83,7 @@ export const descartarDadosClienteExcluido = onDocumentDeletedWithAuthContext(
         resultado[nome] = await fn()
       } catch (err) {
         falhas.push(nome)
-        console.error(`[descarte] ${nome} falhou`, { clienteId, err })
+        logErro('[descarte][falha-etapa]', { clienteId, etapa: nome }, err)
       }
     }
 
