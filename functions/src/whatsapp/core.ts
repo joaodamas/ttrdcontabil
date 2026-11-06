@@ -4,6 +4,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { HttpsError } from 'firebase-functions/v2/https'
 import { redactAuditData, sanitizeAuditString, SYSTEM_ACTOR, writeAuditLog } from '../audit'
 import { DEFAULT_TENANT_ID } from '../tenant'
+import { logErro } from '../log'
 import {
   avaliarTetoDiario,
   decidirConfirmacaoPagamento,
@@ -1226,7 +1227,7 @@ export async function dispatchWhatsappJob(jobId: string, opts?: { origem?: 'fila
   } catch (error) {
     // Fail-closed: se não deu para confirmar que a cobrança ainda é devida,
     // adiamos. Enviar "no escuro" é o erro caro; esperar 30 min não é.
-    console.error('[whatsapp][revalidacao-falhou]', JSON.stringify({ jobId, erro: String((error as Error)?.message ?? error) }))
+    logErro('[whatsapp][revalidacao-falhou]', { jobId }, error)
     veredicto = { acao: 'adiar', motivo: 'Não foi possível revalidar a cobrança agora — envio adiado.', proximo: new Date(Date.now() + 30 * 60 * 1000) }
   }
 

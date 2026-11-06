@@ -5,6 +5,7 @@ import { SYSTEM_ACTOR, writeAuditLog } from '../audit'
 import { DEFAULT_TENANT_ID } from '../tenant'
 import { dispatchWhatsappJob, queueWhatsappJob } from './core'
 import { twilioSecrets } from './secrets'
+import { logErro } from '../log'
 
 const db = () => admin.firestore()
 
@@ -125,7 +126,7 @@ async function marcarJobEsgotado(doc: FirebaseFirestore.QueryDocumentSnapshot) {
     attemptCount: data.attemptCount ?? null,
     motivo,
   }
-  console.error('[whatsapp][fila-esgotada]', JSON.stringify(contexto))
+  logErro('[whatsapp][fila-esgotada]', contexto)
 
   await writeAuditLog({
     tenantId: String(data.tenantId ?? DEFAULT_TENANT_ID),

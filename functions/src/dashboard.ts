@@ -1,158 +1,114 @@
 import * as admin from 'firebase-admin'
-import { FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { FieldValue } from 'firebase-admin/firestore'
+import { logger } from 'firebase-functions/v2'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
+import { onSchedule } from 'firebase-functions/v2/scheduler'
+import { SYSTEM_ACTOR } from './audit'
 import { assertPerfil } from './authz'
-import { PERFIS } from './usuarios/perfis'
+import { recalcularKpisTenant } from './dashboard-kpis'
+import { ErroEntradaKpis, FUSO_ESCRITORIO, validarMesAno } from './dashboard-kpis-regras'
+import { DEFAULT_TENANT_ID } from './tenant'
+import { PERFIS, podeLerFinanceiro } from './usuarios/perfis'
 
 const db = () => admin.firestore()
 
-type DashboardInput = {
-  mes?: number
-  ano?: number
-}
-
-// Qualquer perfil ativo vê o dashboard.
+// Qualquer perfil ativo vê o Painel e pode pedir o recálculo — mas só recebe
+// de volta os KPIs financeiros quem lê lançamentos (canReadFinanceiro nas regras).
 const assertDashboardUser = (uid: string) => assertPerfil(uid, PERFIS, 'Perfil sem permissão para dashboard.')
-
-function validateInput(data: unknown): Required<DashboardInput> {
-  const now = new Date()
-  const input = data as DashboardInput | undefined
-  const mes = Number(input?.mes ?? now.getMonth() + 1)
-  const ano = Number(input?.ano ?? now.getFullYear())
-  if (!Number.isInteger(mes) || mes < 1 || mes > 12) {
-    throw new HttpsError('invalid-argument', 'Mês inválido para KPIs do dashboard.')
-  }
-  if (!Number.isInteger(ano) || ano < 2020 || ano > 2100) {
-    throw new HttpsError('invalid-argument', 'Ano inválido para KPIs do dashboard.')
-  }
-  return { mes, ano }
-}
-
-function withTenant(query: FirebaseFirestore.Query, tenantId: string) {
-  return query.where('tenantId', '==', tenantId)
-}
-
-async function count(query: FirebaseFirestore.Query) {
-  const snap = await query.count().get()
-  return snap.data().count
-}
-
-async function sum(query: FirebaseFirestore.Query, field: string) {
-  const snap = await query.get()
-  return snap.docs.reduce((acc, doc) => {
-    const value = doc.data()[field]
-    return acc + (typeof value === 'number' && Number.isFinite(value) ? value : 0)
-  }, 0)
-}
 
 export const recalcularDashboardKpis = onCall(
   { region: 'southamerica-east1', timeoutSeconds: 120, memory: '256MiB', invoker: 'public' },
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Autenticação necessária.')
     const usuario = await assertDashboardUser(request.auth.uid)
-    const { mes, ano } = validateInput(request.data)
-
-    const hoje = new Date()
-    const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 0, 0, 0)
-    const em7Dias = new Date(inicioHoje)
-    em7Dias.setDate(em7Dias.getDate() + 7)
-    em7Dias.setHours(23, 59, 59, 999)
-    const hojeTs = Timestamp.fromDate(inicioHoje)
-    const em7DiasTs = Timestamp.fromDate(em7Dias)
-
-    const clientesAtivosQ = withTenant(
-      db().collection('clientes').where('status', '==', 'ativo'),
-      usuario.tenantId
-    )
-    const competenciasMesQ = withTenant(
-      db().collection('competencias').where('mes', '==', mes).where('ano', '==', ano),
-      usuario.tenantId
-    )
-    const tarefasAbertasQ = withTenant(
-      db().collection('tarefas').where('status', 'in', ['pendente', 'em_andamento']),
-      usuario.tenantId
-    )
-    const receitaVencendoQ = withTenant(
-      db()
-        .collection('lancamentos')
-        .where('tipo', '==', 'receita')
-        .where('status', '==', 'pendente')
-        .where('dataVencimento', '>=', hojeTs)
-        .where('dataVencimento', '<=', em7DiasTs),
-      usuario.tenantId
-    )
-    const receitaAtrasadaQ = withTenant(
-      db()
-        .collection('lancamentos')
-        .where('tipo', '==', 'receita')
-        .where('status', '==', 'pendente')
-        .where('dataVencimento', '<', hojeTs),
-      usuario.tenantId
-    )
-
-    const [
-      totalClientesAtivos,
-      tarefasPendentes,
-      vencendoCount,
-      atrasadosCount,
-      somaVencendo,
-      somaAtrasados,
-      competenciasSnap,
-    ] = await Promise.all([
-      count(clientesAtivosQ),
-      count(tarefasAbertasQ),
-      count(receitaVencendoQ),
-      count(receitaAtrasadaQ),
-      sum(receitaVencendoQ, 'valor'),
-      sum(receitaAtrasadaQ, 'valor'),
-      competenciasMesQ.get(),
-    ])
-
-    const compCounts: Record<string, number> = {}
-    for (const doc of competenciasSnap.docs) {
-      const status = doc.data().status as string | undefined
-      if (status) compCounts[status] = (compCounts[status] ?? 0) + 1
+    const agora = new Date()
+    let mesAno: { mes: number; ano: number }
+    try {
+      mesAno = validarMesAno(request.data, agora)
+    } catch (err) {
+      if (err instanceof ErroEntradaKpis) throw new HttpsError('invalid-argument', err.message)
+      throw err
     }
 
-    const docId = `${usuario.tenantId}_${ano}_${String(mes).padStart(2, '0')}`
-    const payload = {
-      tenantId: usuario.tenantId,
-      mes,
-      ano,
-      totalClientesAtivos,
-      compCounts,
-      tarefasPendentes,
-      somaVencendo,
-      vencendoCount,
-      somaAtrasados,
-      atrasadosCount,
-      atualizadoEm: FieldValue.serverTimestamp(),
-      atualizadoPorId: usuario.id,
-      atualizadoPorNome: usuario.nome,
-      origem: 'cloud_function',
-    }
+    const resultado = await recalcularKpisTenant(
+      db(),
+      {
+        tenantId: usuario.tenantId,
+        ...mesAno,
+        atualizadoPorId: usuario.id,
+        atualizadoPorNome: usuario.nome,
+        origem: 'cloud_function',
+      },
+      agora,
+    )
 
-    await db().collection('dashboard_kpis').doc(docId).set(payload, { merge: true })
     await db().collection('logs_auditoria').add({
       tenantId: usuario.tenantId,
       usuarioId: usuario.id,
       usuarioNome: usuario.nome,
       entidade: 'dashboard_kpis',
-      entidadeId: docId,
+      entidadeId: resultado.id,
       acao: 'upsert',
       dadosAntes: null,
       dadosDepois: {
-        mes,
-        ano,
-        totalClientesAtivos,
-        tarefasPendentes,
-        vencendoCount,
-        atrasadosCount,
+        mes: mesAno.mes,
+        ano: mesAno.ano,
+        totalClientesAtivos: resultado.operacional.totalClientesAtivos,
+        tarefasPendentes: resultado.operacional.tarefasPendentes,
       },
       origem: 'cloud_function',
       criadoEm: FieldValue.serverTimestamp(),
     })
 
-    return { id: docId, ...payload, atualizadoEm: new Date().toISOString() }
+    const atualizadoEm = agora.toISOString()
+    return {
+      id: resultado.id,
+      ...resultado.operacional,
+      atualizadoEm,
+      ...(podeLerFinanceiro(usuario) ? { financeiro: { ...resultado.financeiro, atualizadoEm } } : {}),
+    }
+  }
+)
+
+/**
+ * Recalcula os KPIs do mês corrente de hora em hora no horário comercial
+ * (seg–sáb, 7h–20h de Brasília). Antes o único escritor era o callable, e a
+ * tela só o chamava quando o doc do mês não existia: depois do 1º acesso o
+ * Painel ficava congelado no número daquela hora até virar o mês. A tela
+ * também recalcula quando o doc tem mais de 1 h (fora deste horário).
+ */
+export const recalcularDashboardKpisAgendado = onSchedule(
+  {
+    schedule: '0 7-20 * * 1-6',
+    timeZone: FUSO_ESCRITORIO,
+    region: 'southamerica-east1',
+    memory: '256MiB',
+    timeoutSeconds: 120,
+  },
+  async () => {
+    const agora = new Date()
+    const mesAno = validarMesAno(undefined, agora)
+    try {
+      const { id } = await recalcularKpisTenant(
+        db(),
+        {
+          tenantId: DEFAULT_TENANT_ID,
+          ...mesAno,
+          atualizadoPorId: SYSTEM_ACTOR.id,
+          atualizadoPorNome: SYSTEM_ACTOR.nome,
+          origem: 'scheduler',
+        },
+        agora,
+      )
+      logger.info('[dashboard-kpis] recalculado', { id })
+    } catch (err) {
+      logger.error('[dashboard-kpis][falha]', {
+        tenantId: DEFAULT_TENANT_ID,
+        ...mesAno,
+        erro: err instanceof Error ? err.message : String(err),
+      })
+      // Propaga para a execução aparecer como falha no Cloud Scheduler/Run.
+      throw err
+    }
   }
 )
