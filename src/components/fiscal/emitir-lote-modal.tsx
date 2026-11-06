@@ -13,8 +13,9 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import { getFunctions, httpsCallable } from 'firebase/functions'
-import { where } from 'firebase/firestore'
-import { listDocuments } from '@/lib/firestore-client'
+import { limit, where } from 'firebase/firestore'
+import { getDocument, listDocuments } from '@/lib/firestore-client'
+import { bloqueiosDe, preValidarRascunho, type AchadoFiscal } from '@/lib/nfse-pre-validacao'
 import { formatCurrency } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { AppModal } from '@/components/ui/app-modal'
@@ -33,6 +34,28 @@ interface Rascunho {
   competenciaId?: string | null
   valorServico: number
   dados:        Record<string, unknown>
+  /**
+   * Bloqueios da pré-validação fiscal (mesmo motor do servidor). Rascunho
+   * bloqueado não pode ser selecionado: o servidor recusaria sem enviar.
+   */
+  bloqueios:    AchadoFiscal[]
+}
+
+/** Configuração fiscal e cadastro de cada prestador do lote (para a pré-validação). */
+async function contextoDosClientes(clienteIds: string[]) {
+  const pares = await Promise.all(clienteIds.map(async (id) => {
+    const [cliente, fiscais] = await Promise.all([
+      getDocument<{ cpfCnpj?: string; razaoSocial?: string }>('clientes', id).catch(() => null),
+      listDocuments<Record<string, unknown>>('clientes_fiscal', [where('clienteId', '==', id), limit(1)]).catch(() => []),
+    ])
+    return [id, { cliente: cliente ?? undefined, fiscal: fiscais[0] ?? null }] as const
+  }))
+  return new Map(pares)
+}
+
+const SEM_CONFIG: AchadoFiscal = {
+  regra: 'sem_configuracao', campo: 'config.regime', severidade: 'bloqueio',
+  mensagem: 'Cliente sem configuração fiscal — configure antes de emitir.',
 }
 
 interface ResultadoLote {
@@ -68,20 +91,30 @@ export function EmitirLoteModal({ open, onOpenChange, onSuccess }: EmitirLoteMod
       const docs = await listDocuments('nfse_rascunhos', [
         where('status', '==', 'aguardando_emissao'),
       ])
+      const clienteIds = [...new Set(docs.map((d) => String((d as Record<string, unknown>).clienteId ?? '')).filter(Boolean))]
+      const contexto = await contextoDosClientes(clienteIds)
       const mapped: Rascunho[] = docs.map((d) => {
         const r = d as Record<string, unknown>
         const dados = (r.dados ?? {}) as Record<string, unknown>
+        const clienteId = (r.clienteId ?? dados.clienteId ?? '') as string
+        const competenciaId = (r.competenciaId ?? dados.competenciaId ?? null) as string | null
+        const ctx = contexto.get(clienteId)
         return {
           id:           r.id as string,
-          clienteId:    (r.clienteId ?? dados.clienteId ?? '') as string,
+          clienteId,
           clienteNome:  (r.clienteNome ?? r.titulo ?? '') as string,
-          competenciaId: (r.competenciaId ?? dados.competenciaId ?? null) as string | null,
+          competenciaId,
           valorServico: (dados.valorServico ?? r.valorServico ?? 0) as number,
           dados,
+          bloqueios: ctx?.fiscal
+            ? bloqueiosDe(preValidarRascunho({ id: r.id as string, clienteId, competenciaId, dados }, ctx.fiscal, ctx.cliente))
+            : [SEM_CONFIG],
         }
       })
+      // Bloqueados por último; a seleção inicial só pega os que podem sair.
+      mapped.sort((a, b) => Number(a.bloqueios.length > 0) - Number(b.bloqueios.length > 0))
       setRascunhos(mapped)
-      setSelected(new Set(mapped.slice(0, LOTE_MAX).map((r) => r.id)))
+      setSelected(new Set(mapped.filter((r) => r.bloqueios.length === 0).slice(0, LOTE_MAX).map((r) => r.id)))
     } finally {
       setLoading(false)
     }
@@ -95,15 +128,23 @@ export function EmitirLoteModal({ open, onOpenChange, onSuccess }: EmitirLoteMod
     }
   }, [open, load])
 
+  const emitiveis = rascunhos.filter((r) => r.bloqueios.length === 0)
+  const bloqueados = rascunhos.length - emitiveis.length
+
   function toggleAll(checked: boolean) {
     if (checked) {
-      setSelected(new Set(rascunhos.slice(0, LOTE_MAX).map((r) => r.id)))
+      setSelected(new Set(emitiveis.slice(0, LOTE_MAX).map((r) => r.id)))
     } else {
       setSelected(new Set())
     }
   }
 
   function toggle(id: string) {
+    const r = rascunhos.find((x) => x.id === id)
+    if (r && r.bloqueios.length > 0) {
+      toast.error(`Rascunho bloqueado: ${r.bloqueios[0].mensagem}`)
+      return
+    }
     setSelected((prev) => {
       const next = new Set(prev)
       if (next.has(id)) {
@@ -122,7 +163,8 @@ export function EmitirLoteModal({ open, onOpenChange, onSuccess }: EmitirLoteMod
 
     // Só os ids: o servidor relê cada rascunho (normalizador único) — o payload
     // da nota não sai mais do navegador.
-    const rascunhoIds = rascunhos.filter((r) => selected.has(r.id)).map((r) => r.id)
+    const rascunhoIds = rascunhos.filter((r) => selected.has(r.id) && r.bloqueios.length === 0).map((r) => r.id)
+    if (rascunhoIds.length === 0) return
 
     setStep('running')
 
@@ -153,12 +195,13 @@ export function EmitirLoteModal({ open, onOpenChange, onSuccess }: EmitirLoteMod
     }
   }
 
-  const allSelected = rascunhos.length > 0 && selected.size === Math.min(rascunhos.length, LOTE_MAX)
+  const allSelected = emitiveis.length > 0 && selected.size === Math.min(emitiveis.length, LOTE_MAX)
   const totalSelecionado = rascunhos.filter((r) => selected.has(r.id)).reduce((s, r) => s + r.valorServico, 0)
   const footer = step === 'select' ? (
     <>
       <span className="mr-auto text-xs text-muted-foreground">
         {selected.size} selecionada(s) · {formatCurrency(totalSelecionado)}
+        {bloqueados > 0 ? ` · ${bloqueados} bloqueada(s) pela pré-validação` : ''}
       </span>
       <Button variant="outline" onClick={() => onOpenChange(false)}>
         Cancelar
@@ -210,16 +253,28 @@ export function EmitirLoteModal({ open, onOpenChange, onSuccess }: EmitirLoteMod
                 {rascunhos.map((r) => (
                   <div
                     key={r.id}
-                    className="flex cursor-pointer items-center gap-3 border-b px-5 py-2.5 transition-colors last:border-0 hover:bg-muted/30"
+                    className={[
+                      'flex items-center gap-3 border-b px-5 py-2.5 transition-colors last:border-0',
+                      r.bloqueios.length > 0 ? 'cursor-not-allowed bg-destructive/[0.03]' : 'cursor-pointer hover:bg-muted/30',
+                    ].join(' ')}
                     onClick={() => toggle(r.id)}
                   >
                     <Checkbox
                       checked={selected.has(r.id)}
+                      disabled={r.bloqueios.length > 0}
                       onCheckedChange={() => toggle(r.id)}
                       onClick={(e) => e.stopPropagation()}
                       className="shrink-0"
                     />
-                    <span className="flex-1 text-sm">{r.clienteNome || '—'}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm">{r.clienteNome || '—'}</span>
+                      {r.bloqueios.length > 0 && (
+                        <span className="block text-xs text-destructive" title={r.bloqueios.map((b) => b.mensagem).join('\n')}>
+                          Bloqueado: {r.bloqueios[0].mensagem}
+                          {r.bloqueios.length > 1 ? ` (+${r.bloqueios.length - 1})` : ''} — revise o rascunho.
+                        </span>
+                      )}
+                    </span>
                     <span className="w-28 text-right text-sm font-medium tabular-nums">
                       {formatCurrency(r.valorServico)}
                     </span>

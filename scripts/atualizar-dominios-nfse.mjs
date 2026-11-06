@@ -37,6 +37,31 @@ const grava = (nome, dados) => {
   console.log(`${nome}: ${Array.isArray(dados) ? dados.length : Object.keys(dados).length}`)
 }
 
+// `--so=correlacao` atualiza só a correlação item LC 116 × NBS (Anexo VIII).
+const SO = process.argv.find((a) => a.startsWith('--so='))?.slice(5)
+
+// Anexo VIII (Reforma Tributária, gov.br/nfse → Documentação técnica → RTC):
+// tabela oficial de correlação item da LC 116 × NBS × cIndOp × cClassTrib.
+// Usada pela pré-validação (functions/src/nfse/pre-validacao) para barrar NBS
+// que não corresponde ao serviço e pelo seletor de NBS para sugerir as certas.
+// Células mescladas: o item vale para as linhas seguintes até o próximo item.
+const ANEXO_VIII = 'https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/rtc/anexo_viii-tabela-correlacao-v01-02-00-20261026.xlsx'
+{
+  const viii = await baixar(ANEXO_VIII)
+  const correlacao = {}
+  let item = ''
+  for (const l of linhas(viii, 'tabela geral')) {
+    const it = limpa(l[0]).replace(/\D/g, '')
+    if (it) item = it.padStart(4, '0')
+    const nbs = limpa(l[2]).replace(/\D/g, '')
+    if (!item || nbs.length !== 9) continue
+    correlacao[item] ??= []
+    if (!correlacao[item].includes(nbs)) correlacao[item].push(nbs)
+  }
+  grava('correlacao-item-nbs.json', { fonte: ANEXO_VIII, itens: correlacao })
+}
+if (SO === 'correlacao') process.exit(0)
+
 const a = await baixar(ANEXOS.A)
 // UF pelos 2 primeiros dígitos do código IBGE (código da UF) — a coluna de UF
 // da planilha não é confiável linha a linha.
