@@ -88,7 +88,7 @@ export function Timeline({ events }: TimelineProps) {
             {/* Icon circle on the vertical line */}
             <span
               className={cn(
-                'absolute -left-[15px] top-0 h-8 w-8 shrink-0 rounded-full flex items-center justify-center',
+                'absolute -left-12 top-0 h-8 w-8 shrink-0 rounded-full flex items-center justify-center',
                 iconCircleColor
               )}
               aria-hidden="true"

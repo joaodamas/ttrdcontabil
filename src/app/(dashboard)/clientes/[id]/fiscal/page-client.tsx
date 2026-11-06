@@ -12,10 +12,12 @@ import { RecordUnavailable, type RecordLoadFailure } from '@/components/ui/recor
 import { getErrorMessage } from '@/lib/error-message'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, Pencil, Plus, ShieldCheck, ShieldAlert, ShieldOff, AlertTriangle, Package, Truck } from 'lucide-react'
+import { Loader2, Pencil, Plus, AlertTriangle, Package, Truck } from 'lucide-react'
 import { ConfigFiscalForm, MUNICIPIOS, MUNICIPIO_TIPO, defaultsDaConfigFiscal } from '@/components/fiscal/config-fiscal-form'
 import { exigeCertificadoA1, nomeMunicipio } from '@/lib/nfse-dominios'
-import { CertificadoUpload, type CertInfo } from '@/components/fiscal/certificado-upload'
+import { CertificadoStatusCard } from '@/components/fiscal/certificado-status-card'
+import { useAuth } from '@/contexts/auth-context'
+import { podeOperarNfse } from '@/lib/permissions'
 import { EmitirNfseModal } from '@/components/fiscal/emitir-nfse-modal'
 import { getPathSegmentAfter } from '@/lib/route-params'
 
@@ -30,6 +32,7 @@ const REGIME_LABELS: Record<string, string> = {
 export default function ClienteFiscalPage() {
   const pathname = usePathname()
   const id = getPathSegmentAfter(pathname, 'clientes')
+  const { usuario } = useAuth()
 
   const [cliente,   setCliente]   = useState<Record<string, unknown> | null>(null)
   const [fiscal,    setFiscal]    = useState<Record<string, unknown> | null>(null)
@@ -93,15 +96,6 @@ export default function ClienteFiscalPage() {
   const ibge        = fiscal?.municipioIbge as string | undefined
   const tipo        = ibge ? MUNICIPIO_TIPO[ibge] : undefined
   const municipioNome = MUNICIPIOS.find(m => m.ibge === ibge)?.nome ?? nomeMunicipio(ibge) ?? (ibge ?? '—')
-
-  const certInfo: CertInfo | null = creds.certTitular
-    ? {
-        titular:     creds.certTitular as string,
-        vencimento:  creds.certVencimento as string,
-        valido:      creds.certValido as boolean,
-        storagePath: creds.certificadoStoragePath as string,
-      }
-    : null
 
   const fiscalDefaults = defaultsDaConfigFiscal(fiscal)
 
@@ -241,24 +235,13 @@ export default function ClienteFiscalPage() {
 
       {/* Certificado A1 — Ambiente Nacional sempre; conector da prefeitura só ABRASF/GeisWeb */}
       {fiscal && exigeCertificadoA1(fiscal.provedorNfse, tipo) && (
-        <Card>
-          <CardHeader className="flex flex-row items-center gap-2">
-            {certInfo
-              ? certInfo.valido
-                ? <ShieldCheck className="w-4 h-4 text-success" />
-                : <ShieldAlert className="w-4 h-4 text-destructive" />
-              : <ShieldOff className="w-4 h-4 text-muted-foreground" />
-            }
-            <CardTitle className="text-sm">Certificado Digital A1</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CertificadoUpload
-              clienteId={id}
-              certInfo={certInfo}
-              onUploaded={() => load()}
-            />
-          </CardContent>
-        </Card>
+        <CertificadoStatusCard
+          clienteId={id}
+          credenciais={creds}
+          cnpjCliente={cliente.cpfCnpj}
+          podeEnviar={podeOperarNfse(usuario)}
+          onEnviado={load}
+        />
       )}
 
       {/* NFS-e Emitidas */}

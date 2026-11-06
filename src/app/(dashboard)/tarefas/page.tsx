@@ -37,6 +37,7 @@ import { LinkPermitido } from '@/components/ui/link-permitido'
 import { FiltrosAtivos } from '@/components/ui/filtros-ativos'
 import { useNomeCliente, useNomeResponsavel, useRotuloCompetencia } from '@/lib/use-nomes-filtro'
 import { hrefSemFiltro } from '@/lib/url-filtros'
+import { LinkFichaCliente } from '@/components/clientes/ficha/painel-cliente'
 
 function TarefasContent() {
   const router = useRouter()
@@ -293,7 +294,11 @@ function TarefasContent() {
                       </Link>
                     </td>
                     <td className="px-3 py-1.5 text-muted-foreground">
-                      {(t.clienteNome as string) ?? '—'}
+                      {t.clienteId ? (
+                        <LinkFichaCliente clienteId={t.clienteId as string} nome={t.clienteNome as string | undefined} className="hover:text-foreground hover:underline">
+                          {(t.clienteNome as string) ?? '—'}
+                        </LinkFichaCliente>
+                      ) : ((t.clienteNome as string) ?? '—')}
                     </td>
                     <td className="px-3 py-1.5">
                       {t.prioridade ? (

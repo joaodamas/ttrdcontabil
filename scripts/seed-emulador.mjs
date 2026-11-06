@@ -86,6 +86,16 @@ for (let i = 0; i < nomes.length; i++) {
     clienteId: id, municipioIbge: ibge, municipioEmissor: cidade, inscricaoMunicipal: String(100000 + i),
     regimeTributario: c.regimeTributario, aliquotaPadrao: 2 + (i % 4), ambienteEmissao: 'homologacao',
     provedorNfse: i === 2 ? 'spedy' : 'municipio', optanteSimples: c.regimeTributario !== 'lucro_presumido',
+    // Certificado A1 (só os campos públicos que o uploadCertificado grava):
+    // cli-02 válido, cli-03 vencendo em 20 dias, cli-04 vencido; o resto sem.
+    ...(i >= 1 && i <= 3 ? {
+      credenciais: {
+        certTitular: `${nomes[i].toUpperCase()}:${cnpj}`,
+        certVencimento: new Date(hoje.getTime() + [0, 240, 20, -5][i] * 86_400_000).toISOString(),
+        certValido: true,
+        certificadoStoragePath: `certificados/${id}.pfx`,
+      },
+    } : {}),
   })
 }
 
@@ -138,6 +148,11 @@ for (let i = 0; i < clientes.length; i++) {
   })
 }
 
+function xmlNfseFicticio(numero, ibge, cnpj) {
+  const chave = `${ibge}2${cnpj}${'0'.repeat(10)}${numero.padStart(13, '0')}${'0'.repeat(50)}`.slice(0, 50)
+  return `<?xml version="1.0" encoding="UTF-8"?><NFSe xmlns="http://www.sped.fazenda.gov.br/nfse" versao="1.00"><infNFSe Id="NFS${chave}"><nNFSe>${numero}</nNFSe><xLocEmi>Emulador</xLocEmi></infNFSe></NFSe>`
+}
+
 for (let i = 0; i < 24; i++) {
   const c = clientes[i % 16]
   const st = i % 8 === 0 ? 'erro_integracao' : i % 11 === 0 ? 'cancelada' : 'emitida'
@@ -148,6 +163,9 @@ for (let i = 0; i < 24; i++) {
     descricaoServico: 'Serviços de consultoria e assessoria', codigoServico: '17.01',
     valorServico: 1500 + i * 230, valorDeducoes: 0, aliquota: 3, issRetido: i % 5 === 0,
     municipioIbge: c.ibge, municipioNome: c.cidade, ambienteEmissao: 'homologacao',
+    // XML oficial (fictício) nas notas autorizadas: habilita o download do XML
+    // e o PDF (DANFSe gerado pelo callable obterUrlDanfse a partir dele).
+    ...(st === 'erro_integracao' ? {} : { xmlNfse: xmlNfseFicticio(String(2400 + i), c.ibge, c.cpfCnpj) }),
   })
 }
 
