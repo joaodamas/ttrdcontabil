@@ -1,4 +1,5 @@
 import { HttpsError } from 'firebase-functions/v2/https'
+import { VERSAO_ENVELOPE_ARQUIVO, arquivoCifrado, cifrarArquivo, decifrarArquivo } from './encrypt'
 
 // Quem grava o certificado é o uploadCertificado (emitir.ts) e ele usa sempre o
 // mesmo padrão. Centralizar aqui para que leitura e escrita nunca divirjam.
@@ -51,6 +52,38 @@ export function assertCaminhoCertificado(clienteId: string, caminhoPersistido: u
   }
 
   return esperado
+}
+
+/**
+ * Conteúdo gravado no Storage para um .pfx recebido em base64: o binário do
+ * PKCS#12 dentro do envelope AES-256-GCM (CREDENTIAL_KEY). Antes de 2026-11-06
+ * o arquivo ia em claro — só a senha era cifrada.
+ */
+export function conteudoCertificadoParaStorage(pfxBase64: string): { conteudo: Buffer; metadata: Record<string, string> } {
+  return {
+    conteudo: cifrarArquivo(Buffer.from(pfxBase64, 'base64')),
+    metadata: { cifrado: VERSAO_ENVELOPE_ARQUIVO },
+  }
+}
+
+/**
+ * Lê o arquivo do certificado no Storage em qualquer formato: envelope cifrado
+ * (atual) ou legado em claro (binário DER ou texto base64). Devolve o .pfx em
+ * base64. Envelope que não decifra = erro claro (chave trocada/arquivo
+ * corrompido), nunca tenta usar o envelope como se fosse o .pfx.
+ */
+export function pfxBase64DoArquivoStorage(buffer: Buffer): string {
+  if (arquivoCifrado(buffer)) {
+    try {
+      return decifrarArquivo(buffer).toString('base64')
+    } catch {
+      throw new HttpsError(
+        'failed-precondition',
+        'Não foi possível decifrar o certificado A1 guardado. Verifique o secret CREDENTIAL_KEY ou reenvie o certificado.',
+      )
+    }
+  }
+  return pfxBase64FromStorageBuffer(buffer)
 }
 
 export function pfxBase64FromStorageBuffer(buffer: Buffer): string {

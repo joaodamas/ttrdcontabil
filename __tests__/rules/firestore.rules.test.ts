@@ -770,7 +770,7 @@ describeIfEmulator('firestore.rules', () => {
     await assertFails(updateDoc(doc(dbAs('admin-a'), 'clientes_fiscal/cf-seed'), {
       producaoLiberada: true,
     }))
-    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-forjado-prod'), {
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cliente-a'), {
       tenantId: 'tenant-a',
       clienteId: 'cliente-a',
       ambienteEmissao: 'producao',
@@ -781,22 +781,77 @@ describeIfEmulator('firestore.rules', () => {
   it('clientes_fiscal: create tambem nao aceita spedyCompanyId nem credenciais', async () => {
     // Sem esta trava bastava criar um SEGUNDO doc para o mesmo clienteId — as
     // functions buscam a config por where('clienteId','==',...).limit(1).
-    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-forjado'), {
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cliente-a'), {
       tenantId: 'tenant-a',
       clienteId: 'cliente-a',
       spedyCompanyId: 'empresa-do-atacante',
     }))
-    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-forjado-cred'), {
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cliente-a'), {
       tenantId: 'tenant-a',
       clienteId: 'cliente-a',
       credenciais: { spedyApiKey: 'chave-do-atacante' },
     }))
-    await assertSucceeds(setDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-novo'), {
+    // Uma config por cliente: o doc novo tem id = clienteId.
+    await assertSucceeds(setDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cliente-a'), {
       tenantId: 'tenant-a',
       clienteId: 'cliente-a',
       municipioIbge: '3525904',
-      provedorNfse: 'spedy',
+      provedorNfse: 'nacional',
     }))
+  })
+
+  it('clientes_fiscal: create só com id = clienteId (uma configuração fiscal por cliente)', async () => {
+    // Auto-id / id qualquer = segundo doc para o mesmo cliente: recusado.
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-segunda'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      municipioIbge: '3525904',
+    }))
+    // id de um cliente com o corpo de outro: recusado.
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cliente-b'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+    }))
+    // Sem clienteId no corpo: recusado.
+    await assertFails(setDoc(doc(dbAs('admin-a'), 'clientes_fiscal/cliente-a'), {
+      tenantId: 'tenant-a',
+    }))
+    await assertSucceeds(setDoc(doc(dbAs('admin-a'), 'clientes_fiscal/cliente-a'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+    }))
+  })
+
+  it('clientes_fiscal: o clienteId de um doc nunca muda (nem nos docs antigos de auto-id)', async () => {
+    await assertFails(updateDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed'), { clienteId: 'cliente-b' }))
+    await assertFails(updateDoc(doc(dbAs('admin-a'), 'clientes_fiscal/cf-seed'), { clienteId: 'cliente-b' }))
+    // O doc antigo continua editável no resto (até o script de unificação migrar).
+    await assertSucceeds(updateDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed'), { aliquotaPadrao: 3 }))
+  })
+
+  it('clientes_fiscal: próximo número da DPS só pelo servidor (definirNumeracaoDps)', async () => {
+    await assertFails(updateDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed'), { proximoNumeroDps: 500 }))
+    await assertFails(updateDoc(doc(dbAs('admin-a'), 'clientes_fiscal/cf-seed'), {
+      numeracaoDpsAjuste: { serie: '1', tpAmb: '1' },
+    }))
+    await assertFails(setDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cliente-a'), {
+      tenantId: 'tenant-a',
+      clienteId: 'cliente-a',
+      proximoNumeroDps: 500,
+    }))
+    // A série continua sendo do formulário.
+    await assertSucceeds(updateDoc(doc(dbAs('fiscal-a'), 'clientes_fiscal/cf-seed'), { serieDps: '2' }))
+  })
+
+  it('fiscal_conectores: sem uso (emissão só pelo Ambiente Nacional), trancada para todos', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'fiscal_conectores/jundiai-sp'), { tenantId: 'tenant-a', homologado: true })
+    })
+    for (const uid of ['admin-a', 'fiscal-a', 'leitura-a']) {
+      await assertFails(getDoc(doc(dbAs(uid), 'fiscal_conectores/jundiai-sp')))
+      await assertFails(updateDoc(doc(dbAs(uid), 'fiscal_conectores/jundiai-sp'), { producaoLiberada: true }))
+    }
+    await assertFails(setDoc(doc(dbAs('admin-a'), 'fiscal_conectores/novo'), { tenantId: 'tenant-a' }))
   })
 
   it('dps_sequencias: contador da DPS nacional e intocavel pelo navegador (nem admin)', async () => {

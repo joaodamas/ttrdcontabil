@@ -14,14 +14,7 @@ export const BLOQUEIO_FISCAL = {
   descricaoAusente: 'Falta descrição padrão da NFS-e',
   aliquotaAusente: 'Falta alíquota padrão',
   certificadoA1: 'Falta certificado A1 válido',
-  tokenSimpliss: 'Falta token Simpliss',
-  usuarioConam: 'Falta usuário Conam',
-  contribuinteConam: 'Falta código de contribuinte Conam',
-  loginGiap: 'Falta login GIAP',
-  senhaGiap: 'Falta senha GIAP',
-  producaoNaoLiberada: 'Município não liberado para produção',
   municipioNaoEmiteNacional: 'Município não emite pelo Ambiente Nacional (sistema da prefeitura)',
-  provedorDescontinuado: 'Configurado com a Spedy (descontinuada) — salve a configuração fiscal para migrar ao Ambiente Nacional',
 } as const
 
 /**

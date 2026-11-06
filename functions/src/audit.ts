@@ -92,6 +92,21 @@ export function sanitizeAuditString(value: string): string {
     .replace(/\b(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?9?\d{4}[-\s]?\d{4}\b/g, '[PHONE_REDACTED]')
 }
 
+/**
+ * Erro/resposta de terceiros (Sefin) para console/logger: passa por
+ * sanitizeAuditString (XML e payload grande somem; CPF, CNPJ, e-mail e
+ * telefone são mascarados) — o Cloud Logging não é lugar de dado do tomador.
+ */
+export function textoSeguroParaLog(err: unknown): string {
+  let bruto: string
+  if (err instanceof Error) bruto = `${err.name}: ${err.message}`
+  else if (typeof err === 'string') bruto = err
+  else {
+    try { bruto = JSON.stringify(err ?? null) } catch { bruto = String(err) }
+  }
+  return sanitizeAuditString(bruto).slice(0, 2000)
+}
+
 export type AuditActor = {
   id: string
   nome: string

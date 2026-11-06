@@ -1,16 +1,17 @@
 import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { processarEmissao } from './emitir'
-import { rotearCancelamento, rotearConsulta } from './municipios/router'
+import { rotearCancelamento, rotearConsulta } from './roteador'
 import { credentialSecrets } from './secrets'
 import { assertCanAccessCliente } from '../authz'
 import { gerarESalvarDanfse } from './danfse/servico'
-import { redactAuditData, writeAuditLog } from '../audit'
-import { getConfigFiscal, montarContextoFiscal } from './contexto'
+import { atorDaRequisicao, redactAuditData, requisicaoDoCallable, writeAuditLog } from '../audit'
+import { montarContextoFiscal } from './contexto'
 import { normalizarRascunho } from './normalizar-rascunho'
-import { resolverProvedorNfse } from './provedor'
 import { statusAposConsulta, validarMotivoCancelamento } from './regras-emissao'
 import type { EmitirNfseInput } from './types'
+
+type RequisicaoCallable = Parameters<typeof atorDaRequisicao>[0]
 
 export { normalizarRascunho } from './normalizar-rascunho'
 
@@ -58,9 +59,14 @@ async function registrarEvento(
   })
 }
 
+/**
+ * Log da ação fiscal com o ator do TOKEN (nome/e-mail assinados pelo Google,
+ * não `usuarios.nome`, que o próprio usuário edita) e o IP/navegador da
+ * chamada — mesmo padrão dos callables de usuários e senhas de portal.
+ */
 async function auditarAcaoFiscal(params: {
   tenantId?: string
-  uid: string
+  request: RequisicaoCallable
   entidadeId: string
   acao: string
   dadosDepois: Record<string, unknown>
@@ -68,96 +74,14 @@ async function auditarAcaoFiscal(params: {
   if (!params.tenantId) return
   await writeAuditLog({
     tenantId: params.tenantId,
-    actor: { id: params.uid, nome: 'Usuário autenticado' },
+    actor: atorDaRequisicao(params.request),
+    requisicao: requisicaoDoCallable(params.request),
     entidade: 'nfse_emitidas',
     entidadeId: params.entidadeId,
     acao: params.acao,
     dadosDepois: params.dadosDepois,
     origem: 'cloud_function',
   })
-}
-
-/**
- * Consulta prévia do RPS antes do retry — só para o webservice da PREFEITURA
- * (legado). No Ambiente Nacional quem consulta a DPS antes de reenviar é o
- * próprio processarEmissao, que além disso REGISTRA a nota encontrada.
- */
-async function consultarRpsAntesRetry(
-  input: EmitirNfseInput,
-  uid: string,
-  contexto: { tenantId?: string; clienteId?: string },
-): Promise<StandardResponse | null> {
-  if (!input.numeroRps) {
-    throw new HttpsError(
-      'failed-precondition',
-      'Retry fiscal bloqueado: o rascunho não possui RPS persistido para consulta prévia na prefeitura.'
-    )
-  }
-  if (!contexto.tenantId) {
-    throw new HttpsError('failed-precondition', 'Retry fiscal bloqueado: rascunho sem tenantId.')
-  }
-
-  let existenteQuery = db()
-    .collection('nfse_emitidas')
-    .where('tenantId', '==', contexto.tenantId)
-    .where('clienteId', '==', input.clienteId)
-    .where('numeroRps', '==', input.numeroRps)
-    .limit(1)
-
-  if (input.serieRps) {
-    existenteQuery = db()
-      .collection('nfse_emitidas')
-      .where('tenantId', '==', contexto.tenantId)
-      .where('clienteId', '==', input.clienteId)
-      .where('numeroRps', '==', input.numeroRps)
-      .where('serieRps', '==', input.serieRps)
-      .limit(1)
-  }
-
-  const existente = await existenteQuery.get()
-  if (!existente.empty) {
-    const doc = existente.docs[0]
-    await registrarEvento(input.rascunhoId ?? doc.id, 'retry_bloqueado_rps_existente', uid, 'Retry bloqueado: RPS já existe no histórico interno.', {
-      nfseId: doc.id,
-      numeroRps: input.numeroRps,
-      serieRps: input.serieRps ?? null,
-    }, contexto)
-    return ok('Retry bloqueado: este RPS já possui NFS-e no histórico interno.', { id: doc.id })
-  }
-
-  const { config, prestador, cert } = await montarContextoFiscal(input.clienteId, 'consulta')
-  const resultadoConsulta = await rotearConsulta({
-    nfseId: input.rascunhoId ?? input.numeroRps,
-    clienteId: input.clienteId,
-    numeroRps: input.numeroRps,
-    serieRps: input.serieRps,
-    rascunhoId: input.rascunhoId,
-  }, config, prestador, cert)
-
-  await registrarEvento(input.rascunhoId ?? input.numeroRps, 'retry_consulta_rps', uid, 'Consulta prévia por RPS executada antes do retry.', {
-    numeroRps: input.numeroRps,
-    serieRps: input.serieRps ?? null,
-    resultado: resultadoConsulta,
-  }, contexto)
-
-  if (!resultadoConsulta.sucesso) {
-    throw new HttpsError(
-      'failed-precondition',
-      resultadoConsulta.erro ?? 'Retry fiscal bloqueado: não foi possível consultar o RPS antes de tentar nova emissão.'
-    )
-  }
-
-  if (resultadoConsulta.status && resultadoConsulta.status !== 'erro' && resultadoConsulta.status !== 'rejeitada') {
-    return processing(resultadoConsulta.mensagem ?? 'Retry interrompido: prefeitura já possui status para este RPS.', {
-      statusPrefeitura: resultadoConsulta.status,
-      numeroNfse: resultadoConsulta.numeroNfse ?? null,
-      codigoVerificacao: resultadoConsulta.codigoVerificacao ?? null,
-      numeroRps: input.numeroRps,
-      serieRps: input.serieRps ?? null,
-    })
-  }
-
-  return null
 }
 
 export const consultarNfse = onCall(
@@ -192,7 +116,7 @@ export const consultarNfse = onCall(
     }, { tenantId: data.tenantId as string | undefined, clienteId: data.clienteId as string | undefined })
     await auditarAcaoFiscal({
       tenantId: data.tenantId as string | undefined,
-      uid: request.auth.uid,
+      request,
       entidadeId: nfseId,
       acao: 'consulta_nfse',
       dadosDepois: {
@@ -297,7 +221,7 @@ export const cancelarNfse = onCall(
       }, { tenantId: nota.tenantId as string | undefined, clienteId: nota.clienteId as string | undefined })
       await auditarAcaoFiscal({
         tenantId: nota.tenantId as string | undefined,
-        uid: request.auth.uid,
+        request,
         entidadeId: nfseId,
         acao: 'cancelamento_nfse_erro',
         dadosDepois: {
@@ -326,7 +250,7 @@ export const cancelarNfse = onCall(
     }, { tenantId: nota.tenantId as string | undefined, clienteId: nota.clienteId as string | undefined })
     await auditarAcaoFiscal({
       tenantId: nota.tenantId as string | undefined,
-      uid: request.auth.uid,
+      request,
       entidadeId: nfseId,
       acao: 'cancelamento_nfse_solicitado',
       dadosDepois: {
@@ -397,21 +321,18 @@ export const retryNfse = onCall(
 
     if (!input) throw new HttpsError('invalid-argument', 'Informe rascunhoId ou erroId.')
 
-    const provedor = resolverProvedorNfse(await getConfigFiscal(input.clienteId))
-    if (provedor === 'nacional') {
-      // Sem rascunho não há nDPS reservado para reusar: reemitir geraria número
-      // novo — e, se a primeira tentativa saiu, uma segunda nota.
-      if (!input.rascunhoId) {
-        throw new HttpsError('failed-precondition', 'Este erro não tem rascunho com o número da DPS reservado. Confira o histórico de notas antes de emitir de novo.')
-      }
-      // A consulta prévia (GET /dps/{id}) e o registro da nota encontrada
-      // acontecem dentro de processarEmissao.
-    } else {
-      const retryBloqueadoOuEncontrado = await consultarRpsAntesRetry(input, request.auth.uid, retryContext)
-      if (retryBloqueadoOuEncontrado) return retryBloqueadoOuEncontrado
+    // Sem rascunho não há nDPS reservado para reusar: reemitir geraria número
+    // novo — e, se a primeira tentativa saiu, uma segunda nota. A consulta
+    // prévia (GET /dps/{id}) e o registro da nota encontrada acontecem dentro
+    // de processarEmissao.
+    if (!input.rascunhoId) {
+      throw new HttpsError('failed-precondition', 'Este erro não tem rascunho com o número da DPS reservado. Confira o histórico de notas antes de emitir de novo.')
     }
 
-    const resultado = await processarEmissao(input, request.auth.uid)
+    const resultado = await processarEmissao(input, request.auth.uid, {
+      actor: atorDaRequisicao(request),
+      requisicao: requisicaoDoCallable(request),
+    })
     if (!resultado.sucesso) {
       if (input.rascunhoId) {
         await registrarEvento(input.rascunhoId, 'retry_erro', request.auth.uid, resultado.erro ?? 'Retry falhou.', {
@@ -420,7 +341,7 @@ export const retryNfse = onCall(
       }
       await auditarAcaoFiscal({
         tenantId: retryContext.tenantId,
-        uid: request.auth.uid,
+        request,
         entidadeId: rascunhoId ?? erroId ?? input.clienteId,
         acao: 'retry_nfse_erro',
         dadosDepois: {
@@ -442,7 +363,7 @@ export const retryNfse = onCall(
     }
     await auditarAcaoFiscal({
       tenantId: retryContext.tenantId,
-      uid: request.auth.uid,
+      request,
       entidadeId: rascunhoId ?? erroId ?? input.clienteId,
       acao: resultado.reconciliada ? 'retry_nfse_reconciliado' : 'retry_nfse_sucesso',
       dadosDepois: {

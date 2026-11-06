@@ -44,12 +44,67 @@ export function idSequenciaDps(cnpj: string, tpAmb: '1' | '2', serie: string): s
   return `${doc}_${tpAmb}_${serie}`
 }
 
-/** Próximo nDPS a partir do último gravado (ausente/inválido = começa em 1). */
-export function proximoNumeroDps(ultimo: unknown): number {
-  const n = typeof ultimo === 'number' && Number.isSafeInteger(ultimo) && ultimo > 0 ? ultimo : 0
-  const proximo = n + 1
+const inteiroPositivo = (v: unknown): number =>
+  (typeof v === 'number' && Number.isSafeInteger(v) && v > 0 ? v : 0)
+
+/**
+ * Próximo nDPS a partir do último gravado (ausente/inválido = começa em 1).
+ * `piso` = "próximo número" informado na configuração fiscal (o cliente já
+ * emitiu pelo Emissor Nacional web/app na mesma série): o contador nunca
+ * entrega número abaixo dele — nem depois de um contador perdido/restaurado.
+ */
+export function proximoNumeroDps(ultimo: unknown, piso?: unknown): number {
+  const proximo = Math.max(inteiroPositivo(ultimo) + 1, inteiroPositivo(piso))
   if (String(proximo).length > 15) throw new Error('Numeração da DPS esgotada para esta série (15 dígitos).')
   return proximo
+}
+
+/** Ajuste de numeração gravado na config fiscal pelo callable definirNumeracaoDps. */
+export interface AjusteNumeracaoDps {
+  serie?: unknown
+  tpAmb?: unknown
+}
+
+/**
+ * Piso da numeração que vale para ESTE contador (série + ambiente): só o
+ * `proximoNumeroDps` da config, e só se foi definido para a mesma série e o
+ * mesmo ambiente (informar o número da produção não mexe na homologação).
+ */
+export function pisoNumeracaoDps(
+  config: { proximoNumeroDps?: unknown; numeracaoDpsAjuste?: AjusteNumeracaoDps | null },
+  serie: string,
+  tpAmb: '1' | '2',
+): number | undefined {
+  const piso = inteiroPositivo(config.proximoNumeroDps)
+  const ajuste = config.numeracaoDpsAjuste
+  if (!piso || !ajuste || ajuste.serie !== serie || ajuste.tpAmb !== tpAmb) return undefined
+  return piso
+}
+
+/**
+ * Validação do "próximo número da DPS" informado por admin/fiscal: inteiro de
+ * 1 a 15 dígitos e NUNCA menor ou igual ao último já usado pela plataforma
+ * nesta série (voltar repetiria nDPS — E0014 ou, pior, nota em dobro na
+ * consulta prévia). Devolve a mensagem de erro, ou null.
+ */
+export function validarProximoNumeroDps(proximo: unknown, ultimoUsado: unknown): string | null {
+  if (typeof proximo !== 'number' || !Number.isSafeInteger(proximo) || proximo < 1 || String(proximo).length > 15) {
+    return 'Informe o próximo número da DPS como um número inteiro de 1 a 15 dígitos.'
+  }
+  const ultimo = inteiroPositivo(ultimoUsado)
+  if (proximo <= ultimo) {
+    return `A plataforma já usou a DPS nº ${ultimo} nesta série — o próximo número precisa ser ${ultimo + 1} ou maior (a numeração só avança).`
+  }
+  return null
+}
+
+/**
+ * Último número do contador depois de uma colisão E0014 no nº `colidido`:
+ * pelo menos o colidido, para a próxima emissão não repeti-lo.
+ */
+export function ultimoAposColisao(ultimo: unknown, colidido: unknown): number {
+  const c = typeof colidido === 'string' && numeroDpsValido(colidido) ? Number(colidido) : inteiroPositivo(colidido)
+  return Math.max(inteiroPositivo(ultimo), Number.isSafeInteger(c) ? c : 0)
 }
 
 export interface DpsPersistida {
@@ -61,10 +116,9 @@ export interface DpsPersistida {
 
 /**
  * O número já gravado no rascunho pode ser reusado nesta tentativa?
- * Só se for uma DPS NACIONAL do MESMO ambiente e série válidos. RPS municipal
- * antigo (série "RPS", número de Date.now()) ou DPS de outro ambiente → aloca
- * um número novo (é outro sistema/numeração; a consulta prévia do retry já
- * terá olhado o número antigo).
+ * Só se for uma DPS NACIONAL do MESMO ambiente e série válidos. RPS do
+ * conector municipal (removido em 2026-11-06: série "RPS", número de
+ * Date.now()) ou DPS de outro ambiente → aloca um número novo.
  */
 export function podeReusarDps(existente: DpsPersistida, atual: { tpAmb: '1' | '2' }): boolean {
   return existente.provedor === 'nacional'

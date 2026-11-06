@@ -36,17 +36,6 @@ const SERVICOS_BASE = [
   { id: 'irpf', nome: 'Declaração IRPF', frequencia: 'anual', ativo: true },
 ]
 
-const CONECTORES_BASE = [
-  ['jundiai-sp', 'Jundiaí', '3525904', 'abrasf_a1', true],
-  ['campinas-sp', 'Campinas', '3509502', 'abrasf_a1', true],
-  ['cajamar-sp', 'Cajamar', '3509205', 'abrasf_a1', true],
-  ['sao-paulo-sp', 'São Paulo', '3550308', 'proprietario_a1', true],
-  ['barueri-sp', 'Barueri', '3505708', 'proprietario_a1', true],
-  ['santana-parnaiba-sp', 'Santana de Parnaíba', '3547304', 'simpliss_token', false],
-  ['taboao-serra-sp', 'Taboão da Serra', '3552809', 'portal_token', false],
-  ['cotia-sp', 'Cotia', '3513009', 'portal_credencial', false],
-]
-
 async function setDoc(collection, id, data) {
   await db.collection(collection).doc(id).set({
     tenantId: TENANT_ID,
@@ -99,22 +88,6 @@ async function main() {
     await setDoc('servicos', id, data)
   }
 
-  for (const [id, municipio, municipioIbge, tipoIntegracao, exigeCertificadoA1] of CONECTORES_BASE) {
-    await setDoc('fiscal_conectores', id, {
-      nome: `Prefeitura de ${municipio}`,
-      municipio,
-      uf: 'SP',
-      municipioIbge,
-      tipoIntegracao,
-      exigeCertificadoA1,
-      ativo: true,
-      homologado: false,
-      producaoLiberada: false,
-      emissao: true,
-      consulta: false,
-      cancelamento: false,
-    })
-  }
 
   await seedAdmin()
 

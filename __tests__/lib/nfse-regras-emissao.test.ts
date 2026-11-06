@@ -1,15 +1,14 @@
 // @vitest-environment node
 /**
  * Regras puras da orquestração da emissão (2026-11-06): normalizador único,
- * trava do rascunho, status após consulta, motivo de cancelamento, allowlist
- * de credenciais, gate do Ambiente Nacional, IM só no municipal, escape do
- * e-mail e ids do lote.
+ * trava do rascunho, status após consulta, motivo de cancelamento, gate do
+ * Ambiente Nacional, IM opcional, escape do e-mail e ids do lote.
  */
 import { describe, expect, it } from 'vitest'
 
 import { dadosRascunhoDoInput, normalizarRascunho } from '../../functions/src/nfse/normalizar-rascunho'
 import {
-  TRAVA_EMISSAO_MS, avaliarTrava, chaveIdempotenciaValida, filtrarCredenciais, idRascunhoEmissaoDireta,
+  TRAVA_EMISSAO_MS, avaliarTrava, chaveIdempotenciaValida, idRascunhoEmissaoDireta,
   statusAposConsulta, validarMotivoCancelamento,
 } from '../../functions/src/nfse/regras-emissao'
 import { producaoNacionalLiberada } from '../../functions/src/nfse/provedor'
@@ -18,6 +17,7 @@ import { xmlIndicaCancelamento } from '../../functions/src/nfse/provedores/nacio
 import { compactarXml } from '../../functions/src/nfse/nacional/ambiente'
 import { escapeHtml, tableHtml } from '../../functions/src/email/mailer'
 import { idsDoLote } from '../../functions/src/nfse/emitir-lote'
+import { severidadeDaFalha } from '../../functions/src/nfse/log-emissao'
 import type { ConfigFiscalCliente, EmitirNfseInput } from '../../functions/src/nfse/types'
 
 const inputCompleto: EmitirNfseInput = {
@@ -150,15 +150,6 @@ describe('cancelamento (B10)', () => {
   })
 })
 
-describe('credenciais de portal (M5)', () => {
-  it('aceita só a allowlist; certificado não muda por aqui', () => {
-    const r = filtrarCredenciais({ token: 't', simplissToken: 's', certificadoStoragePath: 'certificados/outro.pfx.b64', certificadoSenha: 'x', vazio: '' })
-    expect(r.aceitas).toEqual({ token: 't', simplissToken: 's' })
-    expect(r.recusadas.sort()).toEqual(['certificadoSenha', 'certificadoStoragePath', 'vazio'])
-    expect(filtrarCredenciais(['a'])).toEqual({ aceitas: {}, recusadas: [] })
-  })
-})
-
 describe('gate de produção do Ambiente Nacional (A4)', () => {
   it('exige SEMPRE a chave global; a config só pode bloquear', () => {
     expect(producaoNacionalLiberada({ producaoLiberada: true }, null)).toBe(false)
@@ -176,9 +167,9 @@ describe('inscrição municipal (M6)', () => {
     itemListaServico: '17.19', aliquotaPadrao: 2, ambienteEmissao: 'homologacao', provedorNfse,
   })
   const prestador = { cnpj: '11222333000181', inscricaoMunicipal: '', razaoSocial: 'Prestador', municipioIbge: '3505708' }
-  it('não é exigida no Ambiente Nacional; é no webservice da prefeitura', () => {
+  it('não é exigida (emissão só pelo Ambiente Nacional) — nem em config antiga com provedor da prefeitura', () => {
     expect(validarPayloadFiscal(inputCompleto, config('nacional'), prestador)).not.toContain('Inscrição municipal do prestador inválida.')
-    expect(validarPayloadFiscal(inputCompleto, config('prefeitura'), prestador)).toContain('Inscrição municipal do prestador inválida.')
+    expect(validarPayloadFiscal(inputCompleto, config('prefeitura'), prestador)).not.toContain('Inscrição municipal do prestador inválida.')
   })
   it('se preenchida no nacional, ainda precisa ser plausível', () => {
     expect(validarPayloadFiscal(inputCompleto, config('nacional'), { ...prestador, inscricaoMunicipal: 'x' })).toContain('Inscrição municipal do prestador inválida.')
@@ -201,5 +192,18 @@ describe('lote (M8)', () => {
     expect(idsDoLote({ itens: [{ rascunhoId: 'x' }, { rascunhoId: 3 }, {}] as never })).toEqual(['x'])
     expect(idsDoLote({ rascunhoIds: ['ok', '../fora', ''] })).toEqual(['ok'])
     expect(idsDoLote(undefined)).toEqual([])
+  })
+})
+
+describe('severidade do log de falha da emissão (alerta do Cloud Monitoring)', () => {
+  const httpsError = (code: string, details?: unknown) => Object.assign(new Error('x'), { code, httpErrorCode: { status: 400 }, details })
+  it('bloqueio da pré-validação e erro do usuário = WARNING; falha real = ERROR', () => {
+    expect(severidadeDaFalha(httpsError('failed-precondition', { codigo: 'PRE_VALIDACAO' }))).toBe('WARNING')
+    expect(severidadeDaFalha(httpsError('invalid-argument'))).toBe('WARNING')
+    expect(severidadeDaFalha(httpsError('permission-denied'))).toBe('WARNING')
+    expect(severidadeDaFalha(httpsError('already-exists'))).toBe('WARNING')
+    expect(severidadeDaFalha(httpsError('internal'))).toBe('ERROR')
+    expect(severidadeDaFalha(new Error('tempo esgotado (90 s)'))).toBe('ERROR')
+    expect(severidadeDaFalha(Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' }))).toBe('ERROR')
   })
 })

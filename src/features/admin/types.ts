@@ -22,24 +22,6 @@ export type ServicoAdmin = Record<string, unknown> & {
   ativo?: boolean
 }
 
-export type ConectorFiscalAdmin = {
-  id: string
-  nome?: string
-  municipio?: string | null
-  uf?: string | null
-  tipoIntegracao?: string
-  /** 'nacional' = Ambiente Nacional; ausente = webservice da prefeitura (docs antigos). */
-  provedor?: string
-  municipioIbge?: string
-  urlPortal?: string | null
-  ativo?: boolean
-  homologado?: boolean
-  producaoLiberada?: boolean
-  emissao?: boolean
-  consulta?: boolean
-  cancelamento?: boolean
-}
-
 export type UiFeatureFlags = {
   premiumUiEnabled: boolean
   dashboardV2Enabled: boolean

@@ -74,3 +74,6 @@ scripts/clientes-*.json
 
 # Configuração local da ferramenta Serena (MCP)
 .serena/
+
+# backup local do scripts/unificar-config-fiscal.mjs (senha do A1 cifrada)
+unificar-config-fiscal-backup-*.json

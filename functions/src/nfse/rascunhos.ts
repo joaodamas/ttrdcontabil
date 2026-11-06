@@ -18,6 +18,7 @@ import {
 } from './selecao-recorrentes'
 import type { EmitirNfseInput } from './types'
 import { normalizarRascunho } from './normalizar-rascunho'
+import { escolherDocConfigFiscal, type DocConfigFiscal } from './config-fiscal'
 
 const db = () => getFirestore()
 
@@ -228,8 +229,19 @@ async function listarPendentes(params: {
     .where('tenantId', '==', tenantId)
     .get()
     .catch(() => null)
+  // Um cliente pode ter mais de um doc antigo (auto-id): a escolha é a mesma
+  // da emissão (config-fiscal.ts) — id = clienteId, senão o mais recente —, e
+  // não "o último que a consulta devolveu".
   const fiscalByCliente = new Map<string, FirebaseFirestore.DocumentData>()
-  fiscalSnap?.docs.forEach((doc) => fiscalByCliente.set(doc.data().clienteId as string, doc.data()))
+  const docsPorCliente = new Map<string, DocConfigFiscal[]>()
+  fiscalSnap?.docs.forEach((doc) => {
+    const id = doc.data().clienteId as string
+    docsPorCliente.set(id, [...(docsPorCliente.get(id) ?? []), { id: doc.id, data: doc.data() }])
+  })
+  for (const [id, docs] of docsPorCliente) {
+    const escolhido = escolherDocConfigFiscal(id, docs)
+    if (escolhido) fiscalByCliente.set(id, escolhido.data)
+  }
 
   // Sem .catch aqui, de propósito: uma falha transitória do Firestore devolvia
   // lista vazia, e "não existe nada" faz o batch reescrever (merge: false) até
@@ -411,10 +423,9 @@ async function listarPendentes(params: {
           tomadorCpfCnpj: onlyDigits(candidato.contrato.tomadorCpfCnpj),
           tomadorEmail: textoOuNulo(tomador?.email),
           tomadorInscricaoMunicipal: textoOuNulo(tomador?.inscricaoMunicipal),
-          // Endereço completo do cadastro, INCLUSIVE municipioIbge: Cajamar
-          // manda esse código como <Cidade> do tomador e como
-          // <MunicipioPrestacaoServico> (municipios/cajamar.ts), e sem ele a
-          // nota volta rejeitada.
+          // Endereço completo do cadastro, INCLUSIVE municipioIbge (cMun do
+          // tomador na DPS): sem ele, serviço com ISS no município do tomador
+          // é recusado (E0234).
           tomadorEndereco: {
             cep: onlyDigits(endereco.cep) || null,
             logradouro: textoOuNulo(endereco.logradouro),

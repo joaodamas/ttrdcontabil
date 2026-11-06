@@ -4,19 +4,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions'
 import { deleteDocument, listDocuments } from '@/lib/firestore-client'
 import { getFirebaseApp } from '@/lib/firebase'
 import type { FiscalReadiness, FiscalReadinessCliente, FiscalSnapshot, NotaFiscalRecord } from './types'
-import { normalizarIbge } from '@/lib/ibge'
 import { situacaoNacional } from '@/lib/nfse-nacional-convenio'
-
-const MUNICIPIO_TIPO: Record<string, 'abrasf_a1' | 'geisweb_a1' | 'simpliss' | 'conam' | 'giap'> = {
-  '3525904': 'abrasf_a1',
-  '3509502': 'abrasf_a1',
-  '3509205': 'abrasf_a1',
-  '3550308': 'abrasf_a1',
-  '3505708': 'abrasf_a1',
-  '3547304': 'simpliss',
-  '3552809': 'conam',
-  '3513009': 'giap',
-}
 
 function hasText(value: unknown) {
   return typeof value === 'string' && value.trim().length > 0
@@ -34,46 +22,23 @@ function getFiscalDocForCliente(
 }
 
 /**
- * Provedor efetivo — mesma regra do backend (functions/src/nfse/provedor.ts):
- * só 'prefeitura' (escolha explícita) usa o conector municipal; 'municipio'
- * gravado pelo formulário antigo e config sem o campo vão pelo Ambiente Nacional.
+ * Provedor efetivo: SEMPRE o Ambiente Nacional (decisão do dono — o conector
+ * de prefeitura e a Spedy saíram em 2026-11-06). Config antiga com
+ * 'prefeitura', 'municipio' ou 'spedy' emite pelo Nacional como as outras.
  */
-export function provedorNfseEfetivo(fiscal: Record<string, unknown> | null | undefined): 'nacional' | 'municipio' {
-  const p = fiscal?.provedorNfse
-  return p === 'prefeitura' ? 'municipio' : 'nacional'
+export function provedorNfseEfetivo(_fiscal?: Record<string, unknown> | null): 'nacional' {
+  void _fiscal
+  return 'nacional'
 }
 
 function temCertificadoA1Valido(credenciais: Record<string, unknown>) {
   return hasText(credenciais.certificadoStoragePath) && credenciais.certValido === true
 }
 
+/** A única credencial do Ambiente Nacional é o A1 do próprio cliente (mTLS + assinatura). */
 export function getCredenciaisBloqueios(fiscal: Record<string, unknown>) {
   const credenciais = (fiscal.credenciais ?? {}) as Record<string, unknown>
-  const provedor = provedorNfseEfetivo(fiscal)
-  // Ambiente Nacional: a única credencial é o A1 do próprio cliente (mTLS + assinatura).
-  if (provedor === 'nacional') return temCertificadoA1Valido(credenciais) ? [] : [BLOQUEIO_FISCAL.certificadoA1]
-  const municipioIbge = (fiscal.municipioIbge ?? fiscal.codigoMunicipioIbge) as string | undefined
-  const tipo = municipioIbge ? MUNICIPIO_TIPO[normalizarIbge(municipioIbge)] : undefined
-
-  if (tipo === 'abrasf_a1' || tipo === 'geisweb_a1') {
-    if (!temCertificadoA1Valido(credenciais)) return [BLOQUEIO_FISCAL.certificadoA1]
-  }
-
-  if (tipo === 'simpliss' && !hasText(credenciais.simplissToken)) return [BLOQUEIO_FISCAL.tokenSimpliss]
-  if (tipo === 'conam') {
-    const missing = []
-    if (!hasText(credenciais.conamCodigoUsuario)) missing.push(BLOQUEIO_FISCAL.usuarioConam)
-    if (!hasText(credenciais.conamCodigoContribuinte)) missing.push(BLOQUEIO_FISCAL.contribuinteConam)
-    return missing
-  }
-  if (tipo === 'giap') {
-    const missing = []
-    if (!hasText(credenciais.giaplogin)) missing.push(BLOQUEIO_FISCAL.loginGiap)
-    if (!hasText(credenciais.giapSenha)) missing.push(BLOQUEIO_FISCAL.senhaGiap)
-    return missing
-  }
-
-  return []
+  return temCertificadoA1Valido(credenciais) ? [] : [BLOQUEIO_FISCAL.certificadoA1]
 }
 
 function isNfe(doc: Record<string, unknown>): boolean {
@@ -196,19 +161,13 @@ export async function fetchFiscalReadiness(): Promise<FiscalReadiness> {
         if (!hasText(fiscal.descricaoServicoPadrao)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.descricaoAusente)
         if (!hasPositiveNumber(fiscal.aliquotaPadrao)) bloqueiosRascunho.push(BLOQUEIO_FISCAL.aliquotaAusente)
         bloqueiosEmissao.push(...getCredenciaisBloqueios(fiscal))
-        if (provedorNfseEfetivo(fiscal) === 'nacional') {
-          // Liberação de produção do Nacional é a chave única do escritório (não
-          // por cliente); aqui só o que é do cliente: o município emitir pelo Nacional.
-          const situacao = situacaoNacional(municipioIbge as string | undefined)
-          if (situacao === 'prefeitura' || situacao === 'sem_convenio') bloqueiosEmissao.push(BLOQUEIO_FISCAL.municipioNaoEmiteNacional)
-        } else if (fiscal.ambienteEmissao === 'producao' && fiscal.producaoLiberada !== true) {
-          bloqueiosEmissao.push(BLOQUEIO_FISCAL.producaoNaoLiberada)
-        }
+        // Liberação de produção do Nacional é a chave única do escritório (não
+        // por cliente); aqui só o que é do cliente: o município emitir pelo Nacional.
+        const situacao = situacaoNacional(municipioIbge as string | undefined)
+        if (situacao === 'prefeitura' || situacao === 'sem_convenio') bloqueiosEmissao.push(BLOQUEIO_FISCAL.municipioNaoEmiteNacional)
       }
 
-      // Provedor descontinuado primeiro: é o que trava tudo e some no "+N" do fim.
       const bloqueios = [...new Set([...bloqueiosRascunho, ...bloqueiosEmissao])]
-        .sort((x, y) => Number(y === BLOQUEIO_FISCAL.provedorDescontinuado) - Number(x === BLOQUEIO_FISCAL.provedorDescontinuado))
 
       return {
         clienteId,
