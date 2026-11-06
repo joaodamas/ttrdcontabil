@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { usePathname } from 'next/navigation'
+import { getPathSegmentAfter } from '@/lib/route-params'
 import { orderBy, Timestamp, where } from 'firebase/firestore'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { toast } from 'sonner'
@@ -25,10 +26,15 @@ import {
   temXmlNfse,
   urlConsultaPublicaNfse,
 } from '@/features/fiscal/nfse-arquivos'
+import { useAuth } from '@/contexts/auth-context'
+import { podeOperarNfse } from '@/lib/permissions'
 
 export default function NfseDetalhePage() {
-  const params = useParams<{ id: string }>()
-  const id = params.id
+  const pathname = usePathname()
+  const id = useMemo(() => getPathSegmentAfter(pathname, 'fiscal'), [pathname])
+  const { usuario } = useAuth()
+  // Consultar e cancelar são admin/fiscal (functions); financeiro só lê.
+  const podeOperar = podeOperarNfse(usuario)
   const [nota, setNota] = useState<Record<string, unknown> | null>(null)
   const [eventos, setEventos] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(true)
@@ -153,10 +159,12 @@ export default function NfseDetalhePage() {
         description={(nota.clienteNome as string) ?? 'Cliente não informado'}
         action={
           <>
-            <Button variant="outline" size="cta" onClick={consultarStatus}>
-              <RefreshCw />
-              Consultar
-            </Button>
+            {podeOperar ? (
+              <Button variant="outline" size="cta" onClick={consultarStatus}>
+                <RefreshCw />
+                Consultar
+              </Button>
+            ) : null}
             {temXmlNfse(nota) ? (
               <Button variant="outline" size="cta" onClick={() => baixarXml(nota)}>
                 <FileCode />
@@ -175,7 +183,7 @@ export default function NfseDetalhePage() {
                 {gerandoPdf ? 'Gerando PDF…' : 'Baixar PDF (DANFSe)'}
               </Button>
             ) : null}
-            {nota.status === 'emitida' ? (
+            {podeOperar && nota.status === 'emitida' ? (
               <Button variant="outline" size="cta" className="text-destructive" onClick={() => setCancelamentoOpen(true)}>
                 <XCircle />
                 Cancelar

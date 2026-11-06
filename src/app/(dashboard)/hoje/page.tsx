@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useRef, useEffect } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import Link from 'next/link'
+import { LinkPermitido } from '@/components/ui/link-permitido'
 import { toast } from 'sonner'
 import {
   AlertTriangle,
@@ -126,9 +126,9 @@ function EmptyCockpit() {
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2">
-          <Link href="/clientes" className={buttonVariants({ variant: 'outline' })}>Ver clientes</Link>
-          <Link href="/competencias/nova" className={buttonVariants({ variant: 'outline' })}>Criar competência</Link>
-          <Link href="/tarefas/nova" className={buttonVariants()}>Nova tarefa</Link>
+          <LinkPermitido semAcesso="ocultar" href="/clientes" className={buttonVariants({ variant: 'outline' })}>Ver clientes</LinkPermitido>
+          <LinkPermitido semAcesso="ocultar" href="/competencias/nova" className={buttonVariants({ variant: 'outline' })}>Criar competência</LinkPermitido>
+          <LinkPermitido semAcesso="ocultar" href="/tarefas/nova" className={buttonVariants()}>Nova tarefa</LinkPermitido>
         </div>
       </CardContent>
     </Card>
@@ -177,9 +177,9 @@ function TaskRow({
       <Checkbox checked={checked} onCheckedChange={onToggle} className="mt-1" />
       <div className="min-w-0 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
-          <Link href={`/tarefas/${item.id}`} className="font-medium hover:underline">
+          <LinkPermitido href={`/tarefas/${item.id}`} className="font-medium hover:underline">
             {item.titulo ?? 'Tarefa sem título'}
-          </Link>
+          </LinkPermitido>
           <TarefaPrioridadeBadge prioridade={item.prioridade ?? 'normal'} />
           {impactoPeso(item) >= 3 && (
             <span className="rounded-full border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-[10px] font-semibold text-warning">fiscal</span>
@@ -485,9 +485,10 @@ export default function HojePage() {
               variant={swimlanes ? 'default' : 'outline'}
               size="cta"
               onClick={() => setSwimlanes(v => !v as boolean)}
+              aria-pressed={swimlanes}
             >
               <Users className="h-3.5 w-3.5" />
-              Swimlanes
+              Separar por responsável
             </Button>
           )}
           <Button
@@ -603,9 +604,9 @@ export default function HojePage() {
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             {bloqueios.slice(0, 12).map((b) => (
-              <Link key={b.id} href="/fechamento">
+              <LinkPermitido key={b.id} href="/fechamento">
                 <Badge variant="warning">{b.clienteNome ?? b.id}</Badge>
-              </Link>
+              </LinkPermitido>
             ))}
           </CardContent>
         </Card>

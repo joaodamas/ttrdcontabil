@@ -269,7 +269,7 @@ function FechamentoContent() {
           <DialogHeader>
             <DialogTitle>Encerrar revisão de {mesLabel} / {ano}</DialogTitle>
             <DialogDescription>
-              O registro fica salvo no Firestore com usuário, data e observação para auditoria do fechamento.
+              A revisão fica registrada com usuário, data e observação, para consulta futura do fechamento.
             </DialogDescription>
           </DialogHeader>
           <Textarea
@@ -300,7 +300,7 @@ function FechamentoContent() {
         description={
           fechamentosComPendencia.length > 0
             ? `${fechamentosComPendencia.length} cliente(s) ainda têm ${totalObrigacoesPendentes} obrigação(ões) pendente(s), com guia ou parcial. O encerramento será salvo como evidência de auditoria mesmo com essas pendências. Confirme somente se elas foram justificadas ou assumidas fora do fluxo.`
-            : 'O registro fica salvo no Firestore com usuário, data e observação para auditoria do fechamento.'
+            : 'A revisão fica registrada com usuário, data e observação, para consulta futura do fechamento.'
         }
         confirmLabel={fechamentosComPendencia.length > 0 ? 'Encerrar mesmo assim' : 'Registrar revisão'}
         cancelLabel="Voltar para revisão"

@@ -31,6 +31,8 @@ import { useNfseArquivos } from '@/components/fiscal/use-nfse-arquivos'
 import { podeObterDanfse, temXmlNfse } from '@/features/fiscal/nfse-arquivos'
 import { LogsNfseModal } from '@/components/fiscal/logs-nfse-modal'
 import { HeatmapFiscal } from '@/components/fiscal/heatmap-fiscal'
+import { useAuth } from '@/contexts/auth-context'
+import { podeOperarNfse } from '@/lib/permissions'
 import { ClientePicker } from '@/components/ui/cliente-picker'
 
 const TIPO_LABEL: Record<string, string> = { nfe: 'NF-e', nfse: 'NFS-e' }
@@ -49,6 +51,9 @@ type NotaGroup = { label: string; notas: Array<Record<string, unknown>>; valorTo
 
 function FiscalHistoricoContent() {
   const router = useRouter()
+  const { usuario } = useAuth()
+  // Consultar e cancelar são admin/fiscal (functions); financeiro só lê.
+  const podeOperar = podeOperarNfse(usuario)
   const searchParams = useSearchParams()
   const clienteId = searchParams.get('clienteId') ?? ''
   const status = searchParams.get('status') ?? ''
@@ -436,7 +441,7 @@ function FiscalHistoricoContent() {
                   : 'Crie um rascunho revisado e emita em homologação antes de liberar produção.'}
                 action={clienteId || status || mes || ano || tipo || numero
                   ? { label: 'Limpar filtros', href: '/fiscal/historico' }
-                  : { label: 'Emitir NFS-e', href: '/fiscal?emitir=1' }}
+                  : podeOperar ? { label: 'Emitir NFS-e', href: '/fiscal?emitir=1' } : undefined}
               />
             ) : (
               grouped.map((group) => (
@@ -463,9 +468,11 @@ function FiscalHistoricoContent() {
                       >
                         <Eye className="h-3.5 w-3.5" />
                       </Link>
-                      <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Consultar status" onClick={() => consultarStatus(n.id as string)}>
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      </Button>
+                      {podeOperar ? (
+                        <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Consultar status" onClick={() => consultarStatus(n.id as string)}>
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </Button>
+                      ) : null}
                       {temXmlNfse(n) ? (
                         <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Baixar XML" aria-label="Baixar XML" onClick={() => baixarXml(n)}>
                           <FileCode className="h-3.5 w-3.5" />
@@ -487,7 +494,7 @@ function FiscalHistoricoContent() {
                             : <Download className="h-3.5 w-3.5" />}
                         </Button>
                       ) : null}
-                      {n.status === 'emitida' ? (
+                      {podeOperar && n.status === 'emitida' ? (
                         <Button variant="outline" size="sm" className="h-8 w-8 p-0 text-destructive" title="Solicitar cancelamento" onClick={() => abrirCancelamento(n.id as string)}>
                           <XCircle className="h-3.5 w-3.5" />
                         </Button>

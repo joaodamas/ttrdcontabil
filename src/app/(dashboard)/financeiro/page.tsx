@@ -42,6 +42,10 @@ import { TimelineFinanceiraModal } from '@/components/financeiro/timeline-financ
 import type { FirestoreCursor } from '@/lib/firestore-client'
 import { fetchWhatsappHistory, pauseWhatsappRuleForLancamento, rescheduleWhatsappRuleForLancamento, resumeWhatsappRuleForLancamento, sendWhatsappNow } from '@/features/whatsapp/services'
 import { WHATSAPP_STATUS_LABELS } from '@/features/whatsapp/types'
+import { WHATSAPP_HABILITADO } from '@/lib/features'
+
+// Colunas da tabela: as 4 do WhatsApp só existem com o módulo ligado.
+const COLUNAS_TABELA = WHATSAPP_HABILITADO ? 11 : 7
 
 const TIPO_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
   receita: { label: 'Receita', variant: 'default' },
@@ -397,30 +401,34 @@ function FinanceiroContent() {
       ) : null}
 
       <DataTableShell density="compact">
-        <table className="w-full table-fixed text-sm md:table-auto md:min-w-[1180px]">
+        <table className={`w-full table-fixed text-sm md:table-auto ${WHATSAPP_HABILITADO ? 'md:min-w-[1180px]' : 'md:min-w-[900px]'}`}>
           <thead className="hidden bg-muted/50 md:table-header-group">
             <tr>
               <th className="px-4 py-3 text-left section-label">Pagador</th>
-              <th className="px-4 py-3 text-left section-label">WhatsApp</th>
+              {WHATSAPP_HABILITADO && <th className="px-4 py-3 text-left section-label">WhatsApp</th>}
               <th className="px-4 py-3 text-left section-label">Serviço / Referência</th>
               <th className="px-4 py-3 text-left section-label">Vencimento</th>
               <th className="px-4 py-3 text-left section-label">Pagamento</th>
               <th className="px-4 py-3 text-right section-label">Valor</th>
               <th className="px-4 py-3 text-left section-label">Status</th>
-              <th className="px-4 py-3 text-left section-label">Status WhatsApp</th>
-              <th className="px-4 py-3 text-left section-label">Última ação</th>
-              <th className="px-4 py-3 text-left section-label">Próxima ação</th>
+              {WHATSAPP_HABILITADO && (
+                <>
+                  <th className="px-4 py-3 text-left section-label">Status WhatsApp</th>
+                  <th className="px-4 py-3 text-left section-label">Última ação</th>
+                  <th className="px-4 py-3 text-left section-label">Próxima ação</th>
+                </>
+              )}
               <th className="px-4 py-3 text-left section-label">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {isLoading ? (
-              <TableRowSkeleton cols={11} rows={8} />
+              <TableRowSkeleton cols={COLUNAS_TABELA} rows={8} />
             ) : isError ? (
               /* Sem este ramo a tabela caía no vazio genérico e convidava a criar
                  lançamento — como se a base estivesse limpa, e não ilegível. */
               <TableEmptyState
-                colSpan={11}
+                colSpan={COLUNAS_TABELA}
                 icon={AlertTriangle}
                 title="Não foi possível carregar os lançamentos"
                 description="A lista está vazia por falha de leitura, não porque não existem lançamentos."
@@ -428,7 +436,7 @@ function FinanceiroContent() {
               />
             ) : lancamentos.length === 0 ? (
               <TableEmptyState
-                colSpan={11}
+                colSpan={COLUNAS_TABELA}
                 icon={Receipt}
                 title="Nenhum lançamento encontrado"
                 description={tipo || status ? 'Tente ajustar os filtros.' : 'Clique em "Novo Lançamento" para começar.'}
@@ -473,13 +481,13 @@ function FinanceiroContent() {
                         onBaixado={() => void refreshFinanceiro()}
                       />
                     ) : null}
-                    {(l.tipo === 'receita' || usuario?.perfil === 'admin') && (
+                    {((WHATSAPP_HABILITADO && l.tipo === 'receita') || usuario?.perfil === 'admin') && (
                       <DropdownMenu>
                         <DropdownMenuTrigger className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
                           <MoreHorizontal className="h-3.5 w-3.5" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          {l.tipo === 'receita' ? (
+                          {WHATSAPP_HABILITADO && l.tipo === 'receita' ? (
                             <>
                               <DropdownMenuItem onClick={() => void handleWhatsappAction('send', l.id as string)}>
                                 <Send className="h-3.5 w-3.5 mr-2" />Enviar cobrança agora
@@ -496,7 +504,7 @@ function FinanceiroContent() {
                               </DropdownMenuItem>
                             </>
                           ) : null}
-                          {l.tipo === 'receita' && usuario?.perfil === 'admin' ? <DropdownMenuSeparator /> : null}
+                          {WHATSAPP_HABILITADO && l.tipo === 'receita' && usuario?.perfil === 'admin' ? <DropdownMenuSeparator /> : null}
                           {usuario?.perfil === 'admin' ? (
                             <DropdownMenuItem onClick={() => setDeleteId(l.id as string)} className="text-destructive">
                               <Trash2 className="h-3.5 w-3.5 mr-2" />Excluir
@@ -517,7 +525,7 @@ function FinanceiroContent() {
                         <p className="text-xs text-muted-foreground">{TIPO_MAP[l.tipo as string]?.label ?? (l.tipo as string) ?? '—'}</p>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">{pagadorWhatsapp}</td>
+                    {WHATSAPP_HABILITADO && <td className="px-4 py-3 text-muted-foreground">{pagadorWhatsapp}</td>}
                     <td className="px-4 py-3">
                       <div className="min-w-0">
                         <p className="font-medium">{(l.descricao as string) ?? '—'}</p>
@@ -546,26 +554,30 @@ function FinanceiroContent() {
                         }
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col items-start gap-1">
-                        <Badge variant={WHATSAPP_VARIANT_MAP[whatsappStatus] ?? 'outline'}>
-                          {WHATSAPP_STATUS_LABELS[whatsappStatus] ?? whatsappStatus}
-                        </Badge>
-                        {whatsappPausado ? <span className="text-xs text-muted-foreground">Pausado manualmente</span> : null}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {ultimaAcao ? formatDateTime(ultimaAcao) : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {proximaAcao ? formatDateTime(proximaAcao) : '—'}
-                    </td>
+                    {WHATSAPP_HABILITADO && (
+                      <>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col items-start gap-1">
+                            <Badge variant={WHATSAPP_VARIANT_MAP[whatsappStatus] ?? 'outline'}>
+                              {WHATSAPP_STATUS_LABELS[whatsappStatus] ?? whatsappStatus}
+                            </Badge>
+                            {whatsappPausado ? <span className="text-xs text-muted-foreground">Pausado manualmente</span> : null}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {ultimaAcao ? formatDateTime(ultimaAcao) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {proximaAcao ? formatDateTime(proximaAcao) : '—'}
+                        </td>
+                      </>
+                    )}
                     <td className="px-4 py-3">
                       {acoes}
                     </td>
                   </tr>
                   <tr className={`md:hidden${riscoMotivo ? ' border-l-2 border-l-destructive' : ''}`}>
-                    <td colSpan={11} className="px-3 py-2.5">
+                    <td colSpan={COLUNAS_TABELA} className="px-3 py-2.5">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium">{pagadorNome}</p>
@@ -580,9 +592,11 @@ function FinanceiroContent() {
                       <div className="mt-1.5 flex items-center justify-between gap-2">
                         <div className="flex min-w-0 flex-wrap items-center gap-1">
                           <PagamentoStatusBadge status={l.status as string} />
-                          <Badge variant={WHATSAPP_VARIANT_MAP[whatsappStatus] ?? 'outline'}>
-                            {WHATSAPP_STATUS_LABELS[whatsappStatus] ?? whatsappStatus}
-                          </Badge>
+                          {WHATSAPP_HABILITADO && (
+                            <Badge variant={WHATSAPP_VARIANT_MAP[whatsappStatus] ?? 'outline'}>
+                              {WHATSAPP_STATUS_LABELS[whatsappStatus] ?? whatsappStatus}
+                            </Badge>
+                          )}
                           {riscoMotivo ? <span className="text-[11px] font-medium text-destructive leading-tight">{riscoMotivo}</span> : null}
                         </div>
                         <div className="shrink-0">{acoes}</div>

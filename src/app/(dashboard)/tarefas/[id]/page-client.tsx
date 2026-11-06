@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { useState, useEffect, useMemo } from 'react'
+import { usePathname } from 'next/navigation'
+import { getPathSegmentAfter } from '@/lib/route-params'
 import Link from 'next/link'
 import { where, orderBy, Timestamp } from 'firebase/firestore'
 
@@ -17,7 +18,8 @@ import { TarefaComentarios } from '@/components/tarefas/tarefa-comentarios'
 import { Pencil, Loader2 } from 'lucide-react'
 
 export default function TarefaDetalhePage() {
-  const { id } = useParams<{ id: string }>()
+  const pathname = usePathname()
+  const id = useMemo(() => getPathSegmentAfter(pathname, 'tarefas'), [pathname])
 
   const [tarefa, setTarefa] = useState<Record<string, unknown> | null>(null)
   const [comentariosSerializados, setComentariosSerializados] = useState<Array<{ id: string; texto: string; criadoEm: string; usuarioNome: string }>>([])

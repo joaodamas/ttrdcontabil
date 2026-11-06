@@ -1495,7 +1495,7 @@ export function NfseEmissaoForm({
             <div><span className="text-muted-foreground">Valor:</span> {Number.isFinite(previewValor) ? formatCurrency(Number(previewValor)) : 'Informe o valor'}</div>
             <div><span className="text-muted-foreground">Alíquota:</span> {Number.isFinite(previewAliquota) ? `${Number(previewAliquota)}%` : 'Padrão da configuração'}</div>
             <div><span className="text-muted-foreground">ISS retido:</span> {previewIssRetido ? 'Sim' : 'Não'}</div>
-            <div><span className="text-muted-foreground">Credencial/certificado:</span> Validado pela Cloud Function fiscal</div>
+            <div><span className="text-muted-foreground">Certificado digital:</span> conferido no envio da nota</div>
           </CardContent>
         </Card>
 

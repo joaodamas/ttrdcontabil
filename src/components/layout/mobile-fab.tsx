@@ -4,29 +4,39 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, X, CheckSquare, DollarSign, FileText, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/contexts/auth-context'
+import { canAccessTela, podeEscreverEm, podeOperarNfse } from '@/lib/permissions'
+import type { UserSession } from '@/lib/auth-client'
 
 type FabAction = {
   label: string
   href: string
   icon: React.ReactNode
   colorClass: string
+  /** Quem vê o atalho: mesma régua das regras/functions do módulo. */
+  permitido: (usuario: UserSession | null) => boolean
 }
 
 const FAB_ACTIONS: FabAction[] = [
-  { label: 'Nova tarefa',       href: '/tarefas/nova',         icon: <CheckSquare className="h-4 w-4" />, colorClass: 'bg-primary text-primary-foreground' },
-  { label: 'Novo cliente',      href: '/clientes/novo',        icon: <Users className="h-4 w-4" />,       colorClass: 'bg-secondary text-secondary-foreground' },
-  { label: 'Novo lançamento',   href: '/financeiro/novo',    icon: <DollarSign className="h-4 w-4" />, colorClass: 'bg-success text-success-foreground' },
-  { label: 'Emitir NFS-e',      href: '/fiscal?emitir=1',      icon: <FileText className="h-4 w-4" />,   colorClass: 'bg-warning text-warning-foreground' },
+  { label: 'Nova tarefa',       href: '/tarefas/nova',         icon: <CheckSquare className="h-4 w-4" />, colorClass: 'bg-primary text-primary-foreground', permitido: (u) => podeEscreverEm(u, 'tarefas') },
+  { label: 'Novo cliente',      href: '/clientes/novo',        icon: <Users className="h-4 w-4" />,       colorClass: 'bg-secondary text-secondary-foreground', permitido: (u) => podeEscreverEm(u, 'clientes') },
+  { label: 'Novo lançamento',   href: '/financeiro/novo',    icon: <DollarSign className="h-4 w-4" />, colorClass: 'bg-success text-success-foreground', permitido: (u) => podeEscreverEm(u, 'financeiro') },
+  { label: 'Emitir NFS-e',      href: '/fiscal?emitir=1',      icon: <FileText className="h-4 w-4" />,   colorClass: 'bg-warning text-warning-foreground', permitido: (u) => canAccessTela(u, 'fiscal') && podeOperarNfse(u) },
 ]
 
 export function MobileFab() {
   const [open, setOpen] = useState(false)
   const router = useRouter()
+  const { usuario } = useAuth()
+  const acoes = FAB_ACTIONS.filter((a) => a.permitido(usuario))
 
   function handleAction(href: string) {
     setOpen(false)
     router.push(href)
   }
+
+  // Perfil sem nenhuma ação de criação (ex.: leitura): sem botão flutuante.
+  if (acoes.length === 0) return null
 
   return (
     <div className="fixed bottom-6 right-4 z-50 flex flex-col items-end gap-3 sm:hidden">
@@ -42,7 +52,7 @@ export function MobileFab() {
           />
           {/* Action items */}
           <div className="relative z-10 flex flex-col items-end gap-2">
-            {FAB_ACTIONS.map((action) => (
+            {acoes.map((action) => (
               <button
                 key={action.href}
                 type="button"

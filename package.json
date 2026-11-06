@@ -11,6 +11,7 @@
     "test:rules": "firebase emulators:exec --only firestore \"vitest run __tests__/rules/firestore.rules.test.ts\"",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:e2e:estatico": "NEXT_PUBLIC_USE_FIREBASE_EMULATORS=1 NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-ttrd next build && npx -y firebase-tools@14 emulators:exec --only auth,firestore,storage,hosting --project demo-ttrd \"node scripts/seed-emulador.mjs && playwright test -c playwright.estatico.config.ts\"",
     "smoke:prod": "node scripts/smoke-prod.mjs",
     "poc:nfse": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/poc-nfse-nacional/cli.mjs",
     "poc:nfse:conector": "npm --prefix functions run build && node scripts/poc-nfse-nacional/emitir-conector.mjs",

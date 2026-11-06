@@ -30,6 +30,8 @@ import { getErrorMessage } from '@/lib/error-message'
 import { useFiscalDashboard, useFiscalReadiness } from '@/features/fiscal/hooks'
 import { fiscalKeys } from '@/features/fiscal/queries'
 import { temHistoricoInterno } from '@/lib/historico-interno'
+import { useAuth } from '@/contexts/auth-context'
+import { podeOperarNfse } from '@/lib/permissions'
 
 export default function FiscalPage() {
   const router = useRouter()
@@ -39,7 +41,11 @@ export default function FiscalPage() {
   const [rascunhoParaRemover, setRascunhoParaRemover] = useState<string | null>(null)
   const [gerarRascunhosOpen, setGerarRascunhosOpen] = useState(false)
   const [notaErroOpen, setNotaErroOpen] = useState<Record<string, unknown> | null>(null)
-  const emissaoModalOpen = searchParams.get('emitir') === '1'
+  const { usuario } = useAuth()
+  // Financeiro tem a tela NFS-e para consultar notas, mas emitir, lote,
+  // rascunhos e cancelamento são só admin/fiscal (functions + regras).
+  const podeOperar = podeOperarNfse(usuario)
+  const emissaoModalOpen = podeOperar && searchParams.get('emitir') === '1'
   const modalClienteId = searchParams.get('clienteId') ?? undefined
   const modalRascunhoId = searchParams.get('rascunhoId') ?? undefined
   const {
@@ -143,7 +149,7 @@ export default function FiscalPage() {
     <div className="space-y-5">
 
       <PageHeader
-        title="Emitir NFS-e"
+        title={podeOperar ? 'Emitir NFS-e' : 'NFS-e'}
         description={
           notasIsError
             ? 'Não foi possível carregar o resumo de notas.'
@@ -155,30 +161,34 @@ export default function FiscalPage() {
               <History />
               Histórico de NFS-e
             </Link>
-            <button
-              type="button"
-              onClick={() => setLoteOpen(true)}
-              className={buttonVariants({ variant: 'outline', size: 'cta' })}
-            >
-              <Layers />
-              Emitir em lote
-            </button>
-            <button
-              type="button"
-              onClick={() => setGerarRascunhosOpen(true)}
-              className={buttonVariants({ variant: 'outline', size: 'cta' })}
-            >
-              <FileText />
-              Preparar mês
-            </button>
-            <button
-              type="button"
-              onClick={() => openEmissaoModal()}
-              className={buttonVariants({ size: 'cta' })}
-            >
-              <Plus />
-              Nova NFS-e
-            </button>
+            {podeOperar && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setLoteOpen(true)}
+                  className={buttonVariants({ variant: 'outline', size: 'cta' })}
+                >
+                  <Layers />
+                  Emitir em lote
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGerarRascunhosOpen(true)}
+                  className={buttonVariants({ variant: 'outline', size: 'cta' })}
+                >
+                  <FileText />
+                  Preparar mês
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openEmissaoModal()}
+                  className={buttonVariants({ size: 'cta' })}
+                >
+                  <Plus />
+                  Nova NFS-e
+                </button>
+              </>
+            )}
           </>
         }
       />
@@ -415,13 +425,15 @@ export default function FiscalPage() {
                     <div className="flex flex-col items-center gap-2">
                       <Receipt size={28} className="text-muted-foreground/30" />
                       <p className="text-sm text-muted-foreground">Nenhuma NFS-e emitida ainda</p>
-                      <button
-                        type="button"
-                        onClick={() => openEmissaoModal()}
-                        className={cn(buttonVariants({ size: 'sm' }), 'mt-1 gap-1.5')}
-                      >
-                        <Plus size={13} /> Emitir primeira nota
-                      </button>
+                      {podeOperar && (
+                        <button
+                          type="button"
+                          onClick={() => openEmissaoModal()}
+                          className={cn(buttonVariants({ size: 'sm' }), 'mt-1 gap-1.5')}
+                        >
+                          <Plus size={13} /> Emitir primeira nota
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -442,7 +454,7 @@ export default function FiscalPage() {
                           <Eye size={13} />
                         </button>
                       ) : null}
-                      {isRascunho && (
+                      {isRascunho && podeOperar && (
                         <>
                         <button
                           type="button"
@@ -533,7 +545,7 @@ export default function FiscalPage() {
       </div>
 
       <EmitirLoteModal
-        open={loteOpen}
+        open={podeOperar && loteOpen}
         onOpenChange={setLoteOpen}
         onSuccess={() => {
           setLoteOpen(false)
@@ -566,7 +578,7 @@ export default function FiscalPage() {
         onConfirm={deleteRascunho}
       />
       <ConfirmDialog
-        open={gerarRascunhosOpen}
+        open={podeOperar && gerarRascunhosOpen}
         onOpenChange={setGerarRascunhosOpen}
         title="Gerar rascunhos NFS-e do mês?"
         description="A ferramenta criará rascunhos recorrentes para clientes ativos com dia de emissão vencido, serviço ativo e configuração fiscal completa. Os rascunhos ficam para revisão antes de qualquer emissão — exceto para clientes com 'Emissão automática' ligada na config fiscal, que emitem direto, sem revisão."

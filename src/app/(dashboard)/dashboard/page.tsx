@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
+import { LinkPermitido } from '@/components/ui/link-permitido'
 import { useRouter } from 'next/navigation'
 import { where, orderBy, limit, Timestamp } from 'firebase/firestore'
 import { getFunctions, httpsCallable } from 'firebase/functions'
@@ -220,12 +220,12 @@ function CurvaSFechamento({
         <span>{cumul} / {totalFechamentos} concluídos</span>
         <span>Dia {diaAtual}/{diasNoMes}</span>
       </div>
-      <Link
+      <LinkPermitido semAcesso="ocultar"
         href={`/fechamento?mes=${hoje.getMonth() + 1}&ano=${hoje.getFullYear()}`}
         className="mt-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
       >
         Ver fechamento <ArrowRight className="size-3" />
-      </Link>
+      </LinkPermitido>
     </div>
   )
 }
@@ -253,7 +253,7 @@ function InsightCard({
   }[tone]
 
   return (
-    <Link
+    <LinkPermitido
       href={href}
       className="group block rounded-2xl border border-border/70 bg-card/95 p-4 card-shadow transition-all hover:border-primary/35 hover:shadow-md"
     >
@@ -270,7 +270,7 @@ function InsightCard({
       <div className="mt-4 flex items-center gap-1 text-xs font-medium text-muted-foreground group-hover:text-primary">
         Abrir área <ArrowRight className="size-3" />
       </div>
-    </Link>
+    </LinkPermitido>
   )
 }
 
@@ -294,9 +294,9 @@ function DashboardV2(props: DashboardV2Props) {
         description={`Visão executiva · ${props.hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}`}
         action={
           <>
-            <Link href="/hoje" className={buttonVariants({ variant: 'outline', size: 'cta' })}>
+            <LinkPermitido semAcesso="ocultar" href="/hoje" className={buttonVariants({ variant: 'outline', size: 'cta' })}>
               <CalendarClock /> Fila de execução
-            </Link>
+            </LinkPermitido>
             <DropdownMenu>
               <DropdownMenuTrigger className={buttonVariants({ size: 'cta' })}>
                 <Receipt /> Emitir <ChevronDown />
@@ -358,20 +358,20 @@ function DashboardV2(props: DashboardV2Props) {
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[360px]">
-            <Link href="/tarefas" className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2 hover:bg-muted/45">
+            <LinkPermitido href="/tarefas" className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2 hover:bg-muted/45">
               <p className="text-lg font-bold tabular-nums text-destructive">{props.tarefasVencidas.length}</p>
               <p className="text-[11px] text-muted-foreground">tarefas</p>
-            </Link>
-            <Link href="/financeiro?status=pendente" className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2 hover:bg-muted/45">
+            </LinkPermitido>
+            <LinkPermitido href="/financeiro?status=pendente" className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2 hover:bg-muted/45">
               <p className={cn('text-lg font-bold tabular-nums', props.secoesComFalha.lancamentos ? 'text-muted-foreground' : 'text-destructive')}>
                 {props.secoesComFalha.lancamentos ? '—' : props.lancamentosVencidos.length}
               </p>
               <p className="text-[11px] text-muted-foreground">cobranças</p>
-            </Link>
-            <Link href="/fiscal" className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2 hover:bg-muted/45">
+            </LinkPermitido>
+            <LinkPermitido href="/fiscal" className="rounded-xl border border-border/70 bg-muted/25 px-3 py-2 hover:bg-muted/45">
               <p className="text-lg font-bold tabular-nums text-warning">{props.alertasNFSe.length}</p>
               <p className="text-[11px] text-muted-foreground">NFS-e</p>
-            </Link>
+            </LinkPermitido>
           </div>
         </div>
       </section>
@@ -427,7 +427,7 @@ function DashboardV2(props: DashboardV2Props) {
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
         <div className="space-y-4">
           {/* Resumo de pendências — leitura executiva, ações na fila /hoje */}
-          <Link
+          <LinkPermitido
             href="/hoje"
             className="group flex items-center justify-between rounded-2xl border border-border/70 bg-card/95 px-4 py-4 card-shadow transition-all hover:border-primary/35 hover:shadow-md"
           >
@@ -449,7 +449,7 @@ function DashboardV2(props: DashboardV2Props) {
             <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground group-hover:text-primary">
               Abrir fila <ArrowRight className="size-3" />
             </div>
-          </Link>
+          </LinkPermitido>
         </div>
 
         <aside className="space-y-4">
@@ -482,12 +482,12 @@ function DashboardV2(props: DashboardV2Props) {
                 <span className={cn('font-bold tabular-nums', pctConcluida >= 80 ? 'text-success' : pctConcluida >= 50 ? 'text-warning' : 'text-destructive')}>{pctConcluida}%</span>
               </div>
             </div>
-            <Link
+            <LinkPermitido semAcesso="ocultar"
               href={`/competencias?mes=${props.mesAtual}&ano=${props.anoAtual}`}
               className={buttonVariants({ variant: 'outline', size: 'sm', className: 'mt-4 w-full' })}
             >
               Ver competências
-            </Link>
+            </LinkPermitido>
           </div>
 
           {/* Ranking clientes em risco */}
@@ -500,7 +500,7 @@ function DashboardV2(props: DashboardV2Props) {
               </div>
               <div className="divide-y divide-border/70">
                 {props.clientesEmRisco.map((c, i) => (
-                  <Link key={c.id} href={`/clientes/${c.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/35">
+                  <LinkPermitido key={c.id} href={`/clientes/${c.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/35">
                     <span className="text-xs font-bold tabular-nums text-muted-foreground w-4">{i + 1}</span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-medium">{c.razaoSocial}</p>
@@ -510,13 +510,13 @@ function DashboardV2(props: DashboardV2Props) {
                       'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums',
                       c.score >= 3 ? 'bg-destructive/10 text-destructive' : 'bg-warning/15 text-warning'
                     )}>{c.score}</span>
-                  </Link>
+                  </LinkPermitido>
                 ))}
               </div>
               <div className="border-t border-border/70 px-4 py-2">
-                <Link href="/clientes" className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1">
+                <LinkPermitido semAcesso="ocultar" href="/clientes" className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1">
                   Ver todos os clientes <ArrowRight className="size-3" />
-                </Link>
+                </LinkPermitido>
               </div>
             </div>
           )}
@@ -550,12 +550,12 @@ function DashboardV2(props: DashboardV2Props) {
                   <div className="h-full rounded-full bg-success" style={{ width: `${pctConcluida}%` }} />
                 </div>
               </div>
-              <Link
+              <LinkPermitido semAcesso="ocultar"
                 href={`/competencias?mes=${props.mesAtual}&ano=${props.anoAtual}`}
                 className={buttonVariants({ variant: 'outline', size: 'sm', className: 'mt-4 w-full' })}
               >
                 Ver competências
-              </Link>
+              </LinkPermitido>
             </div>
           )}
 
@@ -572,15 +572,15 @@ function DashboardV2(props: DashboardV2Props) {
           <div className="rounded-2xl border border-border/70 bg-card/95 p-4 card-shadow">
             <h2 className="text-sm font-semibold">Atalhos executivos</h2>
             <div className="mt-3 grid gap-2">
-              <Link href="/clientes/novo" className={buttonVariants({ variant: 'outline', className: 'justify-start' })}>
+              <LinkPermitido semAcesso="ocultar" href="/clientes/novo" className={buttonVariants({ variant: 'outline', className: 'justify-start' })}>
                 <Users className="size-4" /> Novo cliente
-              </Link>
-              <Link href="/financeiro/novo" className={buttonVariants({ variant: 'outline', className: 'justify-start' })}>
+              </LinkPermitido>
+              <LinkPermitido semAcesso="ocultar" href="/financeiro/novo" className={buttonVariants({ variant: 'outline', className: 'justify-start' })}>
                 <TrendingUp className="size-4" /> Novo lançamento
-              </Link>
-              <Link href="/tarefas/nova" className={buttonVariants({ variant: 'outline', className: 'justify-start' })}>
+              </LinkPermitido>
+              <LinkPermitido semAcesso="ocultar" href="/tarefas/nova" className={buttonVariants({ variant: 'outline', className: 'justify-start' })}>
                 <CheckSquare className="size-4" /> Nova tarefa
-              </Link>
+              </LinkPermitido>
             </div>
           </div>
         </aside>
@@ -897,17 +897,17 @@ export default function DashboardPage() {
             <p className="text-xs font-semibold text-warning">
               {alertasNFSe.length} cliente{alertasNFSe.length !== 1 ? 's' : ''} com NFS-e a emitir
             </p>
-            <Link href="/clientes" className="ml-auto text-xs text-warning hover:text-warning/80 transition-colors flex items-center gap-1">
+            <LinkPermitido semAcesso="ocultar" href="/clientes" className="ml-auto text-xs text-warning hover:text-warning/80 transition-colors flex items-center gap-1">
               Ver clientes <ArrowRight className="h-3 w-3" />
-            </Link>
+            </LinkPermitido>
           </div>
           <div className="divide-y divide-warning/10">
             {alertasNFSe.map(a => (
               <div key={a.id} className="flex items-center gap-3 px-4 py-2.5">
                 <Receipt className="h-3.5 w-3.5 text-warning/70 shrink-0" />
-                <Link href={`/clientes/${a.id}`} className="text-sm font-medium hover:underline truncate">
+                <LinkPermitido href={`/clientes/${a.id}`} className="text-sm font-medium hover:underline truncate">
                   {a.razaoSocial}
-                </Link>
+                </LinkPermitido>
                 <span className="ml-auto shrink-0 text-xs tabular-nums font-medium">
                   {a.diasRestantes < 0
                     ? <span className="text-destructive">Dia {a.diaEmissaoNFSe} — atrasada</span>
@@ -916,12 +916,12 @@ export default function DashboardPage() {
                       : <span className="text-muted-foreground">em {a.diasRestantes} dia{a.diasRestantes !== 1 ? 's' : ''} (dia {a.diaEmissaoNFSe})</span>
                   }
                 </span>
-                <Link
+                <LinkPermitido semAcesso="ocultar"
                   href={`/fiscal?emitir=1&clienteId=${a.id}`}
                   className="shrink-0 rounded-md border border-warning/30 bg-warning/10 px-2 py-1 text-[11px] font-semibold text-amber-800 dark:text-warning hover:bg-warning/20 transition-colors"
                 >
                   Emitir
-                </Link>
+                </LinkPermitido>
               </div>
             ))}
           </div>
@@ -932,7 +932,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
 
         {/* Clientes */}
-        <Link href="/clientes?status=ativo" className="group rounded-xl border border-border bg-card p-5 card-shadow hover:border-primary/30 hover:shadow-md transition-all block">
+        <LinkPermitido href="/clientes?status=ativo" className="group rounded-xl border border-border bg-card p-5 card-shadow hover:border-primary/30 hover:shadow-md transition-all block">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Clientes Ativos</span>
             <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -943,10 +943,10 @@ export default function DashboardPage() {
           <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1 group-hover:text-primary transition-colors">
             Ver carteira <ArrowRight className="h-3 w-3" />
           </p>
-        </Link>
+        </LinkPermitido>
 
         {/* Tarefas */}
-        <Link href="/tarefas?status=pendente" className="group rounded-xl border border-border bg-card p-5 card-shadow hover:border-primary/30 hover:shadow-md transition-all block">
+        <LinkPermitido href="/tarefas?status=pendente" className="group rounded-xl border border-border bg-card p-5 card-shadow hover:border-primary/30 hover:shadow-md transition-all block">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tarefas Abertas</span>
             <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -963,7 +963,7 @@ export default function DashboardPage() {
               Ver tarefas <ArrowRight className="h-3 w-3" />
             </p>
           )}
-        </Link>
+        </LinkPermitido>
 
         {/* Financeiro — combinado */}
         <div className="rounded-xl border border-border bg-card p-5 card-shadow">
@@ -975,16 +975,16 @@ export default function DashboardPage() {
           </div>
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
-              <Link href="/financeiro?status=pendente" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+              <LinkPermitido href="/financeiro?status=pendente" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
                 A receber (7d) · {vencendoCount} lançamento{vencendoCount !== 1 ? 's' : ''}
-              </Link>
+              </LinkPermitido>
               <span className="text-sm font-bold text-success tabular-nums">{formatCurrency(somaVencendo)}</span>
             </div>
             <div className="h-px bg-border" />
             <div className="flex items-center justify-between">
-              <Link href="/financeiro?status=atrasado" className="text-xs text-muted-foreground hover:text-destructive transition-colors">
+              <LinkPermitido href="/financeiro?status=atrasado" className="text-xs text-muted-foreground hover:text-destructive transition-colors">
                 Em atraso · {atrasadosCount} lançamento{atrasadosCount !== 1 ? 's' : ''}
-              </Link>
+              </LinkPermitido>
               <span className={cn('text-sm font-bold tabular-nums', atrasadosCount > 0 ? 'text-destructive' : 'text-muted-foreground')}>
                 {formatCurrency(somaAtrasados)}
               </span>
@@ -1006,9 +1006,9 @@ export default function DashboardPage() {
               <span className="text-sm font-bold tabular-nums">{compCounts[key] ?? 0}</span>
             </div>
           ))}
-          <Link href={`/competencias?mes=${mesAtual}&ano=${anoAtual}`} className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+          <LinkPermitido semAcesso="ocultar" href={`/competencias?mes=${mesAtual}&ano=${anoAtual}`} className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
             Ver todas <ArrowRight className="h-3 w-3" />
-          </Link>
+          </LinkPermitido>
         </div>
       </div>
 
@@ -1030,9 +1030,9 @@ export default function DashboardPage() {
                   </span>
                 )}
               </div>
-              <Link href="/tarefas" className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+              <LinkPermitido semAcesso="ocultar" href="/tarefas" className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
                 Ver todas <ArrowRight className="h-3 w-3" />
-              </Link>
+              </LinkPermitido>
             </div>
             {tarefasVencidas.length === 0 ? (
               <div className="px-5 py-8 flex flex-col items-center gap-2">
@@ -1043,7 +1043,7 @@ export default function DashboardPage() {
               <ul>
                 {tarefasVencidas.map((t) => (
                   <li key={t.id} className="border-b last:border-0">
-                    <Link href={`/tarefas/${t.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/40 transition-colors">
+                    <LinkPermitido href={`/tarefas/${t.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/40 transition-colors">
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate">{t.titulo}</p>
                         <div className="flex items-center gap-1.5 mt-0.5">
@@ -1054,7 +1054,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <Badge variant="destructive" className="shrink-0 text-xs">atrasada</Badge>
-                    </Link>
+                    </LinkPermitido>
                   </li>
                 ))}
               </ul>
@@ -1070,9 +1070,9 @@ export default function DashboardPage() {
                   Fechamentos Pendentes — {formatMesAno(mesAnterior, anoAnterior)}
                 </h2>
               </div>
-              <Link href={`/competencias?mes=${mesAnterior}&ano=${anoAnterior}&status=aberta`} className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+              <LinkPermitido semAcesso="ocultar" href={`/competencias?mes=${mesAnterior}&ano=${anoAnterior}&status=aberta`} className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
                 Ver todas <ArrowRight className="h-3 w-3" />
-              </Link>
+              </LinkPermitido>
             </div>
             {/* A query rejeitada devolve [], e [] aqui significava "todos em dia"
                 com check verde. Sem o dado a tela não afirma nada. */}
@@ -1094,13 +1094,13 @@ export default function DashboardPage() {
               <ul>
                 {competenciasAbertas.map((c) => (
                   <li key={c.id} className="border-b last:border-0">
-                    <Link href={`/competencias/${c.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/40 transition-colors">
+                    <LinkPermitido href={`/competencias/${c.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-muted/40 transition-colors">
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate">{c.clienteNome ?? '—'}</p>
                         <p className="text-xs text-muted-foreground">{formatMesAno(c.mes, c.ano)}</p>
                       </div>
                       <Badge variant="warning" className="shrink-0 text-xs">pendente</Badge>
-                    </Link>
+                    </LinkPermitido>
                   </li>
                 ))}
               </ul>
@@ -1116,9 +1116,9 @@ export default function DashboardPage() {
                 <span className="h-2 w-2 rounded-full bg-destructive" />
                 <h2 className="text-sm font-semibold">Cobranças Vencidas</h2>
               </div>
-              <Link href="/financeiro?status=pendente" className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+              <LinkPermitido semAcesso="ocultar" href="/financeiro?status=pendente" className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
                 Ver todas <ArrowRight className="h-3 w-3" />
-              </Link>
+              </LinkPermitido>
             </div>
             {secoesComFalha.lancamentos ? (
               <div className="px-5 py-5">
@@ -1138,7 +1138,7 @@ export default function DashboardPage() {
               <ul>
                 {lancamentosVencidos.map((l) => (
                   <li key={l.id} className="border-b last:border-0">
-                    <Link href="/financeiro" className="flex items-start gap-3 px-5 py-3 hover:bg-muted/40 transition-colors">
+                    <LinkPermitido href="/financeiro" className="flex items-start gap-3 px-5 py-3 hover:bg-muted/40 transition-colors">
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate">{l.descricao}</p>
                         <p className="text-xs text-muted-foreground truncate">{l.clienteNome ?? '—'}</p>
@@ -1147,7 +1147,7 @@ export default function DashboardPage() {
                         <p className="text-sm font-bold tabular-nums text-destructive">{formatCurrency(l.valor)}</p>
                         <p className="text-xs text-destructive/70">{formatDate(tsToDate(l.dataVencimento))}</p>
                       </div>
-                    </Link>
+                    </LinkPermitido>
                   </li>
                 ))}
               </ul>
@@ -1164,14 +1164,14 @@ export default function DashboardPage() {
           { href: '/tarefas/nova',      label: 'Nova Tarefa',      icon: CheckSquare },
           { href: '/financeiro/novo',   label: 'Novo Lançamento',  icon: TrendingUp },
         ] as const).map(({ href, label, icon: Icon }) => (
-          <Link
+          <LinkPermitido semAcesso="ocultar"
             key={href}
             href={href}
             className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-4 py-3 text-sm font-medium card-shadow hover:border-primary/30 hover:bg-primary/5 transition-all group"
           >
             <Icon className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
             <span className="truncate">{label}</span>
-          </Link>
+          </LinkPermitido>
         ))}
       </div>
       </>

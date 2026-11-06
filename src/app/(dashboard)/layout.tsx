@@ -14,6 +14,7 @@ import { Search, Plus } from 'lucide-react'
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { RastreadorNavegacao } from '@/lib/historico-interno'
+import { canAccessTela, podeOperarNfse } from '@/lib/permissions'
 
 function TopBar() {
   const { usuario } = useAuth()
@@ -32,7 +33,8 @@ function TopBar() {
           ⌘K
         </kbd>
       </button>
-      {usuario && (
+      {/* Financeiro tem a tela NFS-e só para consultar; emitir é admin/fiscal. */}
+      {podeOperarNfse(usuario) && canAccessTela(usuario, 'fiscal') && (
         <Link
           href="/fiscal?emitir=1"
           className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
