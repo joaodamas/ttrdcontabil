@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -260,6 +260,13 @@ export function NfseEmissaoForm({
   const [tomadorCarteiraId, setTomadorCarteiraId] = useState<string | null>(null)
   const [saving,             setSaving]             = useState(false)
   const [emitting,           setEmitting]           = useState(false)
+  // Trava síncrona contra clique duplo (o estado `emitting` só vale no próximo render).
+  const emitindoRef = useRef(false)
+  // Chave de idempotência da nota em preenchimento: gerada UMA vez por cliente
+  // e reaproveitada em todo reenvio (clique de novo depois de um timeout). O
+  // servidor guarda o nDPS no rascunho `emissao_<chave>` — o segundo envio cai
+  // no MESMO número e, se a primeira tentativa saiu, a nota é só registrada.
+  const chaveEmissaoRef = useRef<{ clienteId: string; chave: string } | null>(null)
   const [emissaoPendente,    setEmissaoPendente]    = useState<NfseFormData | null>(null)
   const [showResume,         setShowResume]         = useState(false)
   const [ultimoRascunho,     setUltimoRascunho]     = useState<RascunhoNfse | null>(null)
@@ -692,16 +699,30 @@ export function NfseEmissaoForm({
     setShowResume(false)
   }
 
+  function chaveIdempotenciaDoCliente(clienteId: string): string {
+    const atual = chaveEmissaoRef.current
+    if (atual && atual.clienteId === clienteId) return atual.chave
+    const chave = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}-${Math.random().toString(36).slice(2, 12)}`
+    chaveEmissaoRef.current = { clienteId, chave }
+    return chave
+  }
+
   async function confirmarEmissao() {
-    if (!emissaoPendente) return
+    if (!emissaoPendente || emitindoRef.current) return
     const data = emissaoPendente
 
+    emitindoRef.current = true
     setEmitting(true)
     try {
       const functions = getFunctions(getFirebaseApp(), 'southamerica-east1')
-      const emitirNfse = httpsCallable<Record<string, unknown>, { sucesso: boolean; numeroNfse?: string; codigoVerificacao?: string; erro?: string; detalhes?: string; codigoErro?: string }>(
+      const emitirNfse = httpsCallable<Record<string, unknown>, { sucesso: boolean; numeroNfse?: string; codigoVerificacao?: string; erro?: string; detalhes?: string; codigoErro?: string; jaEmitida?: boolean; reconciliada?: boolean; mensagem?: string }>(
         functions,
-        'emitirNfse'
+        'emitirNfse',
+        // A emissão pode levar até ~2,5 min (Sefin lenta + consulta prévia); o
+        // padrão do SDK (70 s) desistia antes do servidor e convidava o clique duplo.
+        { timeout: 300_000 },
       )
 
       const competencia = lerCompetencia(data.competencia)
@@ -709,6 +730,8 @@ export function NfseEmissaoForm({
       const payload = {
         clienteId:     data.clienteId,
         rascunhoId:    rascunhoAtual?.id,
+        // Só vale sem rascunho salvo (com rascunho, ele mesmo guarda o nDPS).
+        chaveIdempotencia: rascunhoAtual?.id ? undefined : chaveIdempotenciaDoCliente(data.clienteId),
         competenciaId: data.competenciaId ?? null,
         // Competência explícita da tela; o backend ainda limita à data de emissão.
         dataCompetencia: competencia ? competenciaParaData(competencia) : undefined,
@@ -740,10 +763,14 @@ export function NfseEmissaoForm({
       const res = result.data
 
       if (res.sucesso) {
-        const msg = res.numeroNfse
-          ? `NFS-e emitida com sucesso! Número: ${res.numeroNfse}`
-          : 'NFS-e emitida com sucesso!'
+        const msg = res.jaEmitida && res.mensagem
+          ? res.mensagem
+          : res.numeroNfse
+            ? `NFS-e emitida com sucesso! Número: ${res.numeroNfse}`
+            : 'NFS-e emitida com sucesso!'
         toast.success(msg)
+        // Nota concluída: a próxima nota deste formulário ganha chave nova.
+        chaveEmissaoRef.current = null
         await finishFlow()
       } else {
         const mensagem = [
@@ -756,6 +783,7 @@ export function NfseEmissaoForm({
     } catch (err) {
       toast.error(getErrorMessage(err, 'Não foi possível emitir a NFS-e. Verifique configuração fiscal, credencial e homologação do município.'))
     } finally {
+      emitindoRef.current = false
       setEmitting(false)
       setEmissaoPendente(null)
     }

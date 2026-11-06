@@ -100,8 +100,8 @@ export default function NfseDetalhePage() {
 
   async function solicitarCancelamento() {
     const motivo = motivoCancelamento.trim()
-    if (motivo.length < 10) {
-      toast.error('Informe um motivo com pelo menos 10 caracteres.')
+    if (motivo.length < 15) { // Ambiente Nacional: xMotivo de 15 a 255 caracteres
+      toast.error('Informe um motivo com pelo menos 15 caracteres.')
       return
     }
     setCancelando(true)

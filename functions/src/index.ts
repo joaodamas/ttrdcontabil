@@ -36,6 +36,7 @@ export { exportarFirestoreSemanal } from './backup'
 export { criarCompetenciasMensais } from './scheduler/competencias'
 export { criarLancamentosMensais  } from './scheduler/lancamentos'
 export { enviarAlertasDiarios, alertasPrazoCritico, detectarInadimplencia } from './scheduler/alertas'
+export { reconciliarNfsePendentes } from './scheduler/nfse-reconciliacao'
 // agendarCobrancasWhatsapp e processarFilaWhatsapp: ver o bloco WhatsApp abaixo.
 
 // ── Triggers ──────────────────────────────────────────────────────────────────

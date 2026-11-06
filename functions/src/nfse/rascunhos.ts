@@ -18,6 +18,7 @@ import {
   type FiltroDia,
 } from './selecao-recorrentes'
 import type { EmitirNfseInput } from './types'
+import { normalizarRascunho } from './normalizar-rascunho'
 
 const db = () => admin.firestore()
 
@@ -534,45 +535,15 @@ async function processarItens(itens: ItemPendente[], actor: Actor) {
   }
 
   for (const item of automaticos) {
-    const dados = item.dados.dados as Record<string, unknown>
-    const endereco = (dados.tomadorEndereco ?? {}) as Record<string, string | null>
-    const input: EmitirNfseInput = {
-      clienteId: item.clienteId,
-      rascunhoId: item.ref.id,
-      // `competenciaId` é opcional na emissão; contrato sem competência única no
-      // mês manda undefined em vez de um ID que não existe.
-      competenciaId: item.competenciaId ?? undefined,
-      tomador: {
-        razaoSocial: dados.tomadorNome as string,
-        cpfCnpj: dados.tomadorCpfCnpj as string,
-        email: (dados.tomadorEmail as string | null) ?? undefined,
-        // O endereço vai junto porque a prefeitura que exige o município do
-        // tomador (IBGE) rejeita a nota sem ele — e o conector não tem de onde
-        // buscar depois.
-        endereco: {
-          logradouro: endereco.logradouro ?? undefined,
-          numero: endereco.numero ?? undefined,
-          complemento: endereco.complemento ?? undefined,
-          bairro: endereco.bairro ?? undefined,
-          municipioIbge: endereco.municipioIbge ?? undefined,
-          uf: endereco.uf ?? undefined,
-          cep: endereco.cep ?? undefined,
-        },
-      },
-      servico: {
-        discriminacao: dados.descricaoServico as string,
-        codigoServico: dados.codigoServico as string,
-        itemListaServico: dados.itemListaServico as string,
-        cnae: (dados.cnae as string | null) ?? undefined,
-        valorServico: dados.valorServico as number,
-        aliquota: dados.aliquota as number,
-        issRetido: dados.issRetido as boolean,
-      },
-    }
     // O tomador entra na mensagem: com 40 contratos por prestador, "Cliente X:
     // erro" não diz qual nota falhou.
     const etiqueta = `${item.clienteNome} → ${item.tomadorNome}`
     try {
+      // Normalizador único (o mesmo do formulário, lote e retry): o item novo
+      // acabou de ser gravado com `item.dados`; o reprocessado é relido do
+      // documento, que pode ter campos que a geração não recalcula.
+      const doc = item.reprocessar ? ((await item.ref.get()).data() ?? item.dados) : item.dados
+      const input: EmitirNfseInput = normalizarRascunho(item.ref.id, { ...doc, clienteId: item.clienteId })
       const resultado = await processarEmissao(input, actor.uid)
       if (resultado.sucesso) emitidos++
       else {
@@ -597,7 +568,7 @@ export const gerarRascunhosNfseMensais = onCall(
   {
     region: 'southamerica-east1',
     memory: '256MiB',
-    timeoutSeconds: 300,
+    timeoutSeconds: 540, // emissão automática sequencial: até ~2,5 min por nota no pior caso (Sefin lenta)
     secrets: credentialSecrets,
   },
   async (request) => {
@@ -674,7 +645,7 @@ export const processarNfseRecorrenteDiaria = onSchedule(
     timeZone: 'America/Sao_Paulo',
     region: 'southamerica-east1',
     memory: '256MiB',
-    timeoutSeconds: 300,
+    timeoutSeconds: 540, // emissão automática sequencial: até ~2,5 min por nota no pior caso (Sefin lenta)
     secrets: credentialSecrets,
   },
   async () => {

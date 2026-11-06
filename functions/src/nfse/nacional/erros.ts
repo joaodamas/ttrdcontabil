@@ -23,6 +23,13 @@ export function mensagemMunicipioSemEmissorNacional(municipio: string): string {
 const TRADUCOES: Record<string, (ctx: ContextoErroNacional) => string> = {
   E0037: (ctx) => mensagemMunicipioSemConvenio(ctx.municipio),
   E0008: () => 'Data de emissão posterior ao horário da Sefin. Aguarde alguns segundos e tente de novo.',
+  // "Conjunto de Série, Número, Código do Município Emissor e CNPJ/CPF informado
+  // nesta DPS já existe em uma NFS-e gerada a partir de uma DPS enviada
+  // anteriormente." — o código não está em regras-dps.json (é regra da
+  // recepção, RN_RECEP); texto confirmado em documentação de emissores
+  // (Omie/Alterdata), a confirmar na homologação. Quem recebe o E0014
+  // (emitir.ts) CONSULTA a DPS e registra a nota existente em vez de reenviar.
+  E0014: () => 'Já existe uma NFS-e gerada com esta série e número de DPS (envio anterior que chegou à Sefin). A plataforma consulta essa nota e a registra — não emita outra.',
   E0162: () => 'Regime de apuração do Simples (regApTribSN) só vale para ME/EPP optante. Revise o regime tributário do cliente.',
   // Texto oficial: "código de tributação nacional não administrado pelo município
   // de incidência na data de competência" — confirmado na produção restrita

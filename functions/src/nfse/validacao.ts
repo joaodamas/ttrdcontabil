@@ -1,4 +1,5 @@
 import type { ConfigFiscalCliente, EmitirNfseInput, Prestador } from './types'
+import { resolverProvedorNfse } from './provedor'
 
 function onlyDigits(value: unknown) {
   return String(value ?? '').replace(/\D/g, '')
@@ -65,7 +66,13 @@ export function validarPayloadFiscal(
 
   if (!isCpfCnpj(prestador.cnpj)) erros.push('CNPJ do prestador inválido.')
   if (!hasText(prestador.razaoSocial, 2, 200)) erros.push('Razão social do prestador inválida.')
-  if (!hasText(prestador.inscricaoMunicipal, 2, 30)) erros.push('Inscrição municipal do prestador inválida.')
+  // Inscrição municipal: obrigatória só no webservice da prefeitura. No Ambiente
+  // Nacional a DPS identifica o prestador pelo CNPJ (a IM é opcional no leiaute);
+  // se vier preenchida, ainda precisa ter formato plausível.
+  const imPreenchida = typeof prestador.inscricaoMunicipal === 'string' && prestador.inscricaoMunicipal.trim().length > 0
+  if ((resolverProvedorNfse(config) === 'municipio' || imPreenchida) && !hasText(prestador.inscricaoMunicipal, 2, 30)) {
+    erros.push('Inscrição municipal do prestador inválida.')
+  }
   if (!isIbge(prestador.municipioIbge)) erros.push('Município IBGE do prestador inválido.')
 
   if (tomador) {

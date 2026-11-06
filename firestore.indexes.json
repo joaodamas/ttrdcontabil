@@ -1541,6 +1541,20 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "codigoErroUltimaTentativa",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "nfse_rascunhos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "clienteId",
           "order": "ASCENDING"
         },

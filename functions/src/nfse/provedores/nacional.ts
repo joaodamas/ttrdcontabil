@@ -35,6 +35,8 @@ import {
 } from '../nacional/erros'
 import { numeroDpsValido, serieDpsValida } from '../nacional/numeracao'
 import { dataCompetenciaDps } from '../nacional/competencia'
+import { chaveAcessoValida } from './chave'
+import { CODIGO_DPS_JA_EMITIDA } from '../nacional/codigos'
 
 // ─── Transporte HTTP (injetável nos testes) ─────────────────────────────────
 
@@ -47,6 +49,8 @@ export interface RequisicaoHttp {
   url: URL
   metodo: 'GET' | 'POST' | 'HEAD'
   corpoJson?: unknown
+  /** Prazo TOTAL da requisição (conexão + envio + resposta), em ms. */
+  timeoutMs?: number
 }
 
 export type Requisitar = (req: RequisicaoHttp) => Promise<RespostaHttp>
@@ -54,7 +58,23 @@ export type Requisitar = (req: RequisicaoHttp) => Promise<RespostaHttp>
 /** Cria o cliente HTTP autenticado (mTLS) com a chave/cadeia do A1. */
 export type FabricaTransporte = (chave: ChaveAssinatura) => Requisitar
 
-const TIMEOUT_MS = 45_000
+/**
+ * Prazos TOTAIS por tipo de chamada. Somados no pior caso de uma emissão
+ * (convênio + consulta prévia + envio + consulta de reconciliação ≈ 140 s)
+ * cabem com folga nos 300 s de emitirNfse/retryNfse — antes eram dois
+ * requests de 45 s de INATIVIDADE (sem prazo total) numa function de 60 s:
+ * a function morria com a nota possivelmente gerada e o rascunho travado.
+ */
+export const PRAZOS_NACIONAL_MS = {
+  /** ADN /parametrizacao/{ibge}/convenio — só uma pré-checagem; falhou, segue. */
+  convenio: 8_000,
+  /** GET /dps/{id}, GET /nfse/{chave} e eventos. */
+  consulta: 20_000,
+  /** POST /nfse (emissão) e POST de evento (cancelamento). */
+  envio: 90_000,
+} as const
+
+const PRAZO_PADRAO_MS = PRAZOS_NACIONAL_MS.consulta
 
 /**
  * mTLS com chave + cadeia em PEM (e não `pfx`/`passphrase` direto no Agent):
@@ -63,7 +83,8 @@ const TIMEOUT_MS = 45_000
  */
 export const transporteMtls: FabricaTransporte = (chave) => {
   const agente = new https.Agent({ key: chave.privateKeyPem, cert: chave.certChainPem, keepAlive: false })
-  return ({ url, metodo, corpoJson }) => {
+  return ({ url, metodo, corpoJson, timeoutMs }) => {
+    const prazo = timeoutMs ?? PRAZO_PADRAO_MS
     const corpo = corpoJson === undefined ? undefined : Buffer.from(JSON.stringify(corpoJson), 'utf8')
     const headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': 'jp-fiscal-nfse-nacional/1.0' }
     if (corpo) {
@@ -71,19 +92,42 @@ export const transporteMtls: FabricaTransporte = (chave) => {
       headers['Content-Length'] = String(corpo.length)
     }
     return new Promise((resolve, reject) => {
-      const req = https.request(url, { method: metodo, headers, agent: agente, timeout: TIMEOUT_MS }, (res) => {
+      // Prazo total (o `timeout` do http é só de inatividade do socket: uma
+      // resposta pingando bytes nunca estourava).
+      const relogio = setTimeout(() => req.destroy(new Error(`tempo esgotado (${Math.round(prazo / 1000)} s)`)), prazo)
+      const req = https.request(url, { method: metodo, headers, agent: agente, timeout: prazo }, (res) => {
         const partes: Buffer[] = []
         res.on('data', (c: Buffer) => partes.push(c))
-        res.on('end', () => resolve({ status: res.statusCode ?? 0, corpo: Buffer.concat(partes) }))
-        res.on('error', reject)
+        res.on('end', () => {
+          clearTimeout(relogio)
+          resolve({ status: res.statusCode ?? 0, corpo: Buffer.concat(partes) })
+        })
+        res.on('error', (err) => {
+          clearTimeout(relogio)
+          reject(err)
+        })
       })
-      req.on('timeout', () => req.destroy(new Error(`tempo esgotado (${TIMEOUT_MS / 1000} s)`)))
-      req.on('error', reject)
+      req.on('timeout', () => req.destroy(new Error(`tempo esgotado (${Math.round(prazo / 1000)} s)`)))
+      req.on('error', (err) => {
+        clearTimeout(relogio)
+        reject(err)
+      })
       if (corpo) req.write(corpo)
       req.end()
     })
   }
 }
+
+// ─── Cache do convênio (por instância do servidor) ──────────────────────────
+
+/** Resultado CONCLUSIVO da consulta de convênio, com validade. */
+export type CacheConvenio = Map<string, { falha: Falha | null; expiraEm: number }>
+
+/** Convênio aderente muda raramente; negativa expira mais cedo (adesão nova). */
+const VALIDADE_CONVENIO_OK_MS = 6 * 60 * 60_000
+const VALIDADE_CONVENIO_NEGADO_MS = 30 * 60_000
+
+const CACHE_CONVENIO_GLOBAL: CacheConvenio = new Map()
 
 function lerJson(resp: RespostaHttp): Record<string, unknown> | null {
   try {
@@ -103,11 +147,7 @@ function comDeclaracao(xml: string): string {
   return xml.startsWith('<?xml') ? xml : `<?xml version="1.0" encoding="UTF-8"?>${xml}`
 }
 
-const PADRAO_CHAVE = /^[0-9]{6}[0-9A-Z]{14}[0-9]{30}$/
-
-export function chaveAcessoValida(v: unknown): v is string {
-  return typeof v === 'string' && PADRAO_CHAVE.test(v)
-}
+export { chaveAcessoValida }
 
 /** nNFSe e chave (Id "NFS" + 50) de dentro do XML da NFS-e. */
 export function lerDadosNfseXml(xml: string): { numeroNfse?: string; chaveAcesso?: string; dataEmissao?: string } {
@@ -117,6 +157,36 @@ export function lerDadosNfseXml(xml: string): { numeroNfse?: string; chaveAcesso
   return { numeroNfse, chaveAcesso, dataEmissao }
 }
 
+/**
+ * Eventos que cancelam a NFS-e: e101101 (cancelamento) e e105102
+ * (cancelamento por substituição). Procura no JSON e dentro de todo campo
+ * *XmlGZipB64 (descompactado). Exportada para teste.
+ */
+export function xmlIndicaCancelamento(resposta: unknown): boolean {
+  const PADRAO = /\be?10(1101|5102)\b|<e(101101|105102)[\s>]|<tpEvento>\s*(e?101101|e?105102)\s*</
+  const textos: string[] = []
+  const visitar = (v: unknown, chave = '') => {
+    if (typeof v === 'string') {
+      if (/XmlGZipB64$/i.test(chave)) {
+        try { textos.push(descompactarXml(v)) } catch { /* ignora campo ilegível */ }
+      } else if (chave === '' || /xml|tipo|evento/i.test(chave)) {
+        textos.push(v)
+      }
+      return
+    }
+    if (Array.isArray(v)) { v.forEach((x) => visitar(x, chave)); return }
+    if (v && typeof v === 'object') {
+      for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+        // nfseXmlGZipB64 é a própria nota — não é evento.
+        if (k === 'nfseXmlGZipB64') continue
+        visitar(x, k)
+      }
+    }
+  }
+  visitar(resposta)
+  return textos.some((t) => PADRAO.test(t))
+}
+
 // ─── Conector ───────────────────────────────────────────────────────────────
 
 export interface OpcoesNacionalConector {
@@ -124,9 +194,17 @@ export interface OpcoesNacionalConector {
   agora?: () => Date
   /** Pula a consulta prévia do convênio no ADN (só testes). */
   semConsultaConvenio?: boolean
+  /**
+   * Cache do convênio. Padrão: um cache do processo (vale entre chamadas na
+   * mesma instância da function) — exceto quando o transporte é injetado
+   * (testes), que ganham um cache próprio para não vazar entre casos.
+   */
+  cacheConvenio?: CacheConvenio
 }
 
 type Falha = { sucesso: false; erro: string; codigoErro: string; detalhes?: string }
+
+export { CODIGO_DPS_JA_EMITIDA }
 
 function falha(codigoErro: string, erro: string, detalhes?: string): Falha {
   return { sucesso: false, codigoErro, erro, ...(detalhes ? { detalhes } : {}) }
@@ -142,11 +220,13 @@ export class NacionalConector {
   private readonly fabrica: FabricaTransporte
   private readonly agora: () => Date
   private readonly semConsultaConvenio: boolean
+  private readonly cacheConvenio: CacheConvenio
 
   constructor(opcoes: OpcoesNacionalConector = {}) {
     this.fabrica = opcoes.transporte ?? transporteMtls
     this.agora = opcoes.agora ?? (() => new Date())
     this.semConsultaConvenio = opcoes.semConsultaConvenio === true
+    this.cacheConvenio = opcoes.cacheConvenio ?? (opcoes.transporte ? new Map() : CACHE_CONVENIO_GLOBAL)
   }
 
   /** Ambiente + certificado prontos, ou a falha já em pt-BR. */
@@ -182,26 +262,42 @@ export class NacionalConector {
    */
   private async conferirConvenio(sessao: Sessao, ibge: string, municipio: string): Promise<Falha | null> {
     if (this.semConsultaConvenio) return null
+    const chaveCache = `${sessao.ambiente}:${ibge}`
+    const agoraMs = this.agora().getTime()
+    const emCache = this.cacheConvenio.get(chaveCache)
+    if (emCache && emCache.expiraEm > agoraMs) return emCache.falha
+
     let resp: RespostaHttp
     try {
-      resp = await sessao.requisitar({ url: this.url(sessao.ambiente, 'adn', 'parametrizacao', ibge, 'convenio'), metodo: 'GET' })
+      resp = await sessao.requisitar({
+        url: this.url(sessao.ambiente, 'adn', 'parametrizacao', ibge, 'convenio'),
+        metodo: 'GET',
+        timeoutMs: PRAZOS_NACIONAL_MS.convenio,
+      })
     } catch {
-      return null
+      return null // inconclusivo: não guarda; a própria Sefin decide (E0037)
+    }
+    const conclusivo = (falhaConvenio: Falha | null): Falha | null => {
+      this.cacheConvenio.set(chaveCache, {
+        falha: falhaConvenio,
+        expiraEm: agoraMs + (falhaConvenio ? VALIDADE_CONVENIO_NEGADO_MS : VALIDADE_CONVENIO_OK_MS),
+      })
+      return falhaConvenio
     }
     const json = lerJson(resp)
     if (resp.status === 404 && json) {
-      return falha('MUNICIPIO_SEM_CONVENIO', mensagemMunicipioSemConvenio(municipio), texto(json.mensagem))
+      return conclusivo(falha('MUNICIPIO_SEM_CONVENIO', mensagemMunicipioSemConvenio(municipio), texto(json.mensagem)))
     }
     if (resp.status !== 200 || !json) return null
     const p = (json.parametrosConvenio ?? null) as Record<string, unknown> | null
-    if (!p) return falha('MUNICIPIO_SEM_CONVENIO', mensagemMunicipioSemConvenio(municipio), texto(json.mensagem))
+    if (!p) return conclusivo(falha('MUNICIPIO_SEM_CONVENIO', mensagemMunicipioSemConvenio(municipio), texto(json.mensagem)))
     if (Number(p.aderenteAmbienteNacional) !== 1) {
-      return falha('MUNICIPIO_SEM_CONVENIO', mensagemMunicipioSemConvenio(municipio), texto(json.mensagem))
+      return conclusivo(falha('MUNICIPIO_SEM_CONVENIO', mensagemMunicipioSemConvenio(municipio), texto(json.mensagem)))
     }
     if (Number(p.aderenteEmissorNacional) !== 1) {
-      return falha('MUNICIPIO_SEM_EMISSOR_NACIONAL', mensagemMunicipioSemEmissorNacional(municipio), texto(json.mensagem))
+      return conclusivo(falha('MUNICIPIO_SEM_EMISSOR_NACIONAL', mensagemMunicipioSemEmissorNacional(municipio), texto(json.mensagem)))
     }
-    return null
+    return conclusivo(null)
   }
 
   // ─── Emissão ──────────────────────────────────────────────────────────────
@@ -252,11 +348,19 @@ export class NacionalConector {
         url: this.url(sessao.ambiente, 'sefin', 'nfse'),
         metodo: 'POST',
         corpoJson: { dpsXmlGZipB64: compactarXml(xmlAssinado) },
+        timeoutMs: PRAZOS_NACIONAL_MS.envio,
       })
     } catch (err) {
-      // Pode ter chegado e gerado a nota: o retry consulta /dps/{id} antes de reenviar.
+      // Pode ter chegado e gerado a nota. O número da DPS fica reservado no
+      // rascunho: qualquer nova tentativa (botão, lote ou a rotina de 15 min)
+      // consulta GET /dps/{id} ANTES de reenviar e, se a nota existir, só a
+      // registra (emitir.ts → processarEmissao / reconciliacao.ts).
       return {
-        ...falha('SEFIN_SEM_RESPOSTA', 'Sem resposta da Sefin Nacional. A nota pode ter sido gerada: use "Tentar de novo" — a plataforma consulta a DPS antes de reenviar.', err instanceof Error ? err.message : String(err)),
+        ...falha(
+          'SEFIN_SEM_RESPOSTA',
+          `Sem resposta da Sefin Nacional (DPS nº ${input.numeroRps}). A nota pode ter sido gerada — NÃO crie outra nota: o número fica reservado e a plataforma consulta a Sefin antes de qualquer reenvio, sozinha em até 15 minutos ou quando você tentar de novo.`,
+          err instanceof Error ? err.message : String(err),
+        ),
         idDps,
       }
     }
@@ -289,7 +393,10 @@ export class NacionalConector {
     const { erros } = extrairMensagens(json)
     if (erros.length) {
       const t = traduzirErrosSefin(erros, ctxErro)
-      return falha(t.codigoErro, t.erro, t.detalhes)
+      // DPS repetida no meio de outras rejeições: o código que manda é o E0014
+      // (quem chama reconcilia consultando a nota em vez de tratar como recusa).
+      const duplicada = erros.some((e) => String(e.codigo ?? '').toUpperCase() === CODIGO_DPS_JA_EMITIDA)
+      return falha(duplicada ? CODIGO_DPS_JA_EMITIDA : t.codigoErro, t.erro, t.detalhes)
     }
     return falha(`HTTP_${resp.status}`, `A Sefin não devolveu a NFS-e nem o motivo — ${explicarStatusHttp(resp.status)}`, JSON.stringify(json).slice(0, 500))
   }
@@ -312,7 +419,7 @@ export class NacionalConector {
     // Sem chave: consulta pela DPS (pré-retry). RPS municipal antigo (série
     // "RPS") não existe no nacional — nada a consultar, o retry segue.
     if (!serieDpsValida(input.serieRps) || !numeroDpsValido(input.numeroRps)) {
-      return { sucesso: true, mensagem: 'Sem DPS nacional para consultar (número anterior era de RPS municipal).' }
+      return { sucesso: true, encontrada: false, mensagem: 'Sem DPS nacional para consultar (número anterior era de RPS municipal).' }
     }
     let idDps: string
     try {
@@ -328,19 +435,19 @@ export class NacionalConector {
     let resp: RespostaHttp
     try {
       // PREMISSA: o {id} vai com o prefixo "DPS" (é o idDPS que a própria Sefin devolve).
-      resp = await sessao.requisitar({ url: this.url(sessao.ambiente, 'sefin', 'dps', idDps), metodo: 'GET' })
+      resp = await sessao.requisitar({ url: this.url(sessao.ambiente, 'sefin', 'dps', idDps), metodo: 'GET', timeoutMs: PRAZOS_NACIONAL_MS.consulta })
     } catch (err) {
       return falha('SEFIN_SEM_RESPOSTA', 'Sem resposta da Sefin Nacional ao consultar a DPS. Tente de novo em alguns minutos.', err instanceof Error ? err.message : String(err))
     }
     if (resp.status === 404) {
-      return { sucesso: true, mensagem: `Nenhuma NFS-e gerada no Ambiente Nacional para a DPS ${idDps}.` }
+      return { sucesso: true, encontrada: false, mensagem: `Nenhuma NFS-e gerada no Ambiente Nacional para a DPS ${idDps}.` }
     }
     const json = lerJson(resp)
     const chaveDps = texto(json?.chaveAcesso)
     if (resp.status === 200 && chaveAcessoValida(chaveDps)) {
       const porChave = await this.consultarPorChave(sessao, chaveDps, ctxErro)
       if (porChave.sucesso) return porChave
-      return { sucesso: true, status: 'emitida', chaveAcesso: chaveDps, codigoVerificacao: chaveDps, mensagem: `NFS-e já gerada para a DPS ${idDps} (chave ${chaveDps}).` }
+      return { sucesso: true, encontrada: true, status: 'emitida', chaveAcesso: chaveDps, codigoVerificacao: chaveDps, mensagem: `NFS-e já gerada para a DPS ${idDps} (chave ${chaveDps}).` }
     }
     const erros = json ? extrairMensagens(json).erros : []
     if (erros.length) {
@@ -353,7 +460,7 @@ export class NacionalConector {
   private async consultarPorChave(sessao: Sessao, chave: string, ctxErro: { municipio: string }): Promise<ResultadoOperacaoNfse> {
     let resp: RespostaHttp
     try {
-      resp = await sessao.requisitar({ url: this.url(sessao.ambiente, 'sefin', 'nfse', chave), metodo: 'GET' })
+      resp = await sessao.requisitar({ url: this.url(sessao.ambiente, 'sefin', 'nfse', chave), metodo: 'GET', timeoutMs: PRAZOS_NACIONAL_MS.consulta })
     } catch (err) {
       return falha('SEFIN_SEM_RESPOSTA', 'Sem resposta da Sefin Nacional ao consultar a NFS-e.', err instanceof Error ? err.message : String(err))
     }
@@ -368,16 +475,20 @@ export class NacionalConector {
         return falha('NFSE_ILEGIVEL', 'XML da NFS-e devolvido pela Sefin não pôde ser lido.')
       }
       const doXml = lerDadosNfseXml(xmlNfse)
-      // PREMISSA: o cancelamento aparece como evento (consulta própria); aqui
-      // a nota existir = 'emitida'. O status 'cancelada' vem do cancelar().
+      // O XML da NFS-e não muda com o cancelamento (é um evento à parte): o
+      // status vem dos eventos da nota. Sem confirmação de evento = 'emitida',
+      // e quem grava (ciclo.ts → statusAposConsulta) nunca regride uma nota
+      // já cancelada por causa disso.
+      const cancelada = await this.temEventoCancelamento(sessao, chave)
       return {
         sucesso: true,
-        status: 'emitida',
+        encontrada: true,
+        status: cancelada ? 'cancelada' : 'emitida',
         numeroNfse: doXml.numeroNfse,
         codigoVerificacao: chave,
         chaveAcesso: chave,
         xmlNfse,
-        mensagem: 'NFS-e localizada no Ambiente Nacional.',
+        mensagem: cancelada ? 'NFS-e localizada no Ambiente Nacional — CANCELADA (evento de cancelamento registrado).' : 'NFS-e localizada no Ambiente Nacional.',
       }
     }
     const erros = json ? extrairMensagens(json).erros : []
@@ -386,6 +497,23 @@ export class NacionalConector {
       return falha(t.codigoErro, t.erro, t.detalhes)
     }
     return falha(`HTTP_${resp.status}`, `Consulta da NFS-e falhou — ${explicarStatusHttp(resp.status)}`)
+  }
+
+  /**
+   * GET /nfse/{chave}/eventos — a nota tem evento de cancelamento?
+   * PREMISSA (a confirmar na homologação): a rota devolve 200 com os eventos
+   * (XML compactado em campos *XmlGZipB64) e 404 quando não há nenhum. Falha
+   * de rede ou formato desconhecido = "não confirmado" (false), nunca erro.
+   */
+  private async temEventoCancelamento(sessao: Sessao, chave: string): Promise<boolean> {
+    let resp: RespostaHttp
+    try {
+      resp = await sessao.requisitar({ url: this.url(sessao.ambiente, 'sefin', 'nfse', chave, 'eventos'), metodo: 'GET', timeoutMs: PRAZOS_NACIONAL_MS.consulta })
+    } catch {
+      return false
+    }
+    if (resp.status !== 200) return false
+    return xmlIndicaCancelamento(lerJson(resp) ?? resp.corpo.toString('utf8'))
   }
 
   // ─── Cancelamento (evento e101101) ────────────────────────────────────────
@@ -428,6 +556,7 @@ export class NacionalConector {
         url: this.url(sessao.ambiente, 'sefin', 'nfse', chave, 'eventos'),
         metodo: 'POST',
         corpoJson: { pedidoRegistroEventoXmlGZipB64: compactarXml(xmlAssinado) },
+        timeoutMs: PRAZOS_NACIONAL_MS.envio,
       })
     } catch (err) {
       return falha('SEFIN_SEM_RESPOSTA', 'Sem resposta da Sefin Nacional ao cancelar. Consulte a nota antes de tentar de novo.', err instanceof Error ? err.message : String(err))

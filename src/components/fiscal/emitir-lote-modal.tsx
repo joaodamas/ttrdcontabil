@@ -6,7 +6,7 @@
  * Carrega os rascunhos com status 'aguardando_emissao', permite selecionar
  * quais emitir e chama a Cloud Function `emitirNfseLote`.
  *
- * Limite por chamada: 50 notas (imposto pela Cloud Function).
+ * Limite por chamada: 25 notas (imposto pela Cloud Function, que também tem orçamento de tempo).
  *
  * Uso:
  *   <EmitirLoteModal open={open} onOpenChange={setOpen} onSuccess={handleSuccess} />
@@ -24,7 +24,7 @@ import { Loader2, CheckCircle2, AlertCircle, SendHorizonal } from 'lucide-react'
 import { toast } from 'sonner'
 import { getFirebaseApp } from '@/lib/firebase'
 
-const LOTE_MAX = 50
+const LOTE_MAX = 25 // igual a functions/src/nfse/emitir-lote.ts
 
 interface Rascunho {
   id:           string
@@ -37,10 +37,13 @@ interface Rascunho {
 
 interface ResultadoLote {
   index:     number
+  rascunhoId?: string
   clienteId: string
   sucesso:   boolean
   numeroNfse?: string
   erro?:     string
+  naoProcessado?: boolean
+  jaEmitida?: boolean
 }
 
 interface EmitirLoteModalProps {
@@ -115,48 +118,29 @@ export function EmitirLoteModal({ open, onOpenChange, onSuccess }: EmitirLoteMod
   }
 
   async function handleEmitir() {
-    if (selected.size === 0) return
+    if (selected.size === 0 || step === 'running') return
 
-    const itensParaEmitir = rascunhos
-      .filter((r) => selected.has(r.id))
-      .map((r) => {
-        const tomador = (r.dados.tomador as Record<string, unknown> | undefined) ?? {
-          razaoSocial: r.dados.tomadorNome,
-          cpfCnpj: r.dados.tomadorCpfCnpj,
-          email: r.dados.tomadorEmail || undefined,
-        }
-        const servico = (r.dados.servico as Record<string, unknown> | undefined) ?? {
-          discriminacao: r.dados.descricaoServico,
-          codigoServico: r.dados.codigoServico,
-          valorServico: r.dados.valorServico,
-          aliquota: r.dados.aliquota ?? undefined,
-          issRetido: r.dados.issRetido,
-        }
-
-        return {
-          clienteId:   r.clienteId,
-          rascunhoId:  r.id,
-          tomador,
-          servico,
-          competenciaId: r.competenciaId ?? r.dados.competenciaId ?? undefined,
-          numeroRps:   r.dados.numeroRps ?? undefined,
-          serieRps:    r.dados.serieRps ?? undefined,
-        }
-      })
+    // Só os ids: o servidor relê cada rascunho (normalizador único) — o payload
+    // da nota não sai mais do navegador.
+    const rascunhoIds = rascunhos.filter((r) => selected.has(r.id)).map((r) => r.id)
 
     setStep('running')
 
     try {
-      const fn = httpsCallable<{ itens: unknown[] }, { resultados: ResultadoLote[]; sucessos: number; falhas: number }>(
+      const fn = httpsCallable<{ rascunhoIds: string[] }, { resultados: ResultadoLote[]; sucessos: number; falhas: number; naoProcessados?: number }>(
         getFunctions(getFirebaseApp(), 'southamerica-east1'),
-        'emitirNfseLote'
+        'emitirNfseLote',
+        { timeout: 540_000 },
       )
-      const { data } = await fn({ itens: itensParaEmitir })
+      const { data } = await fn({ rascunhoIds })
       setResultados(data.resultados)
       setStep('done')
 
+      const naoProcessados = data.naoProcessados ?? 0
       if (data.falhas === 0) {
         toast.success(`${data.sucessos} NFS-e emitida(s) com sucesso.`)
+      } else if (naoProcessados > 0) {
+        toast.warning(`${data.sucessos} emitida(s), ${data.falhas - naoProcessados} com erro e ${naoProcessados} não processada(s) por tempo — selecione de novo para emitir.`)
       } else {
         toast.warning(`${data.sucessos} emitida(s), ${data.falhas} com erro.`)
       }
@@ -272,7 +256,8 @@ export function EmitirLoteModal({ open, onOpenChange, onSuccess }: EmitirLoteMod
 
               <div className="space-y-2">
                 {resultados.map((res) => {
-                  const rascunho = rascunhos[res.index]
+                  // Por id: `index` é a posição na SELEÇÃO, não na lista inteira.
+                  const rascunho = rascunhos.find((r) => r.id === res.rascunhoId)
                   return (
                     <div
                       key={res.index}
@@ -288,7 +273,9 @@ export function EmitirLoteModal({ open, onOpenChange, onSuccess }: EmitirLoteMod
                           {rascunho?.clienteNome ?? res.clienteId}
                         </p>
                         {res.sucesso ? (
-                          <p className="text-xs text-muted-foreground">NFS-e nº {res.numeroNfse ?? '—'}</p>
+                          <p className="text-xs text-muted-foreground">
+                            NFS-e nº {res.numeroNfse ?? '—'}{res.jaEmitida ? ' (já existia — registrada sem reenviar)' : ''}
+                          </p>
                         ) : (
                           <p className="text-xs text-destructive truncate">{res.erro}</p>
                         )}
