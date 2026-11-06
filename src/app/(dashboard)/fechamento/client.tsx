@@ -36,6 +36,7 @@ import { fechamentoFiltroSchema } from '@/features/fechamento/schemas'
 import { useFechamentoList } from '@/features/fechamento/hooks'
 import { fechamentoKeys } from '@/features/fechamento/queries'
 import { getErrorMessage } from '@/lib/error-message'
+import { podeEscreverEm } from '@/lib/permissions'
 import { resumirFechamentos, temPendencia } from '@/lib/fechamento-resumo'
 import type { FechamentoFilters, FechamentoRecord } from '@/features/fechamento/types'
 import { FiltrosAtivos } from '@/components/ui/filtros-ativos'
@@ -100,6 +101,7 @@ function FechamentoContent() {
   const [reabrindo, setReabrindo] = useState(false)
   const travado = revisaoSalva?.travado === true
   const isAdmin = usuario?.perfil === 'admin'
+  const podeGerar = podeEscreverEm(usuario, 'fechamento')
 
   useEffect(() => {
     setRevisaoLoading(true)
@@ -149,7 +151,7 @@ function FechamentoContent() {
       await queryClient.invalidateQueries({ queryKey: fechamentoKeys.list(parsed) })
       await load()
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Não foi possível gerar fechamento. Verifique perfil operacional e tente novamente.'))
+      toast.error(getErrorMessage(err, 'Não foi possível gerar o fechamento. Tente novamente.'))
     } finally {
       setGerando(false)
     }
@@ -266,10 +268,12 @@ function FechamentoContent() {
               Encerrar revisão do mês
             </Button>
           )}
-          <Button size="cta" onClick={() => setConfirmGeracaoOpen(true)} disabled={gerando || loading}>
-            <Plus />
-            {gerando ? 'Gerando...' : 'Gerar fechamento'}
-          </Button>
+          {podeGerar ? (
+            <Button size="cta" onClick={() => setConfirmGeracaoOpen(true)} disabled={gerando || loading}>
+              <Plus />
+              {gerando ? 'Gerando...' : 'Gerar fechamento'}
+            </Button>
+          ) : null}
           </>
         }
       />

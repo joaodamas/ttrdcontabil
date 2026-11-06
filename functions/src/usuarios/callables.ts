@@ -17,8 +17,8 @@
  * mesma transação da mudança.
  */
 import { randomBytes } from 'node:crypto'
-import * as admin from 'firebase-admin'
-import { FieldValue } from 'firebase-admin/firestore'
+import { getAuth } from 'firebase-admin/auth'
+import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 
 import { atorDaRequisicao, montarAuditLog, requisicaoDoCallable } from '../audit'
@@ -33,10 +33,12 @@ import {
   validarEntradaCriar,
   validarUid,
   verificarMudanca,
+  decidirReaproveitamentoConta,
+  MSG_CONTA_NAO_REAPROVEITAVEL,
   type UsuarioResumo,
 } from './regras'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 const OPCOES = { region: 'southamerica-east1', timeoutSeconds: 30, invoker: 'public' as const }
 
 function traduzirErro(err: unknown): never {
@@ -101,7 +103,7 @@ export const criarUsuario = onCall(OPCOES, async (request) => {
     traduzirErro(err)
   }
 
-  const auth = admin.auth()
+  const auth = getAuth()
   const existente = await auth.getUserByEmail(entrada.email).catch((err) => {
     if (codigoAuth(err) === 'auth/user-not-found') return null
     throw err
@@ -119,6 +121,17 @@ export const criarUsuario = onCall(OPCOES, async (request) => {
     // criava o login e falhava no perfil) ou de um cadastro público. Reaproveita
     // o uid, mas zera a senha (quem a criou deixa de entrar), reabilita e derruba
     // as sessões — a partir daqui só o dono do e-mail, pelo convite, define a senha.
+    // Só quando trocar a senha basta para tirar o acesso de quem a criou: sem
+    // outro provedor, sem 2º fator e sem login recente (decidirReaproveitamentoConta).
+    const decisao = decidirReaproveitamentoConta({
+      provedores: existente.providerData.map((p) => p.providerId),
+      ultimoLogin: existente.metadata.lastSignInTime ?? null,
+      fatoresMfa: existente.multiFactor?.enrolledFactors.length ?? 0,
+    }, new Date())
+    if (!decisao.reaproveitar) {
+      console.warn('[criarUsuario][conta-orfa-recusada]', JSON.stringify({ uid: existente.uid, motivo: decisao.motivo }))
+      throw new HttpsError('failed-precondition', MSG_CONTA_NAO_REAPROVEITAVEL)
+    }
     await auth.updateUser(existente.uid, { password: senhaAleatoria(), disabled: false, displayName: entrada.nome })
     await auth.revokeRefreshTokens(existente.uid)
     uid = existente.uid
@@ -242,7 +255,7 @@ export const atualizarUsuario = onCall(OPCOES, async (request) => {
   // Auth depois do Firestore: o perfil já manda (as regras negam inativo). Se o
   // Auth falhar, repetir a mesma chamada é seguro — ela reaplica o estado.
   try {
-    const auth = admin.auth()
+    const auth = getAuth()
     if (alteracoes.ativo !== undefined || alteracoes.nome !== undefined) {
       await auth.updateUser(uid, {
         ...(alteracoes.ativo !== undefined ? { disabled: !alteracoes.ativo } : {}),
@@ -296,14 +309,14 @@ export const redefinirSenhaUsuario = onCall(OPCOES, async (request) => {
   })
 
   // O e-mail da conta de login é a fonte: é para ele que o Firebase manda o link.
-  const conta = await admin.auth().getUser(uid).catch((err) => {
+  const conta = await getAuth().getUser(uid).catch((err) => {
     if (codigoAuth(err) === 'auth/user-not-found') return null
     throw err
   })
   if (!conta?.email) {
     throw new HttpsError('failed-precondition', 'Este usuário não tem conta de login. Exclua-o e crie de novo.')
   }
-  if (conta.disabled) await admin.auth().updateUser(uid, { disabled: false })
+  if (conta.disabled) await getAuth().updateUser(uid, { disabled: false })
   return { uid, email: conta.email ?? email }
 })
 
@@ -343,12 +356,12 @@ export const excluirUsuario = onCall(OPCOES, async (request) => {
   })
 
   try {
-    await admin.auth().deleteUser(uid)
+    await getAuth().deleteUser(uid)
   } catch (err) {
     if (codigoAuth(err) !== 'auth/user-not-found') {
       // Perfil já saiu (sem perfil não há acesso). Ao menos tranca o login; a
       // conta que sobrar é reaproveitada se o e-mail for cadastrado de novo.
-      await admin.auth().updateUser(uid, { disabled: true }).catch(() => undefined)
+      await getAuth().updateUser(uid, { disabled: true }).catch(() => undefined)
       logErro('[excluirUsuario][falha-apagar-login]', { uid }, err)
     }
   }

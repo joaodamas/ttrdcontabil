@@ -1,4 +1,4 @@
-import * as admin from 'firebase-admin'
+import { getFirestore } from 'firebase-admin/firestore'
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https'
 
 import { assertCanAccessCliente } from '../../authz'
@@ -20,7 +20,7 @@ async function prepararDanfse(request: CallableRequest) {
     throw new HttpsError('invalid-argument', 'nfseId obrigatório.')
   }
 
-  const snap = await admin.firestore().collection('nfse_emitidas').doc(nfseId).get()
+  const snap = await getFirestore().collection('nfse_emitidas').doc(nfseId).get()
   if (!snap.exists) throw new HttpsError('not-found', 'NFS-e não encontrada.')
   await assertCanAccessCliente(request.auth.uid, snap.data()?.clienteId as string | undefined, 'nfse')
 

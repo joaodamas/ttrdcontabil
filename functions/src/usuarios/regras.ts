@@ -163,3 +163,52 @@ export function camposAlterados(antes: Record<string, unknown>, alteracoes: Alte
     (k) => JSON.stringify(antes[k] ?? null) !== JSON.stringify(alteracoes[k] ?? null),
   )
 }
+
+// ─── Reaproveitar conta de login sem perfil (criarUsuario) ────────────────────
+
+/** Login mais recente que isso impede o reaproveitamento: a conta está em uso. */
+export const DIAS_SEM_LOGIN_PARA_REAPROVEITAR = 30
+
+export interface ContaAuthResumo {
+  /** providerData[].providerId — 'password', 'google.com', 'phone'… */
+  provedores: string[]
+  /** metadata.lastSignInTime (string do Auth) ou null/undefined se nunca entrou. */
+  ultimoLogin?: string | null
+  /** Fatores de 2º fator cadastrados (multiFactor.enrolledFactors.length). */
+  fatoresMfa: number
+}
+
+export type DecisaoReaproveitamento =
+  | { reaproveitar: true }
+  | { reaproveitar: false; motivo: 'outro_provedor' | 'segundo_fator' | 'login_recente' }
+
+/**
+ * Conta do Auth com o e-mail, mas sem `usuarios/{uid}` (sobra do cadastro
+ * antigo pelo navegador, ou cadastro público). O callable troca a senha por
+ * uma aleatória e revoga as sessões — isso só tira o acesso de quem conhece a
+ * SENHA. Por isso só reaproveita quando é seguro:
+ * - só provedor de senha: com Google/telefone vinculado, quem controla esse
+ *   provedor continuaria entrando na conta que vai ganhar perfil (e os dados
+ *   do escritório) — trocar a senha não o derruba;
+ * - sem 2º fator cadastrado: o fator continuaria de quem o cadastrou;
+ * - sem login nos últimos DIAS_SEM_LOGIN_PARA_REAPROVEITAR dias: conta em uso é
+ *   de alguém, e trocar a senha calado tira o acesso dela sem aviso.
+ * Nos demais casos o admin recebe a recusa e resolve no console (apagar a
+ * conta órfã) ou cadastra outro e-mail.
+ */
+export function decidirReaproveitamentoConta(conta: ContaAuthResumo, agora: Date): DecisaoReaproveitamento {
+  if (conta.provedores.some((p) => p !== 'password')) return { reaproveitar: false, motivo: 'outro_provedor' }
+  if (conta.fatoresMfa > 0) return { reaproveitar: false, motivo: 'segundo_fator' }
+  if (conta.ultimoLogin) {
+    const ultimo = new Date(conta.ultimoLogin).getTime()
+    const limite = agora.getTime() - DIAS_SEM_LOGIN_PARA_REAPROVEITAR * 24 * 60 * 60 * 1000
+    // Data ilegível conta como recente: na dúvida, não mexe na conta.
+    if (!Number.isFinite(ultimo) || ultimo > limite) return { reaproveitar: false, motivo: 'login_recente' }
+  }
+  return { reaproveitar: true }
+}
+
+export const MSG_CONTA_NAO_REAPROVEITAVEL =
+  'Já existe uma conta de login com este e-mail que está em uso ou ligada a outro meio de acesso ' +
+  '(Google, telefone ou 2º fator). Por segurança ela não é reaproveitada: remova-a no Firebase ' +
+  'Authentication (console) ou cadastre outro e-mail.'

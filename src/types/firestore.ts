@@ -21,7 +21,6 @@ export type TipoConector = 'nacional' | 'prefeitura' | 'provedor' | 'manual'
 export type StatusRascunhoNfse = 'rascunho' | 'validando' | 'pronto_para_emitir' | 'aguardando_emissao' | 'erro_validacao' | 'erro_integracao'
 export type StatusNfse = 'emitida' | 'pendente_processamento' | 'rejeitada' | 'cancelada' | 'erro_integracao'
 export type TipoEventoNfse = 'emissao' | 'consulta' | 'cancelamento' | 'download_xml' | 'download_pdf' | 'erro' | 'reenvio'
-export type StatusFila = 'aguardando' | 'processando' | 'processado' | 'erro' | 'cancelado'
 export type TipoEventoCliente =
   | 'tarefa'
   | 'lancamento'
@@ -286,22 +285,6 @@ export interface FiscalConectorDoc {
   atualizadoEm: Timestamp
 }
 
-// Coleção: clientes_fiscal_integracao
-export interface ClienteFiscalIntegracaoDoc {
-  clienteId: string
-  conectorId: string
-  conectorNome: string     // denormalizado
-  identificadorExterno?: string
-  usaCertificado: boolean
-  usaLoginSenha: boolean
-  usaToken: boolean
-  usaGov: boolean
-  configJson?: Record<string, unknown>
-  ativo: boolean
-  criadoEm: Timestamp
-  atualizadoEm: Timestamp
-}
-
 // Coleção: certificados_digitais
 export interface CertificadoDigitalDoc {
   clienteId: string
@@ -417,21 +400,6 @@ export interface NfseEventoDoc {
   payloadRetorno?: Record<string, unknown>
   usuarioId?: string
   criadoEm: Timestamp
-}
-
-// Coleção: nfse_fila_processamento
-export interface NfseFilaDoc {
-  nfseRascunhoId: string
-  clienteId: string
-  conectorId: string
-  status: StatusFila
-  tentativas: number
-  maxTentativas: number
-  ultimoErro?: string
-  agendadoPara: Timestamp
-  processadoEm?: Timestamp
-  criadoEm: Timestamp
-  atualizadoEm: Timestamp
 }
 
 // ============================================================

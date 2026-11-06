@@ -8,6 +8,7 @@ import {
   telaDaRota,
 } from '@/lib/permissions'
 import { ehPermissaoNegada } from '@/lib/error-message'
+import { PERFIS_FECHAMENTO } from '../../functions/src/usuarios/perfis'
 
 const sessao = (perfil: string, telas?: string[]): UserSession => ({
   uid: perfil, email: `${perfil}@demo.local`, nome: perfil, perfil, tenantId: 't', telas,
@@ -53,6 +54,14 @@ describe('podeEscreverEm — criação por módulo (allow create das regras)', (
   it('financeiro: admin e financeiro', () => {
     expect(podeEscreverEm(financeiro, 'financeiro')).toBe(true)
     expect(podeEscreverEm(operacional, 'financeiro')).toBe(false)
+  })
+
+  it('fechamento: equipe contábil (o fiscal também gera — mesmo conjunto do callable)', () => {
+    expect(podeEscreverEm(admin, 'fechamento')).toBe(true)
+    expect(podeEscreverEm(operacional, 'fechamento')).toBe(true)
+    expect(podeEscreverEm(fiscal, 'fechamento')).toBe(true)
+    expect(podeEscreverEm(sessao('financeiro', ['hoje', 'fechamento']), 'fechamento')).toBe(false)
+    expect([...PERFIS_FECHAMENTO].sort()).toEqual(['admin', 'fiscal', 'operacional'])
   })
 })
 

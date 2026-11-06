@@ -39,6 +39,8 @@ seguem o **perfil** (e, onde indicado, a tela concedida), conferido em `firestor
 | Ler NFS-e, baixar XML/DANFSe (Firestore, Storage `nfse/`, `obterUrlDanfse` — URL de 5 min) | ✔ | tela fiscal | ✔ | ✔ | — |
 | Ler configuração fiscal do cliente (`clientes_fiscal`, `produtos`) | ✔ | tela fiscal | ✔ | — (mesmo com a tela fiscal) | tela fiscal |
 | Validar/enviar certificado A1 (`validarCertificado`, `uploadCertificado`) | ✔ | — | ✔ | — | — |
+| Fechamento mensal: gerar (`gerarFechamentoMensal`), editar células e encerrar a revisão do mês | ✔ | ✔ | ✔ | — | — |
+| Fechamento mensal: reabrir mês travado | ✔ | — | — | — | — |
 | Storage `documentos/` (nenhuma tela usa — trancado) | — | — | — | — | — |
 | Gravar log de auditoria pelo navegador (só coleções não sensíveis; em nome próprio, e-mail do token, hora do servidor, campos fechados) | ✔ | ✔ | ✔ | ✔ | ✔ |
 | Ligar/desligar a exigência de 2º fator (só em sessão que entrou com 2º fator) | ✔ | — | — | — | — |
@@ -59,6 +61,15 @@ competências e tarefas para "leitura"; quem foi criado assim mantém as telas g
   para qualquer tenant). **Sem perfil** (sobra do fluxo antigo ou de cadastro público) → a conta é
   reaproveitada: senha trocada por aleatória, conta reabilitada, sessões revogadas, perfil criado e
   convite enviado. Quem tinha criado a conta perde o acesso; só o dono do e-mail define a senha.
+  **Desde 2026-11-06 só se for seguro** (`decidirReaproveitamentoConta` em
+  `functions/src/usuarios/regras.ts`): a conta precisa ter **só provedor de senha**, **nenhum 2º fator**
+  e **nenhum login nos últimos 30 dias**. Motivo: trocar a senha só derruba quem conhece a senha — com
+  Google/telefone vinculado ou um TOTP cadastrado, quem criou a conta continuaria entrando, agora com
+  perfil e dados do escritório; e uma conta usada há pouco é de alguém, que perderia o acesso sem aviso.
+  Fora dessas condições o callable recusa (`failed-precondition`) pedindo para remover a conta órfã no
+  console do Firebase Authentication ou usar outro e-mail. Risco residual: conta só-senha, parada há
+  mais de 30 dias, criada por terceiro com o e-mail de outra pessoa — o reaproveitamento a toma de volta
+  para o dono do e-mail (o convite vai para a caixa dele), que é o comportamento desejado.
 - **Reenviar convite / redefinir senha** (`redefinirSenhaUsuario`): confere admin + alvo ativo do
   tenant, registra no log e devolve o e-mail; o navegador dispara o e-mail. O link **não** é
   devolvido ao admin (ele poderia definir a senha no lugar do usuário).

@@ -36,7 +36,6 @@ export const ROTAS_CONHECIDAS = [
   '/fiscal',
   '/fiscal/emitir',
   '/fiscal/historico',
-  '/fiscal/produtos',
   '/fiscal/:id',
   '/ir',
   '/ir/nova',

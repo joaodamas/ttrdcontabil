@@ -60,10 +60,5 @@ export type ParametrosEscritorio = {
   // este diz SE alguém pode. Ver emissaoAutomaticaLiberadaNoEscritorio em
   // functions/src/nfse/rascunhos.ts — o cron falha fechado sem ele.
   emissaoAutomaticaNfseHabilitada: boolean
-  whatsappCloudApiEnabled: boolean
-  whatsappTwilioFromNumber: string
-  whatsappJanelaHoraMinima: string
-  whatsappJanelaHoraMaxima: string
-  whatsappUsaDiasUteis: boolean
   uiFeatureFlags: UiFeatureFlags
 }

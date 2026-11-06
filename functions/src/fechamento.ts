@@ -1,10 +1,11 @@
-import * as admin from 'firebase-admin'
-import { Timestamp } from 'firebase-admin/firestore'
+import { Timestamp, getFirestore } from 'firebase-admin/firestore'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { assertPerfil } from './authz'
+import { PERFIS_FECHAMENTO } from './usuarios/perfis'
 import { writeAuditLog } from './audit'
+import { dataDeExpiracao } from './retencao'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 
 type GerarFechamentoInput = {
   mes: number
@@ -12,8 +13,9 @@ type GerarFechamentoInput = {
   regime?: string
 }
 
-const assertOperacional = (uid: string) =>
-  assertPerfil(uid, ['admin', 'operacional'], 'Perfil sem permissão para gerar fechamento.')
+// Equipe contábil (admin/operacional/fiscal) — ver PERFIS_FECHAMENTO.
+const assertEquipeContabil = (uid: string) =>
+  assertPerfil(uid, PERFIS_FECHAMENTO, 'Perfil sem permissão para gerar fechamento.')
 
 function validateInput(data: unknown): GerarFechamentoInput {
   const input = data as Partial<GerarFechamentoInput>
@@ -33,7 +35,7 @@ export const gerarFechamentoMensal = onCall(
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Autenticação necessária.')
     const input = validateInput(request.data)
-    const usuario = await assertOperacional(request.auth.uid)
+    const usuario = await assertEquipeContabil(request.auth.uid)
 
     // O mês pode estar travado por uma revisão encerrada (ver
     // `salvarRevisao`/`reabrirMes` no app). Gerar fechamento para um mês
@@ -124,6 +126,7 @@ export const gerarFechamentoMensal = onCall(
           ano: input.ano,
         },
         criadoEm: now,
+        expiraEm: Timestamp.fromDate(dataDeExpiracao('events', now.toDate())),
       })
       criados++
       ops += 2

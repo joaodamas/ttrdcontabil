@@ -1,9 +1,9 @@
-import * as admin from 'firebase-admin'
+import { getFirestore } from 'firebase-admin/firestore'
 import { HttpsError } from 'firebase-functions/v2/https'
 import { requireEnvironmentTenant } from './tenant'
 import { PERFIS, podeLerNfse, type Perfil } from './usuarios/perfis'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 
 type AcaoCliente = 'read' | 'write' | 'fiscal' | 'financeiro' | 'nfse' | 'admin'
 
@@ -29,7 +29,7 @@ export interface UsuarioAutorizado {
 /**
  * Carrega o perfil de quem chama e exige que exista, esteja ativo e pertença
  * ao ambiente. Única cópia desta checagem nas functions — antes cada módulo
- * tinha a sua (dashboard, fechamento, rascunhos, whatsapp).
+ * tinha a sua (dashboard, fechamento, rascunhos).
  *
  * `ativo` ausente conta como ativo, como em firestore.rules (isAtivo) e no
  * front: perfis antigos criados por script não têm o campo.

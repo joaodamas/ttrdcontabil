@@ -19,10 +19,10 @@
  * Nota: a propagação é eventual — não há transação global. Em caso de
  * falha parcial, a função reexecuta automaticamente pelo Firestore (retry).
  */
-import * as admin from 'firebase-admin'
+import { getFirestore } from 'firebase-admin/firestore'
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 
 // Coleções que armazenam clienteNome com referência a clienteId
 const COLECOES_COM_NOME = [

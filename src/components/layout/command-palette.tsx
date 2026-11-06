@@ -47,7 +47,6 @@ const NAV_ITEMS: CommandPaletteItem[] = [
   { label: 'Competências', href: '/competencias', icon: Layers, telaKey: 'competencias' },
   { label: 'Fechamento mensal', href: '/fechamento', icon: FolderOpen, telaKey: 'fechamento' },
   { label: 'Emitir NFS-e', href: '/fiscal', icon: Receipt, telaKey: 'fiscal' },
-  { label: 'Produtos', href: '/fiscal/produtos', icon: Package2, telaKey: 'fiscal' },
   { label: 'Histórico de NFS-e', href: '/fiscal/historico', icon: History, telaKey: 'fiscal' },
   { label: 'Imposto de Renda', href: '/ir', icon: FileText, telaKey: 'ir' },
   { label: 'Financeiro', href: '/financeiro', icon: Wallet, telaKey: 'financeiro' },

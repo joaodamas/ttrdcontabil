@@ -13,14 +13,13 @@
  * o PDF oficial deixou de existir — o DANFSe passa a ser responsabilidade do
  * software emissor.
  */
-import * as admin from 'firebase-admin'
-import { FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 
 import { DanfseXmlInvalidoError, montarDadosDanfse } from './dados'
 import { renderizarDanfsePdf } from './render'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 
 export interface ResultadoDanfse {
   pdfPath: string

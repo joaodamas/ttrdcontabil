@@ -3,7 +3,7 @@
  * — uma cópia só, usada por emitir.ts, ciclo.ts e reconciliacao.ts (antes
  * cada arquivo tinha a sua).
  */
-import * as admin from 'firebase-admin'
+import { getFirestore } from 'firebase-admin/firestore'
 import { HttpsError } from 'firebase-functions/v2/https'
 import { getStorage } from 'firebase-admin/storage'
 import { decrypt, isEncrypted } from './encrypt'
@@ -13,7 +13,7 @@ import type { OperacaoFiscal } from './provedor'
 import { requireEnvironmentTenant } from '../tenant'
 import type { CertificadoA1, ConfigFiscalCliente, Prestador } from './types'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 
 export async function getConfigFiscal(clienteId: string): Promise<ConfigFiscalCliente> {
   const snap = await db().collection('clientes_fiscal')

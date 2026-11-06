@@ -13,6 +13,8 @@ import {
   validarTelas,
   validarUid,
   verificarMudanca,
+  decidirReaproveitamentoConta,
+  DIAS_SEM_LOGIN_PARA_REAPROVEITAR,
 } from '../../functions/src/usuarios/regras'
 import { PERFIL_DEFAULT_TELAS, TELAS, podeLerNfse } from '../../functions/src/usuarios/perfis'
 import { projecaoDiretorio } from '../../functions/src/usuarios/diretorio'
@@ -150,5 +152,44 @@ describe('fonte única de perfis e telas', () => {
     expect(podeLerNfse({ perfil: 'financeiro' })).toBe(true)
     expect(podeLerNfse({ perfil: 'leitura' })).toBe(false)
     expect(podeLerNfse({ perfil: 'operacional', telas: ['fiscal'] })).toBe(true)
+  })
+})
+
+describe('reaproveitar conta de login sem perfil (criarUsuario)', () => {
+  const agora = new Date('2026-11-06T12:00:00Z')
+  const diasAtras = (n: number) => new Date(agora.getTime() - n * 86_400_000).toUTCString()
+
+  it('só senha, nunca entrou: reaproveita', () => {
+    expect(decidirReaproveitamentoConta({ provedores: ['password'], ultimoLogin: null, fatoresMfa: 0 }, agora))
+      .toEqual({ reaproveitar: true })
+    expect(decidirReaproveitamentoConta({ provedores: [], fatoresMfa: 0 }, agora)).toEqual({ reaproveitar: true })
+  })
+
+  it('só senha, último login antigo: reaproveita', () => {
+    expect(decidirReaproveitamentoConta(
+      { provedores: ['password'], ultimoLogin: diasAtras(DIAS_SEM_LOGIN_PARA_REAPROVEITAR + 1), fatoresMfa: 0 }, agora,
+    )).toEqual({ reaproveitar: true })
+  })
+
+  it('login recente: recusa (conta em uso)', () => {
+    expect(decidirReaproveitamentoConta({ provedores: ['password'], ultimoLogin: diasAtras(2), fatoresMfa: 0 }, agora))
+      .toEqual({ reaproveitar: false, motivo: 'login_recente' })
+  })
+
+  it('data de login ilegível conta como recente', () => {
+    expect(decidirReaproveitamentoConta({ provedores: ['password'], ultimoLogin: 'xx', fatoresMfa: 0 }, agora).reaproveitar)
+      .toBe(false)
+  })
+
+  it('outro provedor (Google, telefone): recusa — trocar a senha não tira o acesso', () => {
+    expect(decidirReaproveitamentoConta({ provedores: ['password', 'google.com'], ultimoLogin: null, fatoresMfa: 0 }, agora))
+      .toEqual({ reaproveitar: false, motivo: 'outro_provedor' })
+    expect(decidirReaproveitamentoConta({ provedores: ['phone'], ultimoLogin: null, fatoresMfa: 0 }, agora).reaproveitar)
+      .toBe(false)
+  })
+
+  it('2º fator cadastrado: recusa', () => {
+    expect(decidirReaproveitamentoConta({ provedores: ['password'], ultimoLogin: null, fatoresMfa: 1 }, agora))
+      .toEqual({ reaproveitar: false, motivo: 'segundo_fator' })
   })
 })

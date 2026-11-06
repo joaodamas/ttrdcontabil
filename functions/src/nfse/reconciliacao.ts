@@ -6,8 +6,7 @@
  * Usada por emitir.ts (antes de reenviar um nDPS reaproveitado e ao receber
  * E0014) e pela rotina de 15 min (scheduler/nfse-reconciliacao.ts).
  */
-import * as admin from 'firebase-admin'
-import { Timestamp } from 'firebase-admin/firestore'
+import { Timestamp, getFirestore } from 'firebase-admin/firestore'
 import { randomUUID } from 'node:crypto'
 import { rotearConsulta } from './municipios/router'
 import { resolverProvedorNfse } from './provedor'
@@ -21,7 +20,7 @@ import type {
   CertificadoA1, ConfigFiscalCliente, EmitirNfseInput, Prestador, ResultadoEmissao, ResultadoOperacaoNfse,
 } from './types'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 
 export const COLECAO_RASCUNHOS = 'nfse_rascunhos'
 

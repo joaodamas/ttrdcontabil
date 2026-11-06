@@ -9,13 +9,13 @@
  * alerta diário (1x/dia), e o rascunho ficava até 24 h preso ou era reenviado
  * sem saber se a nota já tinha saído.
  */
-import * as admin from 'firebase-admin'
+import { getFirestore } from 'firebase-admin/firestore'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { credentialSecrets } from '../nfse/secrets'
 import { CODIGOS_A_CONFIRMAR, COLECAO_RASCUNHOS, reconciliarRascunho } from '../nfse/reconciliacao'
 import { logErro } from '../log'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 
 const POR_RODADA = 25
 const TIMEOUT_S = 300

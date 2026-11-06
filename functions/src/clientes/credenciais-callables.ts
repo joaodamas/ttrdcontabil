@@ -16,8 +16,7 @@
  * O trigger sincronizarCredenciaisPreenchidas continua mantendo
  * `clientes.credenciaisPreenchidas` (só os nomes dos campos).
  */
-import * as admin from 'firebase-admin'
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https'
 
 import { atorDaRequisicao, montarAuditLog, requisicaoDoCallable } from '../audit'
@@ -35,7 +34,7 @@ import {
   validarCredenciaisParaSalvar,
 } from './credenciais-regras'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 const OPCOES = {
   region: 'southamerica-east1',
   timeoutSeconds: 30,

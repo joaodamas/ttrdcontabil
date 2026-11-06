@@ -423,7 +423,7 @@
         <table class="field-table">
           <tr><th>Bloco</th><th>O que preenche</th></tr>
           <tr><td>Dados Gerais</td><td>Tipo de pessoa (PF/PJ), CNPJ/CPF, razão social, nome fantasia, regime tributário, contato, status.</td></tr>
-          <tr><td>Cobrança por WhatsApp</td><td>WhatsApp principal e financeiro, consentimento pra cobrança (obrigatório antes de mandar mensagem automática), responsável e contato financeiro, opção de pausar a régua automática pra esse cliente específico.</td></tr>
+          <tr><td>Cobrança por WhatsApp</td><td>WhatsApp principal e financeiro, consentimento pra cobrança e contato financeiro — dados de cadastro (a plataforma não envia mensagens de WhatsApp).</td></tr>
           <tr><td>Endereço</td><td>CEP (auto-preenche o resto), logradouro, número, complemento, bairro, cidade, UF.</td></tr>
           <tr><td>Dados Cadastrais da Empresa</td><td>Inscrição estadual/municipal, NIRE, capital social, porte, CNAE principal/secundário, código do Simples Nacional, mensalidade e dia de vencimento.</td></tr>
           <tr><td>Credenciais da Empresa</td><td>Login/senha do portal da prefeitura, PIN do certificado digital e-CNPJ, login/senha do posto fiscal.</td></tr>
@@ -514,7 +514,7 @@
       <div class="path">Menu <span class="sep">→</span> Financeiro</div>
       <h2>Financeiro</h2>
       <p class="screen-sub">Todo lançamento de dinheiro — a receber ou a pagar — vinculado a cliente e serviço.</p>
-      <p>Os três cartões do topo (<b>A receber</b>, <b>Recebido no mês</b>, <b>Em atraso</b>) dão o resumo de caixa em um olhar. A tabela traz uma coluna que os outros módulos não têm: <b>Status WhatsApp</b> — mostra se a régua de cobrança automática já mandou aviso pra esse lançamento, e qual foi a última ação.</p>
+      <p>Os três cartões do topo (<b>A receber</b>, <b>Recebido no mês</b>, <b>Em atraso</b>) dão o resumo de caixa em um olhar.</p>
       <p>Filtros: Receita/Despesa, e por status (Pendente, Atrasado, Pago, Cancelado, Estornado). <b>Inadimplência</b> abre uma visão dedicada aos clientes com atraso. <b>Exportar lista</b> segue o mesmo padrão de export dos outros módulos.</p>
       <div class="callout tip"><span class="icon">i</span><div><b>De onde vêm os lançamentos</b> Na maior parte dos casos você não cria lançamento na mão — eles nascem sozinhos a partir do serviço recorrente vinculado ao cliente (Cadastros → Clientes → aba Serviços). "Novo Lançamento" é pra casos avulsos, fora da recorrência mensal.</div></div>
     </section>
@@ -552,14 +552,10 @@
     <section class="screen" id="parametros">
       <div class="path">Menu <span class="sep">→</span> Configurações <span class="sep">→</span> Painel Admin <span class="sep">→</span> Parâmetros</div>
       <h2>Configurações · Parâmetros</h2>
-      <p class="screen-sub">As configurações gerais do escritório — nome, ambiente fiscal padrão, régua de cobrança por WhatsApp e flags de interface.</p>
+      <p class="screen-sub">As configurações gerais do escritório — nome, ambiente fiscal padrão e flags de interface.</p>
 
       <h3 class="sub">Dados operacionais</h3>
       <p>Nome e CNPJ do escritório, e-mail de alertas, dia padrão de vencimento (usado quando um serviço não tem dia específico), e o <b>ambiente fiscal padrão</b> — homologação (teste) ou produção (nota fiscal real). Todo cliente novo herda esse padrão, mas pode ser sobrescrito individualmente na config fiscal dele.</p>
-
-      <h3 class="sub">Cobrança por WhatsApp</h3>
-      <p>Configuração base da régua automática (os avisos de 7 dias antes, 3 dias antes, no vencimento, 3 e 7 dias de atraso) e do canal oficial da Cloud API — Business Account ID, Phone Number ID, token de verificação do webhook, e a janela de horário permitida pra mandar mensagem (janela mínima/máxima).</p>
-      <div class="callout warn"><span class="icon">!</span><div><b>Cloud API está desligada</b> No estado atual, "Cloud API habilitada" está marcado como <b>não</b>. Enquanto estiver assim, a régua de cobrança gera os avisos internamente mas eles não chegam de fato no WhatsApp do cliente — vale ativar e preencher Business Account ID / Phone Number ID quando a conta do WhatsApp Business estiver pronta.</div></div>
 
       <h3 class="sub">Rollout de UI premium</h3>
       <p>Flags técnicas que liberam gradualmente um redesign de interface (tabelas, modais e sidebar em versão nova) — não é algo que a operação do dia a dia precise mexer, fica a critério de quem administra o sistema.</p>

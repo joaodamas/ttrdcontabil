@@ -92,7 +92,6 @@ const NAV_SECTIONS: NavSection[] = [
     icon: Receipt,
     items: [
       { href: '/fiscal',            label: 'Emitir NFS-e',     icon: Receipt,   telaKey: 'fiscal' },
-      { href: '/fiscal/produtos',   label: 'Produtos',  icon: Package2,  telaKey: 'fiscal' },
       { href: '/fiscal/historico',  label: 'Histórico de NFS-e', icon: History,   telaKey: 'fiscal' },
       { href: '/ir',                label: 'Imposto de Renda', icon: FileText,  telaKey: 'ir' },
     ],
@@ -262,11 +261,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     ...(s.href ? [s.href] : []),
     ...(s.items?.map(i => i.href) ?? []),
   ])
-  // Entre hrefs que casam com a rota atual (ex: '/fiscal' e '/fiscal/produtos'
-  // casam ambos em '/fiscal/produtos'), só o mais específico (mais longo) fica ativo.
+  // Entre hrefs que casam com a rota atual (ex: '/fiscal' e '/fiscal/historico'
+  // casam ambos em '/fiscal/historico'), só o mais específico (mais longo) fica ativo.
   // O detalhe de uma nota (/fiscal/<id>) pertence ao Histórico de NFS-e — é de
   // lá que se chega nele —, não à tela de emissão.
-  const caminhoNav = /^\/fiscal\/(?!historico(?:\/|$)|produtos(?:\/|$)|emitir(?:\/|$))[^/]+\/?$/.test(pathname)
+  const caminhoNav = /^\/fiscal\/(?!historico(?:\/|$)|emitir(?:\/|$))[^/]+\/?$/.test(pathname)
     ? '/fiscal/historico'
     : pathname
   const bestMatchHref = allNavHrefs

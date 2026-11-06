@@ -109,7 +109,7 @@ test.describe('perfil financeiro: só o que ele pode usar', () => {
     await expect(page.getByRole('button', { name: /Configurar/ })).toHaveCount(0)
   })
 
-  test('financeiro sem as ações e colunas do WhatsApp (módulo desligado)', async ({ page }) => {
+  test('financeiro sem as ações e colunas do WhatsApp (módulo removido)', async ({ page }) => {
     await page.goto('/financeiro')
     await expect(page.getByText('Honorários').first()).toBeVisible()
     await expect(page.getByText('Status WhatsApp')).toHaveCount(0)

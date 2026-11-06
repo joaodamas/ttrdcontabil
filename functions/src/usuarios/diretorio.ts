@@ -11,8 +11,7 @@
  * entrada e não deve gerar escrita aqui. Para popular os perfis que já
  * existiam antes do trigger: scripts/sincronizar-diretorio-usuarios.mjs.
  */
-import * as admin from 'firebase-admin'
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { onDocumentWritten } from 'firebase-functions/v2/firestore'
 
 export function projecaoDiretorio(dados: Record<string, unknown>) {
@@ -27,7 +26,7 @@ export const sincronizarDiretorioUsuario = onDocumentWritten(
   { document: 'usuarios/{uid}', region: 'southamerica-east1' },
   async (event) => {
     const uid = event.params.uid
-    const ref = admin.firestore().collection('usuarios_diretorio').doc(uid)
+    const ref = getFirestore().collection('usuarios_diretorio').doc(uid)
     const depois = event.data?.after
     if (!depois?.exists) {
       await ref.delete()

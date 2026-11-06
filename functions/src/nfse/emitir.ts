@@ -12,9 +12,8 @@
  *     existe → só registra (nfse_emitidas + rascunho emitido), sem reenviar;
  *  5. E0014 (DPS já usada) → mesma consulta e registro.
  */
-import * as admin from 'firebase-admin'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
-import { FieldValue, Timestamp, type Transaction } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp, type Transaction, getFirestore } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { randomUUID } from 'node:crypto'
 import { rotearEmissao } from './municipios/router'
@@ -44,7 +43,7 @@ import {
 } from './reconciliacao'
 import type { EmitirNfseInput, ConfigFiscalCliente, ResultadoEmissao } from './types'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 
 async function validarCert(pfxBase64: string, senha: string) {
   const { validarCertificado } = await import('./xml/signer')

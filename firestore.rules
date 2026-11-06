@@ -613,13 +613,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Catálogo de produtos (NF-e/NFC-e): ficha fiscal por produto, preenchida
-    // pelo contador. Mesmo gate de dado fiscal (tela 'fiscal').
+    // Catálogo de produtos (NF-e): a tela /fiscal/produtos saiu em 2026-11-06
+    // (a plataforma não emite NF-e). Trancada; os documentos que existirem
+    // ficam no banco só para consulta pelo console.
     match /produtos/{id} {
-      allow read: if canReadFiscalConfig() && sameTenantExisting();
-      allow create: if isFiscal() && sameTenantWrite();
-      allow update: if isFiscal() && sameTenantUpdate();
-      allow delete: if isAdmin() && sameTenantExisting();
+      allow read, write: if false;
     }
 
     // ─── NFS-e ────────────────────────────────────────────────────────────────
@@ -654,10 +652,21 @@ service cloud.firestore {
     // src/components/financeiro/fila-cobranca.tsx), sempre em nome próprio e
     // com a hora do servidor — antes qualquer ativo forjava evento de qualquer
     // tipo, com qualquer autor e data.
+    // TTL (functions/src/retencao.ts): `expiraEm` é opcional (bundle antigo em
+    // cache não o envia; sem ele o doc nunca expira), mas, se vier, não pode
+    // encurtar a retenção. `diasMinimos` = retenção da coleção menos 30 dias de
+    // folga para relógio errado no navegador.
+    function expiraEmValido(d, diasMinimos) {
+      return !('expiraEm' in d)
+        || (d.expiraEm is timestamp && d.expiraEm > request.time + duration.value(diasMinimos, 'd'));
+    }
+
     function eventoDoNavegadorValido() {
       let d = request.resource.data;
       return d.keys().hasOnly(['tenantId', 'tipo', 'titulo', 'descricao', 'clienteId', 'origemColecao', 'origemId',
-          'actorId', 'actorNome', 'metadata', 'criadoEm', 'atualizadoEm', 'criadoPorId', 'criadoPorNome'])
+          'actorId', 'actorNome', 'metadata', 'criadoEm', 'atualizadoEm', 'criadoPorId', 'criadoPorNome', 'expiraEm'])
+        // events: 2 anos (731 dias) − 30.
+        && expiraEmValido(d, 701)
         && d.criadoPorId == request.auth.uid
         && (!('actorId' in d) || d.actorId == request.auth.uid)
         && d.criadoEm == request.time
@@ -674,10 +683,10 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // nfse_fila_processamento: somente Cloud Functions.
+    // nfse_fila_processamento: nenhuma function grava nem lê (a fila era dos
+    // conectores antigos). Trancada.
     match /nfse_fila_processamento/{id} {
-      allow read: if isFiscal() && sameTenantExisting();
-      allow write: if false;
+      allow read, write: if false;
     }
 
     // nfse_erros: histórico de rejeições/erros de integração. Escrita só via
@@ -725,35 +734,16 @@ service cloud.firestore {
       allow delete: if isAdmin() && sameTenantExisting();
     }
 
-    // ─── WhatsApp (régua de cobrança) ─────────────────────────────────────────
-    // Todas as coleções são escritas exclusivamente pelas Cloud Functions
-    // (Admin SDK ignora rules). O front só lê dados do próprio tenant — sem isso
-    // a régua de cobrança e o histórico de mensagens falham com permission-denied.
 
-    match /whatsapp_campaign_rules/{id} {
-      allow read: if canRead() && sameTenantExisting();
-      allow write: if false;
-    }
-
-    match /whatsapp_templates/{id} {
-      allow read: if canRead() && sameTenantExisting();
-      allow write: if false;
-    }
-
-    match /whatsapp_messages/{id} {
-      allow read: if isFinanceiro() && sameTenantExisting();
-      allow write: if false;
-    }
-
-    match /whatsapp_jobs/{id} {
-      allow read: if isFinanceiro() && sameTenantExisting();
-      allow write: if false;
-    }
-
-    match /whatsapp_webhook_events/{id} {
-      allow read: if isAdmin() && sameTenantExisting();
-      allow write: if false;
-    }
+    // ─── WhatsApp (removido em 2026-11-06) ────────────────────────────────────
+    // O módulo de cobrança por WhatsApp nunca foi publicado e saiu do código.
+    // whatsapp_campaign_rules, whatsapp_templates, whatsapp_messages,
+    // whatsapp_jobs e whatsapp_webhook_events: trancadas para todos.
+    match /whatsapp_campaign_rules/{id} { allow read, write: if false; }
+    match /whatsapp_templates/{id} { allow read, write: if false; }
+    match /whatsapp_messages/{id} { allow read, write: if false; }
+    match /whatsapp_jobs/{id} { allow read, write: if false; }
+    match /whatsapp_webhook_events/{id} { allow read, write: if false; }
 
     // ─── Logs de auditoria — append-only, nunca deletar ──────────────────────
 
@@ -768,7 +758,9 @@ service cloud.firestore {
     function logDoNavegadorValido() {
       let d = request.resource.data;
       return d.keys().hasOnly(['tenantId', 'usuarioId', 'usuarioNome', 'usuarioEmail', 'entidade', 'entidadeId',
-          'acao', 'dadosAntes', 'dadosDepois', 'origem', 'path', 'criadoEm'])
+          'acao', 'dadosAntes', 'dadosDepois', 'origem', 'path', 'criadoEm', 'expiraEm'])
+        // logs_auditoria: 6 anos (2192 dias) − 30.
+        && expiraEmValido(d, 2162)
         && d.usuarioId == request.auth.uid
         && d.usuarioEmail == request.auth.token.email
         && d.origem == 'client'
@@ -820,11 +812,10 @@ service cloud.firestore {
 
     // ─── Documentos (referências de arquivos no Storage) ─────────────────────
 
+    // Nenhuma tela nem function usa (o Storage `documentos/` também está
+    // trancado). Trancada até existir um fluxo — e então restringir por perfil.
     match /documentos/{id} {
-      allow read: if canRead() && sameTenantExisting();
-      allow create: if isOperacional() && sameTenantWrite();
-      allow update: if isOperacional() && sameTenantUpdate();
-      allow delete: if isAdmin() && sameTenantExisting();
+      allow read, write: if false;
     }
   }
 }

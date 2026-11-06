@@ -63,33 +63,6 @@ function buildEventos(lancamento: Lancamento): TimelineEvento[] {
     })
   }
 
-  // Envios WhatsApp
-  const ultimoEnvio = tsToDate(lancamento.ultimoEnvioWhatsappEm)
-  if (ultimoEnvio) {
-    const wsStatus = (lancamento.statusWhatsappCobranca as string) ?? 'enviado'
-    eventos.push({
-      id:       'wa-ultimo',
-      tipo:     'cobranca_enviada',
-      titulo:   `WhatsApp ${wsStatus}`,
-      detalhe:  (lancamento.etapaWhatsappAtual as string | undefined) ?? undefined,
-      ts:       ultimoEnvio,
-      variante: wsStatus === 'lido' || wsStatus === 'respondido' ? 'success' : wsStatus === 'falhou' ? 'destructive' : 'neutral',
-    })
-  }
-
-  // Pausa da régua
-  if (lancamento.whatsappCobrancaPausada) {
-    const pausadoEm = tsToDate(lancamento.whatsappCobrancaPausadaEm)
-    eventos.push({
-      id:       'pausado',
-      tipo:     'pausado',
-      titulo:   'Régua de cobrança pausada',
-      detalhe:  (lancamento.whatsappCobrancaPausadaMotivo as string | undefined) ?? undefined,
-      ts:       pausadoEm ?? hoje,
-      variante: 'warning',
-    })
-  }
-
   // Pagamento
   const dataPagamento = tsToDate(lancamento.dataPagamento)
   if (dataPagamento && lancamento.status === 'pago') {

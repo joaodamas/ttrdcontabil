@@ -53,6 +53,16 @@ export const PERFIL_DEFAULT_TELAS: Record<Perfil, readonly TelaKey[]> = {
  */
 export const PERFIS_CREDENCIAIS: readonly Perfil[] = ['admin', 'fiscal']
 
+/**
+ * Quem gera o fechamento mensal (callable gerarFechamentoMensal). Mesmo
+ * conjunto que cria/edita `fechamentos` e encerra a revisão do mês nas regras
+ * (isEquipeContabil; fechamento_revisoes: operacional ou fiscal) e que tem a
+ * tela 'fechamento' em PERFIL_DEFAULT_TELAS. Decisão de 2026-11-06: antes só
+ * admin/operacional — o fiscal editava e encerrava o mês, mas tomava
+ * permission-denied em "Gerar fechamento". Reabrir mês travado segue só admin.
+ */
+export const PERFIS_FECHAMENTO: readonly Perfil[] = ['admin', 'operacional', 'fiscal']
+
 export function ehPerfil(valor: unknown): valor is Perfil {
   return typeof valor === 'string' && (PERFIS as readonly string[]).includes(valor)
 }
