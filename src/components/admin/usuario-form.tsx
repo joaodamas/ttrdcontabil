@@ -83,12 +83,21 @@ interface UsuarioFormProps {
     tenantId?: string
   }
   onSaved?: () => void
+  /** Controle externo do diálogo (ex.: clicar na linha da lista abre a edição). */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 /* ─── Component ───────────────────────────────────────────── */
-export function UsuarioForm({ usuario, onSaved }: UsuarioFormProps) {
+export function UsuarioForm({ usuario, onSaved, open: openControlado, onOpenChange }: UsuarioFormProps) {
   const isEditing = !!usuario?.id
-  const [open, setOpen] = useState(false)
+  const [openInterno, setOpenInterno] = useState(false)
+  const open = openControlado ?? openInterno
+  const setOpen = (v: boolean) => {
+    if (openControlado === undefined) setOpenInterno(v)
+    onOpenChange?.(v)
+  }
+
   const { usuario: usuarioLogado } = useAuth()
   const isSelf = isEditing && !!usuarioLogado && usuarioLogado.uid === usuario?.id
 

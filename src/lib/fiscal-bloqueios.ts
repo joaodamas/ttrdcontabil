@@ -34,3 +34,15 @@ export function resumirBloqueios(bloqueios: readonly string[], max = 3): string 
   const resto = bloqueios.length - max
   return resto > 0 ? `${visiveis} · +${resto}` : visiveis
 }
+
+const BLOQUEIOS_DO_CADASTRO: readonly string[] = [BLOQUEIO_FISCAL.semServicoAtivo, BLOQUEIO_FISCAL.diaEmissaoAusente]
+
+/**
+ * Onde se corrige cada bloqueio da prontidão: serviço e dia de emissão estão
+ * no cadastro do cliente; o resto (município, certificado, inscrição,
+ * alíquota…) na configuração fiscal (/clientes/<id>/fiscal).
+ */
+export function destinoBloqueio(bloqueio: string, clienteId: string): string {
+  const id = encodeURIComponent(clienteId)
+  return BLOQUEIOS_DO_CADASTRO.includes(bloqueio) ? `/clientes/${id}` : `/clientes/${id}/fiscal`
+}

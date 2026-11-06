@@ -7,11 +7,14 @@ import { STATUS_CYCLE, STATUS_LABEL, STATUS_NOME, STATUS_STYLE } from './status-
 import { situacaoObrigacao, temPendencia } from '@/lib/fechamento-resumo'
 import { DataTableShell } from '@/components/ui/data-table-shell'
 import { EmptyState } from '@/components/ui/empty-state'
+import { useLinhaClicavel } from '@/components/ui/linha-clicavel'
+import { LinkPermitido } from '@/components/ui/link-permitido'
 
 type StatusObrigacao = 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
 
 interface Fechamento {
   id: string
+  clienteId?: string
   clienteCodigo: number
   clienteNome: string
   regime: string
@@ -94,7 +97,18 @@ const REGIME_COLOR: Record<string, string> = {
   isento:           'bg-muted text-muted-foreground border border-border',
 }
 
+/** Nome do cliente que abre a ficha (/clientes/<id>) quando o perfil pode. */
+function NomeCliente({ f }: { f: Fechamento }) {
+  if (!f.clienteId) return <>{f.clienteNome}</>
+  return (
+    <LinkPermitido href={`/clientes/${encodeURIComponent(f.clienteId)}`} className="hover:underline" title="Abrir ficha do cliente">
+      {f.clienteNome}
+    </LinkPermitido>
+  )
+}
+
 export function FechamentoTable({ fechamentos, onUpdate, travado = false }: FechamentoTableProps) {
+  const linha = useLinhaClicavel()
   if (fechamentos.length === 0) {
     return (
       <EmptyState
@@ -140,12 +154,13 @@ export function FechamentoTable({ fechamentos, onUpdate, travado = false }: Fech
             const linhaPendente = 'bg-destructive/[0.03] hover:bg-destructive/[0.06] dark:bg-destructive/[0.08] dark:hover:bg-destructive/[0.14]'
             return (
             <Fragment key={f.id}>
-            <tr className={cn(
-              'hidden hover:bg-muted/30 transition-colors md:table-row',
-              comPendencia ? linhaPendente : ''
-            )}>
+            {/* Linha abre a ficha do cliente; os status (botões) e o portal
+                continuam com a própria ação. */}
+            <tr {...linha(f.clienteId ? `/clientes/${encodeURIComponent(f.clienteId)}` : null, {
+              className: cn('hidden hover:bg-muted/30 transition-colors md:table-row', comPendencia ? linhaPendente : ''),
+            })}>
               <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{f.clienteCodigo}</td>
-              <td className="px-3 py-2 font-medium">{f.clienteNome}</td>
+              <td className="px-3 py-2 font-medium"><NomeCliente f={f} /></td>
               <td className="px-3 py-2">
                 <span className={cn('rounded px-1.5 py-0.5 text-xs font-semibold', REGIME_COLOR[f.regime] ?? 'bg-muted text-muted-foreground')}>
                   {REGIME_LABEL[f.regime] ?? f.regime}
@@ -171,16 +186,16 @@ export function FechamentoTable({ fechamentos, onUpdate, travado = false }: Fech
                   )
                 })()}
               </td>
-              <td className="px-2 py-2 text-center">
+              <td className="px-2 py-2 text-center" data-parar-linha="">
                 <StatusCell status={f.dasStatus} campo="das" id={f.id} onUpdate={onUpdate} travado={travado} />
               </td>
-              <td className="px-2 py-2 text-center">
+              <td className="px-2 py-2 text-center" data-parar-linha="">
                 <StatusCell status={f.esocialStatus} campo="esocial" id={f.id} onUpdate={onUpdate} travado={travado} />
               </td>
-              <td className="px-2 py-2 text-center">
+              <td className="px-2 py-2 text-center" data-parar-linha="">
                 <StatusCell status={f.reinfStatus} campo="reinf" id={f.id} onUpdate={onUpdate} travado={travado} />
               </td>
-              <td className="px-2 py-2 text-center">
+              <td className="px-2 py-2 text-center" data-parar-linha="">
                 <StatusCell status={f.fgtsStatus} campo="fgts" id={f.id} onUpdate={onUpdate} travado={travado} />
               </td>
               <td className="px-3 py-2">
@@ -205,7 +220,8 @@ export function FechamentoTable({ fechamentos, onUpdate, travado = false }: Fech
                   <div className="min-w-0">
                     <p className="text-sm font-medium">
                       <span className="mr-1.5 font-mono text-xs text-muted-foreground">{f.clienteCodigo}</span>
-                      {f.clienteNome}
+                      <NomeCliente f={f} />
+
                     </p>
                     <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                       <span className={cn('rounded px-1.5 py-0.5 text-[11px] font-semibold', REGIME_COLOR[f.regime] ?? 'bg-muted text-muted-foreground')}>

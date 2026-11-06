@@ -18,6 +18,10 @@ import { FilterBtn } from '@/components/ui/filter-btn'
 import { irFiltroSchema } from '@/features/ir/schemas'
 import type { IrDeclaracaoRecord, IrFilters } from '@/features/ir/types'
 import { useIrList } from '@/features/ir/hooks'
+import { LinhaClicavel } from '@/components/ui/linha-clicavel'
+import { LinkPermitido } from '@/components/ui/link-permitido'
+import { FiltrosAtivos } from '@/components/ui/filtros-ativos'
+import { hrefSemFiltro } from '@/lib/url-filtros'
 
 function IrContent() {
   const searchParams = useSearchParams()
@@ -48,10 +52,10 @@ function IrContent() {
         title="Imposto de Renda"
         description={isError ? `Ano-base ${anoBase}` : <>{total} declaraç{total !== 1 ? 'ões' : 'ão'} — Ano-base {anoBase}</>}
         action={
-          <Link href="/ir/nova" className={buttonVariants({ size: 'cta' })}>
+          <LinkPermitido href="/ir/nova" semAcesso="ocultar" className={buttonVariants({ size: 'cta' })}>
             <Plus />
             Nova declaração
-          </Link>
+          </LinkPermitido>
         }
       />
 
@@ -71,6 +75,12 @@ function IrContent() {
           ))}
         </div>
       </div>
+
+      <FiltrosAtivos
+        chips={[
+          status && { chave: 'status', rotulo: 'Status', valor: getStatusLabel('ir', status), removerHref: hrefSemFiltro('/ir', searchParams, ['status']) },
+        ]}
+      />
 
       <div className="overflow-hidden rounded-2xl border border-border/65 bg-card/95 card-shadow">
         <table className="w-full text-sm">
@@ -100,13 +110,13 @@ function IrContent() {
                 icon={FileText}
                 title="Nenhuma declaração encontrada"
                 description={status ? 'Tente ajustar os filtros.' : `Nenhuma declaração para ${anoBase}.`}
-                action={!status ? { label: 'Nova Declaração', href: '/ir/nova' } : undefined}
+                action={!status ? { label: 'Nova declaração', href: '/ir/nova' } : undefined}
               />
             ) : (
               declaracoes.map((d: IrDeclaracaoRecord) => {
                 const dataEntrega = d.dataEntrega as Timestamp | undefined
                 return (
-                  <tr key={d.id as string} className="transition-colors hover:bg-muted/35">
+                  <LinhaClicavel key={d.id as string} alvo={`/ir/${d.id}`} className="transition-colors hover:bg-muted/35">
                     <td className="px-4 py-3">
                       <Link
                         href={`/ir/${d.id}`}
@@ -125,7 +135,8 @@ function IrContent() {
                     <td className="px-4 py-3 text-muted-foreground">
                       {dataEntrega ? formatDate(tsToDate(dataEntrega)) : '—'}
                     </td>
-                  </tr>
+                  </LinhaClicavel>
+
                 )
               })
             )}

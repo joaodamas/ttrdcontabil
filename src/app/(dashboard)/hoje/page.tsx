@@ -604,7 +604,8 @@ export default function HojePage() {
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             {bloqueios.slice(0, 12).map((b) => (
-              <LinkPermitido key={b.id} href="/fechamento">
+              // Abre o fechamento já filtrado no cliente (chip removível lá).
+              <LinkPermitido key={b.id} href={b.clienteId ? `/fechamento?clienteId=${encodeURIComponent(b.clienteId)}` : '/fechamento'}>
                 <Badge variant="warning">{b.clienteNome ?? b.id}</Badge>
               </LinkPermitido>
             ))}

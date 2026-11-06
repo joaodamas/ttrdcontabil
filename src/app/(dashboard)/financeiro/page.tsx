@@ -2,7 +2,6 @@
 
 import { Fragment, useMemo, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 import { Timestamp } from 'firebase/firestore'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -43,6 +42,20 @@ import type { FirestoreCursor } from '@/lib/firestore-client'
 import { fetchWhatsappHistory, pauseWhatsappRuleForLancamento, rescheduleWhatsappRuleForLancamento, resumeWhatsappRuleForLancamento, sendWhatsappNow } from '@/features/whatsapp/services'
 import { WHATSAPP_STATUS_LABELS } from '@/features/whatsapp/types'
 import { WHATSAPP_HABILITADO } from '@/lib/features'
+import { LinkPermitido } from '@/components/ui/link-permitido'
+import { FiltrosAtivos } from '@/components/ui/filtros-ativos'
+import { useNomeCliente, useRotuloCompetencia } from '@/lib/use-nomes-filtro'
+import { hrefSemFiltro } from '@/lib/url-filtros'
+
+/** Nome do pagador; com cliente vinculado, leva à ficha do cliente. */
+function PagadorLink({ clienteId, nome, className }: { clienteId?: string; nome: string; className?: string }) {
+  if (!clienteId) return <span className={className}>{nome}</span>
+  return (
+    <LinkPermitido href={`/clientes/${encodeURIComponent(clienteId)}`} className={className} title="Abrir ficha do cliente">
+      <span className="hover:underline">{nome}</span>
+    </LinkPermitido>
+  )
+}
 
 // Colunas da tabela: as 4 do WhatsApp só existem com o módulo ligado.
 const COLUNAS_TABELA = WHATSAPP_HABILITADO ? 11 : 7
@@ -85,6 +98,9 @@ function FinanceiroContent() {
     const q = p.toString()
     router.push(q ? `/financeiro?${q}` : '/financeiro', { scroll: false })
   }
+  const nomeCliente = useNomeCliente(clienteId)
+  const rotuloCompetencia = useRotuloCompetencia(competenciaId)
+  const semFiltro = (...chaves: string[]) => hrefSemFiltro('/financeiro', searchParams, chaves)
   const setTipo = (v: string) => setFiltros({ tipo: v })
   const setStatus = (v: string) => setFiltros({ status: v })
   const filterKey = useMemo(
@@ -271,10 +287,14 @@ function FinanceiroContent() {
               <Download />
               Inadimplência
             </Button>
-            <Link href="/financeiro/novo" className={buttonVariants({ size: 'cta' })}>
+            <LinkPermitido
+              href="/financeiro/novo"
+              semAcesso="ocultar"
+              className={buttonVariants({ size: 'cta' })}
+            >
               <Plus />
               Novo lançamento
-            </Link>
+            </LinkPermitido>
           </>
         }
       />
@@ -400,6 +420,18 @@ function FinanceiroContent() {
         </div>
       ) : null}
 
+      {/* clienteId/competenciaId chegam de outras telas ("Financeiro do
+          cliente") e antes filtravam a lista sem aparecer em lugar nenhum. */}
+      <FiltrosAtivos
+        chips={[
+          clienteId && { chave: 'clienteId', rotulo: 'Cliente', valor: nomeCliente, removerHref: semFiltro('clienteId') },
+          competenciaId && { chave: 'competenciaId', rotulo: 'Competência', valor: rotuloCompetencia, removerHref: semFiltro('competenciaId') },
+          tipo && { chave: 'tipo', rotulo: 'Tipo', valor: TIPO_MAP[tipo]?.label ?? tipo, removerHref: semFiltro('tipo') },
+          status && { chave: 'status', rotulo: 'Status', valor: getStatusLabel('pagamento', status), removerHref: semFiltro('status') },
+        ]}
+        limparHref="/financeiro"
+      />
+
       <DataTableShell density="compact">
         <table className={`w-full table-fixed text-sm md:table-auto ${WHATSAPP_HABILITADO ? 'md:min-w-[1180px]' : 'md:min-w-[900px]'}`}>
           <thead className="hidden bg-muted/50 md:table-header-group">
@@ -439,8 +471,8 @@ function FinanceiroContent() {
                 colSpan={COLUNAS_TABELA}
                 icon={Receipt}
                 title="Nenhum lançamento encontrado"
-                description={tipo || status ? 'Tente ajustar os filtros.' : 'Clique em "Novo Lançamento" para começar.'}
-                action={!tipo && !status ? { label: 'Novo Lançamento', href: '/financeiro/novo' } : undefined}
+                description={tipo || status || clienteId || competenciaId ? 'Tente ajustar os filtros.' : 'Clique em "Novo lançamento" para começar.'}
+                action={!tipo && !status ? { label: 'Novo lançamento', href: '/financeiro/novo' } : undefined}
               />
             ) : lancamentos.map((l) => {
                 const dataVenc = tsToDate(l.dataVencimento)
@@ -521,7 +553,7 @@ function FinanceiroContent() {
                   <tr className={`hidden transition-colors hover:bg-muted/35 md:table-row${riscoMotivo ? ' border-l-2 border-l-destructive' : ''}`}>
                     <td className="px-4 py-3">
                       <div className="min-w-0">
-                        <p className="font-medium">{pagadorNome}</p>
+                        <PagadorLink clienteId={l.clienteId as string | undefined} nome={pagadorNome} className="font-medium" />
                         <p className="text-xs text-muted-foreground">{TIPO_MAP[l.tipo as string]?.label ?? (l.tipo as string) ?? '—'}</p>
                       </div>
                     </td>
@@ -580,7 +612,8 @@ function FinanceiroContent() {
                     <td colSpan={COLUNAS_TABELA} className="px-3 py-2.5">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{pagadorNome}</p>
+                          <PagadorLink clienteId={l.clienteId as string | undefined} nome={pagadorNome} className="block truncate text-sm font-medium" />
+
                           <p className="truncate text-xs text-muted-foreground">{(l.descricao as string) ?? '—'}</p>
                         </div>
                         <p className="shrink-0 text-sm font-semibold tabular-nums">{formatCurrency(l.valor as number)}</p>

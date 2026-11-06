@@ -38,6 +38,9 @@ import { fechamentoKeys } from '@/features/fechamento/queries'
 import { getErrorMessage } from '@/lib/error-message'
 import { resumirFechamentos, temPendencia } from '@/lib/fechamento-resumo'
 import type { FechamentoFilters, FechamentoRecord } from '@/features/fechamento/types'
+import { FiltrosAtivos } from '@/components/ui/filtros-ativos'
+import { useNomeCliente } from '@/lib/use-nomes-filtro'
+import { hrefSemFiltro } from '@/lib/url-filtros'
 
 const MESES = [
   { value: 1,  label: 'Janeiro'   },
@@ -78,6 +81,9 @@ function FechamentoContent() {
     regime: searchParams.get('regime') ?? '',
   })
   const { mes, ano, regime } = parsed
+  // ?clienteId= vem dos badges de bloqueio do "Hoje": mostra só aquele cliente
+  // (filtro local — o mês inteiro já é uma leitura só) com chip removível.
+  const clienteId = searchParams.get('clienteId') ?? ''
   const mesLabel = MESES.find((m) => m.value === mes)?.label ?? ''
 
   const [fechamentos, setFechamentos] = useState<FechamentoRecord[]>([])
@@ -104,8 +110,10 @@ function FechamentoContent() {
   }, [ano, mes])
 
   useEffect(() => {
-    setFechamentos(fechamentosData as FechamentoRecord[])
-  }, [fechamentosData])
+    const todos = fechamentosData as FechamentoRecord[]
+    setFechamentos(clienteId ? todos.filter((f) => f.clienteId === clienteId) : todos)
+  }, [fechamentosData, clienteId])
+  const nomeCliente = useNomeCliente(clienteId, fechamentos.find((f) => f.clienteId === clienteId)?.clienteNome)
 
   async function load() {
     try {
@@ -120,9 +128,11 @@ function FechamentoContent() {
       mes: String(mes),
       ano: String(ano),
       ...(regime ? { regime } : {}),
+      ...(clienteId ? { clienteId } : {}),
       ...Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])),
     })
     if (!sp.get('regime')) sp.delete('regime')
+    if (!sp.get('clienteId')) sp.delete('clienteId')
     startTransition(() => {
       router.push(`/fechamento?${sp.toString()}`)
     })
@@ -249,8 +259,8 @@ function FechamentoContent() {
               onClick={() => setRevisaoDialogOpen(true)}
               // A revisão trava o mês INTEIRO (id ano_mes), mas o snapshot sai da
               // lista na tela — com regime filtrado ele registraria só parte.
-              disabled={loading || revisaoLoading || Boolean(regime)}
-              title={regime ? 'Remova o filtro de regime para encerrar a revisão do mês inteiro.' : undefined}
+              disabled={loading || revisaoLoading || Boolean(regime) || Boolean(clienteId)}
+              title={regime || clienteId ? 'Remova os filtros de regime e cliente para encerrar a revisão do mês inteiro.' : undefined}
             >
               <ClipboardList />
               Encerrar revisão do mês
@@ -473,7 +483,16 @@ function FechamentoContent() {
         />
       ) : null}
 
+      <FiltrosAtivos
+        chips={[
+          clienteId && { chave: 'clienteId', rotulo: 'Cliente', valor: nomeCliente, removerHref: hrefSemFiltro('/fechamento', searchParams, ['clienteId']) },
+          regime && { chave: 'regime', rotulo: 'Regime', valor: REGIMES.find((r) => r.value === regime)?.label ?? regime, removerHref: hrefSemFiltro('/fechamento', searchParams, ['regime']) },
+        ]}
+        limparHref={`/fechamento?mes=${mes}&ano=${ano}`}
+      />
+
       {/* Table */}
+
       <div ref={tabelaRef} id="fechamento-tabela">
         {loading ? (
           <div className="overflow-hidden rounded-2xl border border-border/65 bg-card/95">

@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
+import { test, expect } from './fixtures'
 
 /*
  * Roda contra o build estático + emuladores com scripts/seed-emulador.mjs

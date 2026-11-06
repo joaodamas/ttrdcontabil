@@ -8,7 +8,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions'
 import { toast } from 'sonner'
 
 import { listDocumentsPage, type FirestoreCursor } from '@/lib/firestore-client'
-import { formatDate, formatCurrency, tsToDate, cn } from '@/lib/utils'
+import { formatDate, formatCurrency, formatMesAno, tsToDate, cn } from '@/lib/utils'
 import { exportToCsv } from '@/lib/export-csv'
 import { exportToExcel } from '@/lib/export-excel'
 import { getFirebaseApp } from '@/lib/firebase'
@@ -26,7 +26,7 @@ import { AppModal } from '@/components/ui/app-modal'
 import { FilterBtn } from '@/components/ui/filter-btn'
 import { DataTableShell } from '@/components/ui/data-table-shell'
 import { Textarea } from '@/components/ui/textarea'
-import { ChevronDown, Download, Eye, FileCode, FileText, Loader2, RefreshCw, Search, XCircle, History } from 'lucide-react'
+import { ChevronDown, Download, Eye, FileCode, FileText, Loader2, MoreHorizontal, RefreshCw, Search, XCircle, History } from 'lucide-react'
 import { useNfseArquivos } from '@/components/fiscal/use-nfse-arquivos'
 import { podeObterDanfse, temXmlNfse } from '@/features/fiscal/nfse-arquivos'
 import { LogsNfseModal } from '@/components/fiscal/logs-nfse-modal'
@@ -34,6 +34,14 @@ import { HeatmapFiscal } from '@/components/fiscal/heatmap-fiscal'
 import { useAuth } from '@/contexts/auth-context'
 import { podeOperarNfse } from '@/lib/permissions'
 import { ClientePicker } from '@/components/ui/cliente-picker'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { useLinhaClicavel, PararLinha } from '@/components/ui/linha-clicavel'
+import { FiltrosAtivos } from '@/components/ui/filtros-ativos'
+import { SeletorMes } from '@/components/ui/seletor-mes'
+import { hrefComFiltro, hrefSemFiltro } from '@/lib/url-filtros'
+import { STATUS_COM_ERRO, rotuloStatusFiltro, statusDaUrl } from '@/features/fiscal/historico-filtros'
 
 const TIPO_LABEL: Record<string, string> = { nfe: 'NF-e', nfse: 'NFS-e' }
 
@@ -57,6 +65,8 @@ function FiscalHistoricoContent() {
   const searchParams = useSearchParams()
   const clienteId = searchParams.get('clienteId') ?? ''
   const status = searchParams.get('status') ?? ''
+  // `status` pode ser uma lista ("rejeitada,erro_integracao"): vira where-in.
+  const statusLista = useMemo(() => statusDaUrl(status), [status])
   const tipo = searchParams.get('tipo') ?? ''
   const numero = searchParams.get('numero') ?? ''
   const mes = searchParams.get('mes') ? parseInt(searchParams.get('mes')!) : undefined
@@ -123,6 +133,8 @@ function FiscalHistoricoContent() {
   const [logNota, setLogNota] = useState<Record<string, unknown> | null>(null)
   // Sem recarregar a lista ao gerar o PDF: o callable reaproveita o arquivo já salvo.
   const { baixarXml, abrirDanfse, gerandoPdfId } = useNfseArquivos()
+  const linha = useLinhaClicavel()
+
 
   const loadNotas = useCallback(() => {
     setLoading(true)
@@ -138,7 +150,9 @@ function FiscalHistoricoContent() {
 
     const constraints: QueryConstraint[] = [
       ...(clienteId ? [where('clienteId', '==', clienteId)] : []),
-      ...(status ? [where('status', '==', status)] : []),
+      ...(statusLista.length === 1 ? [where('status', '==', statusLista[0])] : []),
+      ...(statusLista.length > 1 ? [where('status', 'in', statusLista)] : []),
+
       ...(inicioPeriodo && fimPeriodo
         ? [where('dataEmissao', '>=', inicioPeriodo), where('dataEmissao', '<=', fimPeriodo), orderBy('dataEmissao', 'desc')]
         : [orderBy('criadoEm', 'desc')]),
@@ -183,7 +197,7 @@ function FiscalHistoricoContent() {
       setHasMore(false)
       setLastCursor(null)
     }).finally(() => setLoading(false))
-  }, [activePagination, ano, buscaAtiva, clienteId, mes, numero, page, status, tipo])
+  }, [activePagination, ano, buscaAtiva, clienteId, mes, numero, page, statusLista, tipo])
 
   useEffect(() => {
     queueMicrotask(loadNotas)
@@ -274,18 +288,16 @@ function FiscalHistoricoContent() {
     }
   }
 
+  // '' remove a chave (antes ficava "status=" na URL).
   function buildUrl(overrides: Record<string, string | number>) {
-    const params = new URLSearchParams({
-      ...(clienteId && { clienteId }),
-      ...(status && { status }),
-      ...(tipo && { tipo }),
-      ...(numero && { numero }),
-      ...(mes && { mes: String(mes) }),
-      ...(ano && { ano: String(ano) }),
-      ...Object.fromEntries(Object.entries(overrides).map(([k, v]) => [k, String(v)])),
-    })
-    return `/fiscal/historico?${params.toString()}`
+    return hrefComFiltro('/fiscal/historico', searchParams, overrides)
   }
+  const semFiltro = (...chaves: string[]) => hrefSemFiltro('/fiscal/historico', searchParams, chaves)
+  const nomeClienteFiltro = clienteId
+    ? ((clientes.find((c) => String(c.id) === clienteId)?.razaoSocial as string | undefined)
+      ?? (notas.find((n) => n.clienteId === clienteId)?.clienteNome as string | undefined)
+      ?? '…')
+    : ''
 
   if (loading) {
     return (
@@ -356,6 +368,14 @@ function FiscalHistoricoContent() {
       )}
 
       <div className="surface-subtle flex flex-wrap items-center gap-3 border px-3 py-2.5">
+        {/* Mesmo seletor de Competências, sobre os parâmetros mes/ano que a
+            consulta já entendia (antes só chegavam por link). */}
+        <SeletorMes
+          mes={mes ?? null}
+          ano={mes ? (ano ?? new Date().getFullYear()) : null}
+          hrefPara={(m, a) => buildUrl({ mes: m, ano: a })}
+          hrefTodos={buildUrl({ mes: '', ano: '' })}
+        />
         <div className="relative flex-1 min-w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -394,7 +414,7 @@ function FiscalHistoricoContent() {
             <p className="text-sm font-semibold text-destructive">{totalRejeitadas} nota{totalRejeitadas !== 1 ? 's' : ''} com erro ou rejeição</p>
             <p className="text-xs text-muted-foreground">Revise o detalhe de cada nota para corrigir e reenviar.</p>
           </div>
-          <Link href={buildUrl({ status: 'rejeitada' })} className="shrink-0 text-xs font-medium text-destructive border border-destructive/25 rounded-lg px-2.5 py-1.5 hover:bg-destructive/10 transition-colors">
+          <Link href={buildUrl({ status: STATUS_COM_ERRO })} className="shrink-0 text-xs font-medium text-destructive border border-destructive/25 rounded-lg px-2.5 py-1.5 hover:bg-destructive/10 transition-colors">
             Ver rejeições
           </Link>
         </div>
@@ -407,6 +427,22 @@ function FiscalHistoricoContent() {
           </FilterBtn>
         ))}
       </div>
+
+      <FiltrosAtivos
+        chips={[
+          (mes || ano) && {
+            chave: 'periodo',
+            rotulo: 'Período',
+            valor: mes && ano ? formatMesAno(mes, ano) : ano ? String(ano) : `mês ${mes}`,
+            removerHref: semFiltro('mes', 'ano'),
+          },
+          clienteId && { chave: 'clienteId', rotulo: 'Cliente', valor: nomeClienteFiltro, removerHref: semFiltro('clienteId') },
+          status && { chave: 'status', rotulo: 'Status', valor: rotuloStatusFiltro(status), removerHref: semFiltro('status') },
+          tipo && { chave: 'tipo', rotulo: 'Tipo', valor: TIPO_LABEL[tipo] ?? tipo, removerHref: semFiltro('tipo') },
+          numero && { chave: 'numero', rotulo: 'Nº', valor: numero, removerHref: semFiltro('numero') },
+        ]}
+        limparHref="/fiscal/historico"
+      />
 
       <DataTableShell density="compact">
         <table className="w-full table-fixed text-sm md:table-auto md:min-w-[920px]">
@@ -454,25 +490,11 @@ function FiscalHistoricoContent() {
                   {group.notas.map((n) => {
                     const dataEmissao = n.dataEmissao as Timestamp | undefined
                     const comErro = n.status === 'rejeitada' || n.status === 'erro_integracao'
-                    // Mesmas ações na linha (desktop) e no card (celular).
+                    // Mesmas ações na linha (desktop) e no card (celular): PDF e
+                    // XML à vista; detalhe, logs, consultar e cancelar no ⋯
+                    // (consultar/cancelar só para quem opera NFS-e).
                     const acoes = (
-                    <div className="flex justify-end gap-1.5">
-                      <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Ver logs de emissão" onClick={() => setLogNota(n)}>
-                        <History className="h-3.5 w-3.5" />
-                      </Button>
-                      <Link
-                        href={`/fiscal/${n.id as string}`}
-                        title="Ver detalhe"
-                        aria-label="Ver detalhe"
-                        className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-8 w-8 p-0' })}
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                      </Link>
-                      {podeOperar ? (
-                        <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Consultar status" onClick={() => consultarStatus(n.id as string)}>
-                          <RefreshCw className="h-3.5 w-3.5" />
-                        </Button>
-                      ) : null}
+                    <PararLinha className="flex justify-end gap-1.5">
                       {temXmlNfse(n) ? (
                         <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Baixar XML" aria-label="Baixar XML" onClick={() => baixarXml(n)}>
                           <FileCode className="h-3.5 w-3.5" />
@@ -494,16 +516,42 @@ function FiscalHistoricoContent() {
                             : <Download className="h-3.5 w-3.5" />}
                         </Button>
                       ) : null}
-                      {podeOperar && n.status === 'emitida' ? (
-                        <Button variant="outline" size="sm" className="h-8 w-8 p-0 text-destructive" title="Solicitar cancelamento" onClick={() => abrirCancelamento(n.id as string)}>
-                          <XCircle className="h-3.5 w-3.5" />
-                        </Button>
-                      ) : null}
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-8 w-8 p-0' })}
+                          aria-label="Mais ações"
+                          title="Mais ações"
+                        >
+                          <MoreHorizontal className="h-3.5 w-3.5" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-52">
+                          <DropdownMenuItem onClick={() => router.push(`/fiscal/${n.id as string}`)}>
+                            <Eye className="h-3.5 w-3.5 mr-2" />Ver detalhe
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setLogNota(n)}>
+                            <History className="h-3.5 w-3.5 mr-2" />Ver logs de emissão
+                          </DropdownMenuItem>
+                          {podeOperar ? (
+                            <DropdownMenuItem onClick={() => { void consultarStatus(n.id as string) }}>
+                              <RefreshCw className="h-3.5 w-3.5 mr-2" />Consultar status
+                            </DropdownMenuItem>
+                          ) : null}
+                          {podeOperar && n.status === 'emitida' ? (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="text-destructive" onClick={() => abrirCancelamento(n.id as string)}>
+                                <XCircle className="h-3.5 w-3.5 mr-2" />Solicitar cancelamento
+                              </DropdownMenuItem>
+                            </>
+                          ) : null}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </PararLinha>
                     )
+                    const detalheHref = `/fiscal/${n.id as string}`
                     return (
                       <Fragment key={n.id as string}>
-                      <tr className={cn('hidden transition-colors hover:bg-muted/35 md:table-row', comErro && 'bg-destructive/[0.03] border-l-2 border-l-destructive')}>
+                      <tr {...linha(detalheHref, { className: cn('hidden transition-colors hover:bg-muted/35 md:table-row', comErro && 'bg-destructive/[0.03] border-l-2 border-l-destructive') })}>
                         <td className="px-4 py-3 font-medium">
                           <div className="flex items-center gap-1.5">
                             <span>{(n.clienteNome as string) ?? '—'}</span>
@@ -536,7 +584,7 @@ function FiscalHistoricoContent() {
                           {acoes}
                         </td>
                       </tr>
-                      <tr className={cn('md:hidden', comErro && 'bg-destructive/[0.03] border-l-2 border-l-destructive')}>
+                      <tr {...linha(detalheHref, { className: cn('md:hidden active:bg-muted/40', comErro && 'bg-destructive/[0.03] border-l-2 border-l-destructive') })}>
                         <td colSpan={8} className="px-3 py-2.5">
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">

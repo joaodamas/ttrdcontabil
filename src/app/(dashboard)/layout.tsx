@@ -14,6 +14,7 @@ import { Search, Plus } from 'lucide-react'
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { RastreadorNavegacao } from '@/lib/historico-interno'
+import { GuardaRotaInexistente } from '@/components/layout/pagina-nao-encontrada'
 import { canAccessTela, podeOperarNfse } from '@/lib/permissions'
 
 function TopBar() {
@@ -25,10 +26,12 @@ function TopBar() {
       <button
         type="button"
         onClick={() => window.dispatchEvent(new CustomEvent('open-command-palette'))}
-        className="hidden sm:flex items-center gap-2 h-8 px-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        aria-label="Buscar (⌘K)"
+        title="Buscar (⌘K)"
+        className="flex items-center justify-center gap-2 h-8 w-8 sm:w-auto sm:px-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
       >
         <Search size={13} />
-        <span className="text-xs">Buscar</span>
+        <span className="hidden sm:inline text-xs">Buscar</span>
         <kbd className="ml-1 hidden lg:inline-flex h-5 items-center rounded border border-border bg-muted px-1.5 font-mono text-[10px] text-muted-foreground">
           ⌘K
         </kbd>
@@ -63,14 +66,15 @@ function DashboardChrome({ children }: { children: React.ReactNode }) {
       <AppSidebar />
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
         <TopBar />
-        <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
+        {/* pb-24 no celular: o botão flutuante (MobileFab) não cobre a última linha. */}
+        <main className="flex-1 overflow-y-auto px-4 pt-5 pb-24 sm:px-6 sm:pb-5 lg:px-8">
           {/* 1280px deixava ~300px de vão morto de cada lado num monitor de
               1920 — a sidebar já come 272. Numa ferramenta de tabela (119
               clientes em 8 colunas) esse espaço é conteúdo, não respiro. O teto
               agora existe só para não esticar linha de texto em ultrawide. */}
           <div className="mx-auto w-full max-w-[1600px]">
             <ErrorBoundary>
-              {children}
+              <GuardaRotaInexistente>{children}</GuardaRotaInexistente>
             </ErrorBoundary>
           </div>
         </main>

@@ -18,6 +18,7 @@ import {
 import { fetchUsuariosAdmin } from '@/features/admin/services'
 import { getErrorMessage } from '@/lib/error-message'
 import type { UsuarioAdmin } from '@/features/admin/types'
+import { LinhaClicavel, PararLinha } from '@/components/ui/linha-clicavel'
 
 const PERFIL_LABELS: Record<string, string> = {
   admin:       'Admin',
@@ -40,6 +41,8 @@ export default function AdminUsuariosPage() {
   const [loading, setLoading]   = useState(true)
   const [erroCarga, setErroCarga] = useState<string | null>(null)
   const { usuario: logado } = useAuth()
+  // Clicar na linha abre a edição (a mesma do botão "Editar").
+  const [editandoId, setEditandoId] = useState<string | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -111,7 +114,7 @@ export default function AdminUsuariosPage() {
                   const totalTelas = TELAS_LIST.length
 
                   return (
-                    <tr key={u.id} className="transition-colors hover:bg-muted/35">
+                    <LinhaClicavel key={u.id} alvo={() => setEditandoId(u.id)} className="transition-colors hover:bg-muted/35">
                       <td className="px-4 py-3 font-medium">{u.nome}</td>
                       <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
                       <td className="px-4 py-3">
@@ -149,12 +152,18 @@ export default function AdminUsuariosPage() {
                         {u.ultimoAcesso ? formatDate(tsToDate(u.ultimoAcesso)) : '—'}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1">
-                          <UsuarioForm usuario={u} onSaved={load} />
+                        <PararLinha className="flex items-center justify-end gap-1">
+                          <UsuarioForm
+                            usuario={u}
+                            onSaved={load}
+                            open={editandoId === u.id}
+                            onOpenChange={(v) => setEditandoId(v ? u.id : null)}
+                          />
                           <UsuarioAcoes usuario={u} ehProprio={logado?.uid === u.id} onChanged={load} />
-                        </div>
+                        </PararLinha>
                       </td>
-                    </tr>
+                    </LinhaClicavel>
+
                   )
                 })
               )}

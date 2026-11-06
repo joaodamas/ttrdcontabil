@@ -9,7 +9,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { formatDate, formatCurrency, tsToDate, cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { NfseStatusBadge } from '@/components/ui/status-badge'
-import { resumirBloqueios } from '@/lib/fiscal-bloqueios'
+import { destinoBloqueio } from '@/lib/fiscal-bloqueios'
 import { buttonVariants } from '@/components/ui/button'
 import { PageHeader } from '@/components/layout/page-header'
 import { AppModal } from '@/components/ui/app-modal'
@@ -32,6 +32,48 @@ import { fiscalKeys } from '@/features/fiscal/queries'
 import { temHistoricoInterno } from '@/lib/historico-interno'
 import { useAuth } from '@/contexts/auth-context'
 import { podeOperarNfse } from '@/lib/permissions'
+import { useLinhaClicavel, PararLinha } from '@/components/ui/linha-clicavel'
+import { LinkPermitido } from '@/components/ui/link-permitido'
+import { STATUS_COM_ERRO, STATUS_PENDENTES, hrefHistorico } from '@/features/fiscal/historico-filtros'
+
+/** Cartão de KPI que leva ao histórico filtrado. */
+function KpiLink({ href, rotulo, children }: { href: string; rotulo: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      aria-label={rotulo}
+      className="block rounded-2xl transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    >
+      {children}
+    </Link>
+  )
+}
+
+/**
+ * Bloqueios da prontidão como links para onde se corrigem (cadastro ou
+ * configuração fiscal do cliente). Só vira link para quem configura NFS-e
+ * (admin/fiscal); para os demais continua texto.
+ */
+function BloqueiosLinks({ bloqueios, clienteId, podeCorrigir, max = 3 }: { bloqueios: readonly string[]; clienteId: string; podeCorrigir: boolean; max?: number }) {
+  if (bloqueios.length === 0) return <span>Sem bloqueios</span>
+  const visiveis = bloqueios.slice(0, max)
+  const resto = bloqueios.length - visiveis.length
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-1 gap-y-0.5">
+      {visiveis.map((b, i) => (
+        <span key={b} className="inline-flex items-center gap-1">
+          {i > 0 ? <span aria-hidden>·</span> : null}
+          {podeCorrigir ? (
+            <LinkPermitido href={destinoBloqueio(b, clienteId)} className="underline decoration-dotted underline-offset-2 hover:text-primary">
+              {b}
+            </LinkPermitido>
+          ) : b}
+        </span>
+      ))}
+      {resto > 0 ? <span title={bloqueios.slice(max).join('\n')}>· +{resto}</span> : null}
+    </span>
+  )
+}
 
 export default function FiscalPage() {
   const router = useRouter()
@@ -45,6 +87,10 @@ export default function FiscalPage() {
   // Financeiro tem a tela NFS-e para consultar notas, mas emitir, lote,
   // rascunhos e cancelamento são só admin/fiscal (functions + regras).
   const podeOperar = podeOperarNfse(usuario)
+  const linha = useLinhaClicavel()
+  const hoje = new Date()
+  const mesAtual = hoje.getMonth() + 1
+  const anoAtual = hoje.getFullYear()
   const emissaoModalOpen = podeOperar && searchParams.get('emitir') === '1'
   const modalClienteId = searchParams.get('clienteId') ?? undefined
   const modalRascunhoId = searchParams.get('rascunhoId') ?? undefined
@@ -195,10 +241,19 @@ export default function FiscalPage() {
 
       {/* KPI strip — horizontal, compacto */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiCard label="Emitidas no mês" value={notasIsError ? '—' : emitidaMesCount} description={notasIsError ? undefined : formatCurrency(somaEmitidaMes)} icon={Receipt} tone="success" />
-        <KpiCard label="Pendentes" value={notasIsError ? '—' : pendenteCount} description={notasIsError ? undefined : 'aguardando envio'} icon={AlertTriangle} tone="warning" />
-        <KpiCard label="Com erro" value={notasIsError ? '—' : erroCount} description={notasIsError ? undefined : 'requer atenção'} icon={XCircle} tone={!notasIsError && erroCount > 0 ? 'danger' : 'neutral'} />
-        <KpiCard label="Canceladas" value={notasIsError ? '—' : canceladaCount} description={notasIsError ? undefined : 'neste mês'} icon={CheckCircle2} />
+        {/* Cada KPI abre o histórico já filtrado pelo que ele conta. */}
+        <KpiLink href={hrefHistorico({ status: 'emitida', mes: mesAtual, ano: anoAtual })} rotulo="Ver notas emitidas no mês">
+          <KpiCard label="Emitidas no mês" value={notasIsError ? '—' : emitidaMesCount} description={notasIsError ? undefined : formatCurrency(somaEmitidaMes)} icon={Receipt} tone="success" />
+        </KpiLink>
+        <KpiLink href={hrefHistorico({ status: STATUS_PENDENTES })} rotulo="Ver notas pendentes">
+          <KpiCard label="Pendentes" value={notasIsError ? '—' : pendenteCount} description={notasIsError ? undefined : 'aguardando envio'} icon={AlertTriangle} tone="warning" />
+        </KpiLink>
+        <KpiLink href={hrefHistorico({ status: STATUS_COM_ERRO })} rotulo="Ver notas com erro ou rejeição">
+          <KpiCard label="Com erro" value={notasIsError ? '—' : erroCount} description={notasIsError ? undefined : 'requer atenção'} icon={XCircle} tone={!notasIsError && erroCount > 0 ? 'danger' : 'neutral'} />
+        </KpiLink>
+        <KpiLink href={hrefHistorico({ status: 'cancelada', mes: mesAtual, ano: anoAtual })} rotulo="Ver notas canceladas no mês">
+          <KpiCard label="Canceladas" value={notasIsError ? '—' : canceladaCount} description={notasIsError ? undefined : 'neste mês'} icon={CheckCircle2} />
+        </KpiLink>
       </div>
 
       {notasIsError ? (
@@ -299,7 +354,7 @@ export default function FiscalPage() {
                   )
                   return (
                   <Fragment key={cliente.clienteId}>
-                  <tr className="hidden hover:bg-muted/30 transition-colors md:table-row">
+                  <tr {...linha(`/clientes/${cliente.clienteId}`, { className: 'hidden hover:bg-muted/30 transition-colors md:table-row' })}>
                     <td className="px-4 py-3 font-medium max-w-[240px]">
                       <div className="flex items-center gap-1.5">
                         <Link href={`/clientes/${cliente.clienteId}`} className="truncate hover:text-primary">
@@ -320,11 +375,11 @@ export default function FiscalPage() {
                     <td className="px-4 py-3">
                       {statusBadge}
                     </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground max-w-[320px]" title={cliente.bloqueios.length > 3 ? cliente.bloqueios.join('\n') : undefined}>
-                      {resumirBloqueios(cliente.bloqueios)}
+                    <td className="px-4 py-3 text-xs text-muted-foreground max-w-[320px]">
+                      <BloqueiosLinks bloqueios={cliente.bloqueios} clienteId={cliente.clienteId} podeCorrigir={podeOperar} />
                     </td>
                   </tr>
-                  <tr className="md:hidden">
+                  <tr {...linha(`/clientes/${cliente.clienteId}`, { className: 'md:hidden' })}>
                     <td colSpan={6} className="px-3 py-2.5">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -347,7 +402,9 @@ export default function FiscalPage() {
                         <div className="shrink-0">{statusBadge}</div>
                       </div>
                       {cliente.bloqueios.length > 0 ? (
-                        <p className="mt-1 text-xs text-muted-foreground">{cliente.bloqueios.slice(0, 3).join(', ')}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          <BloqueiosLinks bloqueios={cliente.bloqueios} clienteId={cliente.clienteId} podeCorrigir={podeOperar} />
+                        </p>
                       ) : null}
                     </td>
                   </tr>
@@ -442,8 +499,13 @@ export default function FiscalPage() {
                   const dataEmissao = n.dataEmissao as Timestamp | undefined
                   const isRascunho = n._origem === 'rascunho'
                   // Mesmas ações na linha (desktop) e no card (celular).
+                  // Linha: nota → detalhe; rascunho → abre a emissão para revisar
+                  // (como o lápis), só para quem emite.
+                  const alvoLinha = isRascunho
+                    ? (podeOperar ? () => openEmissaoModal({ rascunhoId: n.id as string }) : null)
+                    : `/fiscal/${n.id as string}`
                   const acoes = (
-                    <div className="flex justify-end gap-2">
+                    <PararLinha className="flex justify-end gap-2">
                       {hasErroTecnico(n) ? (
                         <button
                           type="button"
@@ -474,15 +536,14 @@ export default function FiscalPage() {
                         </button>
                         </>
                       )}
-                    </div>
+                    </PararLinha>
                   )
                   return (
                     <Fragment key={n.id as string}>
                     <tr
-                      className={cn(
-                        'hidden transition-colors hover:bg-muted/30 md:table-row',
-                        isRascunho && 'opacity-75'
-                      )}
+                      {...linha(alvoLinha, {
+                        className: cn('hidden transition-colors hover:bg-muted/30 md:table-row', isRascunho && 'opacity-75'),
+                      })}
                     >
                       <td className="px-4 py-3 font-medium max-w-[200px]">
                         <div className="flex items-center gap-1.5">
@@ -510,7 +571,8 @@ export default function FiscalPage() {
                         {acoes}
                       </td>
                     </tr>
-                    <tr className={cn('md:hidden', isRascunho && 'opacity-75')}>
+                    <tr {...linha(alvoLinha, { className: cn('md:hidden', isRascunho && 'opacity-75') })}>
+
                       <td colSpan={6} className="px-3 py-2.5">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">

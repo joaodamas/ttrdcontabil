@@ -24,6 +24,15 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        // e2e-estatico/fixtures.ts reescreve a CSP da página (route.fulfill);
+        // o Chromium passa a tratar a página como "pública" e o Local Network
+        // Access bloqueia as chamadas aos emuladores em 127.0.0.1.
+        launchOptions: { args: ['--disable-features=LocalNetworkAccessChecks'] },
+      },
+    },
   ],
 })
