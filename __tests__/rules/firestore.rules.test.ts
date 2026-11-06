@@ -476,25 +476,27 @@ describeIfEmulator('firestore.rules', () => {
     await assertFails(getDoc(doc(dbAs('operacional-b'), 'logs_auditoria/log-a')))
   })
 
-  // ─── WhatsApp / nfse_erros: leitura por perfil/tenant, escrita só Functions ──
+  // ─── Coleções aposentadas (2026-11-06): trancadas para todos ──────────────
 
-  it('whatsapp_messages: financeiro le do proprio tenant, escrita direta bloqueada', async () => {
-    await assertSucceeds(getDoc(doc(dbAs('financeiro-a'), 'whatsapp_messages/msg-a')))
-    await assertFails(getDoc(doc(dbAs('leitura-a'), 'whatsapp_messages/msg-a')))
-    await assertFails(setDoc(doc(dbAs('financeiro-a'), 'whatsapp_messages/forjada'), {
-      tenantId: 'tenant-a',
-      status: 'enviado',
-    }))
+  it('coleções sem uso (WhatsApp, produtos, fila NFS-e, documentos): ninguém lê nem grava, nem admin', async () => {
+    for (const caminho of [
+      'whatsapp_messages/msg-a',
+      'whatsapp_campaign_rules/rule-a',
+      'whatsapp_templates/t-a',
+      'whatsapp_jobs/j-a',
+      'whatsapp_webhook_events/w-a',
+      'produtos/prod-a',
+      'nfse_fila_processamento/fila-a',
+      'documentos/doc-a',
+    ]) {
+      for (const uid of ['admin-a', 'fiscal-a', 'financeiro-a', 'operacional-a']) {
+        await assertFails(getDoc(doc(dbAs(uid), caminho)))
+        await assertFails(setDoc(doc(dbAs(uid), caminho.replace(/\/[^/]+$/, '/novo')), { tenantId: 'tenant-a', clienteId: 'cliente-a' }))
+      }
+    }
   })
 
-  it('whatsapp_campaign_rules: leitura permitida, escrita direta bloqueada', async () => {
-    await assertSucceeds(getDoc(doc(dbAs('operacional-a'), 'whatsapp_campaign_rules/rule-a')))
-    await assertFails(setDoc(doc(dbAs('operacional-a'), 'whatsapp_campaign_rules/forjada'), {
-      tenantId: 'tenant-a',
-      etapa: 'x',
-      ativo: true,
-    }))
-  })
+  // ─── nfse_erros: leitura por perfil/tenant, escrita só Functions ──────────
 
   it('nfse_erros: le do proprio tenant, escrita direta bloqueada e isolamento', async () => {
     await assertSucceeds(getDoc(doc(dbAs('fiscal-a'), 'nfse_erros/erro-a')))

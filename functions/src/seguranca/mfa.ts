@@ -11,7 +11,7 @@
  * Só administrador e fiscal chamam esses callables; o front leva quem não
  * cadastrou o 2º fator para /conta/seguranca.
  */
-import * as admin from 'firebase-admin'
+import { getFirestore } from 'firebase-admin/firestore'
 import { HttpsError } from 'firebase-functions/v2/https'
 
 export const DOC_SEGURANCA = 'seguranca'
@@ -22,7 +22,7 @@ let cache: { valor: boolean; em: number } | null = null
 /** Lê o interruptor (cache de 1 min por instância). */
 export async function mfaObrigatorio(): Promise<boolean> {
   if (cache && Date.now() - cache.em < CACHE_MS) return cache.valor
-  const snap = await admin.firestore().collection('configuracoes').doc(DOC_SEGURANCA).get()
+  const snap = await getFirestore().collection('configuracoes').doc(DOC_SEGURANCA).get()
   const valor = snap.exists && snap.get('mfaObrigatorio') === true
   cache = { valor, em: Date.now() }
   return valor

@@ -47,12 +47,6 @@ const lancamentoSchema = z.object({
   formaPagamento:   z.string().max(50).optional().nullable(),
   pagadorNome:      z.string().optional().nullable(),
   pagadorWhatsapp:  z.string().optional().nullable(),
-  cobrancaWhatsappEnabled: z.boolean().default(true),
-  statusWhatsappCobranca: z.enum(['nao_agendado', 'agendado', 'enviado', 'entregue', 'lido', 'respondido', 'falhou', 'pausado']).default('nao_agendado'),
-  whatsappCobrancaPausada: z.boolean().default(false),
-  whatsappCobrancaPausadaMotivo: z.string().optional().nullable(),
-  whatsappCobrancaIgnorada: z.boolean().default(false),
-  whatsappCobrancaExigeAprovacao: z.boolean().default(false),
   observacoes:      z.string().optional().nullable(),
 }).superRefine((data, ctx) => {
   if (data.tipo === 'receita' && !data.clienteId) {
@@ -124,11 +118,6 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
     resolver: zodResolver(lancamentoSchema),
     defaultValues: {
       tipo: 'receita',
-      cobrancaWhatsappEnabled: true,
-      statusWhatsappCobranca: 'nao_agendado',
-      whatsappCobrancaPausada: false,
-      whatsappCobrancaIgnorada: false,
-      whatsappCobrancaExigeAprovacao: false,
       ...initialData,
       status: normalizeStatusLegado(initialData?.status) ?? 'pendente',
     },
@@ -366,80 +355,6 @@ export function LancamentoForm({ initialData, onSuccess, onClose }: LancamentoFo
                 }}
               />
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-            <div className="space-y-1.5">
-              <Label>Cobrança WhatsApp</Label>
-              <Controller
-                name="cobrancaWhatsappEnabled"
-                control={control}
-                render={({ field }) => (
-                  <Select value={field.value ? 'sim' : 'nao'} onValueChange={(v) => field.onChange(v === 'sim')}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sim">Ativa</SelectItem>
-                      <SelectItem value="nao">Desligada</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Status WhatsApp</Label>
-              <Controller
-                name="statusWhatsappCobranca"
-                control={control}
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="nao_agendado">Não agendado</SelectItem>
-                      <SelectItem value="agendado">Agendado</SelectItem>
-                      <SelectItem value="pausado">Pausado</SelectItem>
-                      <SelectItem value="falhou">Falhou</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Pausa manual</Label>
-              <Controller
-                name="whatsappCobrancaPausada"
-                control={control}
-                render={({ field }) => (
-                  <Select value={field.value ? 'sim' : 'nao'} onValueChange={(v) => field.onChange(v === 'sim')}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="nao">Não</SelectItem>
-                      <SelectItem value="sim">Sim</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Exige aprovação</Label>
-              <Controller
-                name="whatsappCobrancaExigeAprovacao"
-                control={control}
-                render={({ field }) => (
-                  <Select value={field.value ? 'sim' : 'nao'} onValueChange={(v) => field.onChange(v === 'sim')}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="nao">Não</SelectItem>
-                      <SelectItem value="sim">Sim</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="whatsappCobrancaPausadaMotivo">Motivo da pausa / exceção</Label>
-            <Input id="whatsappCobrancaPausadaMotivo" {...register('whatsappCobrancaPausadaMotivo')} placeholder="Negociação, exceção, cliente sem consentimento..." />
           </div>
 
           <div className="space-y-1.5">

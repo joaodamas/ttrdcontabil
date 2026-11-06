@@ -12,7 +12,8 @@
  * usuarios/{uid}.nome, que o usuário edita). Id do log = id do evento: se o
  * Eventarc reentregar, o create() falha e não duplica.
  */
-import * as admin from 'firebase-admin'
+import { getFirestore } from 'firebase-admin/firestore'
+import { getAuth } from 'firebase-admin/auth'
 import { onDocumentWrittenWithAuthContext, type FirestoreAuthEvent } from 'firebase-functions/v2/firestore'
 import type { Change, DocumentSnapshot } from 'firebase-functions/v2/firestore'
 
@@ -26,7 +27,7 @@ import {
   type ColecaoAuditada,
 } from './regras'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 const REGION = 'southamerica-east1'
 
 const cacheAtores = new Map<string, { ator: AuditActor; em: number }>()
@@ -41,7 +42,7 @@ async function resolverAtor(authType: string | undefined, authId: string | undef
   if (emCache && Date.now() - emCache.em < CACHE_ATOR_MS) return emCache.ator
   let ator: AuditActor = { id: quem.id, nome: quem.id, email: null }
   try {
-    const conta = await admin.auth().getUser(quem.id)
+    const conta = await getAuth().getUser(quem.id)
     ator = { id: quem.id, nome: conta.displayName || conta.email || quem.id, email: conta.email ?? null }
   } catch {
     // Conta excluída depois da escrita (fica o uid) ou authId que não é uid.

@@ -1,8 +1,8 @@
-import * as admin from 'firebase-admin'
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore'
-import { Timestamp } from 'firebase-admin/firestore'
+import { Timestamp, getFirestore } from 'firebase-admin/firestore'
+import { decidirConclusaoAutomatica } from './competencia-auto'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 
 export const onTarefaConcluida = onDocumentUpdated(
   {
@@ -26,27 +26,31 @@ export const onTarefaConcluida = onDocumentUpdated(
       return
     }
 
-    const pendencias = await db()
-      .collection('tarefas')
-      .where('competenciaId', '==', competenciaId)
-      .where('status', 'in', ['pendente', 'em_andamento'])
-      .limit(1)
-      .get()
+    const ref = db().collection('competencias').doc(competenciaId)
+    // Transação: o status da competência e as pendências são lidos no mesmo
+    // instante da escrita — duas tarefas concluídas juntas, ou alguém
+    // cancelando a competência no meio, não viram uma conclusão indevida.
+    const resultado = await db().runTransaction(async (tx) => {
+      const snap = await tx.get(ref)
+      const decisao = decidirConclusaoAutomatica({ existe: snap.exists, status: snap.get('status') })
+      if (!decisao.concluir) return decisao.motivo
 
-    if (!pendencias.empty) {
-      console.log(`[tarefa-concluida] competencia=${competenciaId} ainda possui tarefas pendentes`)
-      return
-    }
+      const pendencias = await tx.get(
+        db()
+          .collection('tarefas')
+          .where('competenciaId', '==', competenciaId)
+          .where('status', 'in', ['pendente', 'em_andamento'])
+          .limit(1),
+      )
+      if (!pendencias.empty) return 'tarefas_pendentes'
 
-    await db().collection('competencias').doc(competenciaId).set(
-      {
-        status: 'concluida',
-        dataConclusao: Timestamp.now(),
-        atualizadoEm: Timestamp.now(),
-      },
-      { merge: true }
-    )
+      const agora = Timestamp.now()
+      // update (não set/merge): competência apagada não renasce como documento
+      // só com status/datas.
+      tx.update(ref, { status: 'concluida', dataConclusao: agora, atualizadoEm: agora })
+      return 'concluida'
+    })
 
-    console.log(`[tarefa-concluida] competencia=${competenciaId} concluída automaticamente`)
+    console.log(`[tarefa-concluida] competencia=${competenciaId} resultado=${resultado}`)
   }
 )

@@ -7,14 +7,14 @@
  * escritor desse campo (as regras negam ao navegador), então o fiscal, que
  * salva senha mas não edita `clientes`, também mantém o status em dia.
  */
-import * as admin from 'firebase-admin'
+import { getFirestore } from 'firebase-admin/firestore'
 import { onDocumentWritten } from 'firebase-functions/v2/firestore'
 import { camposPreenchidos } from './credenciais-campos'
 
 export const sincronizarCredenciaisPreenchidas = onDocumentWritten(
   { document: 'clientes_credenciais/{clienteId}', region: 'southamerica-east1' },
   async (event) => {
-    const clienteRef = admin.firestore().collection('clientes').doc(event.params.clienteId)
+    const clienteRef = getFirestore().collection('clientes').doc(event.params.clienteId)
     const depois = event.data?.after
     const lista = depois?.exists ? camposPreenchidos(depois.data()) : []
 

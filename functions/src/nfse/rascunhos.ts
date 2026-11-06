@@ -1,7 +1,6 @@
-import * as admin from 'firebase-admin'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
-import { Timestamp } from 'firebase-admin/firestore'
+import { Timestamp, getFirestore } from 'firebase-admin/firestore'
 import { DEFAULT_TENANT_ID } from '../tenant'
 import { SYSTEM_ACTOR } from '../audit'
 import { assertPerfil } from '../authz'
@@ -20,7 +19,7 @@ import {
 import type { EmitirNfseInput } from './types'
 import { normalizarRascunho } from './normalizar-rascunho'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 
 type GerarRascunhosInput = {
   mes?: number

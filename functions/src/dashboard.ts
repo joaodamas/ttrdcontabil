@@ -1,5 +1,4 @@
-import * as admin from 'firebase-admin'
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { logger } from 'firebase-functions/v2'
 import { HttpsError, onCall } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
@@ -10,7 +9,7 @@ import { ErroEntradaKpis, FUSO_ESCRITORIO, validarMesAno } from './dashboard-kpi
 import { DEFAULT_TENANT_ID } from './tenant'
 import { PERFIS, podeLerFinanceiro } from './usuarios/perfis'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 
 // Qualquer perfil ativo vê o Painel e pode pedir o recálculo — mas só recebe
 // de volta os KPIs financeiros quem lê lançamentos (canReadFinanceiro nas regras).

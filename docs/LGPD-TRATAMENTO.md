@@ -24,7 +24,7 @@
 | 6 | Carteira de tomadores do cliente | Clientes dos clientes | Emitir notas recorrentes | Art. 7º, V | `tomadores` | Fiscal (escrita); leitores de NFS-e | Até o fim do contrato; apagada na exclusão do cliente (a nota emitida guarda cópia do tomador) |
 | 7 | Financeiro: honorários, vencimentos, cobranças | Clientes | Cobrança do escritório | Art. 7º, V | `lancamentos`, `cobrancas` | Financeiro, admin | Prazo contábil/fiscal **[decidir]** |
 | 8 | Usuários do escritório: nome, e-mail, perfil, último acesso, 2º fator | Equipe | Controle de acesso | Art. 7º, V e IX (legítimo interesse — segurança) | Firebase Auth, `usuarios` | Admin | Enquanto ativo; exclusão a pedido (callable `excluirUsuario`) |
-| 9 | Logs de auditoria: quem, quando, o que mudou (antes/depois **com segredos redigidos**), **IP e navegador** nas operações sensíveis | Equipe (e, indiretamente, dados do registro alterado) | Segurança, prova, apuração de incidente | Art. 7º, IX e art. 37 | `logs_auditoria` (append-only; ninguém edita/apaga pelo app) | Admin | **[decidir]** — sugestão: 5 anos |
+| 9 | Logs de auditoria: quem, quando, o que mudou (antes/depois **com segredos redigidos**), **IP e navegador** nas operações sensíveis | Equipe (e, indiretamente, dados do registro alterado) | Segurança, prova, apuração de incidente | Art. 7º, IX e art. 37 | `logs_auditoria` (append-only; ninguém edita/apaga pelo app) | Admin | **6 anos** pelo TTL do Firestore (`expiraEm`, ver "Retenção") — **[confirmar]** |
 
 ## Medidas de segurança (art. 46) — estado em 2026-11-06
 
@@ -53,6 +53,36 @@ Excluir o cliente (só admin; "inativar" não dispara nada) aciona o trigger
 O que **não** é apagado automaticamente e precisa de decisão: tarefas, competências, POP/notas
 internas e comentários do cliente, lançamentos após o prazo de guarda **[decidir]**. Backups do
 Firestore guardam cópias até expirarem **[decidir prazo do bucket de backup]**.
+
+## Retenção automática (TTL do Firestore) — 2026-11-06
+
+Os escritores gravam `expiraEm` (Timestamp) = criação + prazo; a política de TTL do Firestore apaga
+o documento depois dessa data (em até ~24 h; a exclusão não gera log nem dispara trigger de
+auditoria). Fonte única dos prazos: `functions/src/retencao.ts` (também usada pelo navegador).
+
+| Coleção | Prazo | Por quê | Quem grava `expiraEm` |
+|---|---|---|---|
+| `logs_auditoria` | 6 anos | Prova de quem mexeu em cadastro, NFS-e, certificado e senha de portal. CTN art. 173, I: 5 anos contados do 1º dia do exercício seguinte (até ~6 anos do fato). Mais que isso guarda IP/navegador da equipe sem finalidade (LGPD art. 15/16). | `montarAuditLog`/`writeAuditLog` (todas as functions que usam o helper, inclusive as de NFS-e), navegador (`firestore-client.ts`). **Ainda sem**: `functions/src/dashboard.ts` e `functions/src/nfse/rascunhos.ts` (gravam o log direto). |
+| `events` | 2 anos | Linha do tempo do cliente — cópia resumida de registros que continuam existindo; conveniência, não guarda legal. | `triggers/cliente-events.ts`, `fechamento.ts`, navegador (`createDocument`/`setDocument`). **Ainda sem**: `functions/src/nfse/emitir.ts`. |
+| `nfse_eventos` | 6 anos (constante pronta) | Histórico da nota; mesmo raciocínio dos logs. As notas (`nfse_emitidas`, XML/PDF) **não** têm TTL. | **Ainda sem**: `functions/src/nfse/ciclo.ts` (fica para o PR fiscal). |
+
+Documento sem `expiraEm` (tudo o que já existe hoje e o que os escritores pendentes gravarem) **não
+expira**. As regras aceitam `expiraEm` do navegador só se não encurtar o prazo (30 dias de folga para
+relógio errado) e continuam aceitando log/evento sem o campo (bundle antigo em cache).
+
+**Ativar (não aplicado — exige decisão do dono):**
+
+```bash
+gcloud firestore fields ttls update expiraEm --collection-group=logs_auditoria --enable-ttl --project=ttrdcontabil-jpproject
+gcloud firestore fields ttls update expiraEm --collection-group=events --enable-ttl --project=ttrdcontabil-jpproject
+gcloud firestore fields ttls update expiraEm --collection-group=nfse_eventos --enable-ttl --project=ttrdcontabil-jpproject
+# conferir
+gcloud firestore fields ttls list --project=ttrdcontabil-jpproject
+```
+
+Para desligar: `--disable-ttl` no mesmo comando. Os documentos antigos podem ganhar `expiraEm` por
+script (criadoEm + prazo) depois da decisão — não há backfill neste PR. O TTL não alcança os
+backups semanais (`exportarFirestoreSemanal`): o prazo do bucket de backup segue **[decidir]**.
 
 ## Direitos do titular (art. 18) — como atender hoje
 

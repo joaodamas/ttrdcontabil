@@ -178,15 +178,6 @@ for (let i = 0; i < 8; i++) {
   })
 }
 
-for (let i = 0; i < 6; i++) {
-  const c = clientes[i + 6]
-  await put('produtos', `prod-${i + 1}`, {
-    clienteId: clientes[5].id, codigo: `P${100 + i}`, descricao: ['Pão francês', 'Leite integral', 'Café 500g', 'Arroz 5kg', 'Feijão 1kg', 'Açúcar 1kg'][i],
-    ncm: '19052090', cfop: '5102', unidade: 'UN', valorUnitario: 4.5 + i * 3, ativo: true,
-  })
-  void c
-}
-
 // Carteira de tomadores (clientes DOS clientes) dos 3 primeiros prestadores.
 const tomadoresBase = [['Mercado Bom Preço Ltda', '11444777000161'], ['Hotel Vista Serra Ltda', '04252011000110'], ['Maria Aparecida Souza', '52998224725']]
 for (let i = 0; i < 3; i++) {

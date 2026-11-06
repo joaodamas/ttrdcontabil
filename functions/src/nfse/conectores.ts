@@ -1,4 +1,4 @@
-import * as admin from 'firebase-admin'
+import { getFirestore } from 'firebase-admin/firestore'
 import { IBGE_LEGADO, normalizarIbge, type ConfigFiscalCliente } from './types'
 import {
   conectorLiberaProducao,
@@ -8,7 +8,7 @@ import {
   type OperacaoFiscal,
 } from './provedor'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 
 export async function isProducaoLiberadaPorConfigOuConector(
   config: ConfigFiscalCliente,

@@ -15,9 +15,6 @@ import {
   saveParametrosEscritorio,
 } from '@/features/admin/services'
 import type { ParametrosEscritorio } from '@/features/admin/types'
-import { fetchWhatsappTemplates, updateWhatsappTemplate } from '@/features/whatsapp/services'
-import type { WhatsappTemplate } from '@/features/whatsapp/types'
-import { WHATSAPP_HABILITADO } from '@/lib/features'
 import {
   UI_FEATURE_FLAG_KEYS,
   UI_FEATURE_FLAG_META,
@@ -34,11 +31,6 @@ export default function AdminParametrosPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  const [templates, setTemplates] = useState<WhatsappTemplate[]>([])
-  const [templatesLoading, setTemplatesLoading] = useState(true)
-  const [savingTemplateKey, setSavingTemplateKey] = useState<string | null>(null)
-  const [draftContentSid, setDraftContentSid] = useState<Record<string, string>>({})
-
   useEffect(() => {
     let mounted = true
     fetchParametrosEscritorio(usuario?.tenantId)
@@ -51,31 +43,6 @@ export default function AdminParametrosPage() {
       .finally(() => mounted && setLoading(false))
     return () => { mounted = false }
   }, [usuario?.tenantId])
-
-  useEffect(() => {
-    // Módulo WhatsApp desligado (src/lib/features.ts): nem lê o catálogo.
-    if (!WHATSAPP_HABILITADO) return
-    let mounted = true
-    fetchWhatsappTemplates()
-      .then((rows) => mounted && setTemplates(rows))
-      .catch(() => toast.error('Não foi possível carregar o catálogo de mensagens.'))
-      .finally(() => mounted && setTemplatesLoading(false))
-    return () => { mounted = false }
-  }, [])
-
-  async function saveTemplateField(template: WhatsappTemplate, patch: Partial<Pick<WhatsappTemplate, 'providerContentSid' | 'ativo' | 'aprovadoProvider'>>) {
-    if (!template.templateKey) return
-    setSavingTemplateKey(template.templateKey)
-    try {
-      await updateWhatsappTemplate({ templateKey: template.templateKey, ...patch })
-      setTemplates((prev) => prev.map((item) => (item.id === template.id ? { ...item, ...patch } : item)))
-      toast.success('Template atualizado.')
-    } catch {
-      toast.error('Não foi possível atualizar o template. Verifique seu perfil de acesso.')
-    } finally {
-      setSavingTemplateKey(null)
-    }
-  }
 
   function update<K extends keyof ParametrosEscritorio>(key: K, value: ParametrosEscritorio[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -219,84 +186,6 @@ export default function AdminParametrosPage() {
               </div>
             </div>
 
-            {WHATSAPP_HABILITADO && (
-              <>
-                <div className="space-y-1.5 sm:col-span-2 pt-2">
-                  <h3 className="text-sm font-semibold">Cobrança por WhatsApp</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Configuração base da régua automática e do canal via Twilio.
-                  </p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Canal habilitado</Label>
-                  <Select
-                    value={form.whatsappCloudApiEnabled ? 'sim' : 'nao'}
-                    onValueChange={(value) => update('whatsappCloudApiEnabled', value === 'sim')}
-                    disabled={loading}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sim">Sim</SelectItem>
-                      <SelectItem value="nao">Não</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Usar dias úteis</Label>
-                  <Select
-                    value={form.whatsappUsaDiasUteis ? 'sim' : 'nao'}
-                    onValueChange={(value) => update('whatsappUsaDiasUteis', value === 'sim')}
-                    disabled={loading}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sim">Sim</SelectItem>
-                      <SelectItem value="nao">Não</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="whatsappTwilioFromNumber">Número Twilio (WhatsApp)</Label>
-                  <Input
-                    id="whatsappTwilioFromNumber"
-                    placeholder="+5511999999999"
-                    value={form.whatsappTwilioFromNumber}
-                    disabled={loading}
-                    onChange={(event) => update('whatsappTwilioFromNumber', event.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="whatsappJanelaHoraMinima">Janela mínima</Label>
-                  <Input
-                    id="whatsappJanelaHoraMinima"
-                    type="time"
-                    value={form.whatsappJanelaHoraMinima}
-                    disabled={loading}
-                    onChange={(event) => update('whatsappJanelaHoraMinima', event.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="whatsappJanelaHoraMaxima">Janela máxima</Label>
-                  <Input
-                    id="whatsappJanelaHoraMaxima"
-                    type="time"
-                    value={form.whatsappJanelaHoraMaxima}
-                    disabled={loading}
-                    onChange={(event) => update('whatsappJanelaHoraMaxima', event.target.value)}
-                  />
-                </div>
-              </>
-            )}
-
             <div className="space-y-1.5 sm:col-span-2 border-t border-border/70 pt-4">
               <h3 className="text-sm font-semibold">Rollout de UI premium</h3>
               <p className="text-xs text-muted-foreground">
@@ -335,85 +224,6 @@ export default function AdminParametrosPage() {
           </form>
         </CardContent>
       </Card>
-
-      {WHATSAPP_HABILITADO && (
-        <Card className="max-w-3xl border-border/65 bg-card/95 card-shadow">
-          <CardHeader>
-            <CardTitle className="text-base">Catálogo de mensagens WhatsApp</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Vincule cada chave interna ao ContentSid do template aprovado no Content API da Twilio.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {templatesLoading && <p className="text-sm text-muted-foreground">Carregando catálogo...</p>}
-            {!templatesLoading && templates.length === 0 && (
-              <p className="text-sm text-muted-foreground">Nenhum template encontrado.</p>
-            )}
-            {templates.map((template) => {
-              const key = template.templateKey ?? template.id
-              const isSaving = savingTemplateKey === template.templateKey
-              const contentSidValue = draftContentSid[key] ?? template.providerContentSid ?? ''
-              return (
-                <div key={template.id} className="grid gap-3 border-b border-border/60 pb-4 last:border-0 last:pb-0 sm:grid-cols-2">
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="font-mono text-xs text-muted-foreground">{key}</Label>
-                  </div>
-
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label htmlFor={`contentSid-${key}`}>ContentSid da Twilio</Label>
-                    <Input
-                      id={`contentSid-${key}`}
-                      placeholder="HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                      value={contentSidValue}
-                      disabled={isSaving}
-                      onChange={(event) => setDraftContentSid((prev) => ({ ...prev, [key]: event.target.value }))}
-                      onBlur={() => {
-                        if (contentSidValue !== (template.providerContentSid ?? '')) {
-                          void saveTemplateField(template, { providerContentSid: contentSidValue })
-                        }
-                      }}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label>Ativo</Label>
-                    <Select
-                      value={template.ativo ? 'sim' : 'nao'}
-                      onValueChange={(value) => void saveTemplateField(template, { ativo: value === 'sim' })}
-                      disabled={isSaving}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="sim">Sim</SelectItem>
-                        <SelectItem value="nao">Não</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label>Aprovado pela Meta</Label>
-                    <Select
-                      value={template.aprovadoProvider ? 'sim' : 'nao'}
-                      onValueChange={(value) => void saveTemplateField(template, { aprovadoProvider: value === 'sim' })}
-                      disabled={isSaving}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="sim">Sim</SelectItem>
-                        <SelectItem value="nao">Não</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )
-            })}
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }

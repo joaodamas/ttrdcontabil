@@ -56,6 +56,9 @@ const PERFIS_ESCRITA = {
   tarefas: ['admin', 'operacional', 'fiscal'],
   competencias: ['admin', 'operacional', 'fiscal'],
   ir: ['admin', 'operacional', 'fiscal'],
+  // fechamentos (isEquipeContabil) e o callable gerarFechamentoMensal
+  // (PERFIS_FECHAMENTO em functions/src/usuarios/perfis.ts).
+  fechamento: ['admin', 'operacional', 'fiscal'],
   financeiro: ['admin', 'financeiro'],
 } as const satisfies Partial<Record<TelaKey, readonly string[]>>
 

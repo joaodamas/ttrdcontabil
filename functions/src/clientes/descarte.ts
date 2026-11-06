@@ -17,7 +17,7 @@
  * lançamentos, competências e logs (obrigação contábil e prova).
  * Ver docs/LGPD-TRATAMENTO.md.
  */
-import * as admin from 'firebase-admin'
+import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { onDocumentDeletedWithAuthContext } from 'firebase-functions/v2/firestore'
 
@@ -27,7 +27,7 @@ import { atorDoEvento } from '../auditoria/regras'
 import { DEFAULT_TENANT_ID } from '../tenant'
 import { logErro } from '../log'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 const LOTE = 400
 
 async function apagarConsulta(q: FirebaseFirestore.Query): Promise<number> {
@@ -49,7 +49,7 @@ async function encerrarRecorrentes(clienteId: string): Promise<number> {
   for (let i = 0; i < ativos.length; i += LOTE) {
     const batch = db().batch()
     ativos.slice(i, i + LOTE).forEach((d) =>
-      batch.update(d.ref, { ativo: false, encerradoPor: 'descarte_cliente', atualizadoEm: admin.firestore.FieldValue.serverTimestamp() }),
+      batch.update(d.ref, { ativo: false, encerradoPor: 'descarte_cliente', atualizadoEm: FieldValue.serverTimestamp() }),
     )
     await batch.commit()
   }

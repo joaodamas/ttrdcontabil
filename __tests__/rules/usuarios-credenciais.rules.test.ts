@@ -24,6 +24,7 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
+import { dataDeExpiracao } from '../../functions/src/retencao'
 
 const PROJECT_ID = 'ttrdcontabil-rules-usuarios'
 const describeIfEmulator = process.env.FIRESTORE_EMULATOR_HOST ? describe : describe.skip
@@ -237,6 +238,18 @@ describeIfEmulator('regras de usuários, credenciais e auditoria', () => {
     await assertFails(setDoc(doc(db, 'logs_auditoria/d5'), logValido({ tenantId: 'tenant-b' })))
   })
 
+  // ─── TTL: expiraEm (functions/src/retencao.ts) ─────────────────────────────
+
+  const emDias = (dias: number) => Timestamp.fromDate(new Date(Date.now() + dias * 86_400_000))
+
+  it('logs_auditoria: expiraEm opcional, com a retenção configurada; prazo menor ou tipo errado recusados', async () => {
+    const db = dbComEmail('operacional-a', 'operacional@a.com')
+    await assertSucceeds(setDoc(doc(db, 'logs_auditoria/ttl1'), logValido({ expiraEm: Timestamp.fromDate(dataDeExpiracao('logs_auditoria')) })))
+    await assertFails(setDoc(doc(db, 'logs_auditoria/ttl2'), logValido({ expiraEm: emDias(30) })))
+    await assertFails(setDoc(doc(db, 'logs_auditoria/ttl3'), logValido({ expiraEm: emDias(2 * 365) })))
+    await assertFails(setDoc(doc(db, 'logs_auditoria/ttl4'), logValido({ expiraEm: '2099-01-01' })))
+  })
+
   // ─── events / nfse_eventos ────────────────────────────────────────────────
 
   const eventoFechamento = (extra: Record<string, unknown> = {}) => ({
@@ -268,6 +281,13 @@ describeIfEmulator('regras de usuários, credenciais e auditoria', () => {
     await assertFails(setDoc(doc(db, 'events/f5'), eventoFechamento({ extra: true })))
     await assertFails(setDoc(doc(db, 'events/f6'), eventoFechamento({ tipo: 'lancamento', origemColecao: 'lancamentos' })))
     await assertFails(setDoc(doc(dbAs('leitura-a'), 'events/f7'), eventoFechamento({ actorId: 'leitura-a', criadoPorId: 'leitura-a' })))
+  })
+
+  it('events: expiraEm opcional, com a retenção configurada; prazo menor recusado', async () => {
+    const db = dbAs('operacional-a')
+    await assertSucceeds(setDoc(doc(db, 'events/ttl1'), eventoFechamento({ expiraEm: Timestamp.fromDate(dataDeExpiracao('events')) })))
+    await assertFails(setDoc(doc(db, 'events/ttl2'), eventoFechamento({ expiraEm: emDias(7) })))
+    await assertFails(setDoc(doc(db, 'events/ttl3'), eventoFechamento({ expiraEm: emDias(365) })))
   })
 
   it('nfse_eventos: navegador não cria (só Cloud Functions), nem o fiscal', async () => {

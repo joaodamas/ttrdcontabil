@@ -1,5 +1,4 @@
-import * as admin from 'firebase-admin'
-import { FieldValue, Timestamp } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { processarEmissao } from './emitir'
 import { rotearCancelamento, rotearConsulta } from './municipios/router'
@@ -15,7 +14,7 @@ import type { EmitirNfseInput } from './types'
 
 export { normalizarRascunho } from './normalizar-rascunho'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 
 type FunctionStatus = 'success' | 'error' | 'processing'
 

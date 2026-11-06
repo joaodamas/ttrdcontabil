@@ -13,14 +13,14 @@
  *
  * Retorna um ResultadoLote por rascunho; falha de um item não interrompe o lote.
  */
-import * as admin from 'firebase-admin'
+import { getFirestore } from 'firebase-admin/firestore'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { credentialSecrets } from './secrets'
 import { assertCanAccessCliente } from '../authz'
 import { processarEmissao } from './emitir'
 import { normalizarRascunho } from './normalizar-rascunho'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 
 export const LOTE_MAX = 25
 const TIMEOUT_LOTE_S = 540

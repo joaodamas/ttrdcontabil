@@ -18,13 +18,12 @@
  *   clientes_fiscal — clienteId, credenciais.certVencimento, credenciais.certTitular
  *   clientes        — razaoSocial (para enriquecer clientes_fiscal)
  */
-import * as admin from 'firebase-admin'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
-import { Timestamp } from 'firebase-admin/firestore'
+import { Timestamp, getFirestore } from 'firebase-admin/firestore'
 import { sendEmail, tableHtml } from '../email/mailer'
 import { emailSecrets } from '../email/secrets'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 
 function fmtDate(ts: FirebaseFirestore.Timestamp | undefined | null): string {
   if (!ts) return '—'

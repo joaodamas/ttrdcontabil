@@ -13,14 +13,13 @@
  *   clientes          — razaoSocial
  *   lancamentos       — documento criado aqui
  */
-import * as admin from 'firebase-admin'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
-import { Timestamp } from 'firebase-admin/firestore'
+import { Timestamp, getFirestore } from 'firebase-admin/firestore'
 import { DEFAULT_TENANT_ID } from '../tenant'
 import { SYSTEM_ACTOR, writeAuditLog } from '../audit'
 import { deveFaturarNoMes, vigenteNoMes } from './recorrencia'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 
 const DIA_VENCIMENTO_PADRAO = 10
 

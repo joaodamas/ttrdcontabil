@@ -1,7 +1,7 @@
-import * as admin from 'firebase-admin'
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore'
+import { dataDeExpiracao } from './retencao'
 
-const db = () => admin.firestore()
+const db = () => getFirestore()
 
 const SENSITIVE_KEYS = new Set([
   'senha',
@@ -133,7 +133,7 @@ export function requisicaoDoCallable(request: RequisicaoCallable): AuditRequisic
 
 export function redactAuditData(value: unknown): unknown {
   if (value == null) return value
-  if (value instanceof admin.firestore.Timestamp) return value
+  if (value instanceof Timestamp) return value
   if (Array.isArray(value)) return value.map(redactAuditData)
   if (typeof value === 'string') return sanitizeAuditString(value)
   if (typeof value !== 'object') return value
@@ -149,7 +149,7 @@ export function redactAuditData(value: unknown): unknown {
 
 function ehObjetoSimples(v: unknown): v is Record<string, unknown> {
   return v != null && typeof v === 'object' && !Array.isArray(v)
-    && !(v instanceof admin.firestore.Timestamp) && !('toDate' in (v as Record<string, unknown>))
+    && !(v instanceof Timestamp) && !('toDate' in (v as Record<string, unknown>))
 }
 
 /**
@@ -198,6 +198,8 @@ export function montarAuditLog(params: AuditLogParams) {
     ...(params.requisicao ? { ip: params.requisicao.ip, userAgent: params.requisicao.userAgent } : {}),
     ...(params.camposAlterados ? { camposAlterados: params.camposAlterados } : {}),
     criadoEm: FieldValue.serverTimestamp(),
+    // TTL do Firestore (functions/src/retencao.ts).
+    expiraEm: Timestamp.fromDate(dataDeExpiracao('logs_auditoria')),
   }
 }
 

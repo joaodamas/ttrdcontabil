@@ -10,6 +10,7 @@ import {
   type QueryDocumentSnapshot,
   type QueryConstraint,
 } from 'firebase/firestore'
+import { dataDeExpiracao } from '../../functions/src/retencao'
 import { getClientDb, getClientAuth } from './firebase'
 
 // ── Generic helpers ───────────────────────────────────────────────────────────
@@ -38,11 +39,6 @@ const AUDITED_COLLECTIONS = new Set([
   // o caso de algum fluxo antigo — o log dela é do servidor.
   'clientes_credenciais',
   'configuracoes',
-  'whatsapp_templates',
-  'whatsapp_campaign_rules',
-  'whatsapp_jobs',
-  'whatsapp_messages',
-  'whatsapp_webhook_events',
 ])
 
 /**
@@ -71,13 +67,10 @@ const TENANT_SCOPED_COLLECTIONS = new Set([
   'fechamentos',
   'fechamento_revisoes',
   'clientes_fiscal',
-  'clientes_fiscal_integracao',
   'fiscal_conectores',
-  'produtos',
   'nfse_rascunhos',
   'nfse_emitidas',
   'nfse_eventos',
-  'nfse_fila_processamento',
   // As regras de `tomadores` e `nfse_recorrentes` exigem sameTenantExisting().
   // Fora deste Set o efeito é assimétrico e silencioso: a ESCRITA passa (o
   // createDocument injeta o tenantId por getAuditActor) mas a LEITURA é negada,
@@ -89,17 +82,11 @@ const TENANT_SCOPED_COLLECTIONS = new Set([
   'events',
   'logs_auditoria',
   'dashboard_kpis',
-  'documentos',
   'ir_declaracoes',
   'ir_checklist',
   'usuarios',
   'usuarios_diretorio',
   'clientes_credenciais',
-  'whatsapp_templates',
-  'whatsapp_campaign_rules',
-  'whatsapp_jobs',
-  'whatsapp_messages',
-  'whatsapp_webhook_events',
 ])
 
 const SENSITIVE_KEYS = new Set([
@@ -221,6 +208,8 @@ async function writeAuditLog(params: {
     origem: 'client',
     path: typeof window !== 'undefined' ? window.location.pathname : null,
     criadoEm: serverTimestamp(),
+    // TTL do Firestore (functions/src/retencao.ts); as regras recusam prazo menor.
+    expiraEm: Timestamp.fromDate(dataDeExpiracao('logs_auditoria')),
   })
 }
 
@@ -246,6 +235,7 @@ export async function registrarExportacaoSensivel(entidade: string, detalhe: Rec
       origem: 'client',
       path: typeof window !== 'undefined' ? window.location.pathname : null,
       criadoEm: serverTimestamp(),
+      expiraEm: Timestamp.fromDate(dataDeExpiracao('logs_auditoria')),
     })
   } catch (err) {
     console.error('[audit] Falha ao registrar exportação sensível', err)
@@ -350,12 +340,20 @@ function stripUndefined(data: Record<string, unknown>): Record<string, unknown> 
   return Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined))
 }
 
+/**
+ * `events` (linha do tempo do cliente) expira pelo TTL do Firestore — ver
+ * functions/src/retencao.ts. As regras exigem prazo >= o configurado.
+ */
+function camposDeRetencao(col: string): Record<string, unknown> {
+  return col === 'events' ? { expiraEm: Timestamp.fromDate(dataDeExpiracao('events')) } : {}
+}
+
 export async function createDocument(col: string, data: Record<string, unknown>) {
   const actor = await getAuditActor()
   const payload = withActorMetadata(stripUndefined(data), 'create', actor)
   const ref = await addDoc(
     collection(getClientDb(), col),
-    { ...payload, criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp() }
+    { ...payload, criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp(), ...camposDeRetencao(col) }
   )
   await auditSafely({
     entidade: col,
@@ -375,7 +373,7 @@ export async function setDocument(col: string, id: string, data: Record<string, 
   }
   const actor = await getAuditActor()
   const payload = withActorMetadata(stripUndefined(data), 'create', actor)
-  await setDoc(ref, { ...payload, criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp() })
+  await setDoc(ref, { ...payload, criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp(), ...camposDeRetencao(col) })
   await auditSafely({
     entidade: col,
     entidadeId: id,
