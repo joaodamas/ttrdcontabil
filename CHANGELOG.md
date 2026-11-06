@@ -35,6 +35,7 @@ Branch `feat/ficha-cliente-unica`. Reclamação do dono no modal do cliente (aba
 - Seed do emulador: XML fictício nas NFS-e autorizadas e certificado em cli-02 (válido), cli-03 (vence em 20 dias) e cli-04 (vencido).
 - `functions/` não mudou (só leitura de `functions/src/nfse/pre-validacao/documentos.ts` para o CNPJ do titular). Nada fiscal mudou — a emissão é a mesma; não exige homologação.
 - Testes: `__tests__/lib/certificado-status.test.ts`; `e2e-estatico/ficha-cliente.spec.ts` (lista abre o painel, Voltar e X fecham; caixa do painel idêntica em todas as abas; PDF/XML por nota, download do XML, linha abre a nota; certificado válido/vencendo/vencido, upload só ao pedir; Expandir abre a página com as mesmas abas; pagador do Financeiro abre o painel; celular 390×844 sem rolagem horizontal em nenhuma aba).
+
 ### Alterado — upgrade do SDK das Functions, limpeza de código morto, permissões e retenção (2026-11-06)
 Branch `chore/upgrade-limpeza`. Deploy: functions + hosting + regras (Firestore e Storage). Nenhum comportamento fiscal mudou.
 - **Dependências (functions)**: `firebase-functions` 6.6 → **7.4.0**, `firebase-admin` 12.7 → **14.5.0**, `twilio` removido. `xml-crypto` fica em **6.1.2** (a última da 6.1; faixa travada em `~6.1.2`): as versões 6.2 a 6.4 mudam a canonicalização e a serialização da assinatura XML (KeyInfo, CR, PIs), então subir exige homologação da NFS-e. `npm audit --omit=dev` em functions: **de 9 moderate para 0**.
