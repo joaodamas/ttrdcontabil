@@ -28,7 +28,8 @@ import {
 } from './nacional/numeracao'
 import { CODIGO_DPS_JA_EMITIDA } from './nacional/codigos'
 import { assertCanAccessCliente, assertPerfil } from '../authz'
-import { validarPayloadFiscal } from './validacao'
+import { preValidarPayload } from './validacao'
+import { bloqueiosDe, textoBloqueios, type AchadoFiscal } from './pre-validacao'
 import { writeAuditLog, SYSTEM_ACTOR, type AuditActor } from '../audit'
 import { requireEnvironmentTenant } from '../tenant'
 import { gerarESalvarDanfse } from './danfse/servico'
@@ -301,7 +302,8 @@ async function travarRascunho(params: {
         dados: { ...(params.dadosParaGravar ?? {}), numeroRps: numero, serieRps: serie, ...extras },
       })
     } else {
-      const update: Record<string, unknown> = { ...comumTrava, 'dados.numeroRps': numero, 'dados.serieRps': serie }
+      // Passou na pré-validação: some a marca de bloqueio de uma tentativa anterior.
+      const update: Record<string, unknown> = { ...comumTrava, preValidacao: null, 'dados.numeroRps': numero, 'dados.serieRps': serie }
       for (const [k, v] of Object.entries(extras)) update[`dados.${k}`] = v
       if (params.dadosParaGravar) {
         for (const [k, v] of Object.entries(params.dadosParaGravar)) update[`dados.${k}`] = v
@@ -312,6 +314,32 @@ async function travarRascunho(params: {
 
     return { numero, serie, reusado, travaId: trava.travaId }
   })
+}
+
+/**
+ * Grava no rascunho existente o resultado da pré-validação (só o campo
+ * `preValidacao`): a lista/lote mostra o motivo sem o rascunho mudar de status,
+ * de trava ou de erro da última tentativa — esses campos guiam a reconciliação
+ * de notas que podem já ter saído, e uma pré-validação não pode apagá-los.
+ */
+async function marcarBloqueioNoRascunho(rascunhoId: string, clienteId: string, tenantId: string, bloqueios: AchadoFiscal[], uid: string) {
+  try {
+    const ref = db().collection(COLECAO_RASCUNHOS).doc(rascunhoId)
+    const snap = await ref.get()
+    const d = snap.data()
+    if (!snap.exists || d?.clienteId !== clienteId || d?.tenantId !== tenantId) return
+    if (d?.status === 'emitida' || d?.status === 'processando') return
+    await ref.update({
+      preValidacao: {
+        bloqueado: true,
+        bloqueios: bloqueios.map(({ regra, campo, codigoSefin, mensagem }) => ({ regra, campo, codigoSefin: codigoSefin ?? null, mensagem })),
+        verificadoEm: Timestamp.now(),
+        verificadoPorId: uid,
+      },
+    })
+  } catch (err) {
+    console.warn('[processarEmissao] Não foi possível marcar a pré-validação no rascunho:', err instanceof Error ? err.message : err)
+  }
 }
 
 /** Nota já registrada para o rascunho (crash entre gravar a nota e marcar o rascunho, ou rascunho já emitido). */
@@ -340,10 +368,26 @@ export async function processarEmissao(inputRecebido: EmitirNfseInput, uid: stri
   }
 
   let input = await comDataCompetencia(inputRecebido)
+  if (!input.clienteId) throw new HttpsError('invalid-argument', 'clienteId obrigatório.')
   const prestador = montarPrestador(config, cliente)
-  const errosValidacao = validarPayloadFiscal(input, config, prestador)
-  if (errosValidacao.length > 0) {
-    throw new HttpsError('invalid-argument', `Payload fiscal inválido: ${errosValidacao.join(' ')}`)
+
+  // ─── Pré-validação fiscal (motor único, o mesmo da tela) ─────────────────
+  // Valida o que de fato vai para a DPS: o input do formulário passa pelo
+  // normalizador (ida e volta) antes de ser emitido — então é ele que se valida.
+  // Bloqueio = nada de rascunho novo, trava, nDPS ou chamada à Sefin.
+  const vaiPersistir = opcoes.persistirDados === true || (!input.rascunhoId && Boolean(nacional))
+  const paraValidar = vaiPersistir
+    ? normalizarRascunho(input.rascunhoId ?? 'pre-validacao', {
+        clienteId: input.clienteId, competenciaId: input.competenciaId ?? null, dados: dadosRascunhoDoInput(input),
+      })
+    : input
+  const bloqueios = bloqueiosDe(preValidarPayload(paraValidar, config, prestador))
+  if (bloqueios.length > 0) {
+    if (input.rascunhoId) await marcarBloqueioNoRascunho(input.rascunhoId, input.clienteId, tenantId, bloqueios, uid)
+    throw new HttpsError('failed-precondition', `A nota não pode ser emitida: ${textoBloqueios(bloqueios)}`, {
+      codigo: 'PRE_VALIDACAO',
+      bloqueios: bloqueios.map(({ regra, campo, codigoSefin, mensagem }) => ({ regra, campo, codigoSefin: codigoSefin ?? null, mensagem })),
+    })
   }
 
   // ─── Rascunho que guarda o nDPS ──────────────────────────────────────────

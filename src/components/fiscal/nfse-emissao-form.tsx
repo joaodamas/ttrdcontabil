@@ -36,13 +36,17 @@ import { fetchTomadores } from '@/features/tomadores/services'
 import type { TomadorRecord } from '@/features/tomadores/types'
 import { provedorNfseEfetivo } from '@/features/fiscal/services'
 import { fetchChaveNfseNacional } from '@/features/admin/services'
-import { situacaoNacional } from '@/lib/nfse-nacional-convenio'
 import { normalizarIbge } from '@/lib/ibge'
 import { buscarDadosCnpj } from '@/lib/cnpj-lookup'
 import { useViaCep } from '@/hooks/use-viacep'
 import { NfseCopiarNota } from '@/components/fiscal/nfse-copiar-nota'
 import { CatalogoPicker } from '@/components/fiscal/catalogo-picker'
-import { CST_IBSCBS, INDICADOR_OPERACAO, MUNICIPIOS as MUNICIPIOS_IBGE, NBS, SERVICOS_NACIONAIS, classificacoesIbsCbs } from '@/lib/nfse-dominios'
+import { AchadosDoCampo, PainelPreValidacao } from '@/components/fiscal/pre-validacao-painel'
+import {
+  CAMPO_FORMULARIO_EMISSAO, achadosDoCampo, bloqueiosDe, entradaDoFormulario, nbsSugeridas, preValidarNfse,
+  type AchadoFiscal,
+} from '@/lib/nfse-pre-validacao'
+import { CINDOP_PADRAO, CST_IBSCBS, INDICADOR_OPERACAO, MUNICIPIOS as MUNICIPIOS_IBGE, NBS, SERVICOS_NACIONAIS, classificacoesIbsCbs } from '@/lib/nfse-dominios'
 import municipiosIbge from '@/lib/nfse-dominios/municipios.json'
 import {
   VARIAVEIS_DESCRICAO,
@@ -190,6 +194,14 @@ function textoEndereco(e: Record<string, string>): string {
     `CEP ${formatCep(e.cep)}`,
   ].filter(Boolean).join(' — ')
 }
+
+/**
+ * Regras de "campo ainda vazio": enquanto a nota está sendo preenchida, não
+ * gritam (o formulário já marca o obrigatório). No resumo, aparecem todas.
+ */
+const REGRAS_DE_PREENCHIMENTO = new Set([
+  'tomador_ausente', 'tomador_nome', 'tomador_documento', 'valor_servico', 'discriminacao', 'codigo_servico', 'item_lista_ausente',
+])
 
 function nomeMunicipioConhecido(ibge: string | null | undefined): string | undefined {
   const codigo = normalizarIbge(digitosDe(ibge))
@@ -686,6 +698,10 @@ export function NfseEmissaoForm({
       toast.error(bloqueioEmissao.titulo)
       return
     }
+    if (bloqueiosFiscais.length > 0) {
+      toast.error(`Emissão bloqueada: ${bloqueiosFiscais[0].mensagem}`)
+      return
+    }
     setEmissaoPendente(data)
   }
 
@@ -804,24 +820,17 @@ export function NfseEmissaoForm({
   const ambienteEmissao = fiscalDoCliente?.ambienteEmissao as string | undefined
   // Sem o campo = Ambiente Nacional (mesma regra do backend).
   const provedorEmissao = fiscalDoCliente ? provedorNfseEfetivo(fiscalDoCliente) : undefined
-  const credenciaisDoCliente = (fiscalDoCliente?.credenciais ?? {}) as Record<string, unknown>
-  const situacaoMunicipio = situacaoNacional((fiscalDoCliente?.municipioIbge ?? fiscalDoCliente?.codigoMunicipioIbge) as string | undefined)
-  const municipioForaDoNacional = situacaoMunicipio === 'prefeitura' || situacaoMunicipio === 'sem_convenio'
-  const semA1Nacional = provedorEmissao === 'nacional'
-    && !(typeof credenciaisDoCliente.certificadoStoragePath === 'string' && credenciaisDoCliente.certificadoStoragePath && credenciaisDoCliente.certValido === true)
   // Barra a emissão ANTES do último clique: antes, um cliente ainda com a Spedy
   // (descontinuada) só descobria o problema no erro do backend, depois das 5 etapas.
+  // Município fora do Emissor Nacional e certificado A1 (ausente, vencido, de
+  // outro CNPJ) agora vêm do motor de pré-validação (achadosFiscais, abaixo).
   const bloqueioEmissao: { titulo: string; detalhe: string } | null =
     !selectedClienteId || fiscalDoCliente === undefined ? null
       : fiscalDoCliente === null
         ? { titulo: 'Cliente sem configuração fiscal.', detalhe: 'Configure município, inscrição municipal e certificado antes de emitir.' }
         : provedorEmissao === 'nacional' && ambienteEmissao === 'producao' && producaoNacionalLiberada === false
           ? { titulo: 'Emissão em produção pelo Ambiente Nacional ainda não liberada.', detalhe: 'Um administrador libera em Administração → Conectores (chave "Ambiente Nacional"). Para testar, deixe o cliente em Homologação.' }
-          : provedorEmissao === 'nacional' && ambienteEmissao === 'producao' && municipioForaDoNacional
-            ? { titulo: `${(fiscalDoCliente.municipioEmissor as string | undefined) ?? 'O município do cliente'} não emite pelo Ambiente Nacional.`, detalhe: 'Este município não aderiu ao Emissor Nacional — a NFS-e deste cliente é emitida no portal da prefeitura, fora da plataforma.' }
-            : semA1Nacional
-            ? { titulo: 'Cliente sem certificado A1 válido.', detalhe: 'A emissão pelo Ambiente Nacional é assinada com o A1 do próprio cliente. Envie o certificado na configuração fiscal.' }
-            : null
+          : null
   const previewTomadorCpf = watch('tomadorCpfCnpj')
   const previewTomadorEmail = watch('tomadorEmail')
   const previewDescricao = watch('descricaoServico')
@@ -837,6 +846,44 @@ export function NfseEmissaoForm({
     ? fiscalDoCliente.codigoTributacaoNacional
     : undefined
   const cTribNacDerivado = cTribNacConfig ?? codigoNacionalDoItem(previewItemListaServico)
+  const cTribNacEfetivo = previewCTribNac?.trim() || cTribNacDerivado
+
+  // ─── Pré-validação fiscal ao vivo ────────────────────────────────────────
+  // O MESMO motor que o servidor roda antes de reservar o número da DPS
+  // (functions/src/nfse/pre-validacao): o que bloqueia aqui seria recusado lá.
+  const achadosFiscais: AchadoFiscal[] = selectedClienteId && fiscalDoCliente
+    ? preValidarNfse(entradaDoFormulario({
+        competencia: watchedValues.competencia,
+        tomadorNome: watchedValues.tomadorNome,
+        tomadorCpfCnpj: watchedValues.tomadorCpfCnpj,
+        tomadorEmail: watchedValues.tomadorEmail,
+        tomadorEndereco: {
+          cep: digitosDe(watchedValues.tomadorCep), logradouro: watchedValues.tomadorLogradouro ?? undefined,
+          numero: watchedValues.tomadorNumero ?? undefined, complemento: watchedValues.tomadorComplemento ?? undefined,
+          bairro: watchedValues.tomadorBairro ?? undefined, municipioIbge: digitosDe(watchedValues.tomadorMunicipioIbge),
+          uf: watchedValues.tomadorUf ?? undefined,
+        },
+        descricaoFinal: previewDescricaoFinal,
+        codigoServico: previewCodigo,
+        itemListaServico: previewItemListaServico,
+        codigoTributacaoNacional: previewCTribNac,
+        codigoNbs: previewNbs,
+        municipioPrestacaoIbge: previewLocalPrestacao,
+        ibsCbsCst: watchedValues.ibsCbsCst,
+        ibsCbsClassTrib: watchedValues.ibsCbsClassTrib,
+        ibsCbsIndOp: watchedValues.ibsCbsIndOp,
+        valorServico: previewValor,
+        aliquota: previewAliquota,
+        issRetido: previewIssRetido,
+        informacoesComplementares: previewInfoCompl,
+      }, fiscalDoCliente, previewCliente))
+    : []
+  const bloqueiosFiscais = bloqueiosDe(achadosFiscais)
+  const doCampo = (campo: string) => achadosDoCampo(achadosFiscais, CAMPO_FORMULARIO_EMISSAO, campo)
+    .filter((a) => showResume || !REGRAS_DE_PREENCHIMENTO.has(a.regra))
+  // NBS da tabela oficial de correlação (Anexo VIII) para o serviço escolhido.
+  const codigosNbsSugeridos = nbsSugeridas(cTribNacEfetivo)
+  const nbsSugeridasOpcoes = NBS.filter((o) => codigosNbsSugeridos.includes(o.codigo))
   const regraCompetencia = normalizarRegraCompetencia(fiscalDoCliente?.competenciaPadrao)
   const regraCompetenciaRotulo = regraCompetencia === 'mes_anterior'
     ? 'mês anterior à emissão'
@@ -897,6 +944,7 @@ export function NfseEmissaoForm({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
+            <PainelPreValidacao achados={achadosFiscais} />
             <section className="space-y-2">
               <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Prestador / Tomador</h3>
               <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-sm">
@@ -1002,6 +1050,7 @@ export function NfseEmissaoForm({
                     Padrão do cliente: {regraCompetenciaRotulo}. Vai como data de competência (1º dia do mês) na NFS-e.
                   </p>
                 )}
+            <AchadosDoCampo achados={doCampo('competencia')} />
           </div>
 
           {selectedClienteId && !isEditingRascunho && (
@@ -1067,6 +1116,7 @@ export function NfseEmissaoForm({
             <Label htmlFor="tomadorNome" required>Nome / Razão Social</Label>
             <Input id="tomadorNome" {...register('tomadorNome')} placeholder="Nome completo ou razão social" />
             {errors.tomadorNome && <p className="text-xs text-destructive">{errors.tomadorNome.message}</p>}
+            <AchadosDoCampo achados={doCampo('tomadorNome')} />
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -1086,6 +1136,7 @@ export function NfseEmissaoForm({
                 )}
               />
               {errors.tomadorCpfCnpj && <p className="text-xs text-destructive">{errors.tomadorCpfCnpj.message}</p>}
+              <AchadosDoCampo achados={doCampo('tomadorCpfCnpj')} />
               {digitosDe(previewTomadorCpf).length === 14 && (
                 <Button type="button" variant="outline" size="sm" className="mt-1" onClick={buscarTomadorPeloCnpj} disabled={buscandoCnpjTomador}>
                   {buscandoCnpjTomador ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Search className="mr-1.5 h-3.5 w-3.5" />}
@@ -1097,6 +1148,7 @@ export function NfseEmissaoForm({
               <Label htmlFor="tomadorEmail">E-mail</Label>
               <Input id="tomadorEmail" type="email" {...register('tomadorEmail')} placeholder="tomador@email.com" />
               {errors.tomadorEmail && <p className="text-xs text-destructive">{errors.tomadorEmail.message}</p>}
+              <AchadosDoCampo achados={doCampo('tomadorEmail')} />
             </div>
           </div>
 
@@ -1122,6 +1174,7 @@ export function NfseEmissaoForm({
                 {buscandoCep && <p className="text-xs text-muted-foreground">Buscando CEP…</p>}
                 {!buscandoCep && erroCep && <p className="text-xs text-warning">{erroCep}</p>}
                 {errors.tomadorCep && <p className="text-xs text-destructive">{errors.tomadorCep.message}</p>}
+                <AchadosDoCampo achados={doCampo('tomadorCep')} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="tomadorLogradouro">Logradouro</Label>
@@ -1174,6 +1227,7 @@ export function NfseEmissaoForm({
                   />
                 )} />
                 {errors.tomadorMunicipioIbge && <p className="text-xs text-destructive">{errors.tomadorMunicipioIbge.message}</p>}
+                <AchadosDoCampo achados={doCampo('tomadorMunicipioIbge')} />
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -1230,6 +1284,7 @@ export function NfseEmissaoForm({
             <Label htmlFor="descricaoServico" required>Descrição do Serviço</Label>
             <Textarea id="descricaoServico" rows={4} {...register('descricaoServico')} placeholder="Descreva o serviço prestado conforme contrato..." />
             {errors.descricaoServico && <p className="text-xs text-destructive">{errors.descricaoServico.message}</p>}
+            <AchadosDoCampo achados={doCampo('descricaoServico')} />
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-xs text-muted-foreground">Inserir variável:</span>
               {VARIAVEIS_DESCRICAO.map((v) => (
@@ -1293,6 +1348,7 @@ export function NfseEmissaoForm({
                 <Lc116Picker value={field.value} onChange={field.onChange} />
               )} />
               {errors.itemListaServico && <p className="text-xs text-destructive">{errors.itemListaServico.message}</p>}
+              <AchadosDoCampo achados={doCampo('itemListaServico')} />
             </div>
           </div>
 
@@ -1312,6 +1368,7 @@ export function NfseEmissaoForm({
               {errors.codigoTributacaoNacional
                 ? <p className="text-xs text-destructive">{errors.codigoTributacaoNacional.message}</p>
                 : <p className="text-xs text-muted-foreground">Lista nacional de serviços. Vazio = o da configuração fiscal ou o derivado do item LC 116.</p>}
+              <AchadosDoCampo achados={doCampo('codigoTributacaoNacional')} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="codigoNbs">Código NBS</Label>
@@ -1320,16 +1377,20 @@ export function NfseEmissaoForm({
                   opcoes={NBS}
                   value={field.value}
                   onChange={(v) => field.onChange(v ?? '')}
-                  placeholder="Selecione o NBS"
-                  buscaPlaceholder="Buscar código ou descrição do NBS..."
+                  placeholder={nbsSugeridasOpcoes.length > 0 ? 'Escolha o NBS do serviço (sugestões oficiais)' : 'Busque o NBS pela descrição do serviço'}
+                  buscaPlaceholder='Busque pela descrição (ex.: "contabilidade")...'
+                  buscaMinima={3}
+                  sugeridas={nbsSugeridasOpcoes}
+                  rotuloSugeridas={cTribNacEfetivo ? `Correspondem ao serviço ${cTribNacEfetivo.slice(0, 2)}.${cTribNacEfetivo.slice(2, 4)} (Anexo VIII)` : undefined}
                   permitirLimpar
                 />
               )} />
               {errors.codigoNbs
                 ? <p className="text-xs text-destructive">{errors.codigoNbs.message}</p>
                 : (
-                    <p className="text-xs text-muted-foreground">Opcional. Tabela NBS 2.0 oficial (Anexo B da NFS-e).</p>
+                    <p className="text-xs text-muted-foreground">Obrigatório com IBS/CBS. Tabela NBS 2.0 oficial (Anexo B da NFS-e).</p>
                   )}
+              <AchadosDoCampo achados={doCampo('codigoNbs')} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="municipioPrestacaoIbge">Local da prestação (IBGE)</Label>
@@ -1350,6 +1411,7 @@ export function NfseEmissaoForm({
                       {previewLocalPrestacao ? 'Onde o serviço foi prestado' : 'Vazio = município do prestador'}
                     </p>
                   )}
+              <AchadosDoCampo achados={doCampo('municipioPrestacaoIbge')} />
             </div>
           </div>
 
@@ -1376,6 +1438,7 @@ export function NfseEmissaoForm({
                     permitirLimpar
                   />
                 )} />
+                <AchadosDoCampo achados={doCampo('ibsCbsCst')} />
               </div>
               <div className="space-y-1.5">
                 <Label>Classificação tributária</Label>
@@ -1391,6 +1454,7 @@ export function NfseEmissaoForm({
                     permitirLimpar
                   />
                 )} />
+                <AchadosDoCampo achados={doCampo('ibsCbsClassTrib')} />
               </div>
               <div className="space-y-1.5">
                 <Label>Indicador de operação</Label>
@@ -1399,10 +1463,15 @@ export function NfseEmissaoForm({
                     opcoes={INDICADOR_OPERACAO}
                     value={field.value}
                     onChange={(v) => field.onChange(v ?? '')}
-                    placeholder="Selecione o indicador"
+                    placeholder="Busque pela descrição da operação"
+                    buscaPlaceholder='Busque pela descrição (ex.: "serviços em geral")...'
+                    buscaMinima={3}
+                    sugeridas={INDICADOR_OPERACAO.filter((o) => o.codigo === CINDOP_PADRAO)}
+                    rotuloSugeridas="Serviços em geral (consultoria, contabilidade, TI)"
                     permitirLimpar
                   />
                 )} />
+                <AchadosDoCampo achados={doCampo('ibsCbsIndOp')} />
               </div>
             </div>
           </div>
@@ -1414,6 +1483,7 @@ export function NfseEmissaoForm({
                 <CurrencyInput id="valorServico" ref={field.ref} value={field.value} onChange={(v) => field.onChange(v ?? NaN)} onBlur={field.onBlur} />
               )} />
               {errors.valorServico && <p className="text-xs text-destructive">{errors.valorServico.message}</p>}
+              <AchadosDoCampo achados={doCampo('valorServico')} />
             </div>
           </div>
 
@@ -1422,6 +1492,7 @@ export function NfseEmissaoForm({
               <Label htmlFor="aliquota">Alíquota ISS (%)</Label>
               <Input id="aliquota" type="number" step="0.01" min="0" max="100" placeholder="Ex: 5" {...register('aliquota', { valueAsNumber: true })} />
               {errors.aliquota && <p className="text-xs text-destructive">{errors.aliquota.message}</p>}
+              <AchadosDoCampo achados={doCampo('aliquota')} />
             </div>
             <div className="space-y-1.5">
               <Label>ISS Retido</Label>
@@ -1438,6 +1509,7 @@ export function NfseEmissaoForm({
                   </Select>
                 )}
               />
+              <AchadosDoCampo achados={doCampo('issRetido')} />
             </div>
           </div>
 
@@ -1452,6 +1524,7 @@ export function NfseEmissaoForm({
             {errors.informacoesComplementares
               ? <p className="text-xs text-destructive">{errors.informacoesComplementares.message}</p>
               : <p className="text-xs text-muted-foreground">Padrão vem da configuração fiscal do cliente. Na NFS-e, as quebras de linha viram &quot; | &quot;.</p>}
+            <AchadosDoCampo achados={doCampo('informacoesComplementares')} />
           </div>
         </CardContent>
       </Card>
@@ -1469,15 +1542,18 @@ export function NfseEmissaoForm({
           </div>
         )}
 
-        {/* Alertas de validação — avisos não-bloqueantes */}
+        {/* Pré-validação fiscal (motor único): no resumo o painel vai no topo da nota. */}
+        {!showResume && (
+          <PainelPreValidacao
+            achados={achadosFiscais.filter((a) => allFieldsFilled || !REGRAS_DE_PREENCHIMENTO.has(a.regra))}
+          />
+        )}
+
+        {/* Alertas de validação — avisos não-bloqueantes que não são regra fiscal */}
         {(() => {
           const avisos: string[] = []
-          if (previewTomadorCpf && !isValidCpfCnpj(previewTomadorCpf))
-            avisos.push('CPF/CNPJ do tomador parece inválido.')
           if (previewCodigo && !isValidCodigoServico(previewCodigo))
             avisos.push('Código de serviço fora do padrão (ex.: 17.19).')
-          if (Number.isFinite(previewAliquota) && Number(previewAliquota) < 2)
-            avisos.push('Alíquota abaixo de 2% — confirme com a prefeitura.')
           if (Number.isFinite(previewValor) && Number(previewValor) > 50000)
             avisos.push('Valor acima de R$ 50.000 — verifique se há retenção obrigatória.')
           if (avisos.length === 0) return null
@@ -1539,10 +1615,24 @@ export function NfseEmissaoForm({
               </Button>
             )}
             {showResume && (
-              <Button type="button" className="w-full justify-center" disabled={isLoading || Boolean(bloqueioEmissao)} onClick={handleSubmit(solicitarEmissao, onEmissaoInvalida)}>
-                {emitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-                Emitir NFS-e
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  className="w-full justify-center"
+                  disabled={isLoading || Boolean(bloqueioEmissao) || bloqueiosFiscais.length > 0}
+                  aria-describedby={bloqueiosFiscais.length > 0 ? 'motivo-bloqueio-emissao' : undefined}
+                  onClick={handleSubmit(solicitarEmissao, onEmissaoInvalida)}
+                >
+                  {emitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                  Emitir NFS-e
+                </Button>
+                {bloqueiosFiscais.length > 0 && (
+                  <p id="motivo-bloqueio-emissao" className="text-xs text-destructive">
+                    Emissão bloqueada: {bloqueiosFiscais[0].mensagem}
+                    {bloqueiosFiscais.length > 1 ? ` (e mais ${bloqueiosFiscais.length - 1} — veja o resumo)` : ''}
+                  </p>
+                )}
+              </>
             )}
             <Button type="button" variant="outline" className="w-full justify-center" disabled={isLoading || loadingRascunho} onClick={handleSubmit(handleSaveRascunho)}>
               {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}

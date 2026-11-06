@@ -26,11 +26,16 @@ import { AlertTriangle } from 'lucide-react'
 import { buscarDadosCnpj } from '@/lib/cnpj-lookup'
 import { normalizarIbge } from '@/lib/ibge'
 import { Textarea } from '@/components/ui/textarea'
-import { REGRAS_COMPETENCIA, normalizarRegraCompetencia } from '@/lib/nfse-modelo'
+import { REGRAS_COMPETENCIA, codigoNacionalDerivado, normalizarRegraCompetencia } from '@/lib/nfse-modelo'
 import { CatalogoPicker } from '@/components/fiscal/catalogo-picker'
 import { CST_IBSCBS, INDICADOR_OPERACAO, MUNICIPIOS as MUNICIPIOS_IBGE, NBS, SERVICOS_NACIONAIS, classificacoesIbsCbs } from '@/lib/nfse-dominios'
 import municipiosIbge from '@/lib/nfse-dominios/municipios.json'
 import { situacaoNacional } from '@/lib/nfse-nacional-convenio'
+import { AchadosDoCampo, PainelPreValidacao } from '@/components/fiscal/pre-validacao-painel'
+import {
+  CAMPO_FORMULARIO_CONFIG, achadosDoCampo, bloqueiamSalvarConfig, hojeBrasilia, nbsSugeridas, preValidarConfigFiscal,
+} from '@/lib/nfse-pre-validacao'
+import { CINDOP_PADRAO } from '@/lib/nfse-dominios'
 
 const nomeDoMunicipio = (ibge: string | null | undefined) =>
   (municipiosIbge as { ibge: string; nome: string }[]).find((m) => m.ibge === ibge)?.nome
@@ -218,7 +223,39 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
       }
     : null
 
+  // Pré-validação dos padrões (o MESMO motor da emissão e do servidor): um
+  // padrão que bloquearia toda nota do cliente não pode ser salvo.
+  const valores = watch()
+  const achadosConfig = preValidarConfigFiscal({
+    municipioIbge: valores.municipioIbge,
+    municipioEmissor: municipioNome || undefined,
+    inscricaoMunicipal: valores.inscricaoMunicipal,
+    ambienteEmissao: valores.ambienteEmissao,
+    regimeTributario: valores.regimeTributario as never,
+    optanteSimples: valores.optanteSimples,
+    naturezaOperacao: valores.naturezaOperacao,
+    itemListaServico: valores.itemListaServico ?? undefined,
+    codigoServicoPadrao: valores.codigoServicoPadrao ?? undefined,
+    aliquotaPadrao: Number.isFinite(valores.aliquotaPadrao) ? (valores.aliquotaPadrao as number) : undefined,
+    aliquotaSimplesNacional: Number.isFinite(valores.aliquotaSimplesNacional) ? (valores.aliquotaSimplesNacional as number) : undefined,
+    // Salvar sempre grava 'nacional' (ver onSubmit); as regras do Nacional valem.
+    provedorNfse: 'nacional',
+    codigoTributacaoNacional: valores.codigoTributacaoNacional || undefined,
+    codigoNbs: valores.codigoNbs || undefined,
+    ibsCbsCst: valores.ibsCbsCst || undefined,
+    ibsCbsClassTrib: valores.ibsCbsClassTrib || undefined,
+    ibsCbsIndOp: valores.ibsCbsIndOp || undefined,
+  }, hojeBrasilia())
+  const impedemSalvar = bloqueiamSalvarConfig(achadosConfig)
+  const doCampo = (campo: string) => achadosDoCampo(achadosConfig, CAMPO_FORMULARIO_CONFIG, campo)
+  const cTribNacConfig = valores.codigoTributacaoNacional || undefined
+  const nbsConfigSugeridas = NBS.filter((o) => nbsSugeridas(cTribNacConfig ?? codigoNacionalDerivado(valores.itemListaServico)).includes(o.codigo))
+
   async function onSubmit(data: FormData) {
+    if (impedemSalvar.length > 0) {
+      toast.error(`Não dá para salvar: ${impedemSalvar[0].mensagem}`)
+      return
+    }
     setSaving(true)
     try {
       // Payload sem credenciais — dados de configuração salvos diretamente
@@ -433,6 +470,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
                 </Select>
               )} />
               {errors.regimeTributario && <p className="text-xs text-destructive">{errors.regimeTributario.message}</p>}
+              <AchadosDoCampo achados={doCampo('regimeTributario')} />
             </div>
             <div className="space-y-1.5">
               <Label required>Optante Simples</Label>
@@ -459,6 +497,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
               <Controller name="itemListaServico" control={control} render={({ field }) => (
                 <Lc116Picker value={field.value} onChange={field.onChange} />
               )} />
+              <AchadosDoCampo achados={doCampo('itemListaServico')} />
             </div>
             <div className="space-y-1.5">
               <Label>CNAE</Label>
@@ -471,6 +510,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
                 placeholder="Ex: 5"
                 {...register('aliquotaPadrao', { valueAsNumber: true })}
               />
+              <AchadosDoCampo achados={doCampo('aliquotaPadrao')} />
             </div>
           </div>
 
@@ -545,6 +585,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
                     />
                   )} />
                   {errors.codigoTributacaoNacional && <p className="text-xs text-destructive">{errors.codigoTributacaoNacional.message}</p>}
+                  <AchadosDoCampo achados={doCampo('codigoTributacaoNacional')} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Desdobro municipal (cTribMun)</Label>
@@ -563,6 +604,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
                     placeholder="Só ME/EPP — padrão: alíquota ISS"
                     {...register('aliquotaSimplesNacional', { setValueAs: (v) => (v === '' || v == null ? null : Number(v)) })}
                   />
+                  <AchadosDoCampo achados={doCampo('aliquotaSimplesNacional')} />
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
@@ -576,11 +618,15 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
                     opcoes={NBS}
                     value={field.value}
                     onChange={(v) => field.onChange(v ?? '')}
-                    placeholder="Selecione o NBS"
-                    buscaPlaceholder="Buscar código ou descrição do NBS..."
+                    placeholder={nbsConfigSugeridas.length > 0 ? 'Escolha o NBS do serviço (sugestões oficiais)' : 'Busque o NBS pela descrição do serviço'}
+                    buscaPlaceholder='Busque pela descrição (ex.: "contabilidade")...'
+                    buscaMinima={3}
+                    sugeridas={nbsConfigSugeridas}
+                    rotuloSugeridas="Correspondem ao serviço (Anexo VIII)"
                     permitirLimpar
                   />
                 )} />
+                <AchadosDoCampo achados={doCampo('codigoNbs')} />
               </div>
 
               <p className="pt-1 text-xs font-semibold uppercase text-muted-foreground">IBS/CBS padrão</p>
@@ -600,6 +646,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
                       permitirLimpar
                     />
                   )} />
+                  <AchadosDoCampo achados={doCampo('ibsCbsCst')} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Classificação tributária (cClassTrib)</Label>
@@ -615,6 +662,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
                       permitirLimpar
                     />
                   )} />
+                  <AchadosDoCampo achados={doCampo('ibsCbsClassTrib')} />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label>Indicador de operação (cIndOp)</Label>
@@ -623,10 +671,15 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
                       opcoes={INDICADOR_OPERACAO}
                       value={field.value}
                       onChange={(v) => field.onChange(v ?? '')}
-                      placeholder="Selecione o indicador de operação"
+                      placeholder="Busque pela descrição da operação"
+                      buscaPlaceholder='Busque pela descrição (ex.: "serviços em geral")...'
+                      buscaMinima={3}
+                      sugeridas={INDICADOR_OPERACAO.filter((o) => o.codigo === CINDOP_PADRAO)}
+                      rotuloSugeridas="Serviços em geral (consultoria, contabilidade, TI)"
                       permitirLimpar
                     />
                   )} />
+                  <AchadosDoCampo achados={doCampo('ibsCbsIndOp')} />
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
@@ -651,6 +704,7 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
                 </SelectContent>
               </Select>
             )} />
+            <AchadosDoCampo achados={doCampo('naturezaOperacao')} />
           </div>
 
           {/* Credenciais: Santana de Parnaíba */}
@@ -708,8 +762,17 @@ export function ConfigFiscalForm({ open, onOpenChange, clienteId, docId, default
             </div>
           )}
 
+          <PainelPreValidacao
+            achados={achadosConfig}
+            tituloBloqueio="Estes padrões bloqueariam a emissão das notas do cliente"
+          />
+          {impedemSalvar.length > 0 && (
+            <p id="motivo-bloqueio-config" className="text-xs text-destructive">
+              Corrija os padrões acima para salvar.
+            </p>
+          )}
           <div className="flex gap-2 pt-2">
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || impedemSalvar.length > 0} aria-describedby={impedemSalvar.length > 0 ? 'motivo-bloqueio-config' : undefined}>
               {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Salvar Configuração
             </Button>

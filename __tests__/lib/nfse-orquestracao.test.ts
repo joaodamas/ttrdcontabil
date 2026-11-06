@@ -166,7 +166,7 @@ const dadosRascunho = {
   descricaoServico: 'Serviços contábeis de outubro',
   codigoServico: '1719',
   itemListaServico: '17.19',
-  codigoNbs: '115011000',
+  codigoNbs: '113022100',
   valorServico: 1000,
   aliquota: 2,
   issRetido: false,
@@ -192,7 +192,7 @@ function inputDoFormulario(over: Partial<EmitirNfseInput> = {}): EmitirNfseInput
   return {
     clienteId: 'c1',
     tomador: { razaoSocial: 'Tomador do Formulário Ltda', cpfCnpj: '11444777000161' },
-    servico: { discriminacao: 'Serviços contábeis de outubro', codigoServico: '1719', itemListaServico: '17.19', valorServico: 1000, issRetido: false, codigoNbs: '115011000' },
+    servico: { discriminacao: 'Serviços contábeis de outubro', codigoServico: '1719', itemListaServico: '17.19', valorServico: 1000, issRetido: false, codigoNbs: '113022100' },
     ...over,
   }
 }
@@ -275,7 +275,7 @@ describe.skipIf(!TEM_OPENSSL)('C1 — mesmo rascunho nunca vira duas notas', () 
     await expect(chamar(emitirModulo.emitirNfse, {
       ...inputDoFormulario({ tomador: { razaoSocial: 'X', cpfCnpj: '123' } }),
       chaveIdempotencia: 'chave-idempotencia-0002',
-    })).rejects.toThrow(/Payload fiscal inválido/)
+    })).rejects.toThrow(/não pode ser emitida.*CPF\/CNPJ do tomador inválido/)
     expect(ctx.db.colecaoInteira('nfse_rascunhos')).toHaveLength(0)
     expect(ctx.db.colecaoInteira('dps_sequencias')).toHaveLength(0)
     expect(posts()).toHaveLength(0)
@@ -486,7 +486,9 @@ describe.skipIf(!TEM_OPENSSL)('M3/M8 — vínculo do rascunho e lote pelo servid
   it('rascunho de outro cliente não emite em nome deste', async () => {
     criarRascunho('r1')
     ctx.db.gravar(ctx.db.collection('clientes_fiscal').doc('f2'), configFiscal({ clienteId: 'c2' }) as Record<string, unknown>)
-    await expect(processarEmissao({ ...inputDoFormulario(), clienteId: 'c2', rascunhoId: 'r1' }, UID))
+    // Tomador ≠ c2 (o tomador padrão tem o CNPJ de c2 e cairia na pré-validação E0202).
+    const tomador = { razaoSocial: 'Prestador Teste Ltda', cpfCnpj: '11222333000181' }
+    await expect(processarEmissao({ ...inputDoFormulario({ tomador }), clienteId: 'c2', rascunhoId: 'r1' }, UID))
       .rejects.toThrow(/não pertence a este cliente/)
     expect(posts()).toHaveLength(0)
   })
@@ -514,8 +516,69 @@ describe.skipIf(!TEM_OPENSSL)('M3/M8 — vínculo do rascunho e lote pelo servid
     expect(dpsXml[0]).toContain('<vServ>1000.00</vServ>')
     expect(dpsXml[1]).toContain('<vServ>2000.00</vServ>')
     // Campos que o lote antigo perdia (M7): NBS do rascunho chega à DPS.
-    expect(dpsXml[0]).toContain('115011000')
+    expect(dpsXml[0]).toContain('113022100')
     expect(notas()).toHaveLength(2)
+  })
+})
+
+// ─── Pré-validação fiscal: bloqueio antes de reservar nDPS ou chamar a Sefin ─
+
+describe.skipIf(!TEM_OPENSSL)('pré-validação fiscal no servidor', () => {
+  const imovel = { ibsCbsCst: '000', ibsCbsClassTrib: '000001', ibsCbsIndOp: '020101' }
+
+  it('formulário com cIndOp de imóvel (E0932): failed-precondition, sem rascunho, sem nDPS, sem Sefin', async () => {
+    const erro = await chamar(emitirModulo.emitirNfse, {
+      ...inputDoFormulario({ servico: { ...inputDoFormulario().servico, ...imovel } }),
+      chaveIdempotencia: 'chave-pre-validacao-0001',
+    }).catch((e: unknown) => e) as { code?: string; message?: string; details?: { codigo: string; bloqueios: { regra: string; codigoSefin: string | null }[] } }
+    expect(erro.code).toBe('failed-precondition')
+    expect(erro.message).toMatch(/indicador de operação 020101/)
+    expect(erro.details?.codigo).toBe('PRE_VALIDACAO')
+    expect(erro.details?.bloqueios.map((b) => b.codigoSefin)).toContain('E0932')
+    expect(ctx.db.colecaoInteira('nfse_rascunhos')).toHaveLength(0)
+    expect(ctx.db.colecaoInteira('dps_sequencias')).toHaveLength(0)
+    expect(sefin.pedidos).toHaveLength(0)
+  })
+
+  it('IBS/CBS sem NBS (E0322) também bloqueia antes do envio', async () => {
+    const servico = { ...inputDoFormulario().servico, codigoNbs: undefined, ibsCbsCst: '000', ibsCbsClassTrib: '000001', ibsCbsIndOp: '100301' }
+    await expect(processarEmissao(inputDoFormulario({ servico }), UID, { chaveIdempotencia: 'chave-pre-validacao-0002', persistirDados: true }))
+      .rejects.toThrow(/NBS é obrigatório/)
+    expect(ctx.db.colecaoInteira('dps_sequencias')).toHaveLength(0)
+    expect(sefin.pedidos).toHaveLength(0)
+  })
+
+  it('lote: rascunho bloqueado não consome número, é marcado e não impede os outros', async () => {
+    criarRascunho('r1', { dados: { ...dadosRascunho, ...imovel } })
+    criarRascunho('r2')
+    const r = await chamar(emitirNfseLote, { rascunhoIds: ['r1', 'r2'] })
+    expect(r.sucessos).toBe(1)
+    expect(r.resultados[0]).toMatchObject({ rascunhoId: 'r1', sucesso: false })
+    expect(r.resultados[0].erro).toMatch(/não pode ser emitida/)
+    // Só a nota boa chegou à Sefin e só ela consumiu número.
+    expect(posts()).toHaveLength(1)
+    expect(ctx.db.colecaoInteira('dps_sequencias')[0]).toMatchObject({ ultimoNumero: 1 })
+    const r1 = rascunho('r1')
+    expect(r1.status).toBe('aguardando_emissao')
+    expect((r1.dados as Record<string, unknown>).numeroRps).toBeUndefined()
+    expect(r1.preValidacao).toMatchObject({ bloqueado: true })
+    expect(JSON.stringify(r1.preValidacao)).toContain('E0932')
+  })
+
+  it('config do cliente com cIndOp de imóvel bloqueia até o retry/cron (o padrão vale para toda nota)', async () => {
+    ctx.db.gravar(ctx.db.collection('clientes_fiscal').doc('f1'), configFiscal({ ...imovel }) as Record<string, unknown>)
+    criarRascunho('r1')
+    const { normalizarRascunho } = await import('../../functions/src/nfse/normalizar-rascunho')
+    await expect(processarEmissao(normalizarRascunho('r1', rascunho('r1')), UID)).rejects.toThrow(/020101/)
+    expect(sefin.pedidos).toHaveLength(0)
+    expect(ctx.db.colecaoInteira('dps_sequencias')).toHaveLength(0)
+  })
+
+  it('NBS incompatível com o serviço (Anexo VIII) bloqueia', async () => {
+    const servico = { ...inputDoFormulario().servico, codigoNbs: '1.0101.11.00' }
+    await expect(processarEmissao(inputDoFormulario({ servico }), UID, { chaveIdempotencia: 'chave-pre-validacao-0003', persistirDados: true }))
+      .rejects.toThrow(/não corresponde ao serviço 17\.19/)
+    expect(sefin.pedidos).toHaveLength(0)
   })
 })
 
