@@ -30,6 +30,7 @@ const TRADUCOES: Record<string, (ctx: ContextoErroNacional) => string> = {
   // (Omie/Alterdata), a confirmar na homologação. Quem recebe o E0014
   // (emitir.ts) CONSULTA a DPS e registra a nota existente em vez de reenviar.
   E0014: () => 'Já existe uma NFS-e gerada com esta série e número de DPS (envio anterior que chegou à Sefin). A plataforma consulta essa nota e a registra — não emita outra.',
+  E0932: () => 'O indicador de operação (IBS/CBS) escolhido é de operação com bem imóvel e exige os dados do imóvel. Para serviços em geral (consultoria, contabilidade, TI) use 100301 na nota e na configuração fiscal do cliente.',
   E0162: () => 'Regime de apuração do Simples (regApTribSN) só vale para ME/EPP optante. Revise o regime tributário do cliente.',
   // Texto oficial: "código de tributação nacional não administrado pelo município
   // de incidência na data de competência" — confirmado na produção restrita

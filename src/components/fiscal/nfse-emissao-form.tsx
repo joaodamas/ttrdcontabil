@@ -929,7 +929,7 @@ export function NfseEmissaoForm({
               </dl>
             </section>
             <div className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2.5 text-xs text-warning-foreground">
-              Revise os dados acima. Após emitir, a nota é registrada na prefeitura e não pode ser cancelada automaticamente.
+              Revise os dados acima. Após emitir, a nota é registrada no Ambiente Nacional; se precisar, ela pode ser cancelada depois pela própria plataforma.
             </div>
           </CardContent>
         </Card>

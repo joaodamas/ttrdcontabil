@@ -337,6 +337,9 @@ export function mapearIbsCbs(
   if (cst.length !== 3 || cClassTrib.length !== 6 || cIndOp.length !== 6) {
     throw new ErroMapeamentoNacional('IBSCBS_INCOMPLETO', 'IBS/CBS: informe CST, classificação tributária e indicador de operação (os três) ou deixe todos vazios.')
   }
+  if (cIndOp.startsWith('02')) {
+    throw new ErroMapeamentoNacional('IBSCBS_IMOVEL', `O indicador de operação ${cIndOp} é de operação com bem imóvel e exige os dados do imóvel na nota, que a plataforma ainda não envia. Para serviços em geral (consultoria, contabilidade, TI) use 100301 — corrija na nota e na configuração fiscal do cliente.`)
+  }
   if (!cClassTrib.startsWith(cst)) {
     throw new ErroMapeamentoNacional('IBSCBS_CLASSIFICACAO', `A classificação tributária ${cClassTrib} não pertence ao CST ${cst}.`)
   }

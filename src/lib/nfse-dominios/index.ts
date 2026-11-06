@@ -35,8 +35,22 @@ export const MUNICIPIOS: OpcaoCatalogo[] = (municipios as { ibge: string; nome: 
 export const PAISES: OpcaoCatalogo[] = (paises as { codigo: string; nome: string }[])
   .map((p) => ({ codigo: p.codigo, rotulo: p.nome, descricao: p.codigo }))
 
+/** Serviços em geral (consultoria, contabilidade, TI…): o caso mais comum, sempre primeiro na lista. */
+export const CINDOP_PADRAO = '100301'
+
+/**
+ * Indicadores 02xxxx (operações com bem imóvel) exigem o grupo de informações do
+ * imóvel na DPS (rejeição E0932), que a plataforma ainda não envia — ficam fora
+ * da lista para não serem escolhidos por engano.
+ */
+export function cIndOpExigeImovel(codigo: string | null | undefined): boolean {
+  return /^02\d{4}$/.test(String(codigo ?? '').replace(/\D/g, ''))
+}
+
 export const INDICADOR_OPERACAO: OpcaoCatalogo[] = (indicadorOperacao as { codigo: string; descricao: string; local: string }[])
+  .filter((i) => !cIndOpExigeImovel(i.codigo))
   .map((i) => ({ codigo: i.codigo, rotulo: i.codigo, descricao: `${i.descricao}${i.local ? ` — local: ${i.local}` : ''}` }))
+  .sort((a, b) => Number(b.codigo === CINDOP_PADRAO) - Number(a.codigo === CINDOP_PADRAO))
 
 /** Opções de um campo codificado da DPS pelo nome do tipo no XSD (ex.: 'TSTribISSQN'). */
 export function opcoesDoTipo(tipoXsd: string): OpcaoCatalogo[] {

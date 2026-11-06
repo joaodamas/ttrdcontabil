@@ -13,6 +13,9 @@ Convenção para novas entradas:
 
 ## [Não lançado]
 
+### Corrigido — 2026-11-06 · Indicador de operação de bem imóvel (E0932)
+- Primeira emissão em produção recusada com E0932: o indicador de operação IBS/CBS escolhido era de bem imóvel (02xxxx), que exige o grupo do imóvel na DPS (não enviado pela plataforma). Os indicadores 02xxxx saem das listas, 100301 (serviços em geral) vem primeiro, o servidor recusa 02xxxx antes do envio com orientação e o E0932 da Sefin é traduzido. Texto do resumo da emissão deixa de falar em "prefeitura" e "não pode ser cancelada". **Exige homologação** (validação fiscal).
+
 ### Segurança — trilha de auditoria, senhas cifradas, 2º fator, CSP e descarte LGPD (2026-11-06)
 Detalhes, ordem de deploy, passos de console e rollback: `docs/USUARIOS-PERMISSOES.md` → "Segurança e auditoria"; LGPD: `docs/LGPD-TRATAMENTO.md` (rascunho para o advogado).
 - **Trilha de auditoria não forjável**: o CRUD de `clientes`, `clientes_fiscal`, `clientes_credenciais`, `lancamentos` e `usuarios` passa a ser auditado por triggers no servidor (`functions/src/auditoria/triggers.ts`, `onDocumentWrittenWithAuthContext`): antes/depois do que mudou de fato, uid do contexto do evento, nome/e-mail da conta no Auth, id do log = id do evento. O navegador deixou de logar essas coleções. O log que o navegador ainda grava (demais coleções) exige uid e e-mail do token, `origem: 'client'`, `criadoEm` = hora do servidor e um conjunto fechado de campos.
