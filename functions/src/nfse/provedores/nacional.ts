@@ -432,16 +432,33 @@ export class NacionalConector {
     } catch (err) {
       return falha('DPS_INVALIDA', err instanceof Error ? err.message : String(err))
     }
-    let resp: RespostaHttp
-    try {
-      // PREMISSA: o {id} vai com o prefixo "DPS" (é o idDPS que a própria Sefin devolve).
-      resp = await sessao.requisitar({ url: this.url(sessao.ambiente, 'sefin', 'dps', idDps), metodo: 'GET', timeoutMs: PRAZOS_NACIONAL_MS.consulta })
-    } catch (err) {
-      return falha('SEFIN_SEM_RESPOSTA', 'Sem resposta da Sefin Nacional ao consultar a DPS. Tente de novo em alguns minutos.', err instanceof Error ? err.message : String(err))
+    // Manual de APIs do contribuinte v1.2 (out/2025), item 1.4: GET /dps/{id},
+    // "identificador da DPS" = IBGE (7) + tipo de inscrição (1) + inscrição (14)
+    // + série (5) + nº (15) — 42 dígitos, SEM dizer se leva o prefixo "DPS" do
+    // atributo Id (TSIdDPS, 45). O Swagger exige mTLS ICP-Brasil (403 sem ele).
+    // Tenta a forma do Id (45) e, sem 200, a de 42 dígitos. Só conclui "não
+    // existe" com 404 — e, se errar para menos, o reenvio ainda é barrado pela
+    // Sefin com E0014 (mesma série+número), que reconcilia.
+    const candidatos = [idDps, idDps.replace(/^DPS/, '')]
+    let resp: RespostaHttp | null = null
+    let viu404 = false
+    for (const id of candidatos) {
+      let r: RespostaHttp
+      try {
+        r = await sessao.requisitar({ url: this.url(sessao.ambiente, 'sefin', 'dps', id), metodo: 'GET', timeoutMs: PRAZOS_NACIONAL_MS.consulta })
+      } catch (err) {
+        return falha('SEFIN_SEM_RESPOSTA', 'Sem resposta da Sefin Nacional ao consultar a DPS. Tente de novo em alguns minutos.', err instanceof Error ? err.message : String(err))
+      }
+      resp = r
+      if (r.status === 200) break
+      if (r.status === 404) { viu404 = true; continue }
+      if (r.status === 400) continue // formato do id recusado: tenta o outro
+      break // 5xx/403 etc.: inconclusivo, não adianta trocar o formato
     }
-    if (resp.status === 404) {
+    if (resp && resp.status !== 200 && viu404 && (resp.status === 404 || resp.status === 400)) {
       return { sucesso: true, encontrada: false, mensagem: `Nenhuma NFS-e gerada no Ambiente Nacional para a DPS ${idDps}.` }
     }
+    resp = resp!
     const json = lerJson(resp)
     const chaveDps = texto(json?.chaveAcesso)
     if (resp.status === 200 && chaveAcessoValida(chaveDps)) {

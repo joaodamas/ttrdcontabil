@@ -110,9 +110,9 @@ const rotaPadrao: Rota = async (req) => {
     if (sefin.aoEmitir) return sefin.aoEmitir(req)
     return emitirNaSefin(req)
   }
-  const dps = p.match(/\/dps\/(DPS[0-9]+)$/)
+  const dps = p.match(/\/dps\/((?:DPS)?[0-9]{42})$/)
   if (dps) {
-    const chave = sefin.notas.get(dps[1])
+    const chave = sefin.notas.get(dps[1].startsWith("DPS") ? dps[1] : `DPS${dps[1]}`)
     return chave ? json(200, { chaveAcesso: chave, idDps: dps[1] }) : json(404, { erros: [{ Codigo: 'E404', Descricao: 'não encontrada' }] })
   }
   const eventos = p.match(/\/nfse\/([0-9A-Z]{50})\/eventos$/)
@@ -377,7 +377,7 @@ describe.skipIf(!TEM_OPENSSL)('A2 — timeout e DPS repetida reconciliam sem ree
     definirOpcoesConectorNacional({
       transporte: () => async (req) => {
         sefin.pedidos.push(req)
-        if (/\/dps\//.test(req.url.pathname) && consultas++ === 0) return json(404, {})
+        if (/\/dps\//.test(req.url.pathname) && consultas++ < 2) return json(404, {}) // as 2 formas do id
         return base(req)
       },
     })

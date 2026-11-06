@@ -293,6 +293,33 @@ describe.skipIf(!TEM_OPENSSL)('prazos, convênio em cache e E0014 (2026-11-06)',
     expect(r.erro).toMatch(/consulta a Sefin antes de qualquer reenvio/)
   })
 
+  it('GET /dps/{id}: tenta o Id com prefixo (45) e o identificador de 42 dígitos do manual; 404 nos dois = não existe', async () => {
+    const { conector, pedidos } = falso(() => json(404, {}))
+    const r = await conector.consultar({ nfseId: 'n', clienteId: 'c1', numeroRps: '7', serieRps: '1' }, config(), cert, prestador)
+    expect(r).toMatchObject({ sucesso: true, encontrada: false })
+    const ids = pedidos.map((p) => p.url.pathname.split('/').pop())
+    expect(ids).toEqual(['DPS350570821122233300018100001000000000000007', '350570821122233300018100001000000000000007'])
+    expect(ids[1]).toHaveLength(42)
+  })
+
+  it('GET /dps/{id}: 400 no formato com prefixo e 200 no de 42 dígitos → encontrada', async () => {
+    const { conector } = falso((req) => {
+      const id = req.url.pathname.split('/').pop()!
+      if (req.url.pathname.includes('/dps/')) return id.startsWith('DPS') ? json(400, {}) : json(200, { chaveAcesso: CHAVE })
+      if (req.url.pathname.endsWith('/eventos')) return json(404, {})
+      return json(200, { chaveAcesso: CHAVE, nfseXmlGZipB64: compactarXml(NFSE_XML) })
+    })
+    const r = await conector.consultar({ nfseId: 'n', clienteId: 'c1', numeroRps: '7', serieRps: '1' }, config(), cert, prestador)
+    expect(r).toMatchObject({ sucesso: true, encontrada: true, status: 'emitida', chaveAcesso: CHAVE })
+  })
+
+  it('GET /dps/{id}: 503 é inconclusivo (não vira "não existe")', async () => {
+    const { conector, pedidos } = falso(() => json(503, {}))
+    const r = await conector.consultar({ nfseId: 'n', clienteId: 'c1', numeroRps: '7', serieRps: '1' }, config(), cert, prestador)
+    expect(r.sucesso).toBe(false)
+    expect(pedidos).toHaveLength(1)
+  })
+
   it('consulta por chave com evento de cancelamento → cancelada; sem evento → emitida', async () => {
     const rotas = (cancelada: boolean) => (req: RequisicaoHttp) => {
       if (req.url.pathname.endsWith('/eventos')) {

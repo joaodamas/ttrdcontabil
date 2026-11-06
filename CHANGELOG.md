@@ -40,7 +40,8 @@ Branch `fix/emissao-nfse-idempotente`. Achados C1, A1–A4, M3–M9, B10, B12 da
 - **B10** — motivo de cancelamento de 15 a 255 caracteres no servidor e na UI.
 - Índice novo `nfse_rascunhos (status, codigoErroUltimaTentativa)` para a rotina.
 - Testes: `__tests__/lib/nfse-orquestracao.test.ts` (Firestore/Storage em memória + transporte injetado: 2 envios do mesmo rascunho → 1 nota; timeout + retry com nota na Sefin → reconcilia sem reenviar; E0014; rotina; consulta não regride cancelada; gate nacional; M3/M8), `nfse-regras-emissao.test.ts` e casos novos em `nfse-nacional-conector.test.ts`.
-- **Exige homologação** antes do deploy: confirmar na produção restrita o E0014, `GET /dps/{id}` com prefixo "DPS", o formato de `GET /nfse/{chave}/eventos` e o comportamento com timeout real. **Deploy (decisão do dono):** `firebase deploy --only functions,firestore:indexes` + hosting.
+- Conferido no Manual de APIs do contribuinte v1.2 (out/2025, gov.br/nfse): existem `GET`/`HEAD /dps/{id}` (id = IBGE 7 + tipo 1 + inscrição 14 + série 5 + nº 15 = 42 dígitos; o manual não diz se leva o prefixo "DPS" do atributo Id) e `GET /nfse/{chave}/eventos` (+ `/{tipoEvento}` e `/{tipoEvento}/{numSeqEvento}`). O Swagger da Sefin exige mTLS ICP-Brasil (403 sem certificado). Por isso a consulta da DPS tenta as duas formas (45 com prefixo, depois 42) e só conclui "não existe" com 404; 5xx/403 = inconclusivo.
+- **Exige homologação** antes do deploy: confirmar na produção restrita o E0014, qual forma do id `GET /dps/{id}` aceita, o corpo de `GET /nfse/{chave}/eventos` e o comportamento com timeout real. **Deploy (decisão do dono):** `firebase deploy --only functions,firestore:indexes` + hosting.
 
 ### Segurança — usuários, permissões e senhas de portal dos clientes (2026-11-05)
 Detalhes, matriz perfil × capacidade, ordem de deploy e rollback: `docs/USUARIOS-PERMISSOES.md`.
