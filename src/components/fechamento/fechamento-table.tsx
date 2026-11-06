@@ -8,7 +8,9 @@ import { situacaoObrigacao, temPendencia } from '@/lib/fechamento-resumo'
 import { DataTableShell } from '@/components/ui/data-table-shell'
 import { EmptyState } from '@/components/ui/empty-state'
 import { useLinhaClicavel } from '@/components/ui/linha-clicavel'
-import { LinkPermitido } from '@/components/ui/link-permitido'
+import { LinkFichaCliente, useFichaClientePainel } from '@/components/clientes/ficha/painel-cliente'
+import { useAuth } from '@/contexts/auth-context'
+import { canAccessTela } from '@/lib/permissions'
 
 type StatusObrigacao = 'pendente' | 'enviado' | 'parcial' | 'ok' | 'sm' | 'guia' | 'na'
 
@@ -97,18 +99,21 @@ const REGIME_COLOR: Record<string, string> = {
   isento:           'bg-muted text-muted-foreground border border-border',
 }
 
-/** Nome do cliente que abre a ficha (/clientes/<id>) quando o perfil pode. */
+/** Nome do cliente que abre a ficha no painel lateral quando o perfil pode. */
 function NomeCliente({ f }: { f: Fechamento }) {
   if (!f.clienteId) return <>{f.clienteNome}</>
   return (
-    <LinkPermitido href={`/clientes/${encodeURIComponent(f.clienteId)}`} className="hover:underline" title="Abrir ficha do cliente">
+    <LinkFichaCliente clienteId={f.clienteId} nome={f.clienteNome} className="hover:underline">
       {f.clienteNome}
-    </LinkPermitido>
+    </LinkFichaCliente>
   )
 }
 
 export function FechamentoTable({ fechamentos, onUpdate, travado = false }: FechamentoTableProps) {
   const linha = useLinhaClicavel()
+  const { usuario } = useAuth()
+  const { abrirCliente } = useFichaClientePainel()
+  const verCliente = canAccessTela(usuario, 'clientes')
   if (fechamentos.length === 0) {
     return (
       <EmptyState
@@ -154,9 +159,9 @@ export function FechamentoTable({ fechamentos, onUpdate, travado = false }: Fech
             const linhaPendente = 'bg-destructive/[0.03] hover:bg-destructive/[0.06] dark:bg-destructive/[0.08] dark:hover:bg-destructive/[0.14]'
             return (
             <Fragment key={f.id}>
-            {/* Linha abre a ficha do cliente; os status (botões) e o portal
+            {/* Linha abre a ficha do cliente (painel lateral); os status (botões) e o portal
                 continuam com a própria ação. */}
-            <tr {...linha(f.clienteId ? `/clientes/${encodeURIComponent(f.clienteId)}` : null, {
+            <tr {...linha(f.clienteId && verCliente ? () => abrirCliente(f.clienteId!, f.clienteNome) : null, {
               className: cn('hidden hover:bg-muted/30 transition-colors md:table-row', comPendencia ? linhaPendente : ''),
             })}>
               <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{f.clienteCodigo}</td>

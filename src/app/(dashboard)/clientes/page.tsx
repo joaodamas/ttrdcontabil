@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useRef, Suspense, Fragment } from 'react'
+import { useState, useMemo, Suspense, Fragment } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
@@ -13,7 +13,7 @@ import { TableEmptyState } from '@/components/ui/empty-state'
 import { DataTableShell } from '@/components/ui/data-table-shell'
 import { PageHeader } from '@/components/layout/page-header'
 import { ClientesFiltros } from '@/components/clientes/clientes-filtros'
-import { ClienteModal } from '@/components/clientes/cliente-modal'
+import { useFichaClientePainel } from '@/components/clientes/ficha/painel-cliente'
 import { FilterBtn } from '@/components/ui/filter-btn'
 import { FilterSheet, FilterSheetTrigger } from '@/components/ui/filter-sheet'
 import {
@@ -292,29 +292,11 @@ function ClientesContent() {
   const { filteredClientes, isLoading, isError } = useClientesList({ busca, status })
   const riscoMap = useClientesRisco()
   const mensalidadeDe = useMensalidadeResolver()
-  // Ficha do cliente aberta fica na URL (?cliente=<id>): o Voltar do navegador
-  // fecha a ficha em vez de sair da tela, e o link pode ser compartilhado.
-  const modalClienteId = searchParams.get('cliente')
-  const [modalClienteNome, setModalClienteNome] = useState('')
-  const abriuFichaAqui = useRef(false)
-  const abrirCliente = (c: Record<string, unknown>) => {
-    setModalClienteNome((c.razaoSocial as string) ?? '')
-    const p = new URLSearchParams(searchParams.toString())
-    p.set('cliente', c.id as string)
-    abriuFichaAqui.current = true
-    router.push(`/clientes?${p.toString()}`, { scroll: false })
-  }
-  const fecharCliente = () => {
-    if (abriuFichaAqui.current) {
-      abriuFichaAqui.current = false
-      router.back()
-      return
-    }
-    const p = new URLSearchParams(searchParams.toString())
-    p.delete('cliente')
-    const q = p.toString()
-    router.replace(q ? `/clientes?${q}` : '/clientes', { scroll: false })
-  }
+  // Ficha do cliente aberta fica na URL (?cliente=<id>) e abre no painel
+  // lateral (PainelClienteUrl, no layout): o Voltar do navegador fecha a
+  // ficha em vez de sair da tela, e o link pode ser compartilhado.
+  const painelCliente = useFichaClientePainel()
+  const abrirCliente = (c: Record<string, unknown>) => painelCliente.abrirCliente(c.id as string, (c.razaoSocial as string) ?? '')
   const [filterSheetOpen,  setFilterSheetOpen]  = useState(false)
   const linha = useLinhaClicavel()
 
@@ -668,14 +650,6 @@ function ClientesContent() {
         </table>
       </DataTableShell>
 
-      {modalClienteId && (
-        <ClienteModal
-          clienteId={modalClienteId}
-          clienteNome={modalClienteNome || ((filteredClientes.find((x) => x.id === modalClienteId)?.razaoSocial as string | undefined) ?? '')}
-          open={!!modalClienteId}
-          onOpenChange={(v) => { if (!v) fecharCliente() }}
-        />
-      )}
     </div>
   )
 }

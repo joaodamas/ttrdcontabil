@@ -15,6 +15,7 @@ import Link from 'next/link'
 import { Suspense } from 'react'
 import { RastreadorNavegacao } from '@/lib/historico-interno'
 import { GuardaRotaInexistente } from '@/components/layout/pagina-nao-encontrada'
+import { PainelClienteUrl } from '@/components/clientes/ficha/painel-cliente'
 import { canAccessTela, podeOperarNfse } from '@/lib/permissions'
 
 function TopBar() {
@@ -63,6 +64,8 @@ function DashboardChrome({ children }: { children: React.ReactNode }) {
       data-sidebar-v2={isEnabled('sidebarV2Enabled') ? 'on' : 'off'}
     >
       <Suspense fallback={null}><RastreadorNavegacao /></Suspense>
+      {/* Ficha do cliente em painel lateral em qualquer tela (?cliente=<id>). */}
+      <Suspense fallback={null}><PainelClienteUrl /></Suspense>
       <AppSidebar />
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
         <TopBar />

@@ -4,40 +4,30 @@ import { useCallback, useMemo, useState, useEffect, useRef, Suspense, Fragment }
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { where, orderBy, Timestamp, type QueryConstraint } from 'firebase/firestore'
-import { getFunctions, httpsCallable } from 'firebase/functions'
-import { toast } from 'sonner'
 
 import { listDocumentsPage, type FirestoreCursor } from '@/lib/firestore-client'
 import { formatDate, formatCurrency, formatMesAno, tsToDate, cn } from '@/lib/utils'
 import { exportToCsv } from '@/lib/export-csv'
 import { exportToExcel } from '@/lib/export-excel'
-import { getFirebaseApp } from '@/lib/firebase'
 import { getErrorMessage } from '@/lib/error-message'
 import { fetchClientes } from '@/features/clientes/services'
 import type { ClienteRecord } from '@/features/clientes/types'
 import { Badge } from '@/components/ui/badge'
 import { PageHeader } from '@/components/layout/page-header'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { NfseStatusBadge } from '@/components/ui/status-badge'
 import { getStatusLabel } from '@/lib/status-semantics'
 import { Input } from '@/components/ui/input'
 import { TableEmptyState } from '@/components/ui/empty-state'
-import { AppModal } from '@/components/ui/app-modal'
 import { FilterBtn } from '@/components/ui/filter-btn'
 import { DataTableShell } from '@/components/ui/data-table-shell'
-import { Textarea } from '@/components/ui/textarea'
-import { ChevronDown, Download, Eye, FileCode, FileText, Loader2, MoreHorizontal, RefreshCw, Search, XCircle, History } from 'lucide-react'
-import { useNfseArquivos } from '@/components/fiscal/use-nfse-arquivos'
-import { podeObterDanfse, temXmlNfse } from '@/features/fiscal/nfse-arquivos'
-import { LogsNfseModal } from '@/components/fiscal/logs-nfse-modal'
+import { ChevronDown, Download, FileText, Loader2, Search, XCircle } from 'lucide-react'
+import { AcoesNota } from '@/components/fiscal/acoes-nota'
 import { HeatmapFiscal } from '@/components/fiscal/heatmap-fiscal'
 import { useAuth } from '@/contexts/auth-context'
 import { podeOperarNfse } from '@/lib/permissions'
 import { ClientePicker } from '@/components/ui/cliente-picker'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { useLinhaClicavel, PararLinha } from '@/components/ui/linha-clicavel'
+import { useLinhaClicavel } from '@/components/ui/linha-clicavel'
 import { FiltrosAtivos } from '@/components/ui/filtros-ativos'
 import { SeletorMes } from '@/components/ui/seletor-mes'
 import { hrefComFiltro, hrefSemFiltro } from '@/lib/url-filtros'
@@ -127,12 +117,6 @@ function FiscalHistoricoContent() {
     return Array.from(map.values())
   }, [notas])
 
-  const [cancelamentoId, setCancelamentoId] = useState<string | null>(null)
-  const [motivoCancelamento, setMotivoCancelamento] = useState('')
-  const [cancelando, setCancelando] = useState(false)
-  const [logNota, setLogNota] = useState<Record<string, unknown> | null>(null)
-  // Sem recarregar a lista ao gerar o PDF: o callable reaproveita o arquivo já salvo.
-  const { baixarXml, abrirDanfse, gerandoPdfId } = useNfseArquivos()
   const linha = useLinhaClicavel()
 
 
@@ -242,50 +226,6 @@ function FiscalHistoricoContent() {
       montarLinhasExportacao(),
       exportColumns
     )
-  }
-
-  async function consultarStatus(nfseId: string) {
-    try {
-      const fn = httpsCallable<{ nfseId: string }, { status: string; message: string }>(
-        getFunctions(getFirebaseApp(), 'southamerica-east1'),
-        'consultarNfse'
-      )
-      const { data } = await fn({ nfseId })
-      toast.success(data.message)
-      loadNotas()
-    } catch (err) {
-      toast.error(getErrorMessage(err, 'Não foi possível consultar a NFS-e. Verifique a configuração fiscal do cliente.'))
-    }
-  }
-
-  function abrirCancelamento(nfseId: string) {
-    setCancelamentoId(nfseId)
-    setMotivoCancelamento('')
-  }
-
-  async function confirmarCancelamento() {
-    if (!cancelamentoId) return
-    const motivo = motivoCancelamento.trim()
-    if (motivo.length < 15) { // Ambiente Nacional: xMotivo de 15 a 255 caracteres
-      toast.error('Informe um motivo com pelo menos 15 caracteres.')
-      return
-    }
-    setCancelando(true)
-    try {
-      const fn = httpsCallable<{ nfseId: string; motivo: string }, { status: string; message: string }>(
-        getFunctions(getFirebaseApp(), 'southamerica-east1'),
-        'cancelarNfse'
-      )
-      const { data } = await fn({ nfseId: cancelamentoId, motivo })
-      toast.success(data.message)
-      setCancelamentoId(null)
-      setMotivoCancelamento('')
-      loadNotas()
-    } catch (err) {
-      toast.error(getErrorMessage(err, 'Não foi possível solicitar o cancelamento. Verifique o status da nota e a configuração fiscal.'))
-    } finally {
-      setCancelando(false)
-    }
   }
 
   // '' remove a chave (antes ficava "status=" na URL).
@@ -493,61 +433,7 @@ function FiscalHistoricoContent() {
                     // Mesmas ações na linha (desktop) e no card (celular): PDF e
                     // XML à vista; detalhe, logs, consultar e cancelar no ⋯
                     // (consultar/cancelar só para quem opera NFS-e).
-                    const acoes = (
-                    <PararLinha className="flex justify-end gap-1.5">
-                      {temXmlNfse(n) ? (
-                        <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Baixar XML" aria-label="Baixar XML" onClick={() => baixarXml(n)}>
-                          <FileCode className="h-3.5 w-3.5" />
-                        </Button>
-                      ) : null}
-                      {podeObterDanfse(n) ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                          title={gerandoPdfId === n.id ? 'Gerando PDF (DANFSe)…' : 'Baixar PDF (DANFSe)'}
-                          aria-label="Baixar PDF (DANFSe)"
-                          aria-busy={gerandoPdfId === n.id}
-                          disabled={gerandoPdfId === n.id}
-                          onClick={() => { void abrirDanfse(n) }}
-                        >
-                          {gerandoPdfId === n.id
-                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            : <Download className="h-3.5 w-3.5" />}
-                        </Button>
-                      ) : null}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-8 w-8 p-0' })}
-                          aria-label="Mais ações"
-                          title="Mais ações"
-                        >
-                          <MoreHorizontal className="h-3.5 w-3.5" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-52">
-                          <DropdownMenuItem onClick={() => router.push(`/fiscal/${n.id as string}`)}>
-                            <Eye className="h-3.5 w-3.5 mr-2" />Ver detalhe
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setLogNota(n)}>
-                            <History className="h-3.5 w-3.5 mr-2" />Ver logs de emissão
-                          </DropdownMenuItem>
-                          {podeOperar ? (
-                            <DropdownMenuItem onClick={() => { void consultarStatus(n.id as string) }}>
-                              <RefreshCw className="h-3.5 w-3.5 mr-2" />Consultar status
-                            </DropdownMenuItem>
-                          ) : null}
-                          {podeOperar && n.status === 'emitida' ? (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem className="text-destructive" onClick={() => abrirCancelamento(n.id as string)}>
-                                <XCircle className="h-3.5 w-3.5 mr-2" />Solicitar cancelamento
-                              </DropdownMenuItem>
-                            </>
-                          ) : null}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </PararLinha>
-                    )
+                    const acoes = <AcoesNota nota={n} onAtualizar={loadNotas} />
                     const detalheHref = `/fiscal/${n.id as string}`
                     return (
                       <Fragment key={n.id as string}>
@@ -664,30 +550,6 @@ function FiscalHistoricoContent() {
         </div>
       ) : null}
 
-      <AppModal
-        open={Boolean(cancelamentoId)}
-        onOpenChange={(open) => !open && setCancelamentoId(null)}
-        title="Solicitar cancelamento de NFS-e"
-        description="A solicitação será registrada com auditoria e ficará pendente de processamento fiscal."
-        icon={<XCircle className="size-4 text-destructive" />}
-        size="md"
-        footer={
-          <div className="flex gap-2 justify-end">
-            <Button type="button" variant="outline" onClick={() => setCancelamentoId(null)} disabled={cancelando}>Cancelar</Button>
-            <Button type="button" variant="destructive" onClick={confirmarCancelamento} disabled={cancelando}>
-              {cancelando ? 'Registrando...' : 'Confirmar cancelamento'}
-            </Button>
-          </div>
-        }
-      >
-        <Textarea value={motivoCancelamento} onChange={(e) => setMotivoCancelamento(e.target.value)} placeholder="Informe o motivo fiscal do cancelamento (mínimo 15 caracteres)" className="min-h-28" />
-      </AppModal>
-
-      <LogsNfseModal
-        nota={logNota}
-        open={logNota !== null}
-        onOpenChange={open => { if (!open) setLogNota(null) }}
-      />
     </div>
   )
 }

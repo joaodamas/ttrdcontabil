@@ -1,11 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
-import { Eye, EyeOff, Loader2, Pencil } from 'lucide-react'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
-import { buttonVariants } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
 import { montarFichaCliente } from '@/lib/cliente-ficha'
 import type { CampoCredencial, CredenciaisCliente } from '@/lib/clientes-credenciais'
@@ -57,15 +55,10 @@ export function ClienteFichaCompleta({ cliente, clienteId }: { cliente: Record<s
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          <strong className="text-foreground">{ficha.preenchidos}</strong> de {ficha.total} campos preenchidos ({pct}%)
-        </p>
-        <Link href={`/clientes/${clienteId}/editar`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-          <Pencil className="h-3.5 w-3.5" />
-          Editar cadastro
-        </Link>
-      </div>
+      {/* Editar fica no cabeçalho da ficha (FichaCliente), só para quem grava. */}
+      <p className="text-sm text-muted-foreground">
+        <strong className="text-foreground">{ficha.preenchidos}</strong> de {ficha.total} campos preenchidos ({pct}%)
+      </p>
 
       {ficha.secoes.map((secao) => (
         <section key={secao.titulo} className="rounded-xl border border-border/70">
@@ -82,7 +75,7 @@ export function ClienteFichaCompleta({ cliente, clienteId }: { cliente: Record<s
               const valor = campo.key === 'cpfCnpj' || campo.key === 'responsavelCpf' ? formatCpfCnpj(campo.valor) : campo.valor
               return (
                 <div key={campo.key} className="min-w-0">
-                  <dt className="text-xs text-muted-foreground">{campo.label}</dt>
+                  <dt className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{campo.label}</dt>
                   <dd className={cn('mt-0.5 flex items-center gap-1.5 break-words font-medium', vazio && 'font-normal italic text-muted-foreground/70')}>
                     {vazio ? 'em branco' : oculto ? '••••••••' : valor}
                     {campo.credencial && !vazio && podeRevelar && (

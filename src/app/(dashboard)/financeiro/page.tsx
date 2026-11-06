@@ -43,17 +43,18 @@ import { fetchWhatsappHistory, pauseWhatsappRuleForLancamento, rescheduleWhatsap
 import { WHATSAPP_STATUS_LABELS } from '@/features/whatsapp/types'
 import { WHATSAPP_HABILITADO } from '@/lib/features'
 import { LinkPermitido } from '@/components/ui/link-permitido'
+import { LinkFichaCliente } from '@/components/clientes/ficha/painel-cliente'
 import { FiltrosAtivos } from '@/components/ui/filtros-ativos'
 import { useNomeCliente, useRotuloCompetencia } from '@/lib/use-nomes-filtro'
 import { hrefSemFiltro } from '@/lib/url-filtros'
 
-/** Nome do pagador; com cliente vinculado, leva à ficha do cliente. */
+/** Nome do pagador; com cliente vinculado, abre a ficha do cliente no painel lateral. */
 function PagadorLink({ clienteId, nome, className }: { clienteId?: string; nome: string; className?: string }) {
   if (!clienteId) return <span className={className}>{nome}</span>
   return (
-    <LinkPermitido href={`/clientes/${encodeURIComponent(clienteId)}`} className={className} title="Abrir ficha do cliente">
+    <LinkFichaCliente clienteId={clienteId} nome={nome} className={className}>
       <span className="hover:underline">{nome}</span>
-    </LinkPermitido>
+    </LinkFichaCliente>
   )
 }
 

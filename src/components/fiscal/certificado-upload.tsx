@@ -21,9 +21,11 @@ interface Props {
   clienteId: string
   certInfo?: CertInfo | null
   onUploaded?: (info: CertInfo) => void
+  /** Só o formulário de envio (o status fica no CertificadoStatusCard). */
+  somenteFormulario?: boolean
 }
 
-export function CertificadoUpload({ clienteId, certInfo, onUploaded }: Props) {
+export function CertificadoUpload({ clienteId, certInfo, onUploaded, somenteFormulario = false }: Props) {
   const [uploading, setUploading] = useState(false)
   const [senha, setSenha] = useState('')
   const [file, setFile]   = useState<File | null>(null)
@@ -65,7 +67,7 @@ export function CertificadoUpload({ clienteId, certInfo, onUploaded }: Props) {
   return (
     <div className="space-y-4">
       {/* Status do certificado atual */}
-      {certInfo ? (
+      {somenteFormulario ? null : certInfo ? (
         <div className="flex items-start gap-3 p-3 rounded-md border bg-muted/30">
           {certInfo.valido
             ? <ShieldCheck className="w-5 h-5 text-success mt-0.5 shrink-0" />
@@ -90,7 +92,7 @@ export function CertificadoUpload({ clienteId, certInfo, onUploaded }: Props) {
 
       {/* Formulário de upload */}
       <div className="space-y-3">
-        <div className="grid grid-cols-[1fr_200px] gap-3 items-end">
+        <div className="grid grid-cols-1 gap-3 items-end sm:grid-cols-[1fr_200px]">
           <div className="space-y-1.5">
             <Label>Arquivo .pfx / .p12</Label>
             <Input
