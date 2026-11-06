@@ -160,6 +160,8 @@ async function main() {
     dadosDepois: { clientes: feitos, docsApagados: planos.reduce((n, p) => n + p.apagar.length, 0) },
     origem: 'script',
     criadoEm: FieldValue.serverTimestamp(),
+    // TTL: mesma retenção de logs_auditoria em functions/src/retencao.ts (6 anos).
+    expiraEm: Timestamp.fromMillis(Date.now() + (6 * 365 + 2) * 86_400_000),
   })
   console.log(`Unificados: ${feitos}`)
 }

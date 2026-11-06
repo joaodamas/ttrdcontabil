@@ -13,6 +13,7 @@ import { getFirestore } from 'firebase-admin/firestore'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { credentialSecrets } from '../nfse/secrets'
 import { CODIGOS_A_CONFIRMAR, COLECAO_RASCUNHOS, reconciliarRascunho } from '../nfse/reconciliacao'
+import { textoSeguroParaLog } from '../audit'
 import { logErro } from '../log'
 
 const db = () => getFirestore()
@@ -40,7 +41,8 @@ export async function executarReconciliacaoNfse(agoraMs = Date.now()) {
     // A elegibilidade (trava vencida, código a confirmar, limite de tentativas)
     // é conferida dentro da transação de reconciliarRascunho.
     const desfecho = await reconciliarRascunho(id, agoraMs).catch((err) => {
-      logErro('[nfse-reconciliacao][falha-rascunho]', { rascunhoId: id }, err)
+      // Erro do fluxo fiscal pode trazer dado sensível: vai mascarado, não cru.
+      logErro('[nfse-reconciliacao][falha-rascunho]', { rascunhoId: id, erro: textoSeguroParaLog(err) })
       return 'indefinido' as const
     })
     contagem[desfecho]++

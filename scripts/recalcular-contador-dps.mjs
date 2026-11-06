@@ -28,7 +28,7 @@
  * fiscal, e a emissão pula sozinha os que colidirem (E0014).
  */
 import { applicationDefault, cert, getApps, initializeApp } from 'firebase-admin/app'
-import { FieldPath, FieldValue, getFirestore } from 'firebase-admin/firestore'
+import { FieldPath, FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
 
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? 'ttrdcontabil-jpproject'
 const APLICAR = process.argv.includes('--aplicar')
@@ -157,6 +157,8 @@ async function main() {
       dadosDepois: { contadores: subir },
       origem: 'script',
       criadoEm: FieldValue.serverTimestamp(),
+      // TTL: mesma retenção de logs_auditoria em functions/src/retencao.ts (6 anos).
+      expiraEm: Timestamp.fromMillis(Date.now() + (6 * 365 + 2) * 86_400_000),
     })
   }
   if (!APLICAR && subir > 0) console.log('Rode de novo com --aplicar para gravar.')

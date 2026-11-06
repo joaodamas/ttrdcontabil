@@ -31,7 +31,7 @@
  */
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 import { applicationDefault, cert, getApps, initializeApp } from 'firebase-admin/app'
-import { FieldValue, getFirestore } from 'firebase-admin/firestore'
+import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? 'ttrdcontabil-jpproject'
@@ -136,6 +136,8 @@ async function main() {
       dadosDepois: { arquivos: contagem.cifrados, pulados: contagem.pulados },
       origem: 'script',
       criadoEm: FieldValue.serverTimestamp(),
+      // TTL: mesma retenção de logs_auditoria em functions/src/retencao.ts (6 anos).
+      expiraEm: Timestamp.fromMillis(Date.now() + (6 * 365 + 2) * 86_400_000),
     })
   }
   if (!APLICAR && contagem.emClaro > 0) console.log('Rode de novo com --aplicar para gravar.')

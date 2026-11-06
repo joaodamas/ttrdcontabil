@@ -46,6 +46,7 @@ import {
   type AuditActor, type AuditRequisicao,
 } from '../audit'
 import { requireEnvironmentTenant } from '../tenant'
+import { logErro } from '../log'
 import { gerarESalvarDanfse } from './danfse/servico'
 import { registrarFalhaEmissao } from './log-emissao'
 import { getCertificado, getCliente, getConfigFiscal, localizarDocConfigFiscal, montarPrestador } from './contexto'
@@ -486,7 +487,7 @@ export async function processarEmissao(inputRecebido: EmitirNfseInput, uid: stri
       codigoErroUltimaTentativa: err instanceof HttpsError ? err.code : null,
       atualizadoPorId: uid,
     }).catch((updateErr) => {
-      console.error('[processarEmissao] Falha ao destravar rascunho:', textoSeguroParaLog(updateErr))
+      logErro('[processarEmissao][falha-destravar-rascunho]', { erro: textoSeguroParaLog(updateErr) })
     })
     throw err
   }
@@ -496,7 +497,7 @@ export async function processarEmissao(inputRecebido: EmitirNfseInput, uid: stri
 // emissão: lançar aqui faria a nota emitida parecer falha e reentrar no retry.
 async function auditarSemFalhar(params: Parameters<typeof writeAuditLog>[0]) {
   await writeAuditLog(params).catch((err) => {
-    console.error('[processarEmissao] Falha ao gravar auditoria:', textoSeguroParaLog(err))
+    logErro('[processarEmissao][falha-auditoria]', { erro: textoSeguroParaLog(err) })
   })
 }
 

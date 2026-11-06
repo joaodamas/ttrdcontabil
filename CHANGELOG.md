@@ -65,6 +65,7 @@ Branch `chore/upgrade-limpeza`. Deploy: functions + hosting + regras (Firestore 
   - suite nova do Storage no emulador (`__tests__/rules/storage.rules.test.ts`): `nfse/` por perfil, tela, tenant e usuário inativo; escrita negada; `certificados/` negado até para admin; o resto trancado;
   - com o emulador do Storage no ar, os arquivos de regras rodam em sequência (`fileParallelism` em `vitest.config.ts`). O Storage resolve `firestore.get()` no projeto passado em `--project`, o mesmo que `firestore.rules.test.ts` limpa a cada teste;
   - novos `competencia-auto.test.ts` e `retencao.test.ts`, mais casos em `usuarios-regras`, `permissions-acoes` e nas regras (TTL e coleções trancadas).
+
 ### Corrigido — 2026-11-06 · Numeração da DPS, uma config fiscal por cliente, A1 cifrado e só Ambiente Nacional — **Exige homologação**
 Branch `fix/fiscal-numeracao-certificado`. Leiaute da DPS/XML nacional **não** mudou.
 - **Próximo número da DPS por prestador/série.** Cliente que já emitiu pelo Emissor Nacional (site/app do governo) na série 1 colidia (E0014) a cada nota, porque a plataforma começava do 1. Configuração fiscal → Ambiente Nacional ganhou "Próximo número da DPS"; o callable novo **`definirNumeracaoDps`** (admin/fiscal, auditado com IP) grava contador + config na mesma transação e **só deixa avançar** (nunca ≤ último número já usado em `dps_sequencias`). O número vale como piso do contador para a série/ambiente informados — inclusive se o contador for perdido numa restauração. `proximoNumeroDps`/`numeracaoDpsAjuste` só pelo servidor (firestore.rules).
